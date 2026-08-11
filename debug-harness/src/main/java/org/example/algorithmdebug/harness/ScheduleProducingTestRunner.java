@@ -48,7 +48,8 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
         }
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         RunResult run = executor.execute(spec, options);
-        if (run.completion() != RunCompletion.SUCCEEDED) {
+        OutputDirectorySnapshot immediateAfter = snapshotter.snapshot(source);
+        if (immediateAfter.changedSince(before).isEmpty()) {
             return new ScheduleRunResult<>(run, Optional.empty());
         }
         OutputDirectorySnapshot stableAfter = stabilityWaiter.awaitStable(before, source);

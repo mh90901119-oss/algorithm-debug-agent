@@ -1,5 +1,9 @@
 # Debug Harness
 
+`SurefireDiagnosticReader` 从 Surefire XML 确定性提取失败分类、异常类、规范化消息、cause 和稳定业务栈帧，
+但不推断算法业务根因。目标进程结果与调度结果捕获相互独立：断言失败或算法异常前若已生成新的稳定 Gantt，
+该产物仍会被捕获并保留；XML 解析禁用 DTD 和外部实体。
+
 Phase 0 已实现目标算法 UT 的受控 Maven 执行、动态结果发现与确定性捕获：
 
 - `MavenCommandFactory`：从 `TestLaunchSpec` 生成不经过 Shell 的参数数组；

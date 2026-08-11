@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScheduleProducingTestRunnerTest {
@@ -55,7 +54,7 @@ class ScheduleProducingTestRunnerTest {
     }
 
     @Test
-    void shouldNotInspectOrCaptureOutputAfterFailedRun() throws Exception {
+    void shouldCaptureStableOutputAfterFailedRun() throws Exception {
         Path output = temporaryDirectory.resolve("output-failed");
         ScheduleResultSource source = new ScheduleResultSource(output, false);
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
@@ -74,8 +73,8 @@ class ScheduleProducingTestRunnerTest {
         ScheduleRunResult<TextSnapshot> result = runner.run(
                 spec(), options(), source, this::parse, ignored -> "a".repeat(64), destination);
 
-        assertTrue(result.scheduleResult().isEmpty());
-        assertFalse(Files.exists(destination));
+        assertTrue(result.scheduleResult().isPresent());
+        assertTrue(Files.isRegularFile(destination));
     }
 
     private OutputStabilityWaiter waiter(OutputDirectorySnapshotter snapshotter, AtomicLong nanos) {

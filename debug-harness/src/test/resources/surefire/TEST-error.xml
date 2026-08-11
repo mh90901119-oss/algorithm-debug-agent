@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="a.b.TargetTest" tests="1" failures="0" errors="1">
+  <testcase classname="a.b.TargetTest" name="runs">
+    <error type="java.lang.IllegalStateException" message="schedule failed at 2026-08-12T02:00:00Z">java.lang.IllegalStateException: schedule failed
+ at a.b.Algorithm.solve(Algorithm.java:42)
+ at a.b.TargetTest.runs(TargetTest.java:18)
+Caused by: java.lang.NullPointerException: resource was null
+ at java.base/java.util.Objects.requireNonNull(Objects.java:233)</error>
+  </testcase>
+</testsuite>
