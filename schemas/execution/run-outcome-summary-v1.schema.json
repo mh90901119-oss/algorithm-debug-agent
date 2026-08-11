@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/execution/run-outcome-summary-v1.schema.json",
+  "title": "RunOutcomeSummary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventType", "caseId", "contextId", "analysisId", "runId", "latestRunForAnalysis", "processOutcome", "testOutcome", "ganttOutcome", "targetFailure", "agentFailure", "comparisonOutcome", "comparisonSummary", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "eventType": { "const": "TARGET_TEST_RUN_COMPLETED" },
+    "caseId": { "$ref": "#/$defs/opaqueId" },
+    "contextId": { "$ref": "#/$defs/opaqueId" },
+    "analysisId": { "$ref": "#/$defs/opaqueId" },
+    "runId": { "$ref": "#/$defs/opaqueId" },
+    "latestRunForAnalysis": { "type": "boolean" },
+    "processOutcome": { "enum": ["SUCCEEDED", "FAILED", "TIMED_OUT", "NOT_STARTED"] },
+    "testOutcome": { "enum": ["PASSED", "FAILED", "ERROR", "NOT_EXECUTED", "UNKNOWN"] },
+    "ganttOutcome": { "enum": ["PRESENT", "ABSENT", "INCOMPLETE"] },
+    "targetFailure": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/targetFailure" }] },
+    "agentFailure": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/agentFailure" }] },
+    "comparisonOutcome": { "enum": ["NOT_COMPARED", "MATCHED", "CHANGED", "INCOMPARABLE"] },
+    "comparisonSummary": { "type": "string", "minLength": 1 },
+    "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } }
+  },
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "targetFailure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["category", "exceptionClass", "normalizedMessage", "cause", "stableBusinessFrame"],
+      "properties": {
+        "category": { "enum": ["BUILD_FAILURE", "TEST_FAILURE", "TEST_ERROR", "TEST_NOT_EXECUTED", "AGENT_FAILURE", "UNKNOWN"] },
+        "exceptionClass": { "type": "string", "maxLength": 8192 },
+        "normalizedMessage": { "type": "string", "maxLength": 8192 },
+        "cause": { "type": "string", "maxLength": 8192 },
+        "stableBusinessFrame": { "type": "string", "maxLength": 8192 }
+      }
+    },
+    "agentFailure": {
+      "type": "object", "additionalProperties": false, "required": ["code", "message"],
+      "properties": { "code": { "type": "string", "minLength": 1 }, "message": { "type": "string", "minLength": 1 } }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/opaqueId" },
+        "artifactType": { "type": "string", "minLength": 1 },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

@@ -14,7 +14,10 @@ public final class SchemaVersions {
     public static final String BASELINE_VERIFICATION = "1.0";
 
     /** 统一工具响应 Schema 版本。 */
-    public static final String TOOL_RESPONSE = "1.0";
+    public static final String TOOL_RESPONSE = "2.0";
+
+    /** 面向模型的目标 UT 运行摘要 Schema 版本。 */
+    public static final String RUN_OUTCOME_SUMMARY = "1.0";
 
     private SchemaVersions() {
     }

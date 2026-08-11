@@ -1,5 +1,7 @@
 # Schemas
 
+- `execution/run-outcome-summary-v1.schema.json`：面向模型的一次目标 UT 运行结构化摘要；原始内容通过不可变 Artifact 引用按需读取。
+
 Versioned JSON Schemas for Case, execution, Gantt, collection, trace, evidence and report artifacts.
 
 Phase 0 implemented schemas:
