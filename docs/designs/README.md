@@ -35,4 +35,6 @@ YYYY-MM-DD-<module-or-feature>-design.md
 - `2026-08-10-wafer-demo-adapter-design.md`：Reference Wafer Demo 历史固定结果适配设计，状态为 Superseded。
 - `2026-08-11-case-baseline-lifecycle-design.md`：动态结果采集、Case Resolution 与 Baseline 稳定性垂直闭环，状态为 Implemented。
 - `2026-08-11-debug-harness-maven-junit-runner-design.md`：通用 Maven/JUnit 子进程监管、日志、超时清理与结果捕获组合，状态为 Implemented。
-- `2026-08-12-case-context-run-outcome-multiturn-analysis-design.md`：Case 问题档案、Context Snapshot、Run Outcome、目标异常、跨版本 Diff 与多轮 Analysis/Evidence 持久化，状态为 Review。
+- `2026-08-12-case-context-run-outcome-multiturn-analysis-design.md`：Case 问题档案、Context Snapshot、
+  Run Outcome 摘要/Artifact 引用、通用异常事实、跨版本 Diff、多轮 Analysis/Evidence 持久化以及
+  OpenCode Skill/CLI 薄适配，状态为 Review。

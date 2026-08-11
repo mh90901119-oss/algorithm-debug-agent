@@ -14,6 +14,21 @@ Phase 0 Baseline vertical slice is implemented. `ada-contracts`, `adapter-sdk`, 
 diffing, immutable Run capture, semantic result hashing and deterministic Baseline stability decisions.
 Static analysis, CodePath/JDWP orchestration, evidence construction and explanation remain planned.
 
+The approved OpenCode integration target keeps all product assets in this repository: one versioned
+`algorithm-debug` Skill, an OpenCode agent/command/custom-tool adapter and the Java `ada` CLI. A one-time
+OpenCode adapter installation will register references to the Agent installation without copying the
+Skill into a global Skill directory. Normal use will then be:
+
+```powershell
+cd D:\path\to\target-algorithm
+opencode
+```
+
+The user specifies a JUnit UT and asks a question. Each executed UT returns a bounded structured
+summary plus immutable Artifact references; the Skill guides the model to answer from existing
+evidence or request the next minimal action. The current phase does not implement an Algorithm Debug
+MCP server or other CLI-runtime adapters.
+
 The verified Reference Demo flow runs one dedicated UT twice, captures each result into a separate
 Run directory and reaches `BASELINE_STABLE` only when both semantic hashes match.
 

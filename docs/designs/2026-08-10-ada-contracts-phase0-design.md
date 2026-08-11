@@ -1,5 +1,8 @@
 # ada-contracts Phase 0 可实施详细设计
 
+> 2026-08-12 兼容性修订：`ToolResponse` 1.0 的 `nextAllowedActions` 固定状态机已由 ADR-006
+> 废弃；当前实现升级为 2.0，由 `data` 中的自描述事实和版本化 Skill 指导大模型决策。
+
 - 文档状态：Implemented
 - 设计版本：1.1
 - 创建日期：2026-08-10

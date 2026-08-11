@@ -2,6 +2,11 @@
 
 > 历史草案说明：本文档保留早期方案，包含“算法内部 Domain Trace Sink”等已被调整的设计。当前实施请以 [Algorithm Debug Agent 完整架构与开发计划](../architecture/algorithm-debug-agent-complete-design.md) 为准；主方案采用算法源码零侵入、外部 Debug Harness、CodePathTracer、JDWP Batch Collector 和 Derived Domain Trace。
 
+> 2026-08-12 当前实施修订：OpenCode 是唯一 Agent Runtime；Agent 通过仓库内 Skill 与薄
+> Custom Tool 调用 `ada` CLI，不实现 Algorithm Debug MCP Server。一次性 OpenCode 适配登记
+> Agent 安装目录后，用户进入目标算法仓库直接运行 `opencode`。UT 结果采用结构化摘要、原始 Artifact
+> 引用与 Skill 指引协作，异常分类不推断业务根因。
+
 
 - 文档状态：Draft for Implementation
 - 版本：0.1
@@ -580,7 +585,6 @@ algorithm-debug-parent
   algorithm-debug-validator
   algorithm-debug-reporter
   algorithm-debug-cli
-  algorithm-debug-mcp
 ```
 
 拆分触发条件：
@@ -613,7 +617,11 @@ algorithm-debug-parent
 - 可选的 `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
 - Case 复用、新建与 Revision 决策。
 - 同一问题修改源码、输入或 UT 内容时追加 Context Snapshot，不自动拆分 Case；
-- 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用。
+- 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用；
+- 面向 LLM 的有界 RunOutcomeSummary，明确本轮 runId、目标/Agent 结果和 Artifact 引用；
+- 异常类、消息、cause 和业务栈帧的通用提取，不建立异常到业务根因的穷举规则；
+- 仓库内唯一 `skills/algorithm-debug` 与 OpenCode 适配目录；
+- 幂等的一次性 OpenCode 适配安装，安装后直接使用 `opencode`。
 
 验收：
 
@@ -757,7 +765,7 @@ algorithm-debug-parent
 - 不允许把 LLM hypothesis 写成 validator conclusion；
 - 能回答至少五类核心“为什么”问题。
 
-## Phase 8：Debug Viewer 与 MCP
+## Phase 8：Debug Viewer 与 OpenCode 适配完善
 
 目标：形成可交互的完整问题定位体验。
 
@@ -766,14 +774,17 @@ algorithm-debug-parent
 - Gantt + decision + finding 综合 Viewer；
 - operation 到证据链的交互跳转；
 - compare view；
-- algorithm-debug-mcp；
-- 工作流 Skill。
+- 版本化工作流 Skill；
+- OpenCode Agent、Command 和薄 Custom Tool；
+- OpenCode 适配安装、升级、检查与卸载。
 
 验收：
 
 - 点击异常 Gantt Bar 可以看到输入字段、候选、过滤器、代码位置和 finding；
-- MCP 工具返回结构化事实，不返回未经约束的大对象；
-- Skill 只编排工作流，不承担确定性判断。
+- OpenCode Custom Tool 原样返回 CLI 结构化事实和 Artifact 引用，不返回未经约束的大对象；
+- Skill 只指导模型理解证据和选择下一步，不承担确定性判断；
+- 一次适配后，用户在目标算法仓库直接运行 `opencode` 即可提问；
+- 当前阶段没有 Algorithm Debug MCP Server 运行依赖。
 
 ## 10. 推荐近期迭代 Backlog
 

@@ -1,7 +1,7 @@
 # Algorithm Debug Agent 模块详细设计
 
 - 文档状态：实施基线；仓库骨架已创建，业务模块尚待分阶段实现
-- 版本：1.2
+- 版本：1.3
 - 日期：2026-08-12
 - 当前目标算法 Demo：`D:\javacode\hellomvn`
 - 当前 JDWP 工具仓库：`D:\mcpcode\mcp-jdwp-java`
@@ -23,6 +23,11 @@
 - MVP 实施顺序和阶段验收条件。
 
 本文档现在作为新Agent仓库的模块实施基线。工具实际能力与验证证据统一见 [工具单点验证基线](tool-validation-baseline.md)；各阶段只能声明已经通过验证的能力。目标调度算法和原始UT仍保持零采集源码侵入。
+
+2026-08-12 进一步确认当前 OpenCode 集成不使用 Algorithm Debug MCP：Agent 产品资产全部保存在本仓库，
+一次性登记外部 Skill 与 OpenCode 适配器后，用户进入目标算法仓库直接运行 `opencode`。OpenCode
+Custom Tool 调用稳定 `ada` CLI，CLI 返回“结构化摘要 + 原始 Artifact 引用”，版本化 Skill
+指导大模型自主判断下一步。下文早期 `Inquiry/Turn`、`nextAllowedActions` 或 Agent MCP 描述均以此修订为准。
 
 ## 2. 最终产品定义
 
@@ -215,12 +220,13 @@ algorithm-debug-agent/
 ├── integration-tests/
 ├── distribution/
 ├── docs/
-│
-└── .opencode/
-    ├── agents/
-    ├── skills/
-    ├── tools/
-    └── commands/
+├── skills/
+│   └── algorithm-debug/
+└── integrations/
+    └── opencode/
+        ├── agents/
+        ├── commands/
+        └── tools/
 ```
 
 上述目录表示最终稳定结构。实施阶段可以在父 POM 中一次创建模块骨架，但按 Phase 逐步填充功能，避免同时开发全部模块。
@@ -288,8 +294,8 @@ ada-contracts/src/main/java/.../contracts/
 ├── SchemaVersions.java
 ├── ProjectId.java
 ├── CaseId.java
-├── InquiryId.java
-├── TurnId.java
+├── ContextId.java
+├── AnalysisId.java
 ├── RunId.java
 ├── EvidenceId.java
 ├── TargetTest.java
@@ -315,6 +321,9 @@ ada-contracts/src/main/java/.../contracts/
 ├── ArtifactReference.java
 └── ToolResponse.java
 ```
+
+当前已实现的 `InquiryId`、`TurnId` 在迁移期保留以避免无关破坏，但新 Case/Context/Analysis API 不引用
+它们；确认无外部消费者后再通过独立兼容性变更废弃。
 
 ### 7.3 关键契约
 
@@ -350,9 +359,12 @@ public record ToolResponse<T>(
         String code,
         String message,
         T data,
-        List<ArtifactReference> artifacts,
-        List<String> nextAllowedActions) {}
+        List<ArtifactReference> artifacts) {}
 ```
+
+ToolResponse 不承载固定状态机的 `nextAllowedActions`。它通过 `eventType`、`caseId/contextId/analysisId/runId`、
+`latestRunForAnalysis`、目标/Agent 结果、比较状态和 Artifact 引用自描述本轮事实；大模型根据 Skill、问题和
+证据缺口选择下一步。异常分类只表达构建、测试失败、测试错误、未执行、Agent 失败或未知，不推断业务根因。
 
 ### 7.4 设计规则
 
@@ -945,7 +957,7 @@ stderr.log
 
 Manifest至少记录：
 
-- `caseId/inquiryId/runId`；
+- `caseId/contextId/analysisId/runId`；
 - 目标项目、模块、测试选择器和工作目录；
 - Git commit或源码Hash、classpath Hash、Java版本；
 - Bundle版本、CodePathTracer commit和SHA-256；
@@ -1476,7 +1488,7 @@ INCONCLUSIVE
 报告中的每个确定性结论必须引用至少一个Evidence ID。`ReportCitationValidator`检查：
 
 - ID存在；
-- Evidence与Case/Inquiry匹配；
+- Evidence与Case/Context/Analysis作用域匹配；
 - Evidence类型满足结论要求；
 - `MODEL_INFERRED`不能被写成`OBSERVED`。
 
@@ -1570,9 +1582,10 @@ ada dependency import
 ada case create
 ada case resume
 ada case status
-ada inquiry create
-ada inquiry ask
-ada workflow run
+ada analysis begin
+ada analysis complete
+ada run test
+ada artifact read
 ada baseline run
 ada gantt focus
 ada static analyze
@@ -1585,6 +1598,8 @@ ada evidence query
 ada evidence evaluate
 ada report generate
 ada eval run
+ada install opencode
+ada uninstall opencode
 ```
 
 ### 22.3 CLI输出规则
@@ -1592,50 +1607,52 @@ ada eval run
 - stdout只输出ToolResponse JSON；
 - 日志写stderr和日志文件；
 - 大Trace绝不打印到stdout；
-- 返回Artifact绝对路径、状态和下一步动作；
+- 返回有界结构化摘要、便携 Artifact 引用和完整性/截断信息；
 - 退出码区分参数错误、环境错误、目标测试失败和采集失败。
 
-## 23. `.opencode` 集成详细设计
+## 23. OpenCode 集成详细设计
 
 ### 23.1 目录
 
 ```text
-.opencode/
+skills/
+└── algorithm-debug/
+    ├── SKILL.md
+    └── references/
+
+integrations/opencode/
 ├── agents/algorithm-debug.md
-├── skills/algorithm-debug/SKILL.md
 ├── commands/debug-case.md
 ├── commands/resume-debug-case.md
-└── tools/
-    ├── ada-case.ts
-    ├── ada-baseline.ts
-    ├── ada-gantt.ts
-    ├── ada-static.ts
-    ├── ada-codepath.ts
-    ├── ada-collect.ts
-    ├── ada-evidence.ts
-    └── ada-report.ts
+├── tools/algorithm-debug.ts
+└── opencode-template.json
 ```
+
+`skills/algorithm-debug` 是唯一工作流源码；`integrations/opencode` 只适配 OpenCode。一次性执行
+`ada install opencode`，在 OpenCode 用户配置中登记 Agent 安装路径、外部 Skill 来源和薄 Custom Tool
+加载器。不得把 Skill 正文复制到全局 Skill 目录或目标算法仓库。安装必须幂等、可审计并支持卸载。
 
 ### 23.2 Agent职责
 
 OpenCode Agent负责：
 
 - 解析用户自然语言问题；
-- 维持当前`caseId/inquiryId`；
+- 维持当前`caseId/analysisId`；
 - 选择高层工具；
 - 使用知识库解释Evidence；
 - 在证据不足时提出下一轮DebugIntent；
 - 生成对用户友好的回答。
 
-### 23.3 Tool职责
+### 23.3 Custom Tool 职责
 
-TypeScript Tool仅完成：
+OpenCode 薄 Custom Tool 仅完成：
 
 ```text
 参数Schema校验
+  -> 从tool context取得当前directory/worktree
   -> 启动ada CLI
   -> 解析ToolResponse
-  -> 返回摘要、Artifact路径和nextAllowedActions
+  -> 原样返回RunOutcomeSummary与Artifact引用
 ```
 
 它不实现Java业务逻辑，不直接调用Maven，不直接启动Collector。
@@ -1646,16 +1663,22 @@ TypeScript Tool仅完成：
 
 ```json
 {
+  "eventType": "TARGET_TEST_RUN_COMPLETED",
   "caseId": "CASE-001",
-  "inquiryId": "Q001",
-  "turnId": "TURN-003",
-  "state": "EVIDENCE_PARTIAL",
-  "artifacts": [],
-  "nextAllowedActions": ["QUERY_EVIDENCE", "COLLECT_FOCUSED_JDWP"]
+  "contextId": "CONTEXT-001",
+  "analysisId": "ANALYSIS-003",
+  "runId": "RUN-005",
+  "latestRunForAnalysis": true,
+  "testOutcome": "ERROR",
+  "scheduleResultPresent": false,
+  "artifacts": []
 }
 ```
 
 即使OpenCode重新启动，也能通过`ada case resume CASE-001`恢复，不依赖旧聊天消息。
+
+正常使用是一次安装后进入任意目标算法仓库直接运行 `opencode` 并提问。自动 Skill 发现之外保留
+`/debug-case` 和显式 `algorithm-debug` Agent。`ada opencode --project ...` 仅用于开发、自测或临时免安装。
 
 ### 23.5 权限
 
@@ -1664,7 +1687,7 @@ TypeScript Tool仅完成：
 - 任意Shell命令需要确认；
 - JDWP只允许localhost；
 - 删除Case和历史Run需要确认；
-- 默认不配置JDWP-MCP。
+- 默认不配置JDWP-MCP；当前 Algorithm Debug Agent 接入链路也不实现 MCP Server。
 
 ## 24. `wafer-demo-adapter` 详细设计
 
@@ -2041,7 +2064,8 @@ Collector/Core单点能力已经验证。此Phase只负责Agent侧接入：锁�
 
 ### Phase 6：OpenCode Agent MVP
 
-提供`/debug-case`、多轮`caseId/inquiryId`恢复和`ada_*`工具。
+提供仓库内唯一 Skill、`/debug-case`、多轮 `caseId/analysisId` 恢复、薄 Custom Tool `ada_*` 工具和一次性
+OpenCode 适配安装。安装后用户进入目标算法仓库直接运行 `opencode`；当前阶段不实现 Agent MCP。
 
 ### Phase 7：Knowledge + Sufficiency Loop
 

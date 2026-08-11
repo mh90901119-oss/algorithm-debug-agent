@@ -1,7 +1,7 @@
 # Algorithm Debug Agent 完整架构与开发计划
 
 - 文档状态：实施基线（已按工具单点验证校准）
-- 版本：1.2
+- 版本：1.3
 - 更新日期：2026-08-12
 - 基线算法项目：`D:\javacode\hellomvn`
 - 现有 JDWP 项目：`D:\mcpcode\mcp-jdwp-java`
@@ -31,6 +31,11 @@ Case 与多轮协作模型已由 `ADR-006-case-as-analysis-dossier.md` 和
 分析档案；源码、输入或 UT 内容变化在同一 Case 内追加 Context Snapshot；Run、Analysis、Artifact 和
 Evidence 按 `contextId` 作用域追加保存。本文中更早的复杂 Case State、Inquiry/Turn 或代码变化拆分
 Revision Case 描述不再作为实施依据。
+
+OpenCode 接入进一步由上述详细设计收敛：当前不实现 Algorithm Debug MCP Server；OpenCode 通过仓库内
+Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库，一次性适配安装只登记
+外部路径；此后用户进入目标算法仓库直接运行 `opencode`。每次 UT 运行以“结构化摘要 + 原始 Artifact
+引用”返回，Skill 指导大模型自主决定是否继续读取、运行或采集。
 
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
 
@@ -1398,28 +1403,20 @@ LangChain 仍然只是可选集成层。
 ### 22.1 目录
 
 ```text
-.opencode/
-├── agents/
-│   ├── algorithm-debug.md
-│   ├── evidence-critic.md
-│   └── debug-reporter.md
-├── commands/
-│   ├── algorithm-debug.md
-│   └── evaluate-agent.md
-└── tools/
-    ├── run-baseline.ts
-    ├── profile-case.ts
-    ├── static-analyze.ts
-    ├── collect-code-path.ts
-    ├── build-debug-plan.ts
-    ├── collect-jdwp.ts
-    ├── normalize-trace.ts
-    ├── query-evidence.ts
-    ├── validate-evidence.ts
-    ├── search-knowledge.ts
-    ├── agent-state.ts
-    └── run-evaluation.ts
+skills/algorithm-debug/
+├── SKILL.md
+└── references/
+
+integrations/opencode/
+├── agents/algorithm-debug.md
+├── commands/debug-case.md
+├── commands/resume-debug-case.md
+├── tools/algorithm-debug.ts
+└── opencode-template.json
 ```
+
+Skill 只有一份正式源码。`ada install opencode` 一次性登记 Agent 安装路径、Skill 来源和薄 Custom Tool；
+日常使用是进入目标算法仓库直接运行 `opencode`。不把 Skill 复制到全局 Skill 目录或目标仓库。
 
 ### 22.2 工具实现
 
@@ -1428,12 +1425,15 @@ TypeScript 只做薄封装：
 ```text
 OpenCode Custom Tool
   -> 参数 Schema 校验
-  -> 调用 java -jar algorithm-debug-cli.jar
-  -> 读取结果摘要
-  -> 返回 artifact path 和结构化状态
+  -> 从tool context取得当前directory/worktree
+  -> 调用ada CLI
+  -> 读取ToolResponse/RunOutcomeSummary
+  -> 返回有界摘要和Artifact引用
 ```
 
-不要把完整大型 Trace 返回模型。模型通过 `query_evidence` 按 wafer、resource、eventType、timeRange 查询证据切片。
+不要把完整大型 Trace 或日志返回模型。模型先阅读本轮结构化摘要，需要时再通过 `query_evidence` 或
+`artifact_read` 按 wafer、resource、eventType、timeRange 和 Artifact 引用查询有界切片。Custom Tool 不解释
+异常或改变事实；具体根因由大模型结合 Skill、源码和 Evidence 分析。
 
 ### 22.3 Agent 权限
 
@@ -1935,7 +1935,8 @@ Plan Compiler 决定真实代码位置和安全捕获动作。
 
 ### ADR-008：OpenCode 为第一阶段 Agent Runtime
 
-不引入 LangChain。确定性工具通过 OpenCode Custom Tools 暴露。
+不引入 LangChain。确定性工具通过 OpenCode Custom Tools 调用稳定 `ada` CLI 暴露；当前不实现
+Algorithm Debug MCP Server，也不适配其他客户端。
 
 ### ADR-009：文件作为第一阶段持久化
 
@@ -1943,7 +1944,8 @@ Agent State、Trace、Evidence、Eval 均使用版本化文件，不使用数据
 
 ### ADR-010：MCP 是深挖层而非批量采集层
 
-完整批量 Trace 由 Collector 流式落盘；MCP 用于问题已聚焦后的交互式调试。
+该历史决策只描述外部 JDWP-MCP 调试工具：完整批量 Trace 由 Collector 流式落盘，JDWP-MCP 仅保留为
+可选人工疑难排查工具。它不表示 Algorithm Debug Agent 当前通过 MCP 接入 OpenCode。
 
 ## 32. 推荐立即启动的 Backlog
 
@@ -1959,8 +1961,10 @@ Agent State、Trace、Evidence、Eval 均使用版本化文件，不使用数据
 10. 将已验证的`raw-trace.jsonl`接入Case Run目录并自动校验Manifest；
 11. 将 Trace 与 `schedule-result.json` 对齐；
 12. 生成第一份代码级 `debug-report.md`；
-13. 封装 OpenCode `run_baseline/collect_path/collect_jdwp/query_evidence` 工具；
-14. 建立第一个 Golden Evaluation。
+13. 冻结 RunOutcomeSummary、Artifact 引用和 Skill 协作契约；
+14. 封装 OpenCode `run_test/collect_path/collect_jdwp/query_evidence` 薄 Custom Tool；
+15. 实现幂等 `ada install opencode` 适配安装与直接 `opencode` 使用链路；
+16. 建立第一个 Golden Evaluation。
 
 ## 33. 参考资料
 
