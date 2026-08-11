@@ -594,7 +594,8 @@ algorithm-debug-parent
 
 ## Phase 0：基线冻结与契约版本化
 
-状态：核心垂直闭环已于 2026-08-11 实现；通用 Maven Runner、锁与持久化恢复继续迭代。
+状态：核心垂直闭环和通用 Maven Runner 已于 2026-08-11 实现；2026-08-12 根据实际 OpenCode
+多轮场景，将后续持久化收敛为 Case Context、Run Outcome 和 Analysis/Evidence 追加记录。
 
 目标：把当前 Demo 固化成后续迭代的可比较基线。
 
@@ -604,20 +605,21 @@ algorithm-debug-parent
 - Case Manifest；
 - 当前四类 Case 的 golden summary；
 - 结果 Schema 文档；
-- Run Manifest；
+- Run Start/Outcome；
 - 可重复运行 Hash。
 - 运行前 `CaseFingerprint` 与运行后 `ExecutionIdentity`；
 - 动态输出目录运行前后差分；
 - 不可变 Run 结果捕获；
-- `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
+- 可选的 `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
 - Case 复用、新建与 Revision 决策。
+- 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用。
 
 验收：
 
-- 稳定阈值可配置；Demo 连续运行两次，生产 Case 建议三次以上；
+- 首次无采集 Run 默认作为复现参考；检测到漂移、并发/随机因素或用户要求时再执行重复稳定性验证；
 - 所有 Case 可生成独立 run 目录；
 - 结果中可确认输入 Hash、算法版本和模式。
-- 相同 Fingerprint 结果不一致时进入 `BASELINE_UNSTABLE`，不自动新建 Case。
+- 动态采集运行与参考 Gantt Hash 或异常特征不一致时，相关证据不得用于确认根因。
 
 ## Phase 1：候选决策循环与领域 Trace
 
@@ -906,8 +908,11 @@ TestLaunchSpec
   -> 真实 Demo 两次 Baseline
 ```
 
-下一步先完成 Run Manifest 与 Case State 持久化，再提供 `algorithm-debug-cli baseline`，使上述能力可以
-脱离 JUnit 集成测试正式调用。之后进入 Gantt Focus 与静态分析；后者的第一个可交付目标仍为：
+下一步按
+`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 完成 Case Context、Run
+Start/Outcome、目标异常诊断与多轮 Analysis/Evidence 持久化，再提供 `algorithm-debug-cli baseline`，
+使上述能力可以脱离 JUnit 集成测试正式调用。该切片不实现复杂 Case 状态机、线程转储或事件溯源。
+之后进入 Gantt Focus 与静态分析；后者的第一个可交付目标仍为：
 
 ```text
 运行 complex-parallel-three-jobs-five-chambers Case

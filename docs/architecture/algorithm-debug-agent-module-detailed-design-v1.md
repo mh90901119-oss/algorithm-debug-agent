@@ -1,8 +1,8 @@
 # Algorithm Debug Agent 模块详细设计
 
 - 文档状态：实施基线；仓库骨架已创建，业务模块尚待分阶段实现
-- 版本：1.1
-- 日期：2026-08-10
+- 版本：1.2
+- 日期：2026-08-12
 - 当前目标算法 Demo：`D:\javacode\hellomvn`
 - 当前 JDWP 工具仓库：`D:\mcpcode\mcp-jdwp-java`
 - Agent 仓库：`D:\javacode\algorithm-debug-agent`
@@ -15,7 +15,7 @@
 - 仓库与 Maven 模块边界；
 - 每个目录、核心类和配置文件的职责；
 - 模块依赖方向；
-- Case、Inquiry、Turn、Collection Round 数据模型；
+- Case、Run、Analysis、Artifact、Evidence 数据模型；
 - Baseline、CodePath、JDWP Collector、Evidence 和报告工作流；
 - OpenCode、LLM 与 Java 后端的交互边界；
 - 知识库组织、检索与版本策略；
@@ -49,7 +49,7 @@ org.example.scheduler.wafer.SimpleWaferSchedulerTest
 
 ```text
 建立 Case
-  -> 重复运行 UT 验证确定性
+  -> 首次无采集运行冻结复现参考
   -> 解析并锚定 Gantt 现象
   -> 静态分析相关代码和策略
   -> CodePathTracer 采集实际调用路径
@@ -92,17 +92,23 @@ OpenCode -> 大量低层 jdwp_set_breakpoint/jdwp_get_locals 调用
 
 `jdwp-mcp-server` 仅保留为开发、Collector 自测和人工疑难排查工具，不属于 Agent MVP 的运行依赖。
 
-### 3.3 多轮对话状态不依赖聊天上下文
+### 3.3 多轮分析事实不依赖聊天上下文
 
-OpenCode 会话可以关闭、压缩或更换模型。正式状态必须保存到 Case Workspace。核心层级为：
+OpenCode 会话可以关闭、压缩或更换模型。正式事实必须保存到 Case Workspace。核心层级为：
 
 ```text
-Case -> Inquiry -> Turn -> Collection Round -> Evidence -> Report Version
+Case -> Run / Analysis -> Artifact -> Evidence -> Answer
 ```
+
+Case 是一个用户问题的分析档案，不是工作流状态机。同一问题的追问显式复用 `caseId` 并创建新的
+`analysisId`；每轮 Analysis 记录历史复用、证据缺口、采集计划、Evidence 选择和分级结论。完整规则
+见 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 和
+`../decisions/ADR-006-case-as-analysis-dossier.md`。
 
 ### 3.4 原始产物追加写入、永不覆盖
 
-Baseline、原始 Gantt、原始 CodePath、Raw JDWP Trace、采集计划和历史报告均不可变。只有索引、当前状态和派生视图可以原子更新。
+复现参考、原始 Gantt、原始 CodePath、Raw JDWP Trace、采集计划、Analysis 和历史回答均不可变。
+可选索引和 Case Digest 是可删除、可重建的派生视图，不得成为事实源。
 
 ### 3.5 LLM 只生成意图和解释
 
@@ -364,104 +370,101 @@ public record ToolResponse<T>(
 
 ### 8.1 职责
 
-持久化多轮对话和多轮采集的完整状态，是系统事实源，不依赖 OpenCode 会话上下文。
+持久化一个问题的 Case 身份、每次 UT 的 Run 事实和多轮 Analysis 证据引用，不依赖 OpenCode 会话
+上下文。事实源由不可变记录组成，不使用复杂 Case 状态机驱动分析。
 
 ### 8.2 核心类
 
 ```text
-CaseService
 CaseWorkspace
 CaseResolutionService
 BaselineStabilityService
-CaseStateRepository
-InquiryService
-TurnService
-RunRegistry
-ArtifactStore
+CaseContextRepository
+RunRecordRepository
+AnalysisRecordRepository
+CaseDigestBuilder
 ImmutableArtifactStore
-AtomicStateWriter
-CaseLockManager
-SemanticHashService
-RecoveryService
+ReproductionComparator
 ```
 
 ### 8.3 数据层级
 
 ```text
-Case       固定的执行身份与Baseline
-Inquiry    针对该Gantt的一个独立问题
-Turn       Inquiry下的一次用户追问
+Case       一个目标项目、目标UT和用户问题的分析档案
 Run        一次目标UT进程执行
-Round      一次分析或采集轮次
+Analysis   初始问题或追问的一轮大模型分析
 Artifact   一份不可变文件
 Evidence   从Artifact中提取的可引用事实
 ```
+
+一个 Case 可以包含多个 Run 和多个 Analysis。Analysis 显式引用历史 Run/Evidence；CodePathTracer、
+JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化为有界 Evidence 供大模型使用。
 
 ### 8.4 Case目录
 
 ```text
 .algorithm-debug/cases/CASE-001/
-├── case-manifest.json
-├── case-state.json
-├── run-registry.json
-├── conversation-index.json
+├── case.json
 ├── baseline/
-│   └── baseline-verification.json
+│   └── reproduction.json
 ├── runs/
 │   ├── RUN-001/
-│   │   ├── run-manifest.json
-│   │   ├── input/
+│   │   ├── run-start.json
+│   │   ├── run-outcome.json
 │   │   ├── result/gantt.json
+│   │   ├── diagnostics/test-failure.json
+│   │   ├── codepath/
+│   │   ├── jdwp/
 │   │   └── logs/
 │   └── RUN-002/
-├── shared/
-│   ├── input-profile/
-│   ├── gantt-analysis/
-│   ├── static-analysis/
-│   └── method-path/
-├── inquiries/Q001/
-│   ├── inquiry.json
-│   ├── turns/
-│   ├── plans/
-│   ├── collections/
-│   ├── evidence/
-│   └── reports/
-└── case-evidence/
+├── analyses/
+│   ├── ANALYSIS-001/
+│   │   ├── question.json
+│   │   ├── context.json
+│   │   ├── evidence-gaps.json
+│   │   ├── plan.json
+│   │   ├── evidence-selection.json
+│   │   ├── result.json
+│   │   └── answer.md
+│   └── ANALYSIS-002/
+└── evidence/
 ```
 
 ### 8.5 覆盖规则
 
 不可覆盖：
 
-- 输入副本；
-- Baseline结果；
+- `case.json`；
+- `run-start.json` 和 `run-outcome.json`；
+- 复现参考和输入副本；
 - Raw Trace；
 - Plan版本；
 - Collection Manifest；
-- Report版本。
+- Evidence、Analysis 和回答版本。
 
-允许原子替换：
+允许重新构建但不得作为事实源：
 
-- `case-state.json`；
-- `run-registry.json`；
-- `conversation-index.json`；
-- 重新构建的 `evidence-graph.json`。
+- Case Digest；
+- Evidence Catalog 索引；
+- `evidence-graph.json` 派生视图。
 
-### 8.6 恢复与并发
+### 8.6 不完整运行与并发
 
-- 使用 `.case.lock` 防止两个会话同时写同一个 Case；
-- Run开始前写 `RUNNING` manifest，结束后改为 `SUCCEEDED/FAILED/ABORTED`；
-- 进程异常退出保留目录，不将不完整数据升级为有效Evidence；
-- Recovery扫描孤立PID、未完成临时文件和未关闭Run；
-- 状态更新采用临时文件写完后同卷原子替换。
+- Run 开始前以 create-new 语义写 `run-start.json`，终止后写一次 `run-outcome.json`；
+- 只有 start 而没有 outcome 的目录派生为 `INCOMPLETE`，不重写历史、不升级为 Evidence；
+- `caseId/runId/analysisId/evidenceId` 使用不透明唯一 ID，目录和终态文件拒绝覆盖；
+- 当前不引入复杂 Case Lock、孤立 PID 扫描和事件重放；实测出现同 Case 并发冲突后再增加窄范围锁；
+- 临时文件与最终 create-new/原子提交必须位于同一文件系统。
 
 ### 8.7 测试
 
-- 并发加锁；
-- 崩溃恢复；
+- Case、Run 和 Analysis 拒绝覆盖；
+- 不完整 Run 派生读取；
 - 不可变产物拒绝覆盖；
 - 相同ExecutionIdentity复用Case；
-- 输入或源码变化自动派生新Case。
+- 输入或源码变化自动派生新Case；
+- 同一 Case 多轮 Analysis 复用历史 Evidence；
+- UT 断言失败时仍捕获已产生 Gantt。
 
 ### 8.8 当前 Phase 0 实现
 
@@ -475,7 +478,10 @@ Evidence   从Artifact中提取的可引用事实
 - 同 Fingerprint 下结果语义哈希不同进入 `BASELINE_UNSTABLE`，不得自动拆 Case；
 - LLM 只提供 `CaseIntent`，不能绕过上述规则。
 
-文件锁、JSON State Repository、崩溃恢复、Inquiry/Turn 持久化仍属于后续 Phase。
+后续持久化按
+`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 实现。现有
+`CaseLifecycleState` 和 `BaselineStabilityService` 在迁移期保留，但新 OpenCode 协作入口不依赖复杂
+状态转换；首次无采集 Run 默认作为复现参考，只有检测到漂移或用户要求时才重复验证非确定性。
 
 ## 9. `adapter-sdk` 详细设计
 
@@ -598,14 +604,16 @@ VALIDATION_REPLAY
 
 ### 10.5 Baseline要求
 
-稳定阈值可配置。Phase 0 Demo 默认连续运行两次，生产问题建议配置为三次或更多：
+首次无采集 Run 默认冻结为复现参考，不因流程要求重复执行。检测到语义 Hash 漂移、算法包含随机或
+并发因素、采集前后结果冲突，或用户明确要求时，再按可配置阈值重复验证：
 
 - 测试均通过；
 - 输入Hash一致；
 - 调度结果语义Hash一致；
 - 运行命令与环境被记录。
 
-同一 Fingerprint 的语义结果不一致时 Case 状态为 `BASELINE_UNSTABLE`，禁止自动给出确定根因。
+同一 Fingerprint 的语义结果不一致时记录复现不稳定；与参考结果不一致的动态采集 Evidence 不得用于
+自动给出确定根因，但不通过 Case 状态机阻止大模型继续分析缺失证据。
 
 ### 10.5.1 当前 Phase 0 实现
 
@@ -617,8 +625,9 @@ VALIDATION_REPLAY
 通用 Maven/JUnit Runner 已按
 `../designs/2026-08-11-debug-harness-maven-junit-runner-design.md` 实现。当前正式链路采用“纯参数编译器
 + 通用进程监管器 + 调度结果组合器”，具备 stdout/stderr 有界归档、结构化运行结果、超时进程树
-清理、稳定轮询和现有结果捕获集成；真实集成测试不再包含临时 `ProcessBuilder`。Run Manifest、
-Case State 和 CLI 仍留在后续切片。
+清理、稳定轮询和现有结果捕获集成；真实集成测试不再包含临时 `ProcessBuilder`。后续不实现复杂
+Case State，而按 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 增加
+Case Context、Run Start/Outcome、目标异常诊断和多轮 Analysis/Evidence 持久化；CLI 仍留在再下一切片。
 
 ### 10.6 子进程要求
 
@@ -2103,7 +2112,7 @@ Collector/Core单点能力已经验证。此Phase只负责Agent侧接入：锁�
 本设计修订以下早期内容：
 
 1. 正式流程不再默认使用`interactive_debug`或JDWP-MCP；
-2. Case模型升级为`Case/Inquiry/Turn/Collection Round`；
+2. Case模型升级为`Case/Run/Analysis/Artifact/Evidence`，Case 是问题档案而不是工作流状态机；
 3. 原始采集计划、Trace和报告全部版本化，不覆盖；
 4. 增加独立`gantt-analysis`和`debug-plan-engine`模块；
 5. 明确当前`hellomvn`是目标算法Demo，不是未来Agent框架仓库；

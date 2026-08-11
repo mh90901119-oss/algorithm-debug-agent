@@ -258,9 +258,9 @@ sequenceDiagram
 - 实际变更：实现两阶段身份、Baseline 状态契约、动态结果源 SPI、有界目录快照、唯一候选解析与
   原子复制、Case Resolution、Baseline 稳定性、标准 Case/Run 目录和不可变 Artifact Store；Demo
   新增专用复现 UT；Wafer Adapter 不再理解时间戳或选择最新文件；
-- 相对设计的偏差：通用 Maven Process Runner、文件稳定轮询、JSON State Repository、Case Lock、
-  Run Manifest Writer 和 Inquiry/Turn 持久化未在本次实现；真实集成测试使用测试内 ProcessBuilder
-  驱动两次 UT，这些能力仍按模块设计留在后续 Phase；
+- 相对设计的偏差：通用 Maven Process Runner、文件稳定轮询、JSON 持久化与多轮分析未在本次实现；
+  真实集成测试使用测试内 ProcessBuilder 驱动两次 UT。Runner 后续已完成；持久化边界随后由
+  2026-08-12 简化 Case/Run/Analysis 设计取代，不再计划 Inquiry/Turn 状态机；
 - 测试与命令：Red 阶段先确认 15 个契约缺失编译错误；核心与 Adapter 共 52 个单元/契约测试通过；
   真实集成测试连续运行专用 UT 两次，分别捕获到 `RUN-001`、`RUN-002`，两次 165 操作结果语义哈希
   一致并进入 `BASELINE_STABLE`；Demo 自身 7 个测试通过；
@@ -270,9 +270,16 @@ sequenceDiagram
   重写的极端情况需后续 WatchService/运行锁或算法输出隔离补强；尚无通用 CLI 调用入口；
 - 提交/版本：工作区实现，尚未提交 Git。
 
+后续持久化边界已由
+`2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 重新设计：Case 作为一个用户问题的
+分析档案，不使用 `CaseLifecycleState` 驱动 OpenCode 多轮分析；目标 UT 的执行结果、Gantt 是否存在、
+异常诊断和多轮 Analysis/Evidence 分别追加保存。本设计已经实现的动态结果捕获、Fingerprint、
+Artifact Store 和可选稳定性服务继续复用，不再承担复杂 Case State Repository 的设计依据。
+
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-11 | 1.0 | 动态结果采集与 Case Baseline 生命周期首版 | Codex / zhao1k |
 | 2026-08-11 | 1.1 | 完成 Phase 0 垂直实现并记录真实两次运行验证 | Codex / zhao1k |
+| 2026-08-12 | 1.2 | 明确后续多轮持久化由简化 Case/Run/Analysis 设计接管 | Codex / mh90901119-oss |
