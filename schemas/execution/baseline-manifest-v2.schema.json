@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:algorithm-debug-agent:execution:baseline-manifest:2.0",
+  "title": "BaselineManifest 2.0",
+  "type": "object",
+  "required": [
+    "schemaVersion", "projectId", "caseId", "runId", "capturedAt",
+    "targetTest", "executionIdentity", "scheduleResult"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "projectId": { "type": "string", "minLength": 1 },
+    "caseId": { "type": "string", "minLength": 1 },
+    "runId": { "type": "string", "minLength": 1 },
+    "capturedAt": { "type": "string", "format": "date-time" },
+    "targetTest": { "$ref": "#/$defs/targetTest" },
+    "executionIdentity": { "$ref": "#/$defs/executionIdentity" },
+    "scheduleResult": { "$ref": "#/$defs/artifactReference" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "targetTest": {
+      "type": "object",
+      "required": ["className", "methodName"],
+      "properties": {
+        "className": { "type": "string", "minLength": 1 },
+        "methodName": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "caseFingerprint": {
+      "type": "object",
+      "required": [
+        "testSelector", "gitCommit", "sourceHash", "inputHash", "classpathHash",
+        "javaVersion", "adapterId", "adapterVersion"
+      ],
+      "properties": {
+        "testSelector": { "type": "string", "minLength": 1 },
+        "gitCommit": { "type": "string", "minLength": 1 },
+        "sourceHash": { "$ref": "#/$defs/sha256" },
+        "inputHash": { "$ref": "#/$defs/sha256" },
+        "classpathHash": { "$ref": "#/$defs/sha256" },
+        "javaVersion": { "type": "string", "minLength": 1 },
+        "adapterId": { "type": "string", "minLength": 1 },
+        "adapterVersion": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": true
+    },
+    "executionIdentity": {
+      "type": "object",
+      "required": ["caseFingerprint", "scheduleSemanticHash"],
+      "properties": {
+        "caseFingerprint": { "$ref": "#/$defs/caseFingerprint" },
+        "scheduleSemanticHash": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": true
+    },
+    "artifactReference": {
+      "type": "object",
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "type": "string", "minLength": 1 },
+        "artifactType": { "type": "string", "minLength": 1 },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

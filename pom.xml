@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.example.algorithmdebug</groupId>
+    <artifactId>algorithm-debug-agent-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>Algorithm Debug Agent</name>
+    <description>Offline evidence-driven algorithm problem-location agent</description>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <junit.version>5.10.3</junit.version>
+        <jackson.version>2.17.2</jackson.version>
+    </properties>
+
+    <modules>
+        <module>ada-contracts</module>
+        <module>adapter-sdk</module>
+        <module>case-management</module>
+        <module>debug-harness</module>
+        <module>gantt-analysis</module>
+        <module>static-analysis</module>
+        <module>method-path-spi</module>
+        <module>method-path-codepathtracer</module>
+        <module>debug-plan-engine</module>
+        <module>jdwp-collector-adapter</module>
+        <module>trace-normalizer</module>
+        <module>trace-validator</module>
+        <module>evidence-engine</module>
+        <module>knowledge-engine</module>
+        <module>explanation-reporter</module>
+        <module>ada-core</module>
+        <module>algorithm-debug-cli</module>
+        <module>agent-evaluation</module>
+        <module>adapters/wafer-demo-adapter</module>
+        <module>integration-tests</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.2.5</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>
+

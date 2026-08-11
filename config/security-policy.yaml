@@ -1,0 +1,6 @@
+schemaVersion: "1.0"
+allowNetwork: false
+allowAlgorithmSourceMutation: false
+allowProductionSystemAccess: false
+requireBaselineSemanticHash: true
+

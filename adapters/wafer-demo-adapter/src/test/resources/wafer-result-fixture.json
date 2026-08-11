@@ -1,0 +1,54 @@
+{
+  "snapshotId": "FIXTURE-001",
+  "triggerReason": "JOB_STARTED",
+  "algorithm": "JOB_SEQUENCE_WAFER_SCHEDULER_V1",
+  "equipmentId": "EQP-1",
+  "jobProcessingMode": "PARALLEL",
+  "makespan": 6,
+  "resources": ["EQP-1-ROBOT", "LP1", "CH1"],
+  "operations": [
+    {
+      "operationId": "W1-OP-0",
+      "waferId": "W1",
+      "jobId": "JOB-1",
+      "sequenceId": "SEQ-1",
+      "jobStartOrder": 1,
+      "waferOrder": 1,
+      "operationIndex": 0,
+      "sequenceStepId": "ETCH",
+      "sequenceStepIndex": 0,
+      "operationType": "PICK",
+      "resourceIds": ["EQP-1-ROBOT", "LP1"],
+      "fromLocation": "LP1",
+      "toLocation": "EQP-1-ROBOT",
+      "start": 0,
+      "end": 1,
+      "duration": 1,
+      "source": "SCHEDULED",
+      "schedulingReason": "fixture reason"
+    },
+    {
+      "operationId": "W1-OP-1",
+      "waferId": "W1",
+      "jobId": "JOB-1",
+      "sequenceId": "SEQ-1",
+      "jobStartOrder": 1,
+      "waferOrder": 1,
+      "operationIndex": 1,
+      "sequenceStepId": "ETCH",
+      "sequenceStepIndex": 0,
+      "operationType": "RECIPE",
+      "resourceIds": ["CH1"],
+      "fromLocation": "CH1",
+      "toLocation": "CH1",
+      "start": 1,
+      "end": 6,
+      "duration": 5,
+      "source": "SCHEDULED",
+      "schedulingReason": "another reason"
+    }
+  ],
+  "finalWaferLocations": {"W1": "LP1"},
+  "futureOptionalField": true
+}
+
