@@ -27,12 +27,19 @@ Algorithm Debug Agent 的实际入口是用户在目标算法仓库中通过 Ope
 8. Case 的当前摘要由不可变 Case、Run、Analysis 和 Evidence 记录确定性重建，不作为新的事实源；
 9. 首次无采集 Run 作为复现参考；默认不重复运行两次，只有检测到漂移或用户要求时才验证非确定性；
 10. 动态采集后必须与参考 Run 比较：成功运行比较 Gantt 语义 Hash，异常运行比较稳定失败特征，
-    断言失败且有 Gantt 时同时比较两者。
+    断言失败且有 Gantt 时同时比较两者；
+11. 同一问题中的源码、输入或 UT 内容变化不创建新 Case，而是在 Case 内追加 `ContextSnapshot`；
+12. 不同 Context 之间的 Gantt/异常差异是待分析的变更事实；只有同一 Context 内无采集与动态采集
+    结果不一致时，才把采集 Evidence 降级为行为干扰；
+13. 大模型根据 Case Digest、Workspace Change、历史 Evidence 和用户问题自主决定是否运行 UT、读取
+    Diff 或继续采集，确定性代码不以固定状态机替代该决策。
 
 ## 影响
 
 - `CaseLifecycleState` 不再驱动后续分析流程；现有类型在迁移期保留，但新持久化 API 不依赖它；
 - `InquiryId` 和 `TurnId` 不进入本次持久化切片，OpenCode 对话通过 `caseId`、`analysisId` 关联；
+- Case 只冻结项目、目标 UT selector 和问题身份；每个 Run、Analysis、Artifact 和 Evidence 均标注
+  `contextId`，防止把历史运行事实误写成当前代码事实；
 - 缺少 `run-outcome.json` 的 Run 被读取为不完整事实，不需要恢复任务重写为 `ABORTED`；
 - Append-only 目录与不透明 ID 避免大部分并发覆盖，暂不引入复杂 Case Lock 和事件重放；
 - LLM 可以灵活决定复用、静态分析或动态采集，但不能修改原始 Artifact、伪造 Evidence 或把历史假设

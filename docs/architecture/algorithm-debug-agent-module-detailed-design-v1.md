@@ -97,11 +97,12 @@ OpenCode -> 大量低层 jdwp_set_breakpoint/jdwp_get_locals 调用
 OpenCode 会话可以关闭、压缩或更换模型。正式事实必须保存到 Case Workspace。核心层级为：
 
 ```text
-Case -> Run / Analysis -> Artifact -> Evidence -> Answer
+Case -> Context -> Run / Analysis -> Artifact -> Evidence -> Answer
 ```
 
 Case 是一个用户问题的分析档案，不是工作流状态机。同一问题的追问显式复用 `caseId` 并创建新的
-`analysisId`；每轮 Analysis 记录历史复用、证据缺口、采集计划、Evidence 选择和分级结论。完整规则
+`analysisId`；源码、输入或 UT 内容变化时在同一 Case 追加 Context，每轮 Analysis 记录历史复用、
+变化摘要、证据缺口、采集计划、Evidence 选择和分级结论。完整规则
 见 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 和
 `../decisions/ADR-006-case-as-analysis-dossier.md`。
 
@@ -335,8 +336,10 @@ public record ExecutionIdentity(
         String scheduleSemanticHash) {}
 ```
 
-`CaseFingerprint`用于 UT 运行前选择、复用或派生 Case；`ExecutionIdentity`只在结果已捕获并完成语义哈希
-后形成。`BaselineManifest` Schema 已升级为 2.0。
+`CaseFingerprint` 原 Phase 0 实现用于运行前选择、复用或派生 Case；按 ADR-006，新入口将其作为
+Context Snapshot 的内容身份，用于界定 Run/Evidence 作用域和同 Context 采集一致性，不因同一问题的
+代码变化自动拆分 Case。`ExecutionIdentity`只在结果已捕获并完成语义哈希后形成。
+`BaselineManifest` Schema 已升级为 2.0。
 
 `ToolResponse<T>`：
 
@@ -380,33 +383,42 @@ CaseWorkspace
 CaseResolutionService
 BaselineStabilityService
 CaseContextRepository
+ContextSnapshotRepository
+WorkspaceChangeDetector
 RunRecordRepository
 AnalysisRecordRepository
 CaseDigestBuilder
 ImmutableArtifactStore
 ReproductionComparator
+ScheduleResultDiffService
 ```
 
 ### 8.3 数据层级
 
 ```text
 Case       一个目标项目、目标UT和用户问题的分析档案
+Context    同一Case内一版源码、输入、UT内容和运行环境快照
 Run        一次目标UT进程执行
 Analysis   初始问题或追问的一轮大模型分析
 Artifact   一份不可变文件
 Evidence   从Artifact中提取的可引用事实
 ```
 
-一个 Case 可以包含多个 Run 和多个 Analysis。Analysis 显式引用历史 Run/Evidence；CodePathTracer、
-JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化为有界 Evidence 供大模型使用。
+一个 Case 可以包含多个 Context、Run 和 Analysis。Analysis 显式引用历史 Context/Run/Evidence；
+CodePathTracer、JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化为有界 Evidence 供
+大模型使用。代码变化不会自动拆分新 Case，历史 Evidence 通过 `contextId` 保留作用域。
 
 ### 8.4 Case目录
 
 ```text
 .algorithm-debug/cases/CASE-001/
 ├── case.json
-├── baseline/
-│   └── reproduction.json
+├── contexts/
+│   ├── CONTEXT-001/
+│   │   ├── context.json
+│   │   ├── change-summary.json
+│   │   └── reproduction.json
+│   └── CONTEXT-002/
 ├── runs/
 │   ├── RUN-001/
 │   │   ├── run-start.json
@@ -435,6 +447,7 @@ JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化�
 不可覆盖：
 
 - `case.json`；
+- Context Snapshot 和 Change Summary；
 - `run-start.json` 和 `run-outcome.json`；
 - 复现参考和输入副本；
 - Raw Trace；
@@ -462,8 +475,10 @@ JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化�
 - 不完整 Run 派生读取；
 - 不可变产物拒绝覆盖；
 - 相同ExecutionIdentity复用Case；
-- 输入或源码变化自动派生新Case；
+- 同一问题下输入、源码或 UT 内容变化追加 Context，不派生新 Case；
+- 目标 UT selector 或独立问题变化默认创建新 Case；
 - 同一 Case 多轮 Analysis 复用历史 Evidence；
+- 跨 Context Gantt 变化生成 Diff，同 Context 采集变化降级 Evidence；
 - UT 断言失败时仍捕获已产生 Gantt。
 
 ### 8.8 当前 Phase 0 实现
@@ -481,7 +496,9 @@ JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化�
 后续持久化按
 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 实现。现有
 `CaseLifecycleState` 和 `BaselineStabilityService` 在迁移期保留，但新 OpenCode 协作入口不依赖复杂
-状态转换；首次无采集 Run 默认作为复现参考，只有检测到漂移或用户要求时才重复验证非确定性。
+状态转换；现有 `CaseResolutionService` 的“Fingerprint 变化创建 Revision”是已实现的 Phase 0 行为，
+新入口将以 Context Snapshot 取代该延续规则，使同一问题在代码修改后仍留在原 Case。首次无采集 Run
+默认作为每个 Context 的复现参考，只有检测到漂移或用户要求时才重复验证非确定性。
 
 ## 9. `adapter-sdk` 详细设计
 

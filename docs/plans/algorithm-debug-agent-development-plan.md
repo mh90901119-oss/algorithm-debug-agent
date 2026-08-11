@@ -595,7 +595,7 @@ algorithm-debug-parent
 ## Phase 0：基线冻结与契约版本化
 
 状态：核心垂直闭环和通用 Maven Runner 已于 2026-08-11 实现；2026-08-12 根据实际 OpenCode
-多轮场景，将后续持久化收敛为 Case Context、Run Outcome 和 Analysis/Evidence 追加记录。
+多轮场景，将后续持久化收敛为 Case、Context Snapshot、Run Outcome 和 Analysis/Evidence 追加记录。
 
 目标：把当前 Demo 固化成后续迭代的可比较基线。
 
@@ -612,6 +612,7 @@ algorithm-debug-parent
 - 不可变 Run 结果捕获；
 - 可选的 `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
 - Case 复用、新建与 Revision 决策。
+- 同一问题修改源码、输入或 UT 内容时追加 Context Snapshot，不自动拆分 Case；
 - 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用。
 
 验收：
@@ -620,6 +621,7 @@ algorithm-debug-parent
 - 所有 Case 可生成独立 run 目录；
 - 结果中可确认输入 Hash、算法版本和模式。
 - 动态采集运行与参考 Gantt Hash 或异常特征不一致时，相关证据不得用于确认根因。
+- 不同 Context 的 Gantt 变化形成可分析 Diff；同一 Context 采集前后不一致才视为采集行为干扰。
 
 ## Phase 1：候选决策循环与领域 Trace
 
@@ -909,8 +911,9 @@ TestLaunchSpec
 ```
 
 下一步按
-`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 完成 Case Context、Run
-Start/Outcome、目标异常诊断与多轮 Analysis/Evidence 持久化，再提供 `algorithm-debug-cli baseline`，
+`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 完成 Case、Context Snapshot、
+Run Start/Outcome、目标异常诊断、跨 Context Diff 与多轮 Analysis/Evidence 持久化，再提供
+`algorithm-debug-cli baseline`，
 使上述能力可以脱离 JUnit 集成测试正式调用。该切片不实现复杂 Case 状态机、线程转储或事件溯源。
 之后进入 Gantt Focus 与静态分析；后者的第一个可交付目标仍为：
 

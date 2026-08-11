@@ -1,12 +1,16 @@
 # Case Baseline 生命周期与动态调度结果采集可实施设计
 
 - 文档状态：Implemented
-- 设计版本：1.0
+- 设计版本：1.3
 - 创建日期：2026-08-11
 - 负责人：Codex / zhao1k
 - 目标里程碑：Phase 0 - 可重复 Baseline 垂直闭环
 - 关联需求：目标 UT 自持输入、动态文件名结果、Case 多次复现与多轮分析
 - 关联架构与 ADR：`algorithm-debug-agent-module-detailed-design-v1.md`、`ADR-001-dynamic-output-and-case-identity.md`
+
+> 后续边界：本文记录已实现的 Phase 0 动态结果捕获、Fingerprint 和稳定性行为；同一问题的多轮
+> OpenCode 持久化与代码变化延续规则，以
+> `2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 和 ADR-006 为准。
 
 ## 1. 背景与问题
 
@@ -275,6 +279,9 @@ sequenceDiagram
 分析档案，不使用 `CaseLifecycleState` 驱动 OpenCode 多轮分析；目标 UT 的执行结果、Gantt 是否存在、
 异常诊断和多轮 Analysis/Evidence 分别追加保存。本设计已经实现的动态结果捕获、Fingerprint、
 Artifact Store 和可选稳定性服务继续复用，不再承担复杂 Case State Repository 的设计依据。
+同一问题在源码、输入或 UT 内容变化后由新设计追加 Context Snapshot；本设计已实现的
+`CaseResolutionService` 创建 Revision 行为保留为历史 Phase 0 事实，但不再作为新 OpenCode 入口的
+延续规则。
 
 ## 18. 变更记录
 
@@ -283,3 +290,4 @@ Artifact Store 和可选稳定性服务继续复用，不再承担复杂 Case St
 | 2026-08-11 | 1.0 | 动态结果采集与 Case Baseline 生命周期首版 | Codex / zhao1k |
 | 2026-08-11 | 1.1 | 完成 Phase 0 垂直实现并记录真实两次运行验证 | Codex / zhao1k |
 | 2026-08-12 | 1.2 | 明确后续多轮持久化由简化 Case/Run/Analysis 设计接管 | Codex / mh90901119-oss |
+| 2026-08-12 | 1.3 | 明确 Fingerprint 变化在同一问题中映射为 Context Snapshot | Codex / mh90901119-oss |

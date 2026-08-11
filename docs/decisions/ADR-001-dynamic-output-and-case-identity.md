@@ -31,3 +31,10 @@
 - 强制 `yyyyMMddHHmmss.json`：无法迁移到其他算法；
 - 相同身份结果变化时自动新建 Case：会掩盖算法非确定性；
 - 让 LLM 直接读写 Case 状态：缺乏确定性和审计边界。
+
+## 后续修订
+
+`ADR-006-case-as-analysis-dossier.md` 将“同一 UT 的源码、输入或环境 Fingerprint 变化创建 Revision Case”
+收敛为“同一用户问题的 Case 内追加 Context Snapshot”。本 ADR 的两阶段身份、动态输出 provenance 和
+采集一致性原则继续有效，但 Fingerprint 现在界定 Run/Evidence 的 Context 作用域，不再单独决定同一
+问题是否拆分 Case。目标 UT selector 改变或调用方明确开始独立问题时，仍默认创建新 Case。

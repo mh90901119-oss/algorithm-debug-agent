@@ -1,8 +1,8 @@
 # Algorithm Debug Agent 完整架构与开发计划
 
 - 文档状态：实施基线（已按工具单点验证校准）
-- 版本：1.1
-- 更新日期：2026-08-10
+- 版本：1.2
+- 更新日期：2026-08-12
 - 基线算法项目：`D:\javacode\hellomvn`
 - 现有 JDWP 项目：`D:\mcpcode\mcp-jdwp-java`
 - 产品定位：半导体设备晶圆调度算法的离线问题定位 Agent
@@ -25,6 +25,12 @@
 - 分阶段开发计划、验收标准、风险和测试策略。
 
 本文档是后续实现的主设计基线。早期文档中提出的“在算法内部增加 Domain Trace Sink”不再作为主方案；真实算法和当前 Demo 均优先采用外部、零源码侵入的数据采集方式。
+
+Case 与多轮协作模型已由 `ADR-006-case-as-analysis-dossier.md` 和
+`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 修订：Case 是一个用户问题的
+分析档案；源码、输入或 UT 内容变化在同一 Case 内追加 Context Snapshot；Run、Analysis、Artifact 和
+Evidence 按 `contextId` 作用域追加保存。本文中更早的复杂 Case State、Inquiry/Turn 或代码变化拆分
+Revision Case 描述不再作为实施依据。
 
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
 
