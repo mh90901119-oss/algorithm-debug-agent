@@ -3,14 +3,20 @@ package org.example.algorithmdebug.core;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.ClasspathWorkspaceTemplateProvider;
+import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
+import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.ProjectRegistry;
 import org.example.algorithmdebug.casecore.RepositoryRootLocator;
 import org.example.algorithmdebug.casecore.WorkspaceInitializer;
 import org.example.algorithmdebug.casecore.WorkspaceManifestRepository;
+import org.example.algorithmdebug.adapter.TargetProjectAdapter;
+import org.example.algorithmdebug.harness.MavenTestExecutor;
 
+import java.nio.file.Path;
 import java.time.Clock;
+import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
 
@@ -22,14 +28,20 @@ public final class ControlPlaneServices {
     private final WorkspaceApplicationService workspace;
     private final ProjectApplicationService project;
     private final DoctorApplicationService doctor;
+    private final CaseApplicationService cases;
+    private final RunApplicationService runs;
 
     private ControlPlaneServices(
             WorkspaceApplicationService workspace,
             ProjectApplicationService project,
-            DoctorApplicationService doctor) {
+            DoctorApplicationService doctor,
+            CaseApplicationService cases,
+            RunApplicationService runs) {
         this.workspace = workspace;
         this.project = project;
         this.doctor = doctor;
+        this.cases = cases;
+        this.runs = runs;
     }
 
     /**
@@ -48,6 +60,37 @@ public final class ControlPlaneServices {
             Map<String, String> environment,
             String pathSeparator,
             boolean windows) {
+        return createInternal(
+                clock, javaFeatureSupplier, environment, pathSeparator, windows, null, null);
+    }
+
+    /**
+     * 装配包含 Case/Run 用例的完整离线服务集合；Adapter 由 CLI 组合根显式注入。
+     */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Path mavenExecutable) {
+        if (adapters == null || mavenExecutable == null) {
+            throw new IllegalArgumentException("完整控制面必须提供 adapters 和 mavenExecutable");
+        }
+        return createInternal(
+                clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                List.copyOf(adapters), mavenExecutable);
+    }
+
+    private static ControlPlaneServices createInternal(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Path mavenExecutable) {
         if (clock == null || javaFeatureSupplier == null || environment == null
                 || pathSeparator == null || pathSeparator.isEmpty()) {
             throw new IllegalArgumentException("控制面装配参数不能为空");
@@ -68,10 +111,26 @@ public final class ControlPlaneServices {
                 clock);
         MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
                 environment, pathSeparator, windows);
+        CaseApplicationService cases = null;
+        RunApplicationService runs = null;
+        if (adapters != null) {
+            AdapterCatalog catalog = new AdapterCatalog(adapters);
+            OpaqueIdGenerator ids = new OpaqueIdGenerator();
+            cases = new CaseApplicationService(
+                    new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                    catalog, new ContextSnapshotBuilder(), ids, clock,
+                    () -> System.getProperty("java.version", "UNAVAILABLE"));
+            runs = new RunApplicationService(
+                    new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                    catalog, ids, clock, new MavenTestExecutor(),
+                    new RunArtifactArchiver(), mavenExecutable);
+        }
         return new ControlPlaneServices(
                 new WorkspaceApplicationService(initializer),
                 new ProjectApplicationService(registry),
-                new DoctorApplicationService(javaFeatureSupplier, mavenLocator, manifestRepository));
+                new DoctorApplicationService(javaFeatureSupplier, mavenLocator, manifestRepository),
+                cases,
+                runs);
     }
 
     /** @return Workspace 初始化服务 */
@@ -87,5 +146,21 @@ public final class ControlPlaneServices {
     /** @return 环境诊断服务 */
     public DoctorApplicationService doctor() {
         return doctor;
+    }
+
+    /** @return 完整装配下的 Case 用例；基础控制面装配不提供 */
+    public CaseApplicationService cases() {
+        if (cases == null) {
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
+        }
+        return cases;
+    }
+
+    /** @return 完整装配下的 Run 用例；基础控制面装配不提供 */
+    public RunApplicationService runs() {
+        if (runs == null) {
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter/Maven");
+        }
+        return runs;
     }
 }

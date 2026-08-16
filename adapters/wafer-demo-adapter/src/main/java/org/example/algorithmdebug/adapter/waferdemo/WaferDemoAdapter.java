@@ -73,12 +73,6 @@ public final class WaferDemoAdapter implements TargetProjectAdapter<WaferSchedul
                     "ADAPTER_PROJECT_NOT_SUPPORTED",
                     "未找到 Wafer Demo 目标测试源码: " + root.resolve(TEST_SOURCE));
         }
-        Path complexInput = root.resolve(WaferDemoCaseCatalog.complexInputRelativePath());
-        if (!Files.isRegularFile(complexInput)) {
-            throw new AdapterException(
-                    "ADAPTER_INPUT_NOT_FOUND",
-                    "未找到 Wafer Demo 复杂 Case 输入: " + complexInput);
-        }
         return new ProjectDescriptor(
                 new ProjectId(WaferDemoChecks.PROJECT_ID),
                 "Wafer Scheduling Demo",

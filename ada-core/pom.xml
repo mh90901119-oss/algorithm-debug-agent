@@ -25,6 +25,16 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>adapter-sdk</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>debug-harness</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
