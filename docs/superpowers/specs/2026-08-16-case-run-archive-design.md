@@ -1,7 +1,7 @@
 # Case 持久化、真实 UT 执行与 RunOutcome 归档可实施设计
 
-- 文档状态：Review
-- 设计版本：0.1
+- 文档状态：Implemented
+- 设计版本：1.0
 - 创建日期：2026-08-16
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：P0 - 首个可使用诊断纵向切片
@@ -10,6 +10,8 @@
 - 前置设计：`2026-08-16-external-workspace-control-plane-design.md`
 
 ## 1. 背景与问题
+
+> 实施说明：本节列出的是实施前差距。纵向切片已于 2026-08-16 完成，实际结果见第 21 节。
 
 外部 Workspace 控制面已经能够初始化 Agent 数据目录、登记大型软件仓库中的独立 Maven 算法模块、执行 Doctor，
 并通过稳定 JSON CLI 对外提供这些能力。仓库中也已经存在受控 Maven/JUnit 进程执行、Surefire 失败事实提取、
@@ -427,9 +429,9 @@ sequenceDiagram
 | `ADAPTER_NOT_FOUND` | 没有 Adapter 支持目标模块和 UT |
 | `ADAPTER_AMBIGUOUS` | 多个 Adapter 匹配且调用方未明确选择 |
 | `RUN_ARCHIVE_WRITE_FAILED` | Run 控制文档或 Artifact 无法安全写入 |
-| `PROCESS_START_FAILED` | Maven 子进程没有启动 |
+| `HARNESS_PROCESS_START_FAILED` | Maven 子进程没有启动 |
 | `SUREFIRE_PARSE_FAILED` | 目标报告存在但无法安全解析 |
-| `GANTT_PROCESSING_FAILED` | Gantt 等待、解析、Hash 或复制失败 |
+| `HARNESS_GANTT_PROCESSING_FAILED` | Gantt 等待、解析、Hash 或复制失败 |
 
 Agent 运行日志本切片只使用现有 stderr 和 Run 诊断，不新增全局日志框架。stdout/stderr Artifact 由 `MavenTestExecutor` 直接有界写入
 Run raw 目录，避免先写目标模块外的任意临时位置再无界复制。
@@ -566,13 +568,13 @@ Context 扫描只访问算法模块的固定 allowlist 目录，不跟随符号�
 
 实施完成时同步：
 
-- [ ] `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`
-- [ ] `docs/architecture/algorithm-debug-agent-complete-design.md` 中仍有效的旧状态/固定三次 Baseline 表述
-- [ ] `docs/plans/algorithm-debug-agent-development-plan.md`
-- [ ] `ada-contracts`、`case-management`、`debug-harness`、`ada-core`、`algorithm-debug-cli` README
-- [ ] Case/Context/Analysis/Run/CaseDigest Schema 与示例
-- [ ] 根 README 的当前能力和命令示例
-- [ ] OpenCode README 仅同步“后端命令已存在”，不宣称安装器已实现
+- [x] `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`
+- [x] `docs/architecture/algorithm-debug-agent-complete-design.md` 中仍有效的旧状态/固定三次 Baseline 表述
+- [x] `docs/plans/algorithm-debug-agent-development-plan.md`
+- [x] `ada-contracts`、`case-management`、`debug-harness`、`ada-core`、`algorithm-debug-cli` README
+- [x] Case/Context/Analysis/Run/CaseDigest Schema 与示例
+- [x] 根 README 的当前能力和命令示例
+- [x] OpenCode README 仅同步“后端命令已存在”，不宣称安装器已实现
 
 ## 18. 自审结论
 
@@ -599,3 +601,24 @@ Context 扫描只访问算法模块的固定 allowlist 目录，不跟随符号�
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-16 | 0.1 | 定义 Case 持久化、真实 UT 执行与 RunOutcome 归档纵向切片 | Codex / mh90901119-oss |
+| 2026-08-16 | 1.0 | 完成实现、六类离线 Fixture、fat JAR SPI 验证和真实 hellomvn 只读验收 | Codex / mh90901119-oss |
+
+## 21. 实施结果与偏差
+
+已实现 `case open`、`case inspect` 和 `run execute`；Case、Context、Analysis、RunRequest、RunOutcome 与
+Artifact 按 `caseId/contextId/analysisId/runId` 追加保存。`run execute` 返回不可变 `RunOutcomeSummary`；
+最新 Digest 由调用方随后执行 `case inspect` 获取，不把会随未来 Run 变化的 Digest 嵌入历史 RunOutcome。
+
+验证结果：
+
+- 隔离 Maven Fixture 以离线模式覆盖通过、断言失败、业务异常、编译失败、测试未发现和超时；
+- shaded CLI JAR 通过 `ServiceLoader` 恰好发现一个 `wafer-demo` Adapter；
+- 真实 `D:\javacode\hellomvn` UT 得到 `SUCCEEDED/PASSED/PRESENT`，归档 stdout、stderr、Surefire XML、Gantt；
+- 验收前后比较 POM、主源码、UT 和输入目录共 26 个文件，内容 Hash 变化数为 0；
+- 第一次真实验收在受限网络中因目标 POM 声明的 Maven Resources Plugin 未缓存而失败，Agent 正确归档为
+  `FAILED/UNKNOWN/ABSENT`；允许 Maven 解析该依赖后重跑成功。该事实说明目标构建依赖可用性仍由本机 Maven 环境决定。
+
+与初稿的明确偏差：随机 UUID 碰撞当前采用 create-new 后失败关闭，没有在同一次调用中自动重生成；
+`RunOutcomeSummary` 不携带 Digest 引用，调用方通过 `case inspect` 获取最新摘要。这两点不改变“不覆盖历史”和
+“不自动重试目标 UT”的边界。Baseline 比较、Gantt 业务分析、CodePathTracer、JDWP、Evidence 与 OpenCode
+一次性安装器仍未实现，不得从本切片文档推断为可用。

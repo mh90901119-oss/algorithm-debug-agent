@@ -39,10 +39,11 @@ Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库
 
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
 
-当前实现边界：外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor 和有界
-JSON CLI 已实现。Workspace 位于目标算法仓库之外，目标模块及其上层大型软件仓库保持只读。
-Case/Context/Run/Analysis Repository、Input Analysis、OpenCode 安装器、CodePath/JDWP 编排、Evidence
-和端到端 `/debug-case` 仍未实现；以下相关内容描述目标架构，不代表当前可调用能力。
+当前实现边界：外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
+Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实目标 UT 的结构化
+RunOutcome/Artifact 归档和有界 JSON CLI 已实现。Workspace 位于目标算法仓库之外；Agent 不修改目标源码、
+UT、POM 或输入。Input Analysis、Baseline 比较、OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端
+`/debug-case` 模型流程仍未实现；以下相关内容描述目标架构，不代表当前可调用能力。
 
 ## 2. 执行摘要
 

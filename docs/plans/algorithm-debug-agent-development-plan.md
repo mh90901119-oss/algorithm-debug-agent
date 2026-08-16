@@ -7,6 +7,10 @@
 > Agent 安装目录后，用户进入目标算法仓库直接运行 `opencode`。UT 结果采用结构化摘要、原始 Artifact
 > 引用与 Skill 指引协作，异常分类不推断业务根因。
 
+> 2026-08-16 实施状态：Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、
+> 真实目标 UT 的 RunOutcome/Artifact 归档，以及 `case open/inspect`、`run execute` CLI 已实现并通过
+> 六类隔离 Maven 场景与真实 Wafer UT 验收。Baseline 比较、动态采集、Evidence 和 OpenCode 安装器仍待实现。
+
 
 - 文档状态：Draft for Implementation
 - 版本：0.1
@@ -598,8 +602,10 @@ algorithm-debug-parent
 
 ## Phase 0：基线冻结与契约版本化
 
-状态：核心垂直闭环和通用 Maven Runner 已于 2026-08-11 实现；2026-08-12 根据实际 OpenCode
-多轮场景，将后续持久化收敛为 Case、Context Snapshot、Run Outcome 和 Analysis/Evidence 追加记录。
+状态：核心 Maven Runner 已于 2026-08-11 实现；2026-08-13 完成早期 Case/Context Resolution、
+RunOutcomeSummary、Surefire 通用诊断和 OpenCode 有界适配契约；2026-08-16 已完成正式
+Case/Context/Analysis/Run Repository、Context Snapshot、Case Digest 和可执行 Case/Run CLI。
+OpenCode 安装器、Baseline 比较和采集/Evidence 链仍未实现。
 
 目标：把当前 Demo 固化成后续迭代的可比较基线。
 
@@ -615,13 +621,13 @@ algorithm-debug-parent
 - 动态输出目录运行前后差分；
 - 不可变 Run 结果捕获；
 - 可选的 `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
-- Case 复用、新建与 Revision 决策。
+- Case 新建、Context 复用与新增决策。
 - 同一问题修改源码、输入或 UT 内容时追加 Context Snapshot，不自动拆分 Case；
 - 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用；
 - 面向 LLM 的有界 RunOutcomeSummary，明确本轮 runId、目标/Agent 结果和 Artifact 引用；
 - 异常类、消息、cause 和业务栈帧的通用提取，不建立异常到业务根因的穷举规则；
 - 仓库内唯一 `skills/algorithm-debug` 与 OpenCode 适配目录；
-- 幂等的一次性 OpenCode 适配安装，安装后直接使用 `opencode`。
+- 幂等的一次性 OpenCode 适配安装，安装后直接使用 `opencode`（待实现）。
 
 验收：
 
@@ -909,7 +915,7 @@ algorithm-debug-parent
 
 ## 15. 下一步启动建议
 
-Phase 0 Baseline 的结果发现、稳定性判定和正式 Maven/JUnit Runner 已完成。已实现的纵向切片为：
+Phase 0 的结果发现、稳定性原型、正式 Maven/JUnit Runner 和 Case/Run 归档纵向切片已完成。当前可执行链路为：
 
 ```text
 TestLaunchSpec
@@ -918,15 +924,14 @@ TestLaunchSpec
   -> 超时进程树清理
   -> 文件稳定轮询
   -> ScheduleResultCapture
-  -> 真实 Demo 两次 Baseline
+  -> RunOutcome + 不可变 Artifact
+  -> CaseDigest 查询
 ```
 
-下一步按
-`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 完成 Case、Context Snapshot、
-Run Start/Outcome、目标异常诊断、跨 Context Diff 与多轮 Analysis/Evidence 持久化，再提供
-`algorithm-debug-cli baseline`，
-使上述能力可以脱离 JUnit 集成测试正式调用。该切片不实现复杂 Case 状态机、线程转储或事件溯源。
-之后进入 Gantt Focus 与静态分析；后者的第一个可交付目标仍为：
+下一步先实现 Baseline 比较和 Gantt 业务分析，使当前 Run 事实能够形成可验证的调度语义差异；随后进入
+静态调用关系、CodePathTracer 采集计划/执行，再以其结果驱动 JDWP 方法内聚焦采集。OpenCode 一次性安装器
+在后端能力稳定后接入。后续同样不引入复杂 Case 状态机、线程转储或事件溯源。静态与动态分析的第一个
+可交付目标仍为：
 
 ```text
 运行 complex-parallel-three-jobs-five-chambers Case

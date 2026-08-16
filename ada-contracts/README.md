@@ -3,6 +3,7 @@
 当前契约新增 `RunOutcomeSummary`，用独立维度表达进程、测试、Gantt、目标失败、Agent 失败和基线比较。
 异常仅保留通用事实，不在契约层推断算法业务根因。`ToolResponse` 2.0 删除固定的
 `nextAllowedActions`，后续动作由大模型依据结构化事实与版本化 Skill 决策。
+`AgentFailureDiagnostic` 仅保留稳定错误码、有界说明和可选底层异常类，不携带堆栈或敏感路径。
 序列化 `RunOutcomeSummary` 时，调用方必须为 Jackson 注册 `Jdk8Module` 以处理 `Optional` 字段。
 
 Algorithm Debug Agent 的稳定基础契约模块。它定义跨模块、跨进程和落盘 JSON 共用的不可变类型，
@@ -11,12 +12,20 @@ Algorithm Debug Agent 的稳定基础契约模块。它定义跨模块、跨进�
 ## 当前已实现
 
 - Schema 版本常量；
-- `ProjectId`、`CaseId`、`InquiryId`、`TurnId`、`RunId`、`AnalysisId`、`EvidenceId`；
+- `ProjectId`、`CaseId`、`ContextId`、`RunId`、`AnalysisId`、`EvidenceId`；
 - `TargetTest`；
 - `ExecutionIdentity`；
 - `ArtifactReference`；
 - `BaselineManifest`；
-- `ToolResponse<T>`。
+- `WorkspaceManifest`、`WorkspaceInitializationResult`；
+- `ProjectRegistration`、`ProjectRegistrationResult`；
+- `DoctorCheck`、`DoctorReport`；
+- `ToolResponse<T>`；
+- `CaseManifest`、`ContextSnapshot`、`AnalysisRequest`、`RunRequest`；
+- `CaseDigest`、`CaseOpenResult`；
+- `RunOutcomeSummary`、`TargetFailureDiagnostic`、`AgentFailureDiagnostic` 及正交结果枚举。
+
+Baseline 稳定性只使用专用 `BaselineStabilityState`；Case/多轮对话不使用统一生命周期状态机。
 
 类型在构造时校验不变量。ID 在 JSON 中序列化为字符串；产物路径统一使用 `/` 分隔的相对路径；
 所有集合执行防御性复制。

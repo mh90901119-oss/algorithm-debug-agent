@@ -30,6 +30,11 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>ada-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
             <artifactId>wafer-demo-adapter</artifactId>
             <version>${project.version}</version>
         </dependency>

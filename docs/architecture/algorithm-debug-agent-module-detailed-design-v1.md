@@ -1,8 +1,8 @@
 # Algorithm Debug Agent 模块详细设计
 
-- 文档状态：实施基线；仓库骨架已创建，业务模块尚待分阶段实现
-- 版本：1.3
-- 日期：2026-08-12
+- 文档状态：实施基线；Case/Run 归档纵向切片已实现，其余能力按阶段实施
+- 版本：1.4
+- 日期：2026-08-16
 - 当前目标算法 Demo：`D:\javacode\hellomvn`
 - 当前 JDWP 工具仓库：`D:\mcpcode\mcp-jdwp-java`
 - Agent 仓库：`D:\javacode\algorithm-debug-agent`
@@ -23,6 +23,11 @@
 - MVP 实施顺序和阶段验收条件。
 
 本文档现在作为新Agent仓库的模块实施基线。工具实际能力与验证证据统一见 [工具单点验证基线](tool-validation-baseline.md)；各阶段只能声明已经通过验证的能力。目标调度算法和原始UT仍保持零采集源码侵入。
+
+截至 2026-08-16，已实现外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
+Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实 UT RunOutcome/Artifact
+归档，以及输出单个有界 ToolResponse JSON 的可执行 CLI。Input Analysis、Gantt 业务分析、Baseline 比较、
+OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端 `/debug-case` 模型流程仍未实现。
 
 2026-08-12 进一步确认当前 OpenCode 集成不使用 Algorithm Debug MCP：Agent 产品资产全部保存在本仓库，
 一次性登记外部 Skill 与 OpenCode 适配器后，用户进入目标算法仓库直接运行 `opencode`。OpenCode
@@ -81,7 +86,7 @@ collector.capture(...);
 
 默认也不修改原始UT。外部JUnit Launcher已经验证可行，因此MVP禁止生成Companion Debug UT，也禁止向目标项目POM加入CodePathTracer依赖。若未来遇到不兼容测试框架，必须通过Adapter能力评审新增运行器，而不是静默改写目标测试。
 
-### 3.2 OpenCode 不默认接入 JDWP-MCP
+### 3.2 OpenCode 与 JDWP Collector 边界
 
 正式链路为：
 
@@ -304,7 +309,7 @@ ada-contracts/src/main/java/.../contracts/
 ├── BaselineManifest.java
 ├── BaselineRunObservation.java
 ├── BaselineVerification.java
-├── CaseLifecycleState.java
+├── BaselineStabilityState.java
 ├── RunStatus.java
 ├── GanttOperation.java
 ├── AnalysisQuestion.java
@@ -322,8 +327,8 @@ ada-contracts/src/main/java/.../contracts/
 └── ToolResponse.java
 ```
 
-当前已实现的 `InquiryId`、`TurnId` 在迁移期保留以避免无关破坏，但新 Case/Context/Analysis API 不引用
-它们；确认无外部消费者后再通过独立兼容性变更废弃。
+预发布且无生产消费者的 `InquiryId`、`TurnId` 与复杂 `CaseLifecycleState` 已删除。Baseline v1 兼容数据
+使用专用 `BaselineStabilityState`，保持既有 JSON 枚举字面值。
 
 ### 7.3 关键契约
 
@@ -364,7 +369,8 @@ public record ToolResponse<T>(
 
 ToolResponse 不承载固定状态机的 `nextAllowedActions`。它通过 `eventType`、`caseId/contextId/analysisId/runId`、
 `latestRunForAnalysis`、目标/Agent 结果、比较状态和 Artifact 引用自描述本轮事实；大模型根据 Skill、问题和
-证据缺口选择下一步。异常分类只表达构建、测试失败、测试错误、未执行、Agent 失败或未知，不推断业务根因。
+证据缺口选择下一步。`TargetFailureDiagnostic` 分类只表达构建、测试失败、测试错误、未执行或未知；
+Agent 失败由独立 `AgentFailureDiagnostic` 表达，不推断业务根因。
 
 ### 7.4 设计规则
 
@@ -498,18 +504,17 @@ CodePathTracer、JDWP、Gantt、异常和日志属于 Artifact，确定性代码
 已实现 `CaseWorkspace`、`ImmutableArtifactStore`、`CaseResolutionService` 和
 `BaselineStabilityService`。确定性规则为：
 
-- 相同 `CaseFingerprint` 复用 Case；
+- 相同 `CaseFingerprint` 在同一 Case 内复用 Context；
 - UT selector 改变创建新根 Case；
-- 同 UT 的输入、源码或环境 Fingerprint 改变创建 Revision；
-- 强制复用与 Fingerprint 冲突时返回 `CONFIRMATION_REQUIRED`；
+- 同 UT 的输入、源码或环境 Fingerprint 改变在原 Case 内创建 Context；
+- `REUSE_CONTEXT/NEW_CONTEXT` 决策同时返回现有 `caseId/contextId`，不要求上层从 Fingerprint 猜目录；
 - 同 Fingerprint 下结果语义哈希不同进入 `BASELINE_UNSTABLE`，不得自动拆 Case；
 - LLM 只提供 `CaseIntent`，不能绕过上述规则。
 
 后续持久化按
 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 实现。现有
-`CaseLifecycleState` 和 `BaselineStabilityService` 在迁移期保留，但新 OpenCode 协作入口不依赖复杂
-状态转换；现有 `CaseResolutionService` 的“Fingerprint 变化创建 Revision”是已实现的 Phase 0 行为，
-新入口将以 Context Snapshot 取代该延续规则，使同一问题在代码修改后仍留在原 Case。首次无采集 Run
+`BaselineStabilityService` 只返回专用 Baseline 状态，不驱动 Case/对话工作流。`CaseResolutionService`
+已经使用 Context 规则，使同一问题在代码修改后仍留在原 Case。首次无采集 Run
 默认作为每个 Context 的复现参考，只有检测到漂移或用户要求时才重复验证非确定性。
 
 ## 9. `adapter-sdk` 详细设计
@@ -648,15 +653,12 @@ VALIDATION_REPLAY
 
 已实现有界 `OutputDirectorySnapshotter` 和 `ScheduleResultCapture`：运行前后比较新增或修改文件，
 只对候选调用业务 Parser，只接受唯一合法结果，并用临时文件加原子移动复制到不可变 Run 路径。
-当前尚未实现通用 Maven 子进程 Runner、文件锁和可配置稳定轮询；真实集成测试中的 ProcessBuilder
-仅是测试驱动器，不属于 Harness 公共 API。
-
 通用 Maven/JUnit Runner 已按
 `../designs/2026-08-11-debug-harness-maven-junit-runner-design.md` 实现。当前正式链路采用“纯参数编译器
 + 通用进程监管器 + 调度结果组合器”，具备 stdout/stderr 有界归档、结构化运行结果、超时进程树
-清理、稳定轮询和现有结果捕获集成；真实集成测试不再包含临时 `ProcessBuilder`。后续不实现复杂
-Case State，而按 `../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 增加
-Case Context、Run Start/Outcome、目标异常诊断和多轮 Analysis/Evidence 持久化；CLI 仍留在再下一切片。
+清理、稳定轮询和现有结果捕获集成；真实集成测试不再包含临时 `ProcessBuilder`。Case Context、
+Run Request/Outcome、目标异常诊断、多轮 Analysis 档案和 CLI 已在 Case/Run 纵向切片实现；Evidence
+持久化和采集计划仍属于后续阶段。
 
 ### 10.6 子进程要求
 
@@ -875,12 +877,12 @@ distribution/tools/code-path-tracer/<version>/
 目标项目当前限定为Maven + JUnit 5。完整流程如下：
 
 ```text
-用户指定 projectRoot + module + testClass#testMethod
-  -> ada doctor检查Java、Maven、目标UT和Bundle
+用户指定 workspaceRoot + 已登记moduleRoot + testClass#testMethod
+  -> ada doctor --workspace <workspaceRoot> --project <moduleRoot> 检查当前控制面前置条件
   -> mvn test-compile（只编译，不通过Surefire运行测试）
   -> MavenTestClasspathResolver生成test runtime classpath
   -> 创建不可变run目录与method-path-plan.json
-  -> 以目标项目根目录作为working directory启动干净子JVM
+  -> 以登记的mavenExecutionRoot作为working directory启动干净子JVM
   -> Bundle安装Instrumentation
   -> JUnit Platform按class#method发现并执行原始UT
   -> 原始UT生成正常Gantt JSON
@@ -889,7 +891,9 @@ distribution/tools/code-path-tracer/<version>/
   -> 比较Gantt语义Hash与Baseline
 ```
 
-必须以目标项目根目录为工作目录，否则UT中的相对输入/输出路径可能改变。Launcher JAR应放在classpath第一项，随后依次是目标模块的`target/test-classes`、`target/classes`和Maven测试依赖。
+必须以登记的 Maven 执行目录为工作目录，否则 UT 中的相对输入/输出路径可能改变。对于当前具有独立
+`pom.xml` 的算法模块，`mavenExecutionRoot` 等于 `moduleRoot`。Launcher JAR 应放在 classpath 第一项，
+随后依次是目标模块的 `target/test-classes`、`target/classes` 和 Maven 测试依赖。
 
 目标项目准备命令（当前原型）：
 
@@ -1010,7 +1014,10 @@ RESULT_NOT_FOUND
 RESULT_HASH_MISMATCH
 ```
 
-`ada doctor --project <root>`应预检JDK版本、Maven、Bundle Hash、Attach能力、目标测试选择器、输出目录写权限和目标classpath。测试失败时仍应保留已产生的Trace、stdout/stderr和失败摘要，但不得把失败运行与Baseline一致的运行混合。
+当前 `ada doctor --workspace <workspaceRoot> [--project <moduleRoot>]` 预检 JDK 版本、Maven、Workspace
+Manifest/写入能力和可选模块 POM。Bundle Hash、Attach 能力、目标测试选择器和目标 classpath 检查随
+Collector 编排模块实现，不得提前宣称已具备。测试失败时仍应保留已产生的 Trace、stdout/stderr 和
+失败摘要，但不得把失败运行与 Baseline 一致的运行混合。
 
 ### 13.11 开源库首次构建与离线准备
 
@@ -1496,49 +1503,26 @@ INCONCLUSIVE
 
 ### 21.1 职责
 
-编排全部确定性模块，提供状态机和高层Use Case，不执行低层解析或JDI操作。
+承载高层 Use Case，不执行低层解析或 JDI 操作。当前实现 Workspace、Project 和 Doctor 控制面；
+未来分析编排由大模型根据每轮结构化结果灵活决策，Core 只执行明确的确定性动作，不引入统一工作流状态机。
 
 ### 21.2 核心类
 
 ```text
-AlgorithmDebugApplication
-AlgorithmDebugWorkflow
-WorkflowStateMachine
-WorkflowContext
-WorkflowPolicy
-CreateCaseUseCase
-RunBaselineUseCase
-FocusGanttUseCase
-AnalyzeStaticUseCase
-CollectMethodPathUseCase
-CollectRuntimeUseCase
-BuildEvidenceUseCase
-EvaluateEvidenceUseCase
-GenerateReportUseCase
-ResumeCaseUseCase
+ControlPlaneServices
+WorkspaceApplicationService
+ProjectApplicationService
+DoctorApplicationService
+MavenExecutableLocator
 ```
 
-### 21.3 状态机
+后续按独立设计增量增加运行 UT、采集和证据 Use Case，不以空壳 API 预占边界。
 
-```text
-CREATED
-BASELINE_RUNNING
-BASELINE_VERIFIED
-GANTT_FOCUSED
-STATIC_MAPPED
-PATH_CAPTURED
-DEBUG_PLAN_READY
-RUNTIME_CAPTURED
-EVIDENCE_BUILT
-EVIDENCE_PARTIAL
-EVIDENCE_SUFFICIENT
-REPORTED
+### 21.3 Case 与执行状态
 
-终止状态：
-NON_DETERMINISTIC
-BLOCKED
-FAILED
-```
+Case 是同一用户问题的分析档案，不是有限状态机。每次实际动作追加新的 Run 或 Analysis，并保存
+结构化结果和原始 Artifact 引用；LLM 可以复用历史证据，也可以在证据不足时请求新的最小动作。
+Baseline 自身只使用专用稳定性状态，目标 UT 失败则由 RunOutcome 的独立维度表达。
 
 ### 21.4 Agent Loop
 
@@ -1557,8 +1541,8 @@ FAILED
 默认预算建议：
 
 ```text
-maxTotalRuns = 6
-maxCodePathRuns = 1
+maxTotalRuns = 8
+maxCodePathRuns = 3
 maxJdwpRuns = 4
 maxTraceBytesPerRun = 50 MB
 maxWallClockMinutes = 20
@@ -1572,35 +1556,19 @@ maxWallClockMinutes = 20
 
 为OpenCode和人工终端提供稳定的高层入口。CLI输出简短JSON，完整数据写Artifact文件。
 
-### 22.2 命令
+### 22.2 当前已实现命令
 
 ```text
-ada doctor
-ada project init
-ada project inspect
-ada dependency import
-ada case create
-ada case resume
-ada case status
-ada analysis begin
-ada analysis complete
-ada run test
-ada artifact read
-ada baseline run
-ada gantt focus
-ada static analyze
-ada codepath collect
-ada plan build
-ada jdwp collect
-ada trace normalize
-ada trace validate
-ada evidence query
-ada evidence evaluate
-ada report generate
-ada eval run
-ada install opencode
-ada uninstall opencode
+ada workspace init --root <workspaceRoot>
+ada project register --workspace <workspaceRoot> --project <moduleRoot> [--project-id <id>]
+ada doctor --workspace <workspaceRoot> [--project <moduleRoot>]
+ada case open --workspace <workspaceRoot> --project-id <id> --test <class#method> --question-file <file> [--case-id <id>] [--adapter <id>]
+ada case inspect --workspace <workspaceRoot> --project-id <id> --case-id <id>
+ada run execute --workspace <workspaceRoot> --project-id <id> --case-id <id> --analysis-id <id>
 ```
+
+Artifact 独立读取、Baseline、采集、Evidence、报告和 OpenCode 安装命令均为后续能力；在各自详细设计
+和测试完成前不创建推测性 CLI 占位命令。
 
 ### 22.3 CLI输出规则
 
@@ -1608,7 +1576,7 @@ ada uninstall opencode
 - 日志写stderr和日志文件；
 - 大Trace绝不打印到stdout；
 - 返回有界结构化摘要、便携 Artifact 引用和完整性/截断信息；
-- 退出码区分参数错误、环境错误、目标测试失败和采集失败。
+- 当前退出码为 0（成功）、2（参数错误）、3（确定性控制面错误）和 10（未预期 Agent 错误）。
 
 ## 23. OpenCode 集成详细设计
 
@@ -1819,6 +1787,7 @@ Phase 0先冻结这些Schema的最小字段，再开始Java实现。
 ```text
 config/
 ├── application-default.yaml
+├── execution.yaml
 ├── collection-limits.yaml
 ├── security-policy.yaml
 ├── toolchain-lock.json
@@ -1830,8 +1799,8 @@ config/
 
 ```text
 CLI参数
-  > 目标项目.algorithm-debug配置
-  > 用户主目录配置
+  > Workspace项目级配置
+  > Workspace用户级配置
   > Agent默认配置
 ```
 
@@ -1845,7 +1814,7 @@ CLI参数
 1. OpenCode识别UT和问题
 2. ada case create
 3. CaseService生成CASE-001
-4. BaselineRunner运行3次UT
+4. 按问题和证据需要执行一次或多次无采集UT，建立或复核复现参考
 5. Adapter解析Gantt并计算语义Hash
 6. Gantt Analyzer锚定W1/W2/CH3时间窗
 7. Static Analyzer生成相关调用链和Tracepoint Catalog
@@ -1874,7 +1843,7 @@ CLI参数
 流程：
 
 ```text
-1. 创建TURN-002，不创建新Case
+1. 在同一Case下创建新的Analysis，不创建新Case
 2. Evidence Query搜索jobStartOrder、recipe时间、Comparator结果
 3. 若已有证据充分，不重跑UT
 4. 生成report-v002-confirmed.md
@@ -2016,7 +1985,9 @@ CLI创建Case
 
 ### Phase 0：仓库、契约和Fixture
 
-状态：父POM、20个模块目录、Maven Wrapper、文档/Schema/Knowledge/OpenCode目录骨架已经创建并通过Reactor构建；Contracts、最小Schema和Fixture尚未实现。
+状态：仓库骨架、Contracts/Schema、Case/Baseline/Harness 基础、外部 Workspace 控制面和 Case/Run
+追加式归档纵向切片已经实现；Input Analysis、Baseline 比较、Collector 编排、Evidence、OpenCode 安装器
+与端到端 `/debug-case` 模型流程尚未实现。
 
 交付：
 
@@ -2036,7 +2007,7 @@ CLI创建Case
 - Case Management；
 - Debug Harness；
 - Wafer Demo Adapter；
-- 三次Baseline确定性验证；
+- 可配置次数的Baseline确定性验证；
 - Gantt Analysis；
 - CLI基础命令。
 
@@ -2078,7 +2049,7 @@ OpenCode 适配安装。安装后用户进入目标算法仓库直接运行 `ope
 ## 33. 第一版Definition of Done
 
 1. 能在不修改`hellomvn`算法源码和原始UT的情况下指定一个测试方法；
-2. 能验证三次Baseline的Gantt语义Hash一致；
+2. 能在检测到漂移、随机/并发因素或用户要求时，按配置次数验证 Baseline 的 Gantt 语义 Hash 一致；
 3. 能从用户问题定位Gantt中的Wafer/Resource/时间窗；
 4. 能输出UT到Scheduler决策点的静态和实际调用路径；
 5. 能按声明式计划采集至少五个指定局部变量或对象字段；
@@ -2102,13 +2073,14 @@ OpenCode 适配安装。安装后用户进入目标算法仓库直接运行 `ope
 
 ### D3：Case存储位置
 
-建议默认：
+已确认默认使用 Agent 管理的外部 Workspace：
 
 ```text
-<target-project>/.algorithm-debug/runs
+<workspace>/projects/<projectId>/cases/<caseId>/...
 ```
 
-优点是Case与代码仓库关联直观；大型Trace可通过`.gitignore`排除。也可配置到外部磁盘。
+目标算法模块及其上层大型软件仓库保持只读。项目登记分别保存 repositoryRoot、moduleRoot、
+mavenExecutionRoot 和 pomPath；运行产物不得默认写入目标仓库。
 
 ### D4：静态分析技术
 
