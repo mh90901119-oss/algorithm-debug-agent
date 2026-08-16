@@ -1,7 +1,7 @@
 # 外部 Workspace 控制面可实施设计
 
 - 文档状态：Review
-- 设计版本：0.1
+- 设计版本：0.2
 - 创建日期：2026-08-16
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：P0 - 外部 Workspace 控制面
@@ -20,6 +20,10 @@ Harness、Adapter 和 Baseline 能力无法通过稳定控制面组合，OpenCod
 - Agent 数据 Workspace：保存用户配置、项目登记、知识、Case、Artifact、日志和缓存；
 - 目标算法仓库：只作为被分析的源码和 UT，不默认保存 Agent Case 数据。
 
+实际目标算法可能是大型 Git 仓库中的一个独立 Maven 模块。该模块具有自己的 `pom.xml`，用户通常在模块目录中通过 IDE
+运行目标 UT。因此设计还必须区分整个软件仓库根目录、算法模块目录和 Maven 实际执行目录，不能继续用单一
+`projectRoot` 混合表达三种语义。
+
 本切片先建立外部 Workspace 控制面。它不提前实现 Input Analysis、完整 Case Repository、OpenCode 安装器或动态采集。
 
 ## 2. 目标与非目标
@@ -27,7 +31,7 @@ Harness、Adapter 和 Baseline 能力无法通过稳定控制面组合，OpenCod
 ### 2.1 目标
 
 - 幂等初始化一个独立的 Algorithm Debug Workspace；
-- 将 Maven 目标项目注册到 Workspace，且不写目标项目；
+- 将具有独立 `pom.xml` 的目标算法模块登记到 Workspace，且不写目标模块或其上层仓库；
 - 通过确定性目录布局派生项目 Case 根目录；
 - 建立 CLI、项目配置、Workspace 配置和内置默认值的优先级基础；
 - 提供 Java 21、Maven、Workspace 和目标项目的只读/最小写入诊断；
@@ -146,24 +150,31 @@ createdAt: "2026-08-16T00:00:00Z"
 ```json
 {
   "schemaVersion": "1.0",
-  "projectId": "hellomvn-a1b2c3d4e5f6",
-  "displayName": "hellomvn",
-  "projectRoot": "D:/javacode/hellomvn",
+  "projectId": "algorithm-scheduler-a1b2c3d4e5f6",
+  "displayName": "algorithm-scheduler",
+  "repositoryRoot": "D:/large-system",
+  "moduleRoot": "D:/large-system/algorithm-scheduler",
+  "mavenExecutionRoot": "D:/large-system/algorithm-scheduler",
+  "pomPath": "pom.xml",
   "buildTool": "MAVEN",
   "pomSha256": "<64 lowercase hex characters>",
   "registeredAt": "2026-08-16T00:00:00Z"
 }
 ```
 
-项目登记文件 `project.json` 需要保存规范化绝对路径，以便 Agent 从任意目标仓库会话解析项目；该路径只用于本机确定性控制面，
-不默认进入最终报告。本文所说的“项目注册”仅表示在 Agent Workspace 中创建这份普通 JSON 登记文件，不读取或写入 Windows
-注册表，也不修改操作系统级配置。
+`moduleRoot` 表示实际被分析并包含独立 `pom.xml` 的算法模块；`repositoryRoot` 表示包含该模块的 Git 仓库根目录，供后续
+Context 记录 Git commit 和 dirty 状态；`mavenExecutionRoot` 在 V1 默认等于 `moduleRoot`，使 Harness 从模块目录直接运行
+Maven。`pomPath` 是相对于 `moduleRoot` 的可移植路径，V1 固定为 `pom.xml`。
+
+项目登记文件 `project.json` 需要保存这些规范化绝对路径，以便 Agent 从大型软件仓库或算法模块会话解析项目；这些路径只用于
+本机确定性控制面，不默认进入最终报告。本文所说的“项目注册”仅表示在 Agent Workspace 中创建这份普通 JSON 登记文件，
+不读取或写入 Windows 注册表，也不修改操作系统级配置。
 `pomSha256` 只标识注册时 POM，不代替后续 Context 的源码和 classpath Fingerprint。
 
 如果未显式传入 ProjectId，默认值为：
 
 ```text
-sanitize(lowercase(target-directory-name)) + "-" + first12(sha256(canonical-project-path))
+sanitize(lowercase(module-directory-name)) + "-" + first12(sha256(canonical-module-path))
 ```
 
 生成规则必须确定、无随机数、无真实时间，并将不安全字符折叠为单个 `-`。调用方显式提供的 ID 仍需执行安全路径段校验。
@@ -175,7 +186,7 @@ sanitize(lowercase(target-directory-name)) + "-" + first12(sha256(canonical-proj
 | DTO | 关键字段 | 用途 |
 |---|---|---|
 | `WorkspaceInitializationResult` | root、created、schemaVersion | 初始化结果 |
-| `ProjectRegistration` | schemaVersion、ProjectId、displayName、projectRoot、buildTool、pomSha256、registeredAt | 项目注册事实及 `project.json` 契约 |
+| `ProjectRegistration` | schemaVersion、ProjectId、displayName、repositoryRoot、moduleRoot、mavenExecutionRoot、pomPath、buildTool、pomSha256、registeredAt | 算法模块登记事实及 `project.json` 契约 |
 | `ProjectRegistrationResult` | registration、created | 区分首次注册与幂等复用 |
 | `DoctorCheck` | name、status、code、message | 单项环境诊断 |
 | `DoctorReport` | overallStatus、checks | 有界诊断摘要 |
@@ -200,8 +211,9 @@ Schema 版本常量集中加入 `SchemaVersions`。已有 Schema 不覆盖、不
 | `WorkspaceLayout` | 规范化根路径并安全派生所有标准目录 |
 | `WorkspaceInitializer` | 幂等创建目录、模板和 Workspace Manifest |
 | `WorkspaceManifestRepository` | 原子 create-new、读取并验证 `workspace.yaml` |
-| `ProjectIdGenerator` | 根据规范化目标路径生成确定性 ProjectId |
-| `ProjectRegistry` | 校验 Maven 项目、注册、读取和冲突检测 |
+| `RepositoryRootLocator` | 从模块目录向上查找最近的 `.git` 文件或目录；找不到时退化为模块目录 |
+| `ProjectIdGenerator` | 根据规范化模块路径生成确定性 ProjectId |
+| `ProjectRegistry` | 校验 Maven 算法模块、登记、读取和冲突检测 |
 | `ProjectRegistrationRepository` | 原子写入和读取 `project.json` |
 | `WorkspaceConfigurationResolver` | 按固定层级合并 YAML 配置并拒绝不支持的 Schema |
 | `AtomicDocumentWriter` | 同目录临时文件、flush、原子移动；不覆盖终态文档 |
@@ -233,8 +245,8 @@ Core 返回 DTO 或有错误码的领域异常，不打印 stdout，不依赖 CL
 
 ```text
 ada workspace init --root <workspaceRoot>
-ada project register --workspace <workspaceRoot> --project <projectRoot> [--project-id <id>]
-ada doctor --workspace <workspaceRoot> [--project <projectRoot>]
+ada project register --workspace <workspaceRoot> --project <moduleRoot> [--project-id <id>]
+ada doctor --workspace <workspaceRoot> [--project <moduleRoot>]
 ```
 
 在 OpenCode 安装器完成前，构建产物通过可执行 fat JAR 验证。安装后的 `ada.cmd` 和 PATH 登记属于后续安装切片。
@@ -303,9 +315,10 @@ sequenceDiagram
     participant Workspace
     CLI->>Core: register(workspace, project, optionalId)
     Core->>Registry: register(...)
-    Registry->>Registry: validate Workspace and pom.xml
-    Registry->>Registry: canonicalize path and compute pom hash
-    Registry->>Workspace: inspect ID and path conflicts
+    Registry->>Registry: validate Workspace and module pom.xml
+    Registry->>Registry: locate repository root
+    Registry->>Registry: canonicalize module path and compute pom hash
+    Registry->>Workspace: inspect ID and module path conflicts
     alt identical registration exists
         Workspace-->>Registry: reuse
     else no conflict
@@ -317,13 +330,18 @@ sequenceDiagram
     Core-->>CLI: ProjectRegistrationResult
 ```
 
-同一个规范化项目路径和同一个 ProjectId 重复注册是成功的幂等操作。以下情况失败：
+同一个规范化模块路径和同一个 ProjectId 重复登记是成功的幂等操作。算法模块目录是 Agent Project 的身份边界；大型软件中
+存在多个算法模块时，每个模块可以使用独立 ProjectId，但共享同一个 `repositoryRoot`。以下情况失败：
 
-- 同一 ProjectId 指向另一个路径；
-- 同一路径以另一个 ProjectId 重复注册；
-- 目标目录不存在、不是目录或没有普通文件 `pom.xml`；
+- 同一 ProjectId 指向另一个模块路径；
+- 同一模块路径以另一个 ProjectId 重复登记；
+- 模块目录不存在、不是目录或没有普通文件 `pom.xml`；
 - ProjectId 造成路径逃逸；
 - Workspace Manifest 缺失或版本不支持。
+
+V1 不根据 IDEA 的运行配置猜测 Maven Reactor。默认从 `moduleRoot` 运行 Maven；第一次 Baseline 将验证该模块 POM 能否独立
+执行目标 UT。如果未来确实需要从父 Reactor 使用 `-pl/-am`，通过向后兼容的项目配置扩展 `mavenExecutionRoot` 和模块选择器，
+不改变 Workspace、Case 或 Adapter 架构。
 
 ### 9.3 Doctor
 
@@ -341,9 +359,9 @@ Doctor 顺序执行并保留所有检查结果：Java 版本、Maven 可执行�
 | `WORKSPACE_MANIFEST_INVALID` | Manifest 格式或必填字段无效 |
 | `WORKSPACE_SCHEMA_UNSUPPORTED` | Schema 版本不支持 |
 | `WORKSPACE_WRITE_FAILED` | Workspace 原子写入失败 |
-| `PROJECT_NOT_MAVEN` | 目标项目缺少普通文件 `pom.xml` |
-| `PROJECT_ID_CONFLICT` | ProjectId 已指向其他路径 |
-| `PROJECT_PATH_CONFLICT` | 项目路径已使用其他 ProjectId 注册 |
+| `PROJECT_NOT_MAVEN` | 目标算法模块缺少普通文件 `pom.xml` |
+| `PROJECT_ID_CONFLICT` | ProjectId 已指向其他模块路径 |
+| `PROJECT_PATH_CONFLICT` | 模块路径已使用其他 ProjectId 登记 |
 | `PROJECT_REGISTRATION_INVALID` | `project.json` 无效 |
 | `CONFIG_INVALID` | YAML、Schema 或配置形状无效 |
 | `INTERNAL_ERROR` | 未预期 Agent 错误；保留 cause 到本地日志，不回显堆栈 |
@@ -354,12 +372,12 @@ stdout 必须只有一个 UTF-8 ToolResponse JSON 文档。普通诊断写 stder
 
 ## 11. 安全、兼容与依赖
 
-- 目标项目只读；项目注册不在目标项目创建文件；
+- 目标算法模块和整个软件仓库只读；项目登记不在其中创建文件；
 - Workspace 所有写入目标必须经过根路径边界校验；
 - 终态 Manifest 和项目登记记录使用 create-new 语义，不允许覆盖；
 - 临时文件必须和目标文件位于同一目录，优先原子移动；不支持原子移动时明确失败，不静默降级为覆盖；
 - 不读取或输出凭据环境变量；
-- `projectRoot` 保存在本机注册文件中，但不得默认进入报告或 LLM 摘要；
+- `repositoryRoot`、`moduleRoot` 和 `mavenExecutionRoot` 保存在本机登记文件中，但不得默认进入报告或 LLM 摘要；
 - 不自动导入旧 `.algorithm-debug`；
 - 新增 Jackson Dataformat YAML 用于 YAML 解析。它与项目已有 Jackson BOM 同版本，许可证为 Apache-2.0；不引入 CLI 框架；
 - fat JAR 使用 Apache Maven Shade Plugin，仅用于构建分发产物，不改变模块运行时 API。
@@ -376,7 +394,8 @@ stdout 必须只有一个 UTF-8 ToolResponse JSON 文档。普通诊断写 stder
 | Doctor 检查数 | 32 | 实现固定集合，不接受外部无界扩展 |
 | CLI stdout | 1 MiB | CLI 在序列化前拒绝；同时满足 OpenCode Wrapper 上限 |
 
-Workspace 初始化和项目注册的目录扫描不得递归遍历目标仓库；只读取目标根目录和 `pom.xml`。
+Workspace 初始化和项目登记不得递归遍历大型软件仓库。登记时只读取模块根目录的 `pom.xml`，并沿父目录查找 `.git` 标记；
+不得扫描无关模块。后续 Context Fingerprint 和 Static Analysis 必须另行设计有界文件范围。
 
 ## 13. 测试设计
 
@@ -394,10 +413,13 @@ Workspace 初始化和项目注册的目录扫描不得递归遍历目标仓库�
 - `WorkspaceInitializerTest.shouldCreateStandardWorkspace`；
 - `WorkspaceInitializerTest.shouldBeIdempotentAndPreserveUserConfiguration`；
 - `WorkspaceInitializerTest.shouldRejectUnsupportedExistingManifest`；
-- `ProjectRegistryTest.shouldRegisterMavenProjectWithoutWritingTarget`；
+- `RepositoryRootLocatorTest.shouldFindContainingGitRepositoryWithoutScanningSiblings`；
+- `RepositoryRootLocatorTest.shouldUseModuleRootWhenGitRepositoryIsAbsent`；
+- `ProjectRegistryTest.shouldRegisterMavenModuleWithoutWritingRepository`；
+- `ProjectRegistryTest.shouldKeepRepositoryModuleAndExecutionRootsDistinct`；
 - `ProjectRegistryTest.shouldReturnExistingIdenticalRegistration`；
 - `ProjectRegistryTest.shouldRejectProjectIdConflict`；
-- `ProjectRegistryTest.shouldRejectProjectPathConflict`；
+- `ProjectRegistryTest.shouldRejectModulePathConflict`；
 - `ProjectRegistryTest.shouldRejectMissingPom`；
 - `WorkspaceConfigurationResolverTest.shouldApplyCliProjectWorkspaceDefaultPriority`；
 - `AtomicDocumentWriterTest.shouldRejectOverwrite`。
@@ -410,7 +432,7 @@ Workspace 初始化和项目注册的目录扫描不得递归遍历目标仓库�
 - Maven 显式路径、`MAVEN_HOME`、`M2_HOME`、PATH 查找顺序；
 - 所有 Maven 来源缺失时 Doctor 返回 FAIL 而不是抛 NPE；
 - Doctor 一个检查失败时仍返回其他检查结果；
-- Doctor 不写目标项目。
+- Doctor 不写目标模块或其上层仓库。
 
 ### 13.4 CLI 测试
 
@@ -480,6 +502,7 @@ Workspace 初始化和项目注册的目录扫描不得递归遍历目标仓库�
 - 未新增无需求支撑的 Maven 模块；
 - CLI、Core、Case Management 和 Contracts 的依赖方向一致；
 - Workspace 数据不默认进入目标算法仓库；
+- 大型软件仓库、独立算法模块和 Maven 执行目录具有不同字段，算法模块是 Agent Project 身份边界；
 - 保留 LLM 决策与确定性代码执行的现有边界；
 - 测试覆盖成功、幂等、冲突、损坏配置、路径逃逸和 Maven 缺失；
 - 本切片没有提前实现 Input Analysis、Collector 或 MCP。
@@ -489,3 +512,4 @@ Workspace 初始化和项目注册的目录扫描不得递归遍历目标仓库�
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-16 | 0.1 | 根据完整现状审计和用户确认，定义外部 Workspace 控制面首个实施切片 | Codex / mh90901119-oss |
+| 2026-08-16 | 0.2 | 支持大型软件仓库内具有独立 POM 的算法模块，拆分仓库、模块和 Maven 执行路径 | Codex / mh90901119-oss |
