@@ -3,6 +3,7 @@ package org.example.algorithmdebug.casecore;
 import org.example.algorithmdebug.contracts.ProjectId;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 计算外部 Agent Workspace 的标准目录，并强制所有派生路径留在根目录内。
@@ -70,6 +71,20 @@ public final class WorkspaceLayout {
     public Path projectCases(ProjectId projectId) {
         String segment = safeProjectSegment(projectId);
         return resolveWithinRoot(Path.of("projects", segment, "cases"));
+    }
+
+    List<Path> standardDirectories() {
+        return List.of(
+                configRoot(),
+                resolveWithinRoot(Path.of("config", "projects")),
+                resolveWithinRoot(Path.of("knowledge", "shared")),
+                projectsRoot(),
+                systemRoot(),
+                resolveWithinRoot(Path.of("system", "locks")),
+                resolveWithinRoot(Path.of("system", "indexes")),
+                resolveWithinRoot(Path.of("system", "logs")),
+                resolveWithinRoot(Path.of("cache")),
+                resolveWithinRoot(Path.of("temp")));
     }
 
     private Path resolveWithinRoot(Path relativePath) {
