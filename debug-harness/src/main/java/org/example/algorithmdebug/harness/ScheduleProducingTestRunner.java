@@ -7,7 +7,6 @@ import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 
 import java.nio.file.Path;
-import java.util.Optional;
 
 /** 组合运行前快照、目标测试进程、文件稳定确认和不可变结果捕获。 */
 public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot> {
@@ -33,7 +32,7 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
     }
 
     /**
-     * 失败或超时运行只返回进程事实；仅成功运行继续稳定确认并捕获结果。
+     * 执行目标 UT，并在取得进程结果后把 Gantt 后处理失败作为独立事实返回。
      */
     public ScheduleRunResult<T> run(
             TestLaunchSpec spec,
@@ -48,13 +47,23 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
         }
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         RunResult run = executor.execute(spec, options);
-        OutputDirectorySnapshot immediateAfter = snapshotter.snapshot(source);
-        if (immediateAfter.changedSince(before).isEmpty()) {
-            return new ScheduleRunResult<>(run, Optional.empty());
+        java.util.List<Path> changedOutputCandidates = java.util.List.of();
+        try {
+            OutputDirectorySnapshot immediateAfter = snapshotter.snapshot(source);
+            changedOutputCandidates = immediateAfter.changedSince(before);
+            if (changedOutputCandidates.isEmpty()) {
+                return ScheduleRunResult.absent(run);
+            }
+            OutputDirectorySnapshot stableAfter = stabilityWaiter.awaitStable(before, source);
+            changedOutputCandidates = stableAfter.changedSince(before);
+            CapturedScheduleResult<T> captured = resultCapture.capture(
+                    before, stableAfter, parser, hashStrategy, destination);
+            return ScheduleRunResult.present(run, captured, changedOutputCandidates);
+        } catch (HarnessException exception) {
+            return ScheduleRunResult.incomplete(run, exception, changedOutputCandidates);
+        } catch (RuntimeException exception) {
+            return ScheduleRunResult.incomplete(
+                    run, "HARNESS_GANTT_PROCESSING_FAILED", exception, changedOutputCandidates);
         }
-        OutputDirectorySnapshot stableAfter = stabilityWaiter.awaitStable(before, source);
-        CapturedScheduleResult<T> captured = resultCapture.capture(
-                before, stableAfter, parser, hashStrategy, destination);
-        return new ScheduleRunResult<>(run, Optional.of(captured));
     }
 }

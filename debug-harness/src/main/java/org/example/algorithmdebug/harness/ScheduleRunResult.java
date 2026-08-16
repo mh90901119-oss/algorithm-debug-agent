@@ -1,7 +1,11 @@
 package org.example.algorithmdebug.harness;
 
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
+import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
+import org.example.algorithmdebug.contracts.GanttOutcome;
 
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -10,12 +14,79 @@ import java.util.Optional;
  */
 public record ScheduleRunResult<T extends ScheduleResultSnapshot>(
         RunResult run,
-        Optional<CapturedScheduleResult<T>> scheduleResult) {
+        GanttOutcome ganttOutcome,
+        Optional<CapturedScheduleResult<T>> scheduleResult,
+        Optional<AgentFailureDiagnostic> agentFailure,
+        Optional<Throwable> agentFailureCause,
+        List<Path> changedOutputCandidates) {
 
-    /** 进程结果与调度产物相互独立；仅校验二者容器本身非空。 */
+    /** 校验 Gantt 状态、捕获结果和 Agent 诊断的组合关系。 */
     public ScheduleRunResult {
-        if (run == null || scheduleResult == null) {
-            throw new IllegalArgumentException("run 与 scheduleResult 不能为空");
+        if (run == null || ganttOutcome == null || scheduleResult == null
+                || agentFailure == null || agentFailureCause == null
+                || changedOutputCandidates == null) {
+            throw new IllegalArgumentException("ScheduleRunResult 字段不能为空");
         }
+        changedOutputCandidates = List.copyOf(changedOutputCandidates);
+        if (ganttOutcome == GanttOutcome.PRESENT
+                && (scheduleResult.isEmpty() || agentFailure.isPresent()
+                || agentFailureCause.isPresent())) {
+            throw new IllegalArgumentException("PRESENT 必须包含调度结果且不能包含采集失败");
+        }
+        if (ganttOutcome == GanttOutcome.ABSENT
+                && (scheduleResult.isPresent() || agentFailure.isPresent()
+                || agentFailureCause.isPresent())) {
+            throw new IllegalArgumentException("ABSENT 不能包含调度结果或采集失败");
+        }
+        if (ganttOutcome == GanttOutcome.INCOMPLETE
+                && (scheduleResult.isPresent() || agentFailure.isEmpty()
+                || agentFailureCause.isEmpty())) {
+            throw new IllegalArgumentException("INCOMPLETE 必须包含采集失败/cause 且不能包含完整调度结果");
+        }
+    }
+
+    /** 创建未观察到 Gantt 输出的运行结果。 */
+    public static <T extends ScheduleResultSnapshot> ScheduleRunResult<T> absent(RunResult run) {
+        return new ScheduleRunResult<>(
+                run, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(), Optional.empty(), List.of());
+    }
+
+    /** 创建成功捕获完整 Gantt 的运行结果。 */
+    public static <T extends ScheduleResultSnapshot> ScheduleRunResult<T> present(
+            RunResult run,
+            CapturedScheduleResult<T> scheduleResult,
+            List<Path> changedOutputCandidates) {
+        return new ScheduleRunResult<>(run, GanttOutcome.PRESENT,
+                Optional.of(scheduleResult), Optional.empty(), Optional.empty(), changedOutputCandidates);
+    }
+
+    /** 创建 Gantt 有变化但无法完成验证或捕获的运行结果。 */
+    public static <T extends ScheduleResultSnapshot> ScheduleRunResult<T> incomplete(
+            RunResult run,
+            String code,
+            Throwable cause,
+            List<Path> changedOutputCandidates) {
+        if (cause == null) {
+            throw new IllegalArgumentException("cause 不能为空");
+        }
+        return new ScheduleRunResult<>(run, GanttOutcome.INCOMPLETE, Optional.empty(),
+                Optional.of(new AgentFailureDiagnostic(
+                        code, safeMessage(code), cause.getClass().getName())),
+                Optional.of(cause),
+                changedOutputCandidates);
+    }
+
+    /** 创建 Harness 结构化异常对应的不完整 Gantt 结果。 */
+    public static <T extends ScheduleResultSnapshot> ScheduleRunResult<T> incomplete(
+            RunResult run, HarnessException failure, List<Path> changedOutputCandidates) {
+        if (failure == null) {
+            throw new IllegalArgumentException("failure 不能为空");
+        }
+        Throwable cause = failure.getCause() == null ? failure : failure.getCause();
+        return incomplete(run, failure.code(), cause, changedOutputCandidates);
+    }
+
+    private static String safeMessage(String code) {
+        return "Gantt 采集未完成，详见 Agent 日志；错误码: " + code;
     }
 }

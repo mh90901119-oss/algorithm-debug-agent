@@ -22,7 +22,7 @@ class SurefireDiagnosticReaderTest {
 
     @Test
     void shouldExtractErrorWithoutInferringBusinessCause() throws Exception {
-        copyFixture("TEST-error.xml");
+        copyFixture("TEST-error.xml", "TEST-a.b.TargetTest.xml");
 
         var diagnostic = reader.read(temporaryDirectory, "a.b.TargetTest#runs").orElseThrow();
 
@@ -35,7 +35,7 @@ class SurefireDiagnosticReaderTest {
 
     @Test
     void shouldClassifyAssertionAsTestFailure() throws Exception {
-        copyFixture("TEST-assertion.xml");
+        copyFixture("TEST-assertion.xml", "TEST-a.b.TargetTest.xml");
 
         var diagnostic = reader.read(temporaryDirectory, "a.b.TargetTest#runs").orElseThrow();
 
@@ -46,13 +46,75 @@ class SurefireDiagnosticReaderTest {
     @Test
     void shouldReturnEmptyWhenReportOrTargetIsMissing() throws Exception {
         assertTrue(reader.read(temporaryDirectory, "a.b.TargetTest#runs").isEmpty());
-        copyFixture("TEST-error.xml");
+        copyFixture("TEST-error.xml", "TEST-a.b.TargetTest.xml");
         assertTrue(reader.read(temporaryDirectory, "a.b.OtherTest#runs").isEmpty());
     }
 
     @Test
+    void shouldIgnoreUnrelatedCorruptReportAndReadTargetReport() throws Exception {
+        Files.writeString(temporaryDirectory.resolve("TEST-unrelated.xml"), "<broken");
+        copyFixture("TEST-error.xml", "TEST-a.b.TargetTest.xml");
+
+        var diagnostic = reader.read(temporaryDirectory, "a.b.TargetTest#runs").orElseThrow();
+
+        assertEquals(FailureCategory.TEST_ERROR, diagnostic.category());
+    }
+
+    @Test
+    void shouldPreferCanonicalTargetReportOverStaleSuffixedReport() throws Exception {
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest-old.xml"), "<broken");
+        copyFixture("TEST-error.xml", "TEST-a.b.TargetTest.xml");
+
+        var diagnostic = reader.read(temporaryDirectory, "a.b.TargetTest#runs").orElseThrow();
+
+        assertEquals(FailureCategory.TEST_ERROR, diagnostic.category());
+    }
+
+    @Test
+    void passingCanonicalReportMustNotFallThroughToStaleSuffixedFailure() throws Exception {
+        copyFixture("TEST-error.xml", "TEST-a.b.TargetTest-old.xml");
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest.xml"), """
+                <testsuite><testcase classname='a.b.TargetTest' name='runs'/></testsuite>
+                """);
+
+        assertTrue(reader.read(temporaryDirectory, "a.b.TargetTest#runs").isEmpty());
+    }
+
+    @Test
+    void shouldMatchParameterizedMethodAndExtractDeepestCause() throws Exception {
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest.xml"), """
+                <testsuite xmlns='urn:test'>
+                  <testcase classname='a.b.TargetTest' name='runs[1]'>
+                    <error type='java.lang.IllegalStateException' message='failed'>
+                java.lang.IllegalStateException: failed
+                 at a.b.Algorithm.solve(Algorithm.java:42)
+                Caused by: java.lang.RuntimeException: outer
+                 at a.b.Service.run(Service.java:20)
+                Caused by: java.lang.NullPointerException: deepest
+                 at a.b.InputLoader.load(InputLoader.java:10)
+                    </error>
+                  </testcase>
+                </testsuite>
+                """);
+
+        var diagnostic = reader.read(temporaryDirectory, "a.b.TargetTest#runs").orElseThrow();
+
+        assertEquals("java.lang.NullPointerException: deepest", diagnostic.cause());
+    }
+
+    @Test
+    void shouldRejectTargetReportAboveByteBudget() throws Exception {
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest.xml"),
+                "<testsuite>" + " ".repeat(256) + "</testsuite>");
+
+        assertThrows(SurefireDiagnosticException.class,
+                () -> new SurefireDiagnosticReader(128).read(
+                        temporaryDirectory, "a.b.TargetTest#runs"));
+    }
+
+    @Test
     void shouldRejectDoctype() throws Exception {
-        Files.writeString(temporaryDirectory.resolve("TEST-malicious.xml"),
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest.xml"),
                 "<!DOCTYPE x [<!ENTITY ext SYSTEM 'file:///etc/passwd'>]>"
                         + "<testsuite><testcase classname='a.b.TargetTest' name='runs'>"
                         + "<error type='x' message='&ext;'>&ext;</error></testcase></testsuite>");
@@ -63,7 +125,7 @@ class SurefireDiagnosticReaderTest {
 
     @Test
     void shouldRejectDoctypeWithoutWritingParserDiagnosticsToStderr() throws Exception {
-        Files.writeString(temporaryDirectory.resolve("TEST-malicious.xml"),
+        Files.writeString(temporaryDirectory.resolve("TEST-a.b.TargetTest.xml"),
                 "<!DOCTYPE x><testsuite><testcase classname='a.b.TargetTest' name='runs'>"
                         + "<error type='x' message='bad'>bad</error></testcase></testsuite>");
         ByteArrayOutputStream captured = new ByteArrayOutputStream();
@@ -79,9 +141,9 @@ class SurefireDiagnosticReaderTest {
         assertEquals("", captured.toString());
     }
 
-    private void copyFixture(String name) throws Exception {
+    private void copyFixture(String name, String destinationName) throws Exception {
         try (var source = getClass().getResourceAsStream("/surefire/" + name)) {
-            Files.copy(source, temporaryDirectory.resolve(name));
+            Files.copy(source, temporaryDirectory.resolve(destinationName));
         }
     }
 }
