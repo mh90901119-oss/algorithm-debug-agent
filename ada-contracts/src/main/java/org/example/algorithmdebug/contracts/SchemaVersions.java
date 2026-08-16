@@ -19,6 +19,15 @@ public final class SchemaVersions {
     /** 面向模型的目标 UT 运行摘要 Schema 版本。 */
     public static final String RUN_OUTCOME_SUMMARY = "1.0";
 
+    /** Agent Workspace 清单 Schema 版本。 */
+    public static final String WORKSPACE_MANIFEST = "1.0";
+
+    /** 目标算法项目注册信息 Schema 版本。 */
+    public static final String PROJECT_REGISTRATION = "1.0";
+
+    /** 环境诊断报告 Schema 版本。 */
+    public static final String DOCTOR_REPORT = "1.0";
+
     private SchemaVersions() {
     }
 }

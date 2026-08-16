@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/workspace/doctor-report-v1.schema.json",
+  "title": "DoctorReport v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "overallStatus", "checks"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "overallStatus": { "enum": ["PASS", "WARN", "FAIL"] },
+    "checks": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/check" }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "code", "message"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["PASS", "WARN", "FAIL"] },
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
