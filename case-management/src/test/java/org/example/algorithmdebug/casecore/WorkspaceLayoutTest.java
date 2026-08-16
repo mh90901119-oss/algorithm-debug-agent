@@ -59,4 +59,13 @@ class WorkspaceLayoutTest {
         assertThrows(IllegalArgumentException.class, () -> WorkspaceLayout.of(null));
         assertThrows(IllegalArgumentException.class, () -> layout.projectWorkspace(null));
     }
+
+    @Test
+    void shouldRejectFilesystemRootAsWorkspace() {
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> WorkspaceLayout.of(temporaryDirectory.getRoot()));
+
+        assertEquals("WORKSPACE_PATH_INVALID", failure.code());
+    }
 }

@@ -58,7 +58,7 @@ public final class DoctorApplicationService {
         if (workspace == null || module == null || explicitMaven == null) {
             throw new IllegalArgumentException("workspace、module 和 explicitMaven 不能为空");
         }
-        WorkspaceLayout layout = WorkspaceLayout.of(workspace);
+        Optional<WorkspaceLayout> layout = safeWorkspaceLayout(workspace);
         List<DoctorCheck> checks = new ArrayList<>(5);
         checks.add(checkJava());
         checks.add(checkMaven(explicitMaven));
@@ -93,19 +93,25 @@ public final class DoctorApplicationService {
         }
     }
 
-    private DoctorCheck checkWorkspaceManifest(WorkspaceLayout layout) {
+    private DoctorCheck checkWorkspaceManifest(Optional<WorkspaceLayout> layout) {
+        if (layout.isEmpty()) {
+            return fail("workspace", "WORKSPACE_PATH_INVALID", "Workspace 路径无效");
+        }
         try {
-            manifestRepository.require(layout);
+            manifestRepository.require(layout.orElseThrow());
             return pass("workspace", "WORKSPACE_OK", "Workspace Manifest 有效");
         } catch (RuntimeException failure) {
             return fail("workspace", "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 缺失或无效");
         }
     }
 
-    private DoctorCheck checkWorkspaceWrite(WorkspaceLayout layout) {
+    private DoctorCheck checkWorkspaceWrite(Optional<WorkspaceLayout> layout) {
+        if (layout.isEmpty()) {
+            return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace 路径不可写");
+        }
         Path probe = null;
         try {
-            Path systemRoot = layout.systemRoot();
+            Path systemRoot = layout.orElseThrow().systemRoot();
             if (!Files.isDirectory(systemRoot, LinkOption.NOFOLLOW_LINKS)) {
                 return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace system 目录不可用");
             }
@@ -139,6 +145,14 @@ public final class DoctorApplicationService {
             return pass("project", "PROJECT_OK", "项目 Maven 模块检查通过");
         } catch (IOException | SecurityException failure) {
             return fail("project", "PROJECT_NOT_MAVEN", "项目 Maven 模块检查失败");
+        }
+    }
+
+    private static Optional<WorkspaceLayout> safeWorkspaceLayout(Path workspace) {
+        try {
+            return Optional.of(WorkspaceLayout.of(workspace));
+        } catch (RuntimeException failure) {
+            return Optional.empty();
         }
     }
 

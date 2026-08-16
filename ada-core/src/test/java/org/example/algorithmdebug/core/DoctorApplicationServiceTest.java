@@ -104,6 +104,23 @@ class DoctorApplicationServiceTest {
         assertEquals("PROJECT_NOT_REQUESTED", projectCheck.code());
     }
 
+    @Test
+    void shouldReportAllChecksWithoutProbingRejectedWorkspaceRoot() {
+        DoctorApplicationService doctor = new DoctorApplicationService(
+                () -> 21,
+                new MavenExecutableLocator(Map.of(), ";", true),
+                manifestRepository());
+
+        DoctorReport report = doctor.diagnose(
+                temporaryDirectory.getRoot(), Optional.empty(), Optional.empty());
+
+        assertEquals(5, report.checks().size());
+        assertEquals(DoctorStatus.FAIL, report.overallStatus());
+        assertTrue(codes(report).contains("WORKSPACE_PATH_INVALID"));
+        assertTrue(codes(report).contains("WORKSPACE_WRITE_FAILED"));
+        assertTrue(codes(report).contains("PROJECT_NOT_REQUESTED"));
+    }
+
     private Path initializeWorkspace() {
         Path workspace = temporaryDirectory.resolve("workspace");
         AtomicDocumentWriter writer = new AtomicDocumentWriter();

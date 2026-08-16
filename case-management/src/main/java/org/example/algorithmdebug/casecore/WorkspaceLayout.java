@@ -28,7 +28,12 @@ public final class WorkspaceLayout {
         if (root == null) {
             throw new IllegalArgumentException("Workspace root 不能为空");
         }
-        return new WorkspaceLayout(root.toAbsolutePath().normalize());
+        Path normalized = root.toAbsolutePath().normalize();
+        if (normalized.getParent() == null) {
+            throw new WorkspaceException(
+                    "WORKSPACE_PATH_INVALID", "Workspace root 不能是文件系统根目录: " + normalized);
+        }
+        return new WorkspaceLayout(normalized);
     }
 
     /** @return Workspace 绝对规范化根目录 */

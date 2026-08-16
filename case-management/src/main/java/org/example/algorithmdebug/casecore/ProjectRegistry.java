@@ -73,6 +73,8 @@ public final class ProjectRegistry {
         manifestRepository.require(layout);
         Path canonicalModule = canonicalMavenModule(moduleRoot);
         Path pom = canonicalModule.resolve(POM_FILE_NAME);
+        Path canonicalRepository = repositoryRootLocator.locate(canonicalModule);
+        requireExternalWorkspace(layout, canonicalRepository);
         String modulePortable = portable(canonicalModule);
         ProjectId projectId = requestedId.orElseGet(() -> projectIdGenerator.generate(canonicalModule));
         layout.projectWorkspace(projectId);
@@ -98,7 +100,7 @@ public final class ProjectRegistry {
                 SchemaVersions.PROJECT_REGISTRATION,
                 projectId,
                 canonicalModule.getFileName().toString(),
-                portable(repositoryRootLocator.locate(canonicalModule)),
+                portable(canonicalRepository),
                 modulePortable,
                 modulePortable,
                 POM_FILE_NAME,
@@ -147,6 +149,23 @@ public final class ProjectRegistry {
             } catch (IOException | SecurityException failure) {
                 throw new WorkspaceException("WORKSPACE_WRITE_FAILED", "创建项目 Workspace 目录失败: " + directory, failure);
             }
+        }
+    }
+
+    private static void requireExternalWorkspace(WorkspaceLayout layout, Path repositoryRoot) {
+        try {
+            Path workspaceRoot = layout.root().toRealPath();
+            Path canonicalRepository = repositoryRoot.toRealPath();
+            if (workspaceRoot.startsWith(canonicalRepository)
+                    || canonicalRepository.startsWith(workspaceRoot)) {
+                throw new WorkspaceException(
+                        "WORKSPACE_PATH_INVALID", "Workspace 必须位于目标算法仓库之外");
+            }
+        } catch (WorkspaceException failure) {
+            throw failure;
+        } catch (IOException | SecurityException failure) {
+            throw new WorkspaceException(
+                    "WORKSPACE_PATH_INVALID", "无法验证 Workspace 与目标算法仓库的路径边界", failure);
         }
     }
 

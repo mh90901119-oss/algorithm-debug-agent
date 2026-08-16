@@ -67,10 +67,12 @@ public final class WorkspaceInitializer {
             try {
                 Files.createDirectories(directory);
                 if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
-                    throw new WorkspaceException("Workspace 标准路径不是目录: " + directory);
+                    throw new WorkspaceException(
+                            "WORKSPACE_PATH_INVALID", "Workspace 标准路径不是目录: " + directory);
                 }
             } catch (IOException | SecurityException failure) {
-                throw new WorkspaceException("创建 Workspace 标准目录失败: " + directory, failure);
+                throw new WorkspaceException(
+                        "WORKSPACE_PATH_INVALID", "创建 Workspace 标准目录失败: " + directory, failure);
             }
         }
     }

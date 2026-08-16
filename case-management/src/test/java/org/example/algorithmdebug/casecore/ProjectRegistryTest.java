@@ -124,6 +124,27 @@ class ProjectRegistryTest {
     }
 
     @Test
+    void shouldRejectWorkspaceThatOverlapsTargetRepositoryWithoutFurtherWrites() throws Exception {
+        Path repository = createRepository();
+        Path module = createModule(repository, "algorithm-scheduler", "<project/>");
+        Path overlappingWorkspace = repository.resolve("agent-workspace");
+        new WorkspaceInitializer(
+                manifestRepository(),
+                new AtomicDocumentWriter(),
+                new ClasspathWorkspaceTemplateProvider(),
+                Clock.fixed(REGISTERED_AT, ZoneOffset.UTC))
+                .initialize(overlappingWorkspace);
+        Map<String, String> beforeRegistration = snapshot(repository);
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> registry().register(overlappingWorkspace, module, Optional.empty()));
+
+        assertEquals("WORKSPACE_PATH_INVALID", failure.code());
+        assertEquals(beforeRegistration, snapshot(repository));
+    }
+
+    @Test
     void shouldRejectMalformedExistingProjectJsonBeforeCreatingAnotherProject() throws Exception {
         Path workspace = initializeWorkspace();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);

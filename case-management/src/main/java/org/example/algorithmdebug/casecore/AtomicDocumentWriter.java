@@ -46,11 +46,13 @@ public final class AtomicDocumentWriter {
         Path normalizedTarget = target.toAbsolutePath().normalize();
         Path parent = normalizedTarget.getParent();
         if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("文档父目录不存在或不是普通目录: " + parent);
+            throw new WorkspaceException(
+                    "WORKSPACE_PATH_INVALID", "文档父目录不存在或不是普通目录: " + parent);
         }
         if (Files.exists(normalizedTarget, LinkOption.NOFOLLOW_LINKS)) {
             FileAlreadyExistsException cause = new FileAlreadyExistsException(normalizedTarget.toString());
-            throw new WorkspaceException("拒绝覆盖已有 Workspace 文档: " + normalizedTarget, cause);
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "拒绝覆盖已有 Workspace 文档: " + normalizedTarget, cause);
         }
 
         Path temporary = null;
@@ -60,9 +62,10 @@ public final class AtomicDocumentWriter {
             writeAndFlush(temporary, content);
             moveOperation.move(temporary, normalizedTarget);
             temporary = null;
-        } catch (IOException failure) {
+        } catch (IOException | SecurityException failure) {
             primaryFailure = failure;
-            throw new WorkspaceException("原子创建 Workspace 文档失败: " + normalizedTarget, failure);
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "原子创建 Workspace 文档失败: " + normalizedTarget, failure);
         } finally {
             if (temporary != null) {
                 cleanupTemporary(temporary, primaryFailure);
@@ -86,12 +89,13 @@ public final class AtomicDocumentWriter {
     private static void cleanupTemporary(Path temporary, Throwable primaryFailure) {
         try {
             Files.deleteIfExists(temporary);
-        } catch (IOException cleanupFailure) {
+        } catch (IOException | SecurityException cleanupFailure) {
             if (primaryFailure != null) {
                 primaryFailure.addSuppressed(cleanupFailure);
                 return;
             }
-            throw new WorkspaceException("清理 Workspace 临时文档失败: " + temporary, cleanupFailure);
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "清理 Workspace 临时文档失败: " + temporary, cleanupFailure);
         }
     }
 

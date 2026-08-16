@@ -85,6 +85,19 @@ class WorkspaceInitializerTest {
     }
 
     @Test
+    void shouldClassifyAFileWorkspaceRootAsInvalidPath() throws Exception {
+        Path root = Files.writeString(
+                temporaryDirectory.resolve("workspace-file"), "not-a-directory", StandardCharsets.UTF_8);
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> initializerWithFixedClock().initialize(root));
+
+        assertEquals("WORKSPACE_PATH_INVALID", failure.code());
+        assertEquals("not-a-directory", Files.readString(root, StandardCharsets.UTF_8));
+    }
+
+    @Test
     void shouldLoadExactlyFourBoundedClasspathTemplates() {
         WorkspaceTemplateProvider provider = new ClasspathWorkspaceTemplateProvider();
 

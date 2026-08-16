@@ -41,6 +41,7 @@ class AtomicDocumentWriterTest {
                 WorkspaceException.class,
                 () -> writer.writeNew(target, "replacement".getBytes(StandardCharsets.UTF_8)));
 
+        assertEquals("WORKSPACE_WRITE_FAILED", failure.code());
         assertInstanceOf(java.nio.file.FileAlreadyExistsException.class, failure.getCause());
         assertEquals("original", Files.readString(target, StandardCharsets.UTF_8));
         assertEquals(1L, countDirectoryEntries());
@@ -58,6 +59,7 @@ class AtomicDocumentWriterTest {
                 WorkspaceException.class,
                 () -> writer.writeNew(target, "content".getBytes(StandardCharsets.UTF_8)));
 
+        assertEquals("WORKSPACE_WRITE_FAILED", failure.code());
         assertEquals(moveFailure, failure.getCause());
         assertTrue(Files.notExists(target));
         assertEquals(0L, countDirectoryEntries());
