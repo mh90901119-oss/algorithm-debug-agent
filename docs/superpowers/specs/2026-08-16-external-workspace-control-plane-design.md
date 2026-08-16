@@ -1,7 +1,7 @@
 # 外部 Workspace 控制面可实施设计
 
 - 文档状态：Review
-- 设计版本：0.2
+- 设计版本：0.3
 - 创建日期：2026-08-16
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：P0 - 外部 Workspace 控制面
@@ -189,7 +189,7 @@ sanitize(lowercase(module-directory-name)) + "-" + first12(sha256(canonical-modu
 | `ProjectRegistration` | schemaVersion、ProjectId、displayName、repositoryRoot、moduleRoot、mavenExecutionRoot、pomPath、buildTool、pomSha256、registeredAt | 算法模块登记事实及 `project.json` 契约 |
 | `ProjectRegistrationResult` | registration、created | 区分首次注册与幂等复用 |
 | `DoctorCheck` | name、status、code、message | 单项环境诊断 |
-| `DoctorReport` | overallStatus、checks | 有界诊断摘要 |
+| `DoctorReport` | schemaVersion、overallStatus、checks | 有界诊断摘要 |
 
 Doctor 状态只使用 `PASS`、`WARN`、`FAIL`。Doctor 命令本身成功执行时返回成功 ToolResponse；环境不满足要求通过
 `DoctorReport.overallStatus=FAIL` 表达，避免丢失各项诊断数据。
@@ -513,3 +513,4 @@ Workspace 初始化和项目登记不得递归遍历大型软件仓库。登记�
 |---|---|---|---|
 | 2026-08-16 | 0.1 | 根据完整现状审计和用户确认，定义外部 Workspace 控制面首个实施切片 | Codex / mh90901119-oss |
 | 2026-08-16 | 0.2 | 支持大型软件仓库内具有独立 POM 的算法模块，拆分仓库、模块和 Maven 执行路径 | Codex / mh90901119-oss |
+| 2026-08-16 | 0.3 | 实施计划自审时补齐 DoctorReport 的显式 Schema 版本字段 | Codex / mh90901119-oss |
