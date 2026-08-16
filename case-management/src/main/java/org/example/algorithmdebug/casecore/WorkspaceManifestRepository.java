@@ -1,5 +1,7 @@
 package org.example.algorithmdebug.casecore;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.WorkspaceManifest;
 
 import java.nio.file.Files;
@@ -41,9 +43,10 @@ public final class WorkspaceManifestRepository {
             return Optional.empty();
         }
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("Workspace Manifest 不是普通文件: " + path);
+            throw new WorkspaceException(
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 不是普通文件: " + path);
         }
-        return Optional.of(mapper.readYaml(path, WorkspaceManifest.class));
+        return Optional.of(readManifest(path));
     }
 
     /**
@@ -68,7 +71,8 @@ public final class WorkspaceManifestRepository {
      */
     public WorkspaceManifest require(WorkspaceLayout layout) {
         return find(layout).orElseThrow(
-                () -> new WorkspaceException("Workspace Manifest 不存在: " + manifestPath(layout)));
+                () -> new WorkspaceException(
+                        "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 不存在: " + manifestPath(layout)));
     }
 
     private static Path manifestPath(WorkspaceLayout layout) {
@@ -76,5 +80,37 @@ public final class WorkspaceManifestRepository {
             throw new IllegalArgumentException("layout 不能为空");
         }
         return layout.root().resolve(MANIFEST_FILE_NAME).normalize();
+    }
+
+    private WorkspaceManifest readManifest(Path path) {
+        JsonNode tree;
+        try {
+            tree = mapper.readYaml(path, JsonNode.class);
+        } catch (WorkspaceException failure) {
+            throw new WorkspaceException(
+                    "WORKSPACE_MANIFEST_INVALID",
+                    "Workspace Manifest 无效: " + failure.getMessage(),
+                    failure);
+        }
+        if (tree == null || !tree.isObject()) {
+            throw new WorkspaceException("WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 根节点必须是对象");
+        }
+        JsonNode schemaVersion = tree.path("schemaVersion");
+        if (!schemaVersion.isTextual()) {
+            throw new WorkspaceException(
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 缺少文本 schemaVersion");
+        }
+        if (!SchemaVersions.WORKSPACE_MANIFEST.equals(schemaVersion.textValue())) {
+            IllegalArgumentException cause = new IllegalArgumentException(
+                    "不支持的 Workspace Manifest schemaVersion: " + schemaVersion.textValue());
+            throw new WorkspaceException(
+                    "WORKSPACE_SCHEMA_UNSUPPORTED", "Workspace Manifest Schema 版本不受支持", cause);
+        }
+        try {
+            return mapper.convertJsonTree(tree, WorkspaceManifest.class);
+        } catch (WorkspaceException failure) {
+            throw new WorkspaceException(
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 字段无效", failure);
+        }
     }
 }

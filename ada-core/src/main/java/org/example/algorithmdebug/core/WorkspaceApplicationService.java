@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.core;
 
 import org.example.algorithmdebug.casecore.WorkspaceInitializer;
+import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.contracts.WorkspaceInitializationResult;
 
 import java.nio.file.Path;
@@ -29,6 +30,10 @@ public final class WorkspaceApplicationService {
      * @return 领域层原始初始化结果
      */
     public WorkspaceInitializationResult initialize(Path root) {
-        return initializer.initialize(root);
+        try {
+            return initializer.initialize(root);
+        } catch (WorkspaceException failure) {
+            throw new ControlPlaneException(failure.code(), "Workspace 初始化失败", failure);
+        }
     }
 }

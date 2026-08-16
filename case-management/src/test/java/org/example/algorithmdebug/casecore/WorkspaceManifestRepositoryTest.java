@@ -54,6 +54,7 @@ class WorkspaceManifestRepositoryTest {
                 WorkspaceException.class,
                 () -> repository().require(layout));
 
+        assertEquals("WORKSPACE_SCHEMA_UNSUPPORTED", failure.code());
         assertNotNull(failure.getCause());
         assertTrue(rootMessage(failure).contains("9.0"));
     }
@@ -70,6 +71,7 @@ class WorkspaceManifestRepositoryTest {
                 WorkspaceException.class,
                 () -> repository().require(layout));
 
+        assertEquals("WORKSPACE_MANIFEST_INVALID", failure.code());
         assertNotNull(failure.getCause());
     }
 

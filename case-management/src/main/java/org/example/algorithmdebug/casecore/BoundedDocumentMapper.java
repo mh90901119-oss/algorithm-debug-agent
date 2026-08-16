@@ -1,5 +1,6 @@
 package org.example.algorithmdebug.casecore;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -85,6 +86,17 @@ public final class BoundedDocumentMapper {
      */
     public byte[] writeJson(Object value) {
         return write(value, jsonMapper, "JSON");
+    }
+
+    <T> T convertJsonTree(JsonNode tree, Class<T> type) {
+        if (tree == null || type == null) {
+            throw new IllegalArgumentException("tree 和 type 不能为空");
+        }
+        try {
+            return jsonMapper.treeToValue(tree, type);
+        } catch (IOException | RuntimeException failure) {
+            throw new WorkspaceException("转换 Workspace JSON 树失败", failure);
+        }
     }
 
     private static <T> T read(Path path, Class<T> type, ObjectMapper mapper, String format) {

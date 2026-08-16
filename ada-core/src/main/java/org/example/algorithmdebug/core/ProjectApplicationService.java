@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.core;
 
 import org.example.algorithmdebug.casecore.ProjectRegistry;
+import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistrationResult;
 
@@ -36,6 +37,10 @@ public final class ProjectApplicationService {
             Path workspace,
             Path module,
             Optional<ProjectId> projectId) {
-        return registry.register(workspace, module, projectId);
+        try {
+            return registry.register(workspace, module, projectId);
+        } catch (WorkspaceException failure) {
+            throw new ControlPlaneException(failure.code(), "项目注册失败", failure);
+        }
     }
 }
