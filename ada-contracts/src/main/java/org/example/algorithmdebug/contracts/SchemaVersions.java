@@ -31,6 +31,9 @@ public final class SchemaVersions {
     /** Run 启动请求 Schema 版本。 */
     public static final String RUN_REQUEST = "1.0";
 
+    /** Run 确定性结果指纹 Schema 版本。 */
+    public static final String RUN_RESULT_FINGERPRINT = "1.0";
+
     /** 面向模型的有界 Case 摘要 Schema 版本。 */
     public static final String CASE_DIGEST = "1.0";
 

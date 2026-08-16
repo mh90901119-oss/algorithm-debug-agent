@@ -43,6 +43,9 @@ class CaseArchiveJsonTest {
         RunRequest run = new RunRequest(
                 SchemaVersions.RUN_REQUEST, caseId, contextId, analysisId, new RunId("run-1"),
                 targetTest, "UNINSTRUMENTED", RECORDED_AT);
+        RunResultFingerprint fingerprint = new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT, caseId, contextId, new RunId("run-1"),
+                Optional.of("d".repeat(64)), Optional.of("e".repeat(64)), Optional.empty());
         CaseDigest digest = new CaseDigest(
                 SchemaVersions.CASE_DIGEST, caseId, projectId, targetTest,
                 Optional.of(contextId), Optional.of(analysisId),
@@ -52,6 +55,7 @@ class CaseArchiveJsonTest {
         assertRoundTrip(context, ContextSnapshot.class);
         assertRoundTrip(analysis, AnalysisRequest.class);
         assertRoundTrip(run, RunRequest.class);
+        assertRoundTrip(fingerprint, RunResultFingerprint.class);
         assertRoundTrip(digest, CaseDigest.class);
     }
 
@@ -68,6 +72,10 @@ class CaseArchiveJsonTest {
         assertSchema("execution", "run-request-v1.schema.json", SchemaVersions.RUN_REQUEST,
                 Set.of("schemaVersion", "caseId", "contextId", "analysisId", "runId", "targetTest",
                         "executionMode", "createdAt"));
+        assertSchema("execution", "run-result-fingerprint-v1.schema.json",
+                SchemaVersions.RUN_RESULT_FINGERPRINT,
+                Set.of("schemaVersion", "caseId", "contextId", "runId", "ganttRawSha256",
+                        "ganttNormalizedJsonSha256", "targetFailureSha256"));
         assertSchema("case", "case-digest-v1.schema.json", SchemaVersions.CASE_DIGEST,
                 Set.of("schemaVersion", "caseId", "projectId", "targetTest", "latestContextId",
                         "latestAnalysisId", "latestQuestionExcerpt", "latestRunId", "recentRuns",

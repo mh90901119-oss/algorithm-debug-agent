@@ -2,6 +2,8 @@
 
 - `execution/run-outcome-summary-v1.schema.json`：面向模型的一次目标 UT 运行结构化摘要；原始内容通过不可变 Artifact 引用按需读取。
 - `execution/run-request-v1.schema.json`：启动 Maven 前必须先落盘的 Run 请求。
+- `execution/run-result-fingerprint-v1.schema.json`：一次 Run 的 Gantt 内容与目标失败确定性指纹；
+  Gantt 原始/JSON Token Hash 成对出现，且至少存在一种目标观察。
 - `tool/tool-response-v2.schema.json`：CLI 与客户端薄适配之间的成功/失败、data 和 Artifact 响应边界。
 - `case/case-manifest-v1.schema.json`：Case 的 Project、目标 UT 和初始问题身份。
 - `case/context-snapshot-v1.schema.json`：有界源码、POM、输入和 Adapter 上下文快照。
