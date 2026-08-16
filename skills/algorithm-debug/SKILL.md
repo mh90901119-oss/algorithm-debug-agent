@@ -30,8 +30,12 @@ After every user message:
 1. Determine whether the target UT belongs to an existing Case and whether the current workspace matches an existing Context.
 2. Reuse prior immutable evidence when it already answers the question. A new chat turn does not require a new UT run.
 3. If execution facts are missing or stale for the question, call the test-run tool. Inspect the returned summary even when the command reports target failure.
-4. If the run changed the Gantt or failure facts, describe the exact changed dimensions and their `contextId/runId`; do not label a code change as collector contamination.
-5. Read stdout, stderr, Surefire XML, Gantt, or comparison artifacts only by reference and only within the requested byte/line budget.
+4. When `comparisonOutcome=MATCHED`, treat the current target observation as reproducible for the
+   reported scope. When it is `CHANGED`, state that the Agent detected a Gantt-content and/or target-
+   failure fingerprint change, then read the referenced current and reference artifacts only if the
+   user's question requires the change location. Do not claim that the Agent produced a field-level
+   Gantt diff.
+5. Read stdout, stderr, Surefire XML, or Gantt artifacts only by reference and only within the requested byte/line budget.
 6. Request CodePathTracer when a bounded runtime call path would close a stated gap. Request JDWP only for named methods/variables and bounded hits/depth/bytes.
 7. Before a confirmed root-cause claim, verify evidence coverage, contradictions, truncation, and semantic-baseline consistency.
 

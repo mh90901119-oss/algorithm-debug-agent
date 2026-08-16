@@ -14,6 +14,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.BaselineStabilityState;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.core.MavenExecutableLocator;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
 import org.example.algorithmdebug.harness.MavenTestExecutor;
@@ -29,11 +30,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -91,6 +94,7 @@ class WaferBaselineLifecycleSmokeTest {
                 verification, new RunId("RUN-002"), second.normalizedJsonSha256());
 
         assertEquals(first.normalizedJsonSha256(), second.normalizedJsonSha256());
+        assertEquals(first.rawSha256(), second.rawSha256());
         assertEquals(BaselineStabilityState.BASELINE_STABLE, verification.state());
         assertEquals(165, second.snapshot().operations().size());
         assertTrue(Files.isRegularFile(
@@ -126,15 +130,17 @@ class WaferBaselineLifecycleSmokeTest {
 
     private static Path mavenExecutable() {
         String configured = System.getProperty("ada.maven.executable");
-        if (configured != null && !configured.isBlank()) {
-            return Path.of(configured).toAbsolutePath().normalize();
-        }
-        String executable = System.getProperty("os.name").toLowerCase().contains("win")
-                ? "mvn.cmd"
-                : "mvn";
-        return Path.of(System.getProperty("maven.home"), "bin", executable)
-                .toAbsolutePath()
-                .normalize();
+        Optional<Path> explicit = configured == null || configured.isBlank()
+                ? Optional.empty()
+                : Optional.of(Path.of(configured));
+        boolean windows = System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
+        return new MavenExecutableLocator(
+                System.getenv(), File.pathSeparator, windows)
+                .locate(explicit)
+                .orElseThrow(() -> new AssertionError(
+                        "真实 Smoke 要求 ada.maven.executable、MAVEN_HOME、M2_HOME 或 PATH 提供 Maven"));
     }
 
     private static org.example.algorithmdebug.adapter.ScheduleResultParser<WaferScheduleSnapshot>

@@ -13,12 +13,14 @@ Phase 0 now contains a usable diagnostic vertical slice. The external Workspace 
 initialize a workspace, register an independent Maven algorithm module, open or resume a Case,
 inspect its bounded history, explicitly run one supported JUnit method and append immutable
 Case/Context/Analysis/Run documents. Each completed Run returns orthogonal process, test, Gantt,
-target-failure and Agent-failure facts plus hashed Artifact references.
+target-failure and Agent-failure facts plus hashed Artifact references. A valid Gantt and/or target
+failure now produces an immutable Run fingerprint and a write-once Context reproduction reference;
+later Runs report `MATCHED` or `CHANGED` for the same or previous Context.
 
-Baseline comparison is deliberately still `NOT_COMPARED`. The next approved slice only adds a
-whitespace-insensitive JSON content fingerprint and simple `MATCHED/CHANGED` comparison; field-level
-Gantt Diff is deferred. Input Analysis, CodePathTracer/JDWP orchestration, Evidence construction,
-the OpenCode installer and end-to-end `/debug-case` model workflow remain planned.
+Gantt comparison deliberately ignores JSON formatting whitespace but preserves object/array order and
+string content. It reports only changed dimensions, not a field-level Diff. Input Analysis,
+CodePathTracer/JDWP orchestration, Evidence construction, the OpenCode installer and end-to-end
+`/debug-case` model workflow remain planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
 `algorithm-debug` Skill, bounded OpenCode agent/command/custom-tool contract assets and the Java
@@ -36,7 +38,7 @@ evidence or request the next minimal action. The current phase does not implemen
 MCP server or other CLI-runtime adapters.
 
 The verified Reference Demo flow runs one dedicated UT twice, captures each result into a separate
-Run directory and reaches `BASELINE_STABLE` only when both semantic hashes match.
+Run directory and confirms equal raw and JSON Token content SHA-256 values.
 
 ## Current CLI slice
 

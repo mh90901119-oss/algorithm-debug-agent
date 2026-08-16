@@ -9,7 +9,9 @@
 
 > 2026-08-16 实施状态：Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、
 > 真实目标 UT 的 RunOutcome/Artifact 归档，以及 `case open/inspect`、`run execute` CLI 已实现并通过
-> 六类隔离 Maven 场景与真实 Wafer UT 验收。Baseline 比较、动态采集、Evidence 和 OpenCode 安装器仍待实现。
+> 六类隔离 Maven 场景与真实 Wafer UT 验收。2026-08-17 已完成 JSON Token 内容/目标失败指纹、
+> write-once Context reproduction reference 和 `MATCHED/CHANGED/INCOMPARABLE` 简单比较。
+> 动态采集、Evidence 和 OpenCode 安装器仍待实现。
 
 
 - 文档状态：Draft for Implementation
@@ -605,7 +607,7 @@ algorithm-debug-parent
 状态：核心 Maven Runner 已于 2026-08-11 实现；2026-08-13 完成早期 Case/Context Resolution、
 RunOutcomeSummary、Surefire 通用诊断和 OpenCode 有界适配契约；2026-08-16 已完成正式
 Case/Context/Analysis/Run Repository、Context Snapshot、Case Digest 和可执行 Case/Run CLI。
-OpenCode 安装器、Baseline 比较和采集/Evidence 链仍未实现。
+JSON 内容/失败指纹和简单 Baseline 比较已于 2026-08-17 实现；OpenCode 安装器与采集/Evidence 链仍未实现。
 
 目标：把当前 Demo 固化成后续迭代的可比较基线。
 
@@ -929,9 +931,9 @@ TestLaunchSpec
   -> CaseDigest 查询
 ```
 
-下一步先实现 JSON 内容指纹和 Baseline 简单比较，使当前 Run 能可靠报告 `MATCHED/CHANGED`；字段级
-Gantt Diff 暂不实现，变化后由大模型按需读取参考与当前 Artifact。随后进入
-静态调用关系、CodePathTracer 采集计划/执行，再以其结果驱动 JDWP 方法内聚焦采集。OpenCode 一次性安装器
+JSON 内容指纹和 Baseline 简单比较已完成，当前 Run 可可靠报告 `MATCHED/CHANGED/INCOMPARABLE`；
+字段级 Gantt Diff 继续后置，变化后由大模型按需读取参考与当前 Artifact。下一步进入静态调用关系、
+CodePathTracer 采集计划/执行，再以其结果驱动 JDWP 方法内聚焦采集。OpenCode 一次性安装器
 在后端能力稳定后接入。后续同样不引入复杂 Case 状态机、线程转储或事件溯源。静态与动态分析的第一个
 可交付目标仍为：
 

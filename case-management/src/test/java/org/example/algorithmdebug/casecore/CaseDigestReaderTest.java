@@ -125,6 +125,6 @@ class CaseDigestReaderTest {
                 CaseArchiveRepositoryTest.analysis().analysisId(), runId,
                 ProcessOutcome.SUCCEEDED, TestOutcome.PASSED, GanttOutcome.ABSENT,
                 Optional.empty(), Optional.empty(), ComparisonOutcome.NOT_COMPARED,
-                "Baseline comparison is not implemented in this slice", List.of());
+                "No valid reproduction reference", List.of());
     }
 }

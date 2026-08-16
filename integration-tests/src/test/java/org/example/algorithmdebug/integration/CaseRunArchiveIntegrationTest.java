@@ -14,12 +14,14 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.FailureCategory;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProcessOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistrationResult;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
+import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TestOutcome;
 import org.example.algorithmdebug.core.ControlPlaneServices;
@@ -43,7 +45,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CaseRunArchiveIntegrationTest {
@@ -83,9 +84,126 @@ class CaseRunArchiveIntegrationTest {
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
         assertScenario(outcome, scenario);
-        assertEquals(GanttOutcome.ABSENT, outcome.ganttOutcome());
+        assertEquals(scenario.producesGantt() ? GanttOutcome.PRESENT : GanttOutcome.ABSENT,
+                outcome.ganttOutcome());
         assertTrue(outcome.agentFailure().isEmpty());
-        assertArchivedOutcomeAndArtifacts(workspace, projectId, outcome, scenario.hasSurefireReport());
+        assertArchivedOutcomeAndArtifacts(
+                workspace, projectId, outcome,
+                scenario.hasSurefireReport(), scenario.producesGantt());
+    }
+
+    @org.junit.jupiter.api.Test
+    void comparesCrossContextGanttThenDetectsSameContextContentChange() throws Exception {
+        Path scenarioRoot = Files.createDirectories(temporaryDirectory.resolve("gantt-comparison"));
+        Path module = Files.createDirectories(scenarioRoot.resolve("module"));
+        Path workspace = scenarioRoot.resolve("workspace");
+        MavenFixture.create(module, Scenario.PASS);
+        Path maven = locateMaven();
+        TargetTest target = new TargetTest(TEST_CLASS, Scenario.PASS.targetMethod());
+        FixtureAdapter stableAdapter = new FixtureAdapter(Scenario.PASS, "ok");
+        ControlPlaneServices services = services(stableAdapter, Optional.of(maven));
+        services.workspace().initialize(workspace);
+        ProjectId projectId = new ProjectId("fixture-gantt-comparison");
+        services.project().register(workspace, module, Optional.of(projectId));
+        CaseOpenResult opened = services.cases().open(
+                workspace, projectId, target, "检查调度是否稳定", Optional.empty(),
+                Optional.of("fixture-adapter"));
+
+        RunOutcomeSummary first = services.runs().execute(
+                workspace, projectId, opened.caseId(), opened.analysisId());
+        Files.writeString(module.resolve("src/test/java/fixture/TargetTest.java"),
+                System.lineSeparator() + "// create a new source context",
+                java.nio.file.StandardOpenOption.APPEND);
+        CaseOpenResult reopened = services.cases().open(
+                workspace, projectId, target, "代码变化后继续检查", Optional.of(opened.caseId()),
+                Optional.of("fixture-adapter"));
+        RunOutcomeSummary crossContext = services.runs().execute(
+                workspace, projectId, opened.caseId(), reopened.analysisId());
+        ControlPlaneServices changedServices = services(
+                new FixtureAdapter(Scenario.PASS, "changed"), Optional.of(maven));
+        RunOutcomeSummary changed = changedServices.runs().execute(
+                workspace, projectId, opened.caseId(), reopened.analysisId());
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
+        assertEquals(ComparisonOutcome.MATCHED, crossContext.comparisonOutcome());
+        assertTrue(crossContext.comparisonSummary().contains("scope=CROSS_CONTEXT"));
+        assertEquals(ComparisonOutcome.CHANGED, changed.comparisonOutcome());
+        assertTrue(changed.comparisonSummary().contains("changedDimensions=GANTT"));
+        Path caseRoot = workspace.resolve("projects").resolve(projectId.value())
+                .resolve("cases").resolve(opened.caseId().value());
+        Path firstRunRoot = caseRoot.resolve("runs").resolve(first.runId().value());
+        Path secondRunRoot = caseRoot.resolve("runs").resolve(crossContext.runId().value());
+        assertTrue(Files.isRegularFile(firstRunRoot.resolve("run-result-fingerprint.json")));
+        assertTrue(Files.isRegularFile(secondRunRoot.resolve("run-result-fingerprint.json")));
+        RunResultFingerprint firstReference = new BoundedDocumentMapper().readJson(
+                caseRoot.resolve("contexts").resolve(opened.contextId().value())
+                        .resolve("reproduction.json"),
+                RunResultFingerprint.class);
+        RunResultFingerprint secondReference = new BoundedDocumentMapper().readJson(
+                caseRoot.resolve("contexts").resolve(reopened.contextId().value())
+                        .resolve("reproduction.json"),
+                RunResultFingerprint.class);
+        assertEquals(first.runId(), firstReference.runId());
+        assertEquals(crossContext.runId(), secondReference.runId());
+    }
+
+    @org.junit.jupiter.api.Test
+    void matchesRepeatedBusinessExceptionWithoutGantt() throws Exception {
+        Path scenarioRoot = Files.createDirectories(temporaryDirectory.resolve("failure-comparison"));
+        Path module = Files.createDirectories(scenarioRoot.resolve("module"));
+        Path workspace = scenarioRoot.resolve("workspace");
+        MavenFixture.create(module, Scenario.BUSINESS_EXCEPTION);
+        TargetTest target = new TargetTest(
+                TEST_CLASS, Scenario.BUSINESS_EXCEPTION.targetMethod());
+        ControlPlaneServices services = services(
+                new FixtureAdapter(Scenario.BUSINESS_EXCEPTION), Optional.of(locateMaven()));
+        services.workspace().initialize(workspace);
+        ProjectId projectId = new ProjectId("fixture-failure-comparison");
+        services.project().register(workspace, module, Optional.of(projectId));
+        CaseOpenResult opened = services.cases().open(
+                workspace, projectId, target, "检查异常是否稳定", Optional.empty(),
+                Optional.of("fixture-adapter"));
+
+        RunOutcomeSummary first = services.runs().execute(
+                workspace, projectId, opened.caseId(), opened.analysisId());
+        RunOutcomeSummary second = services.runs().execute(
+                workspace, projectId, opened.caseId(), opened.analysisId());
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
+        assertEquals(ComparisonOutcome.MATCHED, second.comparisonOutcome());
+        assertEquals(GanttOutcome.ABSENT, second.ganttOutcome());
+        assertEquals(FailureCategory.TEST_ERROR,
+                second.targetFailure().orElseThrow().category());
+        assertTrue(second.artifacts().stream().anyMatch(
+                artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
+    }
+
+    @org.junit.jupiter.api.Test
+    void missingMavenDoesNotCreateFingerprintOrReference() throws Exception {
+        Path scenarioRoot = Files.createDirectories(temporaryDirectory.resolve("missing-maven"));
+        Path module = Files.createDirectories(scenarioRoot.resolve("module"));
+        Path workspace = scenarioRoot.resolve("workspace");
+        MavenFixture.create(module, Scenario.PASS);
+        TargetTest target = new TargetTest(TEST_CLASS, Scenario.PASS.targetMethod());
+        ControlPlaneServices services = services(
+                new FixtureAdapter(Scenario.PASS), Optional.empty());
+        services.workspace().initialize(workspace);
+        ProjectId projectId = new ProjectId("fixture-missing-maven");
+        services.project().register(workspace, module, Optional.of(projectId));
+        CaseOpenResult opened = services.cases().open(
+                workspace, projectId, target, "Maven 不可用", Optional.empty(),
+                Optional.of("fixture-adapter"));
+
+        RunOutcomeSummary outcome = services.runs().execute(
+                workspace, projectId, opened.caseId(), opened.analysisId());
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, outcome.comparisonOutcome());
+        Path caseRoot = workspace.resolve("projects").resolve(projectId.value())
+                .resolve("cases").resolve(opened.caseId().value());
+        assertTrue(Files.notExists(caseRoot.resolve("runs").resolve(outcome.runId().value())
+                .resolve("run-result-fingerprint.json")));
+        assertTrue(Files.notExists(caseRoot.resolve("contexts")
+                .resolve(opened.contextId().value()).resolve("reproduction.json")));
     }
 
     private static void assertScenario(RunOutcomeSummary outcome, Scenario scenario) {
@@ -104,7 +222,8 @@ class CaseRunArchiveIntegrationTest {
             Path workspace,
             ProjectId projectId,
             RunOutcomeSummary outcome,
-            boolean expectSurefire) throws Exception {
+            boolean expectSurefire,
+            boolean expectGantt) throws Exception {
         Path runRoot = workspace.resolve("projects").resolve(projectId.value())
                 .resolve("cases").resolve(outcome.caseId().value())
                 .resolve("runs").resolve(outcome.runId().value());
@@ -120,7 +239,7 @@ class CaseRunArchiveIntegrationTest {
         assertTrue(types.contains("STDOUT"));
         assertTrue(types.contains("STDERR"));
         assertEquals(expectSurefire, types.contains("SUREFIRE_XML"));
-        assertFalse(types.contains("GANTT"));
+        assertEquals(expectGantt, types.contains("GANTT"));
         for (ArtifactReference artifact : outcome.artifacts()) {
             Path archived = runRoot.resolve(artifact.relativePath()).normalize();
             assertTrue(archived.startsWith(runRoot));
@@ -141,6 +260,13 @@ class CaseRunArchiveIntegrationTest {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
+    private static ControlPlaneServices services(
+            FixtureAdapter adapter, Optional<Path> maven) {
+        return ControlPlaneServices.create(
+                Clock.systemUTC(), () -> Runtime.version().feature(),
+                System.getenv(), File.pathSeparator, isWindows(), List.of(adapter), maven);
+    }
+
     private static String sha256(Path path) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         try (InputStream input = Files.newInputStream(path)) {
@@ -156,38 +282,41 @@ class CaseRunArchiveIntegrationTest {
     }
 
     private enum Scenario {
-        PASS("caseUnderTest", ProcessOutcome.SUCCEEDED, TestOutcome.PASSED, null, true),
+        PASS("caseUnderTest", ProcessOutcome.SUCCEEDED, TestOutcome.PASSED, null, true, true),
         ASSERTION_FAILURE(
                 "caseUnderTest", ProcessOutcome.FAILED, TestOutcome.FAILED,
-                FailureCategory.TEST_FAILURE, true),
+                FailureCategory.TEST_FAILURE, true, true),
         BUSINESS_EXCEPTION(
                 "caseUnderTest", ProcessOutcome.FAILED, TestOutcome.ERROR,
-                FailureCategory.TEST_ERROR, true),
+                FailureCategory.TEST_ERROR, true, false),
         COMPILE_FAILURE(
                 "caseUnderTest", ProcessOutcome.FAILED, TestOutcome.NOT_EXECUTED,
-                FailureCategory.BUILD_FAILURE, false),
+                FailureCategory.BUILD_FAILURE, false, false),
         TEST_NOT_FOUND(
                 "missingCase", ProcessOutcome.FAILED, TestOutcome.NOT_EXECUTED,
-                FailureCategory.TEST_NOT_EXECUTED, false),
-        TIMEOUT("caseUnderTest", ProcessOutcome.TIMED_OUT, TestOutcome.UNKNOWN, null, false);
+                FailureCategory.TEST_NOT_EXECUTED, false, false),
+        TIMEOUT("caseUnderTest", ProcessOutcome.TIMED_OUT, TestOutcome.UNKNOWN, null, false, false);
 
         private final String targetMethod;
         private final ProcessOutcome processOutcome;
         private final TestOutcome testOutcome;
         private final FailureCategory failureCategory;
         private final boolean hasSurefireReport;
+        private final boolean producesGantt;
 
         Scenario(
                 String targetMethod,
                 ProcessOutcome processOutcome,
                 TestOutcome testOutcome,
                 FailureCategory failureCategory,
-                boolean hasSurefireReport) {
+                boolean hasSurefireReport,
+                boolean producesGantt) {
             this.targetMethod = targetMethod;
             this.processOutcome = processOutcome;
             this.testOutcome = testOutcome;
             this.failureCategory = failureCategory;
             this.hasSurefireReport = hasSurefireReport;
+            this.producesGantt = producesGantt;
         }
 
         String targetMethod() {
@@ -196,6 +325,10 @@ class CaseRunArchiveIntegrationTest {
 
         boolean hasSurefireReport() {
             return hasSurefireReport;
+        }
+
+        boolean producesGantt() {
+            return producesGantt;
         }
     }
 
@@ -271,6 +404,13 @@ class CaseRunArchiveIntegrationTest {
                 case TIMEOUT -> "Thread.sleep(60_000L);";
             };
             String method = scenario == Scenario.TEST_NOT_FOUND ? "differentCase" : "caseUnderTest";
+            String ganttWrite = scenario.producesGantt ? """
+                    java.nio.file.Files.createDirectories(java.nio.file.Path.of("output"));
+                    String scheduleValue = System.getProperty("fixture.scheduleValue", "ok");
+                    java.nio.file.Files.writeString(
+                            java.nio.file.Path.of("output", "gantt-" + System.nanoTime() + ".json"),
+                            "{\\\"schedule\\\":\\\"" + scheduleValue + "\\\"}");
+                    """ : "";
             return """
                     package fixture;
 
@@ -278,9 +418,10 @@ class CaseRunArchiveIntegrationTest {
                         @org.junit.jupiter.api.Test
                         void %s() throws Exception {
                             %s
+                            %s
                         }
                     }
-                    """.formatted(method, body);
+                    """.formatted(method, ganttWrite, body);
         }
     }
 
@@ -290,9 +431,15 @@ class CaseRunArchiveIntegrationTest {
     private static final class FixtureAdapter implements TargetProjectAdapter<FixtureSnapshot> {
 
         private final Scenario scenario;
+        private final String scheduleValue;
 
         private FixtureAdapter(Scenario scenario) {
+            this(scenario, "ok");
+        }
+
+        private FixtureAdapter(Scenario scenario, String scheduleValue) {
             this.scenario = scenario;
+            this.scheduleValue = scheduleValue;
         }
 
         @Override
@@ -322,7 +469,8 @@ class CaseRunArchiveIntegrationTest {
                     Map.of(
                             "test", targetTest.selector(),
                             "failIfNoTests", "true",
-                            "surefire.failIfNoSpecifiedTests", "true"),
+                            "surefire.failIfNoSpecifiedTests", "true",
+                            "fixture.scheduleValue", scheduleValue),
                     List.of(), timeout);
         }
 

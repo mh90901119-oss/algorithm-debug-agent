@@ -1,7 +1,7 @@
 # Case Context、Run Outcome 与多轮 Analysis 持久化可实施设计
 
-- 文档状态：Review
-- 设计版本：0.3
+- 文档状态：Approved / Core Persistence Implemented
+- 设计版本：0.6
 - 创建日期：2026-08-12
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：Phase 0 - OpenCode 多轮问题分析事实链
@@ -9,6 +9,11 @@
 - 关联架构与 ADR：`algorithm-debug-agent-module-detailed-design-v1.md`、
   `ADR-001-dynamic-output-and-case-identity.md`、`ADR-006-case-as-analysis-dossier.md`、
   `ADR-007-opencode-adapter-via-cli.md`
+
+> 2026-08-17 实现收敛：Gantt 复现比较按
+> `2026-08-17-json-content-fingerprint-baseline-design.md` 使用 JSON Token 内容 SHA-256 和最小
+> `MATCHED/CHANGED` 结论，不实现业务字段投影或字段级 Diff。本文早期提到的跨 Context “Diff”统一理解为
+> 指纹变化事实与原始 Artifact 引用；具体变化位置由大模型按问题需要读取产物后解释。
 
 ## 1. 背景与问题
 
@@ -47,7 +52,7 @@ Case 内需要追加轻量 `ContextSnapshot` 标记每份 Run、Analysis 和 Evi
 - 每轮开始时确定性检测源码、输入和 UT 内容变化，并把历史证据作用域与变化摘要提供给大模型；
 - 大模型自主决定是否复用历史、分析代码 Diff、运行 UT、比较 Gantt 或执行最小增量采集；
 - 同一 Context 内动态采集运行与无采集参考进行一致性检查，变化时不得把采集证据用于确认该 Context
-  的根因；不同 Context 之间的变化生成 Diff Evidence 供大模型解释；
+  的根因；不同 Context 之间只生成有范围的指纹变化事实与 Artifact 引用，供大模型解释；
 - 目标 UT 抛异常时 Agent 保持可用，返回结构化诊断并允许大模型决定是否需要后续采集。
 
 ### 2.2 非目标
@@ -61,6 +66,7 @@ Case 内需要追加轻量 `ContextSnapshot` 标记每份 Run、Analysis 和 Evi
 - 不在本切片实现规划中的全部 CLI 命令，只实现支撑 begin/run/read/complete 与 OpenCode 适配安装的最小入口；
 - 不把完整 Raw Trace、完整 Gantt 或对象图直接发送给大模型；
 - 不穷举 Java 异常并用固定规则推断业务根因；
+- 不实现 Gantt 业务字段投影或字段级结构化 Diff；
 - 当前阶段不实现 Algorithm Debug MCP Server，不适配 Codex CLI、Qwen CLI 等其他运行时；
 - 不把 Skill 复制到 OpenCode 全局 Skill 目录，也不要求目标算法仓库保存 Agent 产品代码。
 
@@ -68,11 +74,10 @@ Case 内需要追加轻量 `ContextSnapshot` 标记每份 Run、Analysis 和 Evi
 
 - `debug-harness` 已实现通用 Maven/JUnit Runner、超时进程树清理、有界 stdout/stderr、动态结果差分、
   文件稳定轮询和 Gantt 捕获；
-- `case-management` 已实现 `CaseWorkspace`、`ImmutableArtifactStore`、Case Fingerprint Resolution 和
-  两次成功结果的 Baseline 稳定性服务，但现有 Fingerprint 变化创建 Revision 的规则需要适配为 Case
-  内 Context 追加；
+- `case-management` 已实现追加式 Case/Context/Analysis/Run Repository、Context Snapshot、Case Digest、
+  write-once reproduction reference、简单指纹比较及旧 Baseline 稳定性服务；
 - `ada-contracts` 已存在 `CaseId`、`RunId`、`AnalysisId`、`ArtifactReference` 和证据分级规则；
-- `RunCompletion.FAILED` 当前不区分目标异常、构建失败和 Agent 基础设施失败；
+- `RunOutcomeSummary` 已正交表达进程、测试、Gantt、目标失败和 Agent 失败；
 - 目标算法源码和 UT 不得为采集而修改；输入、源码、UT 未变化时，默认目标 UT 结果确定；
 - 所有路径写入 Artifact 前转为 Case/Run 相对路径，日志和回答不得泄漏未脱敏的公司路径；
 - Case、Run、Analysis、Artifact 和 Evidence 历史只追加保存，不覆盖已有终态文件。
@@ -81,17 +86,17 @@ Case 内需要追加轻量 `ContextSnapshot` 标记每份 Run、Analysis 和 Evi
 
 | 用例 | 输入/前置条件 | 预期结果 | 验证层级 |
 |---|---|---|---|
-| 首轮成功 UT | 指定 UT 成功并输出一个合法 Gantt | 创建 Case、Run、Analysis，保存 Gantt 与语义 Hash | Integration |
+| 首轮成功 UT | 指定 UT 成功并输出一个合法 Gantt | 创建 Case、Run、Analysis，保存 Gantt 与 JSON Token 内容 Hash | Integration |
 | 算法异常 | UT 抛出目标算法异常且无 Gantt | Run 为目标失败，保存异常 cause 与源码位置，Agent 返回可继续分析的响应 | Unit/Integration |
-| 输入异常 | 输入文件不存在或格式错误 | 明确分类为目标输入异常，不标记 Agent 崩溃 | Unit |
+| 输入异常 | 输入文件不存在或格式错误 | 保存目标异常类、cause、消息和稳定业务栈帧，不标记 Agent 崩溃 | Unit |
 | 断言失败且有 Gantt | UT 输出 Gantt 后 JUnit 断言失败 | 同一 Run 同时保存 Gantt 和断言诊断 | Integration |
 | Maven 编译/发现失败 | UT 未实际执行 | 区分 Build/Test Discovery 与目标算法异常 | Unit |
 | Agent 启动失败 | Maven 进程无法创建 | 标记 Agent 基础设施失败，不伪造目标异常 | Unit |
-| 不完整 Run | 已写 `run-start.json`，没有 outcome | 读取结果为 `INCOMPLETE`，不升级为 Evidence | Unit |
+| 不完整 Run | 已写 `run-request.json`，没有 outcome | Digest 标记不完整 Run，不升级为 Evidence | Unit |
 | 同问题追问 | 调用方传入已有 `caseId` | 新建 Analysis，复用历史 Evidence，不重复创建 Case | Integration |
 | 新独立问题 | 同一 UT 但调用方未复用 caseId | 创建新 Case，避免不同问题的推理互相污染 | Unit |
 | 代码变化后直接追问 | 同一 caseId，源码 Hash 已变化，大模型无需运行 | 创建新 Context，历史 Evidence 标为旧 Context，大模型可直接基于历史和 Diff 回答 | Integration/Eval |
-| 代码变化后重跑 | 新 Context 的无采集 UT 产生不同 Gantt | 生成跨 Context Gantt Diff，不将变化误判为采集污染 | Integration |
+| 代码变化后重跑 | 新 Context 的无采集 UT 产生不同 Gantt | 返回跨 Context `CHANGED` 与变化维度，不将变化误判为采集污染 | Integration |
 | CodePath 采集 | Analysis 请求调用路径证据 | Raw Artifact 独立保存，Analysis 只引用标准化 Method Path Evidence | Contract |
 | JDWP 采集 | Analysis 请求有界变量证据 | 保存预算、截断和 Raw Artifact，生成有 provenance 的 Evidence | Contract |
 | 同 Context 采集一致 | 动态运行与本 Context 参考 Gantt Hash/失败特征一致 | Evidence 可用于分级结论 | Unit |
@@ -137,24 +142,21 @@ Guardrail，而不是用规则状态机代替模型推理。
 
 | 模块/类 | 职责 | 输入 | 输出 | 依赖 |
 |---|---|---|---|---|
-| `ada-contracts/CaseContext` | 冻结一个问题的身份 | Case、项目、UT selector、初始问题 | 不可变 Case DTO | contracts |
+| `ada-contracts/CaseManifest` | 冻结一个问题的身份 | Case、项目、UT selector、初始问题 | 不可变 Case DTO | contracts |
 | `ada-contracts/ContextSnapshot` | 冻结一版工作区内容身份 | 源码、输入、UT内容、classpath、环境 | 不可变 Context DTO | contracts |
 | `ada-contracts/WorkspaceChangeSummary` | 表达新旧 Context 的确定性变化 | 两个 Context、文件 Hash | 有界变化摘要 | contracts |
-| `ada-contracts/RunStart` | 记录 Run 启动事实 | caseId、contextId、runId、模式、时间、UT | 不可变 DTO | contracts |
-| `ada-contracts/RunOutcome` | 独立记录进程、测试、Gantt 和失败事实 | Runner、捕获、诊断结果 | 不可变终态 DTO | contracts |
+| `ada-contracts/RunRequest` | 记录 Run 启动事实 | caseId、contextId、runId、模式、时间、UT | 不可变 DTO | contracts |
 | `ada-contracts/RunOutcomeSummary` | 面向 LLM 的有界本轮运行摘要 | RunOutcome、比较结论 | 结构化摘要与 Artifact 引用 | contracts |
+| `ada-contracts/RunResultFingerprint` | 保存可比较的目标观察 | Gantt 原始/内容 Hash、目标失败 Hash | 不可变指纹 DTO | contracts |
 | `ada-contracts/TargetFailureDiagnostic` | 保存异常类、消息、cause 与业务栈帧；原始报告由摘要 Artifact 引用 | Surefire 报告 | 通用诊断事实 | contracts |
-| `ada-contracts/AnalysisRecord` | 保存一轮分析的事实索引 | 问题、历史引用、计划、证据、结论 | 不可变 DTO | contracts |
-| `case-management/CaseContextRepository` | create-new 写入与读取 `case.json` | CaseContext | CaseContext | Jackson/JDK NIO |
-| `case-management/ContextSnapshotRepository` | 追加 Context 并拒绝覆盖 | ContextSnapshot | ContextSnapshot | Jackson/JDK NIO |
-| `case-management/WorkspaceChangeDetector` | 比较当前工作区与历史 Context | 项目路径、历史 Context | Context/Change Summary | JDK NIO |
-| `case-management/RunRecordRepository` | 追加 Run start/outcome，读取派生视图 | RunStart、RunOutcome | RunRecordView | Jackson/JDK NIO |
-| `case-management/AnalysisRecordRepository` | 追加保存一轮 Analysis 文件集合 | AnalysisRecord | AnalysisRecord | Jackson/JDK NIO |
-| `case-management/CaseDigestBuilder` | 构建有界多轮上下文 | Case、Analysis、Evidence Catalog | CaseDigest | contracts |
-| `case-management/ReproductionComparator` | 校验同 Context 采集一致性 | 参考与采集 Run | 一致性结论 | contracts |
-| `gantt-analysis/ScheduleResultDiffService` | 比较不同 Context 的规范化 Gantt | 两个结果快照 | Gantt Diff Evidence | contracts/adapter |
-| `debug-harness/SurefireDiagnosticReader` | 确定性读取测试报告 | reports 目录、target selector | TargetFailureDiagnostic | JDK XML |
-| `debug-harness/PersistedTestRun` | 组合 Runner、Gantt 和异常诊断 | TestLaunchSpec、Case/Run | RunOutcome | harness/case ports |
+| `ada-contracts/AnalysisRequest` | 保存一轮问题与 Context 归属 | 问题、caseId、contextId | 不可变 DTO | contracts |
+| `case-management/CaseArchiveRepository` | create-new 追加 Case、Context、Analysis、Run、指纹与参考 | 稳定 contracts | 不可变 JSON 文档 | Jackson/JDK NIO |
+| `case-management/ContextSnapshotBuilder` | 比较当前工作区与历史 Context | 项目路径、输入定位器 | Context Snapshot | JDK NIO |
+| `case-management/CaseDigestReader` | 构建有界多轮上下文 | Case、Analysis、Run | CaseDigest | contracts |
+| `case-management/ReproductionComparator` | 比较同/跨 Context 目标观察指纹 | 参考与当前 Run | 范围、结论、变化维度 | contracts |
+| `debug-harness/SurefireTestResultReader` | 确定性读取目标测试报告 | 目标报告、target selector | TargetFailureDiagnostic | JDK XML |
+| `debug-harness/ScheduleProducingTestRunner` | 组合 Runner、Gantt 捕获和 Agent 后处理诊断 | TestLaunchSpec、Parser | ScheduleRunResult | harness/adapter |
+| `ada-core/RunApplicationService` | 归档一次 Run 并建立/比较复现参考 | Case/Analysis、Adapter | RunOutcomeSummary | contracts/case/harness |
 | `evidence-engine/EvidenceCatalog` | 登记并筛选标准化 Evidence | Artifact/Evidence | 有界目录 | contracts |
 | `algorithm-debug-cli` | 输出稳定 ToolResponse JSON，日志只写 stderr/Artifact | 高层命令 | 有界 JSON | core/contracts |
 | `integrations/opencode` | 提供 Agent、Command 和薄 Custom Tool，调用 `ada` CLI | OpenCode tool call | ToolResponse | OpenCode/CLI |
@@ -235,9 +237,9 @@ Context。`contextId` 由不透明 ID 表示，Context Fingerprint 用于检测�
 
 - `processCompletion`：`SUCCEEDED`、`FAILED`、`TIMED_OUT`；
 - `testOutcome`：`PASSED`、`ASSERTION_FAILED`、`ERROR`、`NOT_EXECUTED`、`UNKNOWN`；
-- `failureOrigin`：缺失、`TARGET`、`AGENT`；
-- `failureCategory`：`BUILD_FAILURE`、`TEST_FAILURE`、`TEST_ERROR`、`TEST_NOT_EXECUTED`、
-  `AGENT_FAILURE` 或 `UNKNOWN`；它只表达执行阶段和证据来源，不推断业务根因；
+- `targetFailure.category`：`BUILD_FAILURE`、`TEST_FAILURE`、`TEST_ERROR`、`TEST_NOT_EXECUTED` 或
+  `UNKNOWN`；它只表达目标执行阶段，不推断业务根因；
+- `agentFailure`：独立的 Agent 采集、解析或持久化失败诊断，不混入目标失败分类；
 - `scheduleResult`：可选 ArtifactReference，与 testOutcome 无绑定；
 - `diagnostic`：可选 TargetFailureDiagnostic 引用；
 - `stdout`、`stderr`、退出码、耗时、截断和进程清理报告。
@@ -276,20 +278,22 @@ Analysis 不复制 Raw Trace。历史 LLM 假设不会因被新一轮引用自�
 每个 Context 的首次无采集 Run 可创建该 Context 的 `reproduction.json`，默认不要求第二次无采集运行。
 参考结果按实际输出记录：
 
-- UT 通过且有 Gantt：保存 `scheduleSemanticHash`；
-- UT 异常且无 Gantt：保存异常类、cause、稳定抛出位置和规范化消息形成的失败特征；
-- 断言失败且有 Gantt：同时保存 Gantt Hash 与断言失败特征；
+- UT 通过且有 Gantt：在 `RunResultFingerprint` 保存原始 SHA-256 和忽略格式空白的 JSON Token
+  内容 SHA-256；
+- UT 异常且无 Gantt：保存异常类、cause、稳定抛出位置和规范化消息形成的目标失败 SHA-256；
+- 断言失败且有 Gantt：同时保存两类指纹；
 - 输入不存在等已充分定位异常：允许直接回答，不强制动态采集。
 
 变化必须区分：
 
-- 不同 Context 的两个 Run：Gantt/异常变化是代码、输入或 UT 修改后的对比事实，生成
-  `CONTEXT_CHANGE_DIFF` Evidence 供大模型解释，不视为采集污染；
+- 不同 Context 的两个 Run：Gantt/异常变化是代码、输入或 UT 修改后的对比事实，返回
+  `scope=CROSS_CONTEXT` 的 `MATCHED/CHANGED`、固定变化维度和参考 Run；不视为采集污染，也不由代码
+  推断字段级原因；
 - 同一 Context 的无采集与动态采集 Run：逐项比较参考中存在的维度，任何必比维度变化时保留该 Run，
   但其 Evidence 标记 `COLLECTION_BEHAVIOR_MISMATCH`，不得支撑该 Context 的确认性根因；
 - 新 Context 尚无无采集参考却直接采集：Artifact/Evidence 仍保存，但标记 `MISSING_REFERENCE`；在补充
   同 Context 无采集参考前，不得用于确认性根因；
-- 同一 Context 两次无采集 Run 不一致：标记 `REPRODUCTION_UNSTABLE`，由大模型决定是否继续复现或
+- 同一 Context 两次无采集 Run 不一致：当前返回 `CHANGED`，由大模型决定是否继续复现或
   调整问题范围。
 
 失败特征只用于证明同一 Context 采集前后是否仍是同一可观察失败，不等同于根因结论。
@@ -308,8 +312,9 @@ Analysis 不复制 Raw Trace。历史 LLM 假设不会因被新一轮引用自�
 - `schemas/evidence/context-change-diff-v1.schema.json`。
 
 `BaselineManifest v2` 和 `BaselineVerification v1` 继续读取历史数据，但新入口不把它们作为通用 Case
-工作流状态。迁移期保留现有 `CaseLifecycleState` Java 类型，新 API 不依赖该枚举；若无外部消费者，
-后续独立兼容性变更可将其标记 Deprecated。
+工作流状态。实现直接将仅用于 Baseline 的 Java 枚举收敛为 `BaselineStabilityState`，保留
+`BASELINE_CANDIDATE/STABLE/UNSTABLE` JSON 字面值；未发布且无生产引用的 `CaseLifecycleState`、
+`InquiryId` 和 `TurnId` 删除，避免迁移期类型继续误导后续实现。
 
 ### 7.7 OpenCode 与 Agent 调用关联
 
@@ -406,15 +411,16 @@ flowchart TD
     NEWCTX --> MODEL{"大模型判断是否需要运行"}
     MODEL -->|"不需要"| ANSWER["基于历史证据和代码变化回答，并声明当前运行未验证"]
     MODEL -->|"需要"| RUN["执行新Context无采集UT"]
-    RUN --> DIFF["生成跨Context Gantt/异常 Diff"]
-    DIFF --> NEED{"证据是否足够?"}
+    RUN --> COMPARE["比较跨Context Gantt/异常指纹"]
+    COMPARE --> NEED{"证据是否足够?"}
     NEED -->|"足够"| ANSWER2["结合变化点回答"]
     NEED -->|"不足"| COLLECT["请求同Context最小采集"]
     COLLECT --> CHECK["检查同Context采集一致性"]
     CHECK --> ANSWER2
 ```
 
-跨 Context Diff 是分析对象；同 Context 采集一致性是证据 Guardrail。二者不得使用同一个
+跨 Context 的 `MATCHED/CHANGED` 是分析对象；同 Context 采集一致性是后续动态证据 Guardrail。
+确定性代码只报告比较范围、参考 Run 和变化维度，不输出字段级 Diff；二者也不得使用同一个
 `BASELINE_MISMATCH` 语义。
 
 ### 8.5 OpenCode 适配与日常使用
@@ -486,21 +492,18 @@ Trace 构建 Case Digest。
 
 ### 12.1 单元测试
 
-- `CaseContextRepositoryTest.shouldCreateImmutableCaseContext`：重复写同一 Case 必须失败；
-- `WorkspaceChangeDetectorTest.shouldAppendContextWhenSourceChanges`：代码变化留在同一 Case 并产生新 Context；
-- `WorkspaceChangeDetectorTest.shouldReuseContextWhenWorkspaceIsUnchanged`：内容未变时不创建冗余 Context；
-- `RunRecordRepositoryTest.shouldDeriveIncompleteWhenOutcomeIsMissing`：只有 start 文件时读取为不完整；
-- `RunOutcomeTest.shouldAllowAssertionFailureWithScheduleResult`：失败与 Gantt 可同时存在；
-- `RunOutcomeTest.shouldKeepTargetAndAgentOutcomeIndependent`：目标失败与 Agent 工具失败不得混淆；
-- `SurefireDiagnosticReaderTest.shouldExtractTargetExceptionCauseAndSource`：提取 cause 和业务栈帧；
-- `SurefireDiagnosticReaderTest.shouldClassifyFailureWithoutInferringBusinessCause`：只区分测试阶段，不推断根因；
+- `CaseArchiveRepositoryTest`：重复写同一 Case/Run/指纹必须失败，reproduction 只能首次建立；
+- `ContextSnapshotBuilderTest`：代码变化产生新 Context，内容未变时复用 Context；
+- `CaseDigestReaderTest`：只有 `run-request.json` 时读取为不完整；
+- `RunOutcomeSummaryTest`：失败与 Gantt 可同时存在，目标与 Agent 失败不得混淆；
+- `SurefireTestResultReaderTest`：提取 cause 和业务栈帧，只区分测试阶段而不推断根因；
 - `RunOutcomeSummaryTest.shouldIdentifyLatestRunAndBoundExcerpts`：本轮标识、摘要预算和引用完整；
 - `CaseDigestBuilderTest.shouldReuseFactsWithoutPromotingHypotheses`：历史假设保持原等级；
 - `CaseDigestBuilderTest.shouldEnforceSizeBudget`：摘要不得无界增长；
 - `ReproductionComparatorTest.shouldCompareGanttAndAssertionWithinSameContext`：同 Context 组合结果逐维比较；
 - `ReproductionComparatorTest.shouldNotTreatCrossContextChangeAsCollectionMismatch`：跨 Context 变化不是采集污染；
-- `ScheduleResultDiffServiceTest.shouldDescribeChangedOperations`：确定性输出资源、顺序和时间变化；
-- `AnalysisRecordRepositoryTest.shouldRejectOverwrite`：历史 Analysis 不可覆盖；
+- `JsonTokenContentHasherTest`：忽略格式空白，同时保留字符串内容、字段/数组顺序和数字 Token；
+- `AnalysisRequest` 归档测试：历史 Analysis 不可覆盖；
 - `OpenCodeAdapterContractTest.shouldReturnCliToolResponseWithoutRewritingFacts`：薄适配层不得改变事实字段。
 
 ### 12.2 契约与兼容性测试
@@ -517,7 +520,7 @@ Trace 构建 Case Digest。
 - Fixture UT 输入不存在时输出结构化目标异常，Agent 调用正常返回；
 - 同一 caseId 的第二轮 Analysis 复用第一轮 Gantt Evidence，并只新增所需 Run；
 - 修改源码后继续同一 caseId 时创建新 Context，且大模型可在不运行 UT 的情况下复用历史 Evidence；
-- 新 Context 重跑产生不同 Gantt 时生成跨 Context Diff；
+- 新 Context 重跑产生相同 Gantt 时返回跨 Context `MATCHED`，改变 JSON 值时返回 `CHANGED`；
 - 同 Context 模拟采集结果 Hash 变化时，新 Evidence 被标记采集行为不一致。
 
 ### 12.4 性能测试与 Agent Eval
@@ -542,7 +545,7 @@ Trace 构建 Case Digest。
 2. TDD 实现 Context 变化检测、create-new JSON Repository、目录边界和不完整 Run 派生视图；
 3. TDD 实现 Surefire 诊断读取与目标/Agent 失败分类；
 4. 组合 Runner、Gantt 捕获和 Run 持久化，覆盖失败但有 Gantt；
-5. TDD 实现 Analysis Record、Case Digest、跨 Context Diff 和 Evidence Catalog；
+5. TDD 实现 Analysis、Case Digest、跨 Context 简单指纹比较；Evidence Catalog 后续实施；
 6. 增加 CodePath/JDWP Artifact/Evidence 接入契约 Fixture；
 7. 实现仓库内版本化 Skill、OpenCode Custom Tool/Agent/Command 与一次性幂等适配脚本；
 8. 更新真实 Demo 集成测试、README、架构和开发计划；
@@ -550,11 +553,13 @@ Trace 构建 Case Digest。
 
 ## 14. 兼容、迁移与回滚
 
-- 已有 `BaselineManifest`、`BaselineVerification` 和 `CaseLifecycleState` 在本切片不删除；
+- 已有 `BaselineManifest` 和 `BaselineVerification` Schema 保持可读；Java 侧只保留专用
+  `BaselineStabilityState`，不再保留复杂 Case 生命周期枚举；
 - 新持久化格式使用独立 Schema，不尝试自动导入历史测试临时目录；
 - 旧代码仍可使用 `BaselineStabilityService`，新 OpenCode 协作入口默认使用首次复现参考；
-- 现有 `CaseResolutionService` 的 Fingerprint 变化创建 Revision 行为不用于新入口；实施时以回归测试
-  将同问题的内容变化迁移为 Case 内 Context，目标 UT selector 变化仍默认创建新 Case；
+- `CaseResolutionService` 不再创建 Revision：同一目标 UT 的 Fingerprint 变化返回 `NEW_CONTEXT`，
+  完全一致返回 `REUSE_CONTEXT`，目标 UT selector 变化返回 `NEW_CASE`；`NEW_CONTEXT/REUSE_CONTEXT`
+  同时返回现有 `caseId/contextId`，供调用方建立新 Context 的父作用域或直接复用；
 - 如果新多轮持久化不可用，Runner 仍可独立执行并返回内存 `RunResult`，但必须明确提示未形成可恢复 Case；
 - 回滚实现时保留全部已生成 Case/Run/Analysis Artifact，不执行破坏性迁移。
 
@@ -569,9 +574,9 @@ Trace 构建 Case Digest。
 | 异常消息含动态字段 | 采集前后误判不一致 | Raw 完整保存，比较规范化稳定字段 | Resolved |
 | LLM 把旧假设当事实 | 错误结论累积 | Claim Type 固化且升级必须引用新增 Evidence | Resolved |
 | 代码变化后沿用旧运行事实 | 把历史行为误报为当前行为 | Context 作用域、Change Summary 和 Claim contextId | Resolved |
-| 跨 Context Gantt 变化被当成采集污染 | 丢失修改效果 | 跨 Context Diff 与同 Context Guardrail 使用不同结论类型 | Resolved |
+| 跨 Context Gantt 变化被当成采集污染 | 丢失修改效果 | 比较结果明确 `scope=CROSS_CONTEXT` | Resolved |
 | CodePath/JDWP Raw 数据过大 | 内存和上下文失控 | 流式落盘、预算、Normalizer 与 Evidence 切片 | Resolved |
-| 并发写同一 Case | 目录或 ID 冲突 | 不透明唯一 ID、create-new 文件语义；有实测冲突后再引入窄锁 | Resolved |
+| 并发写同一 Case | 目录或 ID 冲突 | 不透明唯一 ID、create-new 文件语义；有实测冲突后再引入窄锁 | Implemented |
 
 ## 16. 文档同步清单
 
@@ -584,8 +589,22 @@ Trace 构建 Case Digest。
 
 ## 17. 实现完成记录
 
-本设计处于 Review，尚未开始生产代码、Schema 或 CLI 实现。现有 Runner、Gantt 捕获、Case Resolution
-和 Baseline Stability 实现作为输入复用，不把其测试结果误记为本设计已完成能力。
+截至 2026-08-17，`RunOutcomeSummary`、通用 Surefire 诊断、追加式 Case/Context/Run/Analysis
+Repository、Case Digest、JSON 内容/目标失败指纹、write-once Context reference、简单比较、规范 Skill、
+OpenCode 适配资产和外部 Workspace 控制面 `ada` CLI 已增量实现；动态采集/Evidence 编排和 OpenCode
+安装器尚未实现。任何 README 和 ADR 不得将“适配资产存在”表述为“用户已可在目标仓库直接调用完整
+Agent”。实现边界如下：
+
+- 一旦 Harness 已取得 `RunResult`，后续 Gantt 扫描、稳定、解析、复制或哈希失败必须返回
+  `GanttOutcome.INCOMPLETE` 与独立 Agent 诊断，不得遮蔽目标 UT 结果；Harness 内部组合结果保留底层
+  cause，面向模型的诊断只暴露有界错误码、说明和异常类；
+- `RunOutcomeSummary` 拒绝测试状态、目标失败分类和 Gantt Artifact 之间的矛盾组合；
+- Surefire Reader 只读取目标测试报告，支持参数化方法名、最深 cause 与文件大小预算；
+- 不完整 Gantt 返回本轮变化候选路径和 Agent 错误码/异常类，后续持久化层负责按预算保存原始部分产物；
+- OpenCode 薄适配只原样返回通过 ToolResponse 2.0 校验的有界 stdout，启动/超限/协议失败返回结构化
+  Adapter 失败且不回显原始日志；
+- `ada` CLI 当前只实现 Workspace init、项目 register 和 Doctor；Case 编排命令与幂等 OpenCode
+  安装器仍作为后续独立模块，不以适配资产或脚手架冒充已完成能力。
 
 ## 18. 变更记录
 
@@ -594,3 +613,6 @@ Trace 构建 Case Digest。
 | 2026-08-12 | 0.1 | 根据用户实际 OpenCode 多轮协作场景重构 Case、Run、Analysis 与 Evidence 模型 | Codex / mh90901119-oss |
 | 2026-08-12 | 0.2 | 增加 ContextSnapshot，支持代码变化后在同一 Case 内由大模型自主复用、运行和对比 | Codex / mh90901119-oss |
 | 2026-08-12 | 0.3 | 明确结构化摘要、原始产物引用与 Skill 协作；收敛异常分类；采用一次性 OpenCode 适配并排除当前 MCP | Codex / mh90901119-oss |
+| 2026-08-13 | 0.4 | 根据代码审计修复结果遮蔽、旧 Case 状态模型、契约不变量、Surefire 边界和 OpenCode 有界协议，并明确 CLI 非目标 | Codex / mh90901119-oss |
+| 2026-08-16 | 0.5 | 同步外部 Workspace 控制面 CLI 的已实现边界，继续明确 Case Repository 与 OpenCode 安装器未实现 | Codex / mh90901119-oss |
+| 2026-08-17 | 0.6 | 同步 Case Repository、JSON 内容/失败指纹和简单比较实现；撤销字段级 Gantt Diff 预期 | Codex / mh90901119-oss |

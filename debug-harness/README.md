@@ -20,7 +20,9 @@ Phase 0 已实现目标算法 UT 的受控 Maven 执行、动态结果发现与�
 - `OutputDirectorySnapshot`：比较运行前后的新增或修改文件；
 - `OutputStabilityWaiter`：在有限预算内要求结果目录连续稳定；
 - `ScheduleResultCapture`：用业务 Adapter Parser 验证候选，只接受唯一合法结果；
-- `CapturedScheduleResult`：保存源路径、不可变副本、原始 SHA-256 和语义哈希。
+- `JsonTokenContentHasher`：流式计算忽略 JSON 格式空白、但保留字符串和顺序的内容 SHA-256；
+- `TargetFailureFingerprinter`：对已有结构化失败事实计算稳定指纹，不推断异常根因；
+- `CapturedScheduleResult`：保存源路径、不可变副本、原始 SHA-256 和 JSON Token 内容 SHA-256。
 - `ScheduleProducingTestRunner`：组合快照、执行、稳定确认和不可变捕获；取得进程事实后不再因 Gantt
   扫描、稳定、解析、复制或哈希失败抛弃该事实。
 
@@ -28,7 +30,7 @@ Phase 0 已实现目标算法 UT 的受控 Maven 执行、动态结果发现与�
 
 ```text
 runner = new ScheduleProducingTestRunner(executor, snapshotter, waiter, capture)
-result = runner.run(spec, options, source, parser, hashStrategy, runResultPath)
+result = runner.run(spec, options, source, parser, runResultPath)
 ```
 
 Adapter 不得选择“最新文件”、指定机器上的 Maven 路径或把时间戳格式作为通用规则。Maven executable
@@ -37,8 +39,8 @@ Adapter 不得选择“最新文件”、指定机器上的 Maven 路径或把�
 `docs/designs/2026-08-11-debug-harness-maven-junit-runner-design.md`。
 
 Run/Case 持久化与 CLI 编排现由 `case-management`、`ada-core` 和 `algorithm-debug-cli` 完成；Harness
-保持只负责进程、Surefire 和 Gantt 的确定性事实。Baseline 比较、CodePathTracer/JDWP 采集和 Evidence
-不属于本模块当前实现。
+保持只负责进程、Surefire、Gantt 与失败指纹的确定性事实。参考选择和比较由 Case/Core 层完成；
+CodePathTracer/JDWP 采集和 Evidence 不属于本模块当前实现。
 
 ```powershell
 mvn -pl debug-harness -am test

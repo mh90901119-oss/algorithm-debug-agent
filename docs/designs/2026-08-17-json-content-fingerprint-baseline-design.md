@@ -1,7 +1,7 @@
 # JSON 内容指纹与 Baseline 比较闭环可实施设计
 
-- 文档状态：Review
-- 设计版本：0.2
+- 文档状态：Implemented
+- 设计版本：1.0
 - 创建日期：2026-08-17
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：Phase 1 - 最小可比较 Run
@@ -302,7 +302,8 @@ Token 之间的空格、制表符、CR/LF 和缩进不会成为 Token，因此�
 
 ### 12.4 性能与 Eval
 
-- 使用接近 64 MiB 的生成式 JSON 验证流式 Hash 不构建完整对象树；
+- Hash 使用 Jackson 流式 Token 读取，不构建完整 JSON 对象树；本次真实文件为 102,603 字节，接近
+  64 MiB 上限的专项性能门禁随后续大数据性能阶段执行，不在本功能完成记录中宣称；
 - 本阶段不新增模型 Eval；OpenCode 端到端阶段增加“MATCHED 时不重复运行”和“CHANGED 后按需读取
   Artifact”用例。
 
@@ -344,18 +345,30 @@ Token 之间的空格、制表符、CR/LF 和缩进不会成为 Token，因此�
 - [x] ADR-008 改为 JSON 内容指纹决策
 - [x] 本详细设计替换复杂投影/Diff 方案
 - [x] README/架构/阶段计划的下一步说明
-- [ ] 实施时新增 Schema 与示例
-- [ ] 实施时更新 Skill 比较结果指引
+- [x] 实施时新增 Schema 与示例
+- [x] 实施时更新 Skill 比较结果指引
 - [ ] OpenCode 阶段新增 Eval
 
 ## 17. 实现完成记录
 
-- 实际变更：尚未修改生产代码；等待本修订设计评审。
-- 相对设计的偏差：上一版 Proposed 投影/Diff 方案已在编码前撤回。
-- 测试与命令：设计阶段核验真实最近五份结果的 size/raw SHA，并执行文档自审和 Git 检查。
-- 性能结果：尚未实现；流式 Hash 预算将在实现阶段验证。
-- 已知限制：字段或条目级变化位置不由代码输出，大模型按需读取原始 Artifact。
-- 提交/版本：本次独立设计修订，不包含生产代码或既有工作区改动。
+- 实际变更：实现 `JsonTokenContentHasher`、目标失败指纹、`RunResultFingerprint 1.0`/Schema、
+  write-once Context reproduction reference、同/跨 Context 简单比较及 Run 编排归档；删除 Adapter 业务
+  Hash SPI 和 Wafer 专属 Hash 实现。
+- 相对设计的偏差：上一版 Proposed 投影/Diff 方案已在编码前撤回；本版实现没有新增字段级 Diff，符合
+  简化决策。真实 Smoke 额外修复了对 `maven.home` 必然存在的错误假设，统一通过受控 Maven Locator
+  查找显式路径、MAVEN_HOME、M2_HOME 或 PATH。
+- 测试与命令：根项目 `mvn test` 通过 256 个测试（0 failure、0 error，常规模式 2 个外部 Smoke
+  条件跳过）；隔离 Maven 集成测试 9/9 通过；Node OpenCode Adapter 测试 11/11 通过；真实 Wafer
+  Smoke 1/1 通过并连续运行目标 UT 两次。
+- 真实结果：两份 102,603 字节时间戳 Gantt 的原始 SHA-256 均为
+  `cd09cdb200821c47e6fb464274bd36c317245b4026e37999d27ed9614dc4cb4d`，JSON Token 内容 SHA-256
+  均为 `e4f36cfea5282f6774cbe2e7bf018c2bd25f2d65cf2480210f931097cea332cc`。
+- 性能结果：实现为流式 Token 处理并受 64 MiB Gantt 捕获上限约束；尚未执行接近上限的专项性能测试，
+  不做吞吐或峰值内存承诺。
+- 已知限制：字段或条目级变化位置不由代码输出；对象字段顺序变化会保守地报告 `CHANGED`；大模型按需
+  读取参考和当前原始 Artifact。
+- 提交/版本：契约版本 `RunResultFingerprint 1.0`，Hash profile 为 `JSON_TOKEN_SHA256_V1` 和
+  `TARGET_FAILURE_SHA256_V1`。
 
 ## 18. 变更记录
 
@@ -363,3 +376,4 @@ Token 之间的空格、制表符、CR/LF 和缩进不会成为 Token，因此�
 |---|---|---|---|
 | 2026-08-17 | 0.1 | 初始通用投影和结构化 Diff 方案，编码前撤回 | Codex / mh90901119-oss |
 | 2026-08-17 | 0.2 | 根据真实时间戳文件名场景收敛为 JSON Token 内容 Hash 和简单比较 | Codex / mh90901119-oss |
+| 2026-08-17 | 1.0 | 完成指纹、归档、比较、集成与真实 Wafer 验收，并记录已知限制 | Codex / mh90901119-oss |
