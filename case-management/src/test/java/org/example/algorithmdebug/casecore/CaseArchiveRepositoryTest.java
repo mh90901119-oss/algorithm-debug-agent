@@ -12,6 +12,7 @@ import org.example.algorithmdebug.contracts.InputSnapshotStatus;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunRequest;
+import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.SourceSnapshot;
@@ -24,6 +25,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -115,6 +117,113 @@ class CaseArchiveRepositoryTest {
         assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", failure.code());
     }
 
+    @Test
+    void shouldCreateRunFingerprintOnceAndValidateRunIdentity() {
+        prepareRun(run(new RunId("run-1"), TIME.plusSeconds(3)));
+        RunResultFingerprint fingerprint = ganttFingerprint(
+                CONTEXT_ID, new RunId("run-1"), "a", "b");
+
+        Path created = repository.createRunResultFingerprint(fingerprint);
+
+        assertEquals(
+                temporaryDirectory.resolve(
+                        "cases/case-1/runs/run-1/run-result-fingerprint.json"),
+                created);
+        WorkspaceException overwrite = assertThrows(
+                WorkspaceException.class,
+                () -> repository.createRunResultFingerprint(fingerprint));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", overwrite.code());
+
+        ContextId wrongContext = new ContextId("context-2");
+        WorkspaceException mismatch = assertThrows(
+                WorkspaceException.class,
+                () -> repository.createRunResultFingerprint(ganttFingerprint(
+                        wrongContext, new RunId("run-1"), "a", "b")));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", mismatch.code());
+    }
+
+    @Test
+    void shouldKeepFirstContextReproductionReference() {
+        prepareRun(run(new RunId("run-1"), TIME.plusSeconds(3)));
+        RunResultFingerprint first = ganttFingerprint(
+                CONTEXT_ID, new RunId("run-1"), "a", "b");
+        repository.createRunResultFingerprint(first);
+        repository.startRun(run(new RunId("run-2"), TIME.plusSeconds(4)));
+        RunResultFingerprint second = ganttFingerprint(
+                CONTEXT_ID, new RunId("run-2"), "c", "d");
+        repository.createRunResultFingerprint(second);
+
+        assertEquals(first, repository.createReproductionIfAbsent(first));
+        assertEquals(first, repository.createReproductionIfAbsent(second));
+        assertEquals(Optional.of(first), repository.findReproduction(CASE_ID, CONTEXT_ID));
+    }
+
+    @Test
+    void shouldSelectLatestOlderContextByTimestampThenContextId() {
+        repository.createCase(manifest());
+        ContextId firstId = new ContextId("context-a");
+        ContextId secondId = new ContextId("context-b");
+        ContextId currentId = new ContextId("context-c");
+        createContextRunAndReproduction(firstId, "analysis-a", "run-a", TIME.plusSeconds(1), "a");
+        createContextRunAndReproduction(secondId, "analysis-b", "run-b", TIME.plusSeconds(1), "b");
+        repository.createContext(context(currentId, TIME.plusSeconds(2), "f"));
+
+        Optional<RunResultFingerprint> selected =
+                repository.findLatestReproductionBefore(CASE_ID, currentId);
+
+        assertEquals(Optional.of(new RunId("run-b")), selected.map(RunResultFingerprint::runId));
+    }
+
+    @Test
+    void shouldRejectReproductionWhoseIdentityDoesNotMatchItsPath() throws Exception {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        Path reproduction = temporaryDirectory.resolve(
+                "cases/case-1/contexts/context-1/reproduction.json");
+        RunResultFingerprint wrong = ganttFingerprint(
+                new ContextId("context-2"), new RunId("run-1"), "a", "b");
+        Files.write(reproduction, new BoundedDocumentMapper().writeJson(wrong));
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> repository.findReproduction(CASE_ID, CONTEXT_ID));
+
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", failure.code());
+    }
+
+    @Test
+    void shouldNotSkipCorruptedLatestOlderReproduction() throws Exception {
+        repository.createCase(manifest());
+        ContextId olderId = new ContextId("context-a");
+        ContextId latestOlderId = new ContextId("context-b");
+        ContextId currentId = new ContextId("context-c");
+        createContextRunAndReproduction(olderId, "analysis-a", "run-a", TIME.plusSeconds(1), "a");
+        createContextRunAndReproduction(
+                latestOlderId, "analysis-b", "run-b", TIME.plusSeconds(2), "b");
+        repository.createContext(context(currentId, TIME.plusSeconds(3), "f"));
+        Files.writeString(temporaryDirectory.resolve(
+                "cases/case-1/contexts/context-b/reproduction.json"), "{broken");
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> repository.findLatestReproductionBefore(CASE_ID, currentId));
+
+        assertEquals("CASE_DOCUMENT_INVALID", failure.code());
+    }
+
+    @Test
+    void layoutRejectsOpaqueIdsThatWouldEscapeArchiveRoots() {
+        Path casesRoot = temporaryDirectory.resolve("cases");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> CaseArchiveLayout.of(casesRoot, new CaseId("../outside")));
+        CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, CASE_ID);
+        assertThrows(IllegalArgumentException.class,
+                () -> layout.contextRoot(new ContextId("../outside")));
+        assertThrows(IllegalArgumentException.class,
+                () -> layout.runResultFingerprint(new RunId("../outside")));
+    }
+
     static CaseManifest manifest() {
         return new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
@@ -138,6 +247,53 @@ class CaseArchiveRepositoryTest {
         return new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", createdAt);
+    }
+
+    private void prepareRun(RunRequest request) {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.startRun(request);
+    }
+
+    private void createContextRunAndReproduction(
+            ContextId contextId,
+            String analysisId,
+            String runId,
+            Instant createdAt,
+            String hashSeed) {
+        repository.createContext(context(contextId, createdAt, hashSeed));
+        AnalysisId analysisIdValue = new AnalysisId(analysisId);
+        repository.createAnalysis(new AnalysisRequest(
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, contextId, analysisIdValue,
+                "继续分析", createdAt.plusMillis(1)));
+        RunId runIdValue = new RunId(runId);
+        repository.startRun(new RunRequest(
+                SchemaVersions.RUN_REQUEST, CASE_ID, contextId, analysisIdValue,
+                runIdValue, TARGET, "UNINSTRUMENTED", createdAt.plusMillis(2)));
+        RunResultFingerprint fingerprint = ganttFingerprint(
+                contextId, runIdValue, hashSeed, hashSeed);
+        repository.createRunResultFingerprint(fingerprint);
+        repository.createReproductionIfAbsent(fingerprint);
+    }
+
+    private static ContextSnapshot context(
+            ContextId contextId, Instant createdAt, String hashSeed) {
+        return new ContextSnapshot(
+                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, contextId, PROJECT_ID, TARGET,
+                "UNAVAILABLE", source(), input(), build(), SnapshotCompleteness.COMPLETE,
+                hashSeed.repeat(64), List.of(), createdAt);
+    }
+
+    private static RunResultFingerprint ganttFingerprint(
+            ContextId contextId,
+            RunId runId,
+            String rawSeed,
+            String normalizedSeed) {
+        return new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, contextId, runId,
+                Optional.of(rawSeed.repeat(64)), Optional.of(normalizedSeed.repeat(64)),
+                Optional.empty());
     }
 
     private static SourceSnapshot source() {

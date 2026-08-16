@@ -54,9 +54,19 @@ public final class CaseArchiveLayout {
         return child(caseRoot, "contexts");
     }
 
+    /** @return 指定 Context 目录 */
+    public Path contextRoot(ContextId contextId) {
+        return child(contextsRoot(), safeSegment(contextId.value(), "contextId"));
+    }
+
     /** @return 指定 Context 终态文档 */
     public Path contextDocument(ContextId contextId) {
-        return child(child(contextsRoot(), safeSegment(contextId.value(), "contextId")), "context.json");
+        return child(contextRoot(contextId), "context.json");
+    }
+
+    /** @return 指定 Context 的一次性复现参考 */
+    public Path contextReproduction(ContextId contextId) {
+        return child(contextRoot(contextId), "reproduction.json");
     }
 
     /** @return Analysis 根目录 */
@@ -88,6 +98,11 @@ public final class CaseArchiveLayout {
     /** @return 指定 Run 完成摘要 */
     public Path runOutcome(RunId runId) {
         return child(runRoot(runId), "run-outcome.json");
+    }
+
+    /** @return 指定 Run 的确定性结果指纹 */
+    public Path runResultFingerprint(RunId runId) {
+        return child(runRoot(runId), "run-result-fingerprint.json");
     }
 
     /** @return 指定 Run 原始产物目录 */

@@ -9,12 +9,14 @@ import org.example.algorithmdebug.contracts.ContextSnapshot;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
+import org.example.algorithmdebug.contracts.RunResultFingerprint;
 
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -126,6 +128,98 @@ public final class CaseArchiveRepository {
         }
     }
 
+    /**
+     * 为已启动 Run 原子创建确定性结果指纹。
+     *
+     * @return 已创建文档的绝对路径
+     */
+    public Path createRunResultFingerprint(RunResultFingerprint fingerprint) {
+        RunResultFingerprint checked = requireNonNull(fingerprint, "fingerprint");
+        validateFingerprintRunIdentity(checked);
+        Path document = layout(checked.caseId()).runResultFingerprint(checked.runId());
+        try {
+            writer.writeNew(document, mapper.writeJson(checked));
+            return document;
+        } catch (WorkspaceException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /** 查找指定 Context 的不可变复现参考；不存在时返回空。 */
+    public Optional<RunResultFingerprint> findReproduction(
+            CaseId caseId, ContextId contextId) {
+        requireContext(caseId, contextId);
+        Path document = layout(caseId).contextReproduction(contextId);
+        if (!Files.exists(document, LinkOption.NOFOLLOW_LINKS)) {
+            return Optional.empty();
+        }
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(
+                    "CASE_DOCUMENT_INVALID", "Context reproduction 不是普通文件");
+        }
+        RunResultFingerprint value = readFingerprint(document);
+        validateFingerprintPathIdentity(value, caseId, contextId);
+        validateFingerprintRunIdentity(value);
+        return Optional.of(value);
+    }
+
+    /**
+     * 原子建立 Context 的首个复现参考；已有参考时只读返回，绝不覆盖。
+     *
+     * @return 新建或已经存在的参考
+     */
+    public RunResultFingerprint createReproductionIfAbsent(
+            RunResultFingerprint fingerprint) {
+        RunResultFingerprint checked = requireNonNull(fingerprint, "fingerprint");
+        requireContext(checked.caseId(), checked.contextId());
+        validateFingerprintRunIdentity(checked);
+        Optional<RunResultFingerprint> existing =
+                findReproduction(checked.caseId(), checked.contextId());
+        if (existing.isPresent()) {
+            return existing.orElseThrow();
+        }
+        requirePersistedRunFingerprint(checked);
+        Path document = layout(checked.caseId()).contextReproduction(checked.contextId());
+        try {
+            writer.writeNew(document, mapper.writeJson(checked));
+            return checked;
+        } catch (WorkspaceException failure) {
+            Optional<RunResultFingerprint> concurrentlyCreated =
+                    findReproduction(checked.caseId(), checked.contextId());
+            if (concurrentlyCreated.isPresent()) {
+                return concurrentlyCreated.orElseThrow();
+            }
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /**
+     * 按 Context 创建时间和 ID 的确定性顺序查找当前 Context 之前最近的复现参考。
+     */
+    public Optional<RunResultFingerprint> findLatestReproductionBefore(
+            CaseId caseId, ContextId currentContextId) {
+        ContextSnapshot current = requireContext(caseId, currentContextId);
+        Comparator<ContextSnapshot> order = Comparator
+                .comparing(ContextSnapshot::createdAt)
+                .thenComparing(value -> value.contextId().value());
+        List<ContextSnapshot> candidates = childDirectories(layout(caseId).contextsRoot()).stream()
+                .filter(path -> Files.isRegularFile(
+                        path.resolve("context.json"), LinkOption.NOFOLLOW_LINKS))
+                .map(path -> contextIdFromDirectory(path))
+                .map(contextId -> requireContext(caseId, contextId))
+                .filter(candidate -> order.compare(candidate, current) < 0)
+                .sorted(order.reversed())
+                .toList();
+        for (ContextSnapshot candidate : candidates) {
+            Optional<RunResultFingerprint> reference =
+                    findReproduction(caseId, candidate.contextId());
+            if (reference.isPresent()) {
+                return reference;
+            }
+        }
+        return Optional.empty();
+    }
+
     /** 读取 Case 身份；不存在或损坏时返回结构化错误。 */
     public CaseManifest requireCase(CaseId caseId) {
         return requireDocument(layout(caseId).caseDocument(), CaseManifest.class, "CASE_NOT_FOUND");
@@ -221,6 +315,55 @@ public final class CaseArchiveRepository {
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
                     "CASE_DOCUMENT_INVALID", "Case 归档文档无效", failure);
+        }
+    }
+
+    private RunResultFingerprint readFingerprint(Path document) {
+        try {
+            return mapper.readJson(document, RunResultFingerprint.class);
+        } catch (WorkspaceException failure) {
+            throw new WorkspaceException(
+                    "CASE_DOCUMENT_INVALID", "RunResultFingerprint 文档无效", failure);
+        }
+    }
+
+    private void requirePersistedRunFingerprint(RunResultFingerprint expected) {
+        Path document = layout(expected.caseId()).runResultFingerprint(expected.runId());
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(
+                    "RUN_RESULT_FINGERPRINT_NOT_FOUND", "Run 结果指纹尚未保存");
+        }
+        RunResultFingerprint persisted = readFingerprint(document);
+        validateFingerprintPathIdentity(
+                persisted, expected.caseId(), expected.contextId());
+        if (!persisted.equals(expected)) {
+            throw identityMismatch("Context reproduction 与 Run 结果指纹不一致");
+        }
+    }
+
+    private void validateFingerprintRunIdentity(RunResultFingerprint fingerprint) {
+        RunRequest request = requireRunRequest(fingerprint.caseId(), fingerprint.runId());
+        if (!request.contextId().equals(fingerprint.contextId())) {
+            throw identityMismatch("RunResultFingerprint Context 与 RunRequest 不一致");
+        }
+    }
+
+    private static void validateFingerprintPathIdentity(
+            RunResultFingerprint fingerprint,
+            CaseId caseId,
+            ContextId contextId) {
+        if (!caseId.equals(fingerprint.caseId())
+                || !contextId.equals(fingerprint.contextId())) {
+            throw identityMismatch("RunResultFingerprint 文档身份与路径不一致");
+        }
+    }
+
+    private static ContextId contextIdFromDirectory(Path directory) {
+        try {
+            return new ContextId(directory.getFileName().toString());
+        } catch (IllegalArgumentException failure) {
+            throw new WorkspaceException(
+                    "CASE_DOCUMENT_INVALID", "Context 目录名不是有效 ID", failure);
         }
     }
 
