@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/analysis-request-v1.schema.json",
+  "title": "AnalysisRequest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "contextId", "analysisId", "question", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "caseId": { "$ref": "#/$defs/id" },
+    "contextId": { "$ref": "#/$defs/id" },
+    "analysisId": { "$ref": "#/$defs/id" },
+    "question": { "type": "string", "minLength": 1, "maxLength": 65536 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": { "id": { "type": "string", "minLength": 1, "maxLength": 128 } }
+}

@@ -6,6 +6,5 @@ public enum FailureCategory {
     TEST_FAILURE,
     TEST_ERROR,
     TEST_NOT_EXECUTED,
-    AGENT_FAILURE,
     UNKNOWN
 }

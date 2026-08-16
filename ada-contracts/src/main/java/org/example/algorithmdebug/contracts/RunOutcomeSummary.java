@@ -14,7 +14,6 @@ public record RunOutcomeSummary(
         ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
-        boolean latestRunForAnalysis,
         ProcessOutcome processOutcome,
         TestOutcome testOutcome,
         GanttOutcome ganttOutcome,
@@ -46,5 +45,51 @@ public record RunOutcomeSummary(
         comparisonOutcome = ContractChecks.requireNonNull(comparisonOutcome, "comparisonOutcome");
         comparisonSummary = ContractChecks.requireNonBlank(comparisonSummary, "comparisonSummary");
         artifacts = ContractChecks.immutableList(artifacts, "artifacts");
+        validateTargetFailure(testOutcome, targetFailure, agentFailure);
+        if (ganttOutcome == GanttOutcome.PRESENT
+                && artifacts.stream().noneMatch(RunOutcomeSummary::isGanttArtifact)) {
+            throw new IllegalArgumentException("GanttOutcome.PRESENT 必须包含 GANTT Artifact 引用");
+        }
+        if (ganttOutcome != GanttOutcome.PRESENT
+                && artifacts.stream().anyMatch(RunOutcomeSummary::isGanttArtifact)) {
+            throw new IllegalArgumentException(ganttOutcome + " 不得引用完整 GANTT Artifact");
+        }
+    }
+
+    private static void validateTargetFailure(
+            TestOutcome testOutcome,
+            Optional<TargetFailureDiagnostic> targetFailure,
+            Optional<AgentFailureDiagnostic> agentFailure) {
+        if (testOutcome == TestOutcome.PASSED && targetFailure.isPresent()) {
+            throw new IllegalArgumentException("PASSED 不得包含 targetFailure");
+        }
+        if ((testOutcome == TestOutcome.FAILED || testOutcome == TestOutcome.ERROR)
+                && targetFailure.isEmpty()) {
+            throw new IllegalArgumentException(testOutcome + " 必须包含 targetFailure");
+        }
+        if (testOutcome == TestOutcome.NOT_EXECUTED
+                && targetFailure.isEmpty() && agentFailure.isEmpty()) {
+            throw new IllegalArgumentException("NOT_EXECUTED 必须包含目标或 Agent 诊断");
+        }
+        if (targetFailure.isEmpty()) {
+            return;
+        }
+        FailureCategory category = targetFailure.orElseThrow().category();
+        if (testOutcome == TestOutcome.FAILED && category != FailureCategory.TEST_FAILURE) {
+            throw new IllegalArgumentException("FAILED 只接受 TEST_FAILURE 分类");
+        }
+        if (testOutcome == TestOutcome.ERROR && category != FailureCategory.TEST_ERROR) {
+            throw new IllegalArgumentException("ERROR 只接受 TEST_ERROR 分类");
+        }
+        if (testOutcome == TestOutcome.NOT_EXECUTED
+                && category != FailureCategory.BUILD_FAILURE
+                && category != FailureCategory.TEST_NOT_EXECUTED
+                && category != FailureCategory.UNKNOWN) {
+            throw new IllegalArgumentException("NOT_EXECUTED 的 targetFailure 分类不匹配");
+        }
+    }
+
+    private static boolean isGanttArtifact(ArtifactReference artifact) {
+        return "GANTT".equals(artifact.artifactType());
     }
 }

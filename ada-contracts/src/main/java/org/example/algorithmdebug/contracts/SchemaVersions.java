@@ -19,6 +19,21 @@ public final class SchemaVersions {
     /** 面向模型的目标 UT 运行摘要 Schema 版本。 */
     public static final String RUN_OUTCOME_SUMMARY = "1.0";
 
+    /** Case 身份清单 Schema 版本。 */
+    public static final String CASE_MANIFEST = "1.0";
+
+    /** Context 内容快照 Schema 版本。 */
+    public static final String CONTEXT_SNAPSHOT = "1.0";
+
+    /** Analysis 请求 Schema 版本。 */
+    public static final String ANALYSIS_REQUEST = "1.0";
+
+    /** Run 启动请求 Schema 版本。 */
+    public static final String RUN_REQUEST = "1.0";
+
+    /** 面向模型的有界 Case 摘要 Schema 版本。 */
+    public static final String CASE_DIGEST = "1.0";
+
     /** Agent Workspace 清单 Schema 版本。 */
     public static final String WORKSPACE_MANIFEST = "1.0";
 

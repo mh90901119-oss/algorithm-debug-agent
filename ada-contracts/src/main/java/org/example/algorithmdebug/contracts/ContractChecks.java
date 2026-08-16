@@ -97,5 +97,27 @@ final class ContractChecks {
         copied.forEach(value -> requireNonBlank(value, fieldName + " item"));
         return copied;
     }
-}
 
+    static String requireBoundedText(
+            String value, String fieldName, int maximumLength, boolean allowEmpty) {
+        if (value == null) {
+            throw new IllegalArgumentException(fieldName + " 不能为 null");
+        }
+        String checked = value.strip();
+        if (!allowEmpty && checked.isEmpty()) {
+            throw new IllegalArgumentException(fieldName + " 不能为空");
+        }
+        if (checked.length() > maximumLength) {
+            throw new IllegalArgumentException(fieldName + " 长度不能超过 " + maximumLength);
+        }
+        return checked;
+    }
+
+    static List<String> immutableBoundedStrings(
+            List<String> values, String fieldName, int maximumItemLength) {
+        List<String> copied = immutableList(values, fieldName);
+        copied.forEach(value -> requireBoundedText(
+                value, fieldName + " item", maximumItemLength, false));
+        return copied;
+    }
+}
