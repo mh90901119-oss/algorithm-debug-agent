@@ -1,28 +1,13 @@
 import { tool } from "@opencode-ai/plugin"
+import { runAdaCommand } from "../lib/ada-cli.mjs"
 
 type ToolContext = { directory: string }
 
+// 这些 Tool 名称描述最终 OpenCode 协作契约。当前 Java CLI 尚未提供全部对应命令，安装器完成命令映射、
+// 外部 Workspace 和 projectId 注入并通过锁定版本端到端验证前，不得把本文件直接登记为可用工具。
+
 async function runAda(args: string[], context: ToolContext): Promise<string> {
-  const process = Bun.spawn(["ada", ...args], {
-    cwd: context.directory,
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
-  ])
-  if (exitCode === 0) return stdout.trim()
-  return JSON.stringify({
-    schemaVersion: "1.0",
-    success: false,
-    code: "ADA_CLI_EXITED_NONZERO",
-    message: "Algorithm Debug CLI returned a nonzero exit code",
-    exitCode,
-    stderr: stderr.trim(),
-    stdout: stdout.trim(),
-  })
+  return runAdaCommand(args, context.directory, Bun.spawn)
 }
 
 export const analysis_begin = tool({

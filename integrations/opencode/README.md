@@ -3,7 +3,8 @@
 这是当前唯一客户端适配层，调用链为 OpenCode Model → canonical Skill → OpenCode Custom Tool →
 `ada` CLI → Java Core。该目录不复制或改写事实，也不包含算法业务语义。
 
-- `tools/algorithm-debug.ts`：将当前 `context.directory` 作为目标项目目录调用 CLI。
+- `tools/algorithm-debug.ts`：最终 Tool 契约源码；安装器还需把当前 `context.directory` 映射到已登记项目，
+  注入外部 Workspace/`projectId`，并把尚未实现的高层命令映射到稳定 CLI 后才能登记使用。
 - `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限读取；只原样返回通过 ToolResponse 2.0 校验的
   stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误返回结构化 Adapter 失败、终止 CLI
   且不回显原始日志。

@@ -1,6 +1,6 @@
 # ADR-007：OpenCode 通过仓库内 Skill 与 CLI 薄适配接入 Agent
 
-- 状态：Accepted
+- 状态：Accepted；CLI Implemented / Installer Pending
 - 日期：2026-08-12
 
 ## 背景
@@ -25,12 +25,15 @@ Server 会增加协议、打包和测试范围而没有当前收益。
    `RunOutcomeSummary` 与原始 Artifact 引用；
 5. 提供幂等的一次性 OpenCode 适配安装。它在 OpenCode 用户配置中登记 Agent 安装路径、外部 Skill
    来源和薄 Custom Tool，不把 Skill 正文复制到全局 Skill 目录；
-6. 安装完成后，用户进入目标算法仓库直接运行 `opencode` 并提问。`/debug-case` 与显式
-   `algorithm-debug` Agent 作为自动发现失败时的兜底；
+6. 安装完成后，用户进入目标算法仓库直接运行 `opencode` 并提问。显式命令和 Agent 定义属于后续
+   安装器需要登记并验证的入口，本 ADR 不把仓库内文件存在视为可用回退链路；
 7. `ada opencode --project ...` 仅作为开发、自测或临时免安装入口，不是日常主流程；
 8. 当前阶段不实现 Algorithm Debug MCP Server。外部 JDWP-MCP 的历史工具能力与本决策无关，不属于
    OpenCode Agent 接入链路；
 9. 目标仓库不保存 Agent 产品资产，只保存可配置位置的 Case 运行证据。
+10. OpenCode 的外部 Skill/Tool/Agent 发现与用户配置格式必须按锁定版本实测。当前仓库中的模板和
+    `integrations/opencode` 目录不是“已自动发现”的证据；安装器可以部署只负责加载仓库资产的薄入口，
+    但不得复制规范 Skill 或 Java 业务逻辑。
 
 ## 影响
 
@@ -38,7 +41,17 @@ Server 会增加协议、打包和测试范围而没有当前收益。
 - OpenCode 用户配置只包含发现/加载引用，不成为 Case、Run、Analysis 或 Evidence 的事实源；
 - 安装、升级、检查和卸载必须有离线、幂等和回滚测试；
 - Custom Tool 必须验证 CLI ToolResponse Schema，且不得重写 `eventType`、ID、结果、比较状态或 Artifact 引用；
+- Custom Tool 对 stdout/stderr 分别施加 1 MiB 上限并设置 15 分钟默认总预算；超时、超限、启动失败
+  或协议错误不回显原始输出，并终止已启动的 CLI 进程；
 - 后续出现第二种客户端的真实需求时，可以复用 CLI JSON 契约并单独评估 MCP，而不提前创建推测性模块。
+
+## 实现状态
+
+截至 2026-08-17，规范 Skill、OpenCode Agent/Command/Tool 源码、ToolResponse 2.0 校验、有界 I/O
+单元测试和可执行 `ada` CLI 已经存在。CLI 当前提供 Workspace 初始化、Maven 模块登记和 Doctor；
+Case/Run 命令随后已经实现，但 Tool 源码中的高层命令映射、Workspace/`projectId` 注入、安装/升级/
+检查/卸载命令、真实 OpenCode 加载验证以及端到端 Debug Case 仍未实现，因此当前不能把目标体验表述为
+已可使用，也不得直接登记该 Tool 源码。
 
 ## 被否决方案
 
