@@ -3,7 +3,7 @@ package org.example.algorithmdebug.casecore;
 import org.example.algorithmdebug.contracts.BaselineRunObservation;
 import org.example.algorithmdebug.contracts.BaselineVerification;
 import org.example.algorithmdebug.contracts.CaseFingerprint;
-import org.example.algorithmdebug.contracts.CaseLifecycleState;
+import org.example.algorithmdebug.contracts.BaselineStabilityState;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 
@@ -34,7 +34,7 @@ public final class BaselineStabilityService {
                 semanticHash,
                 requiredMatchingRuns,
                 List.of(new BaselineRunObservation(runId, semanticHash)),
-                CaseLifecycleState.BASELINE_CANDIDATE);
+                BaselineStabilityState.BASELINE_CANDIDATE);
     }
 
     /** 追加一次运行观察；出现任何不同语义结果后状态保持不稳定。 */
@@ -57,11 +57,11 @@ public final class BaselineStabilityService {
                 item -> !item.scheduleSemanticHash().equals(current.canonicalSemanticHash()));
         long matching = observations.stream().filter(
                 item -> item.scheduleSemanticHash().equals(current.canonicalSemanticHash())).count();
-        CaseLifecycleState state = different
-                ? CaseLifecycleState.BASELINE_UNSTABLE
+        BaselineStabilityState state = different
+                ? BaselineStabilityState.BASELINE_UNSTABLE
                 : matching >= requiredMatchingRuns
-                        ? CaseLifecycleState.BASELINE_STABLE
-                        : CaseLifecycleState.BASELINE_CANDIDATE;
+                        ? BaselineStabilityState.BASELINE_STABLE
+                        : BaselineStabilityState.BASELINE_CANDIDATE;
         return new BaselineVerification(
                 SchemaVersions.BASELINE_VERIFICATION,
                 current.caseFingerprint(),

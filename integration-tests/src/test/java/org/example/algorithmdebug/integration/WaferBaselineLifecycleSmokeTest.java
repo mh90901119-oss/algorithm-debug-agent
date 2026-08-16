@@ -11,7 +11,7 @@ import org.example.algorithmdebug.casecore.CaseWorkspace;
 import org.example.algorithmdebug.contracts.BaselineVerification;
 import org.example.algorithmdebug.contracts.CaseFingerprint;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.CaseLifecycleState;
+import org.example.algorithmdebug.contracts.BaselineStabilityState;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
@@ -91,7 +91,7 @@ class WaferBaselineLifecycleSmokeTest {
                 verification, new RunId("RUN-002"), second.semanticHash());
 
         assertEquals(first.semanticHash(), second.semanticHash());
-        assertEquals(CaseLifecycleState.BASELINE_STABLE, verification.state());
+        assertEquals(BaselineStabilityState.BASELINE_STABLE, verification.state());
         assertEquals(165, second.snapshot().operations().size());
         assertTrue(Files.isRegularFile(
                 workspace.caseRoot().resolve("runs/RUN-001/result/gantt.json")));

@@ -18,7 +18,7 @@ public record BaselineVerification(
         String canonicalSemanticHash,
         int requiredMatchingRuns,
         List<BaselineRunObservation> observations,
-        CaseLifecycleState state) {
+        BaselineStabilityState state) {
 
     /** 校验验证记录自洽，并防御性复制观察列表。 */
     public BaselineVerification {
@@ -43,17 +43,12 @@ public record BaselineVerification(
                 .count();
         boolean hasDifferent = observations.stream()
                 .anyMatch(item -> !item.scheduleSemanticHash().equals(canonicalHash));
-        if (state == CaseLifecycleState.BASELINE_STABLE
+        if (state == BaselineStabilityState.BASELINE_STABLE
                 && (hasDifferent || matching < requiredMatchingRuns)) {
             throw new IllegalArgumentException("BASELINE_STABLE 与运行观察不一致");
         }
-        if (state == CaseLifecycleState.BASELINE_UNSTABLE && !hasDifferent) {
+        if (state == BaselineStabilityState.BASELINE_UNSTABLE && !hasDifferent) {
             throw new IllegalArgumentException("BASELINE_UNSTABLE 必须包含不同语义结果");
-        }
-        if (state != CaseLifecycleState.BASELINE_CANDIDATE
-                && state != CaseLifecycleState.BASELINE_STABLE
-                && state != CaseLifecycleState.BASELINE_UNSTABLE) {
-            throw new IllegalArgumentException("BaselineVerification 不支持状态: " + state);
         }
     }
 }

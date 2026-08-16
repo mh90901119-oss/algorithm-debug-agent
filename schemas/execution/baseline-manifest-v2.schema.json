@@ -61,7 +61,11 @@
       "properties": {
         "artifactId": { "type": "string", "minLength": 1 },
         "artifactType": { "type": "string", "minLength": 1 },
-        "relativePath": { "type": "string", "minLength": 1 },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
         "mediaType": { "type": "string", "minLength": 1 },
         "sha256": { "$ref": "#/$defs/sha256" },
         "sizeBytes": { "type": "integer", "minimum": 0 }
