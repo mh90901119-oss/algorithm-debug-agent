@@ -86,11 +86,11 @@ class WaferBaselineLifecycleSmokeTest {
                 adapter.descriptor().adapterVersion());
         BaselineStabilityService stability = new BaselineStabilityService(2);
         BaselineVerification verification = stability.start(
-                fingerprint, new RunId("RUN-001"), first.semanticHash());
+                fingerprint, new RunId("RUN-001"), first.normalizedJsonSha256());
         verification = stability.record(
-                verification, new RunId("RUN-002"), second.semanticHash());
+                verification, new RunId("RUN-002"), second.normalizedJsonSha256());
 
-        assertEquals(first.semanticHash(), second.semanticHash());
+        assertEquals(first.normalizedJsonSha256(), second.normalizedJsonSha256());
         assertEquals(BaselineStabilityState.BASELINE_STABLE, verification.state());
         assertEquals(165, second.snapshot().operations().size());
         assertTrue(Files.isRegularFile(
@@ -113,7 +113,6 @@ class WaferBaselineLifecycleSmokeTest {
                         ProcessLimits.defaults()),
                 source,
                 adapterParser(),
-                adapterHashStrategy(),
                 runDirectory.resolve("result/gantt.json"));
         assertEquals(RunCompletion.SUCCEEDED, result.run().completion(),
                 () -> "目标 UT 失败，stdout=" + result.run().stdout().path()
@@ -141,11 +140,6 @@ class WaferBaselineLifecycleSmokeTest {
     private static org.example.algorithmdebug.adapter.ScheduleResultParser<WaferScheduleSnapshot>
             adapterParser() {
         return new WaferDemoAdapter().scheduleResultParser();
-    }
-
-    private static org.example.algorithmdebug.adapter.SemanticHashStrategy<WaferScheduleSnapshot>
-            adapterHashStrategy() {
-        return new WaferDemoAdapter().semanticHashStrategy();
     }
 
     private static String sha256(Path path) throws Exception {

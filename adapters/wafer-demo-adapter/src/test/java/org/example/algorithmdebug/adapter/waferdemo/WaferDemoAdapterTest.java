@@ -43,7 +43,6 @@ class WaferDemoAdapterTest {
         assertTrue(adapter.descriptor().supports(AdapterCapability.BASELINE_EXECUTION));
         assertTrue(adapter.descriptor().supports(AdapterCapability.INPUT_LOCATION));
         assertTrue(adapter.descriptor().supports(AdapterCapability.SCHEDULE_RESULT));
-        assertTrue(adapter.descriptor().supports(AdapterCapability.SEMANTIC_HASH));
     }
 
     @Test

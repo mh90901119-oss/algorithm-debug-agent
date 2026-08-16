@@ -9,7 +9,6 @@ import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
@@ -303,8 +302,7 @@ class CaseRunArchiveIntegrationTest {
                     Set.of(
                             AdapterCapability.BASELINE_EXECUTION,
                             AdapterCapability.INPUT_LOCATION,
-                            AdapterCapability.SCHEDULE_RESULT,
-                            AdapterCapability.SEMANTIC_HASH));
+                            AdapterCapability.SCHEDULE_RESULT));
         }
 
         @Override
@@ -344,9 +342,5 @@ class CaseRunArchiveIntegrationTest {
             return path -> new FixtureSnapshot("1.0");
         }
 
-        @Override
-        public SemanticHashStrategy<FixtureSnapshot> semanticHashStrategy() {
-            return ignored -> "a".repeat(64);
-        }
     }
 }

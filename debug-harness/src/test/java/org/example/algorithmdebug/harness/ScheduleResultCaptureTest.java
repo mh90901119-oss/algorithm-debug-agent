@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -29,7 +28,7 @@ class ScheduleResultCaptureTest {
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         Path produced = output.resolve("dynamic-name.any");
-        Files.writeString(produced, "schedule:13");
+        Files.writeString(produced, "{\"schedule\":13}");
 
         CapturedScheduleResult<TextSnapshot> captured = new ScheduleResultCapture<TextSnapshot>(
                 snapshotter,
@@ -37,12 +36,12 @@ class ScheduleResultCaptureTest {
                         before,
                         source,
                         parser(),
-                        hashStrategy(),
                         temporaryDirectory.resolve("run/result/gantt.json"));
 
         assertEquals(produced, captured.sourcePath());
         assertTrue(Files.isRegularFile(captured.capturedPath()));
-        assertEquals("a".repeat(64), captured.semanticHash());
+        assertEquals(new JsonTokenContentHasher().sha256(captured.capturedPath()),
+                captured.normalizedJsonSha256());
     }
 
     @Test
@@ -58,7 +57,6 @@ class ScheduleResultCaptureTest {
                         before,
                         source,
                         parser(),
-                        hashStrategy(),
                         temporaryDirectory.resolve("run/result/gantt.json")));
 
         assertEquals("HARNESS_RESULT_NOT_PRODUCED", exception.code());
@@ -71,15 +69,14 @@ class ScheduleResultCaptureTest {
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         Files.createDirectories(output);
-        Files.writeString(output.resolve("one"), "schedule:1");
-        Files.writeString(output.resolve("two"), "schedule:2");
+        Files.writeString(output.resolve("one"), "{\"schedule\":1}");
+        Files.writeString(output.resolve("two"), "{\"schedule\":2}");
 
         HarnessException exception = assertThrows(HarnessException.class,
                 () -> new ScheduleResultCapture<TextSnapshot>(snapshotter, 1024).capture(
                         before,
                         source,
                         parser(),
-                        hashStrategy(),
                         temporaryDirectory.resolve("run/result/gantt.json")));
 
         assertEquals("HARNESS_RESULT_AMBIGUOUS", exception.code());
@@ -93,7 +90,7 @@ class ScheduleResultCaptureTest {
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         Path produced = output.resolve("stable.json");
-        Files.writeString(produced, "schedule:1");
+        Files.writeString(produced, "{\"schedule\":1}");
         OutputDirectorySnapshot stableAfter = snapshotter.snapshot(source);
         Files.writeString(output.resolve("late.json"), "schedule:2");
 
@@ -102,7 +99,6 @@ class ScheduleResultCaptureTest {
                         before,
                         stableAfter,
                         parser(),
-                        hashStrategy(),
                         temporaryDirectory.resolve("run/result/gantt.json"));
 
         assertEquals(produced, captured.sourcePath());
@@ -112,7 +108,7 @@ class ScheduleResultCaptureTest {
         return path -> {
             try {
                 String value = Files.readString(path);
-                if (!value.startsWith("schedule:")) {
+                if (!value.startsWith("{\"schedule\":")) {
                     throw new AdapterException("TEST_INVALID", "不是调度结果");
                 }
                 return new TextSnapshot("1.0", value);
@@ -120,10 +116,6 @@ class ScheduleResultCaptureTest {
                 throw new AdapterException("TEST_IO", "读取失败", exception);
             }
         };
-    }
-
-    private static SemanticHashStrategy<TextSnapshot> hashStrategy() {
-        return snapshot -> "a".repeat(64);
     }
 
     private record TextSnapshot(String schemaVersion, String value)

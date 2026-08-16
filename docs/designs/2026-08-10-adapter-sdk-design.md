@@ -170,7 +170,7 @@ mvn test
 
 - 实际变更：1.1 已实现 AdapterDescriptor、ProjectDescriptor、TestLaunchSpec、AdapterException、
   3 个枚举、ScheduleResultSnapshot、4 个组合策略接口和泛型 TargetProjectAdapter；主代码只依赖
-  ada-contracts。1.2 的 Hash SPI 移除尚待实施。
+  ada-contracts。1.2 已删除 Adapter Hash SPI，由 Debug Harness 统一计算 JSON Token 内容指纹。
 - 相对设计偏差：无。Red 阶段确认 adapter-sdk 因 64 个缺失生产符号编译失败后才加入实现。
 - 测试结果：初版 adapter-sdk 运行 9 个测试；动态结果源扩展后运行 11 个测试，均为 0 失败、
   0 错误、0 跳过；根项目 Reactor 回归成功。

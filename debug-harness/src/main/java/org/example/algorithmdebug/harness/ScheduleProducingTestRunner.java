@@ -3,7 +3,6 @@ package org.example.algorithmdebug.harness;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 
 import java.nio.file.Path;
@@ -39,10 +38,9 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             MavenExecutionOptions options,
             ScheduleResultSource source,
             ScheduleResultParser<T> parser,
-            SemanticHashStrategy<T> hashStrategy,
             Path destination) throws HarnessException {
         if (spec == null || options == null || source == null || parser == null
-                || hashStrategy == null || destination == null) {
+                || destination == null) {
             throw new IllegalArgumentException("运行参数不能为空");
         }
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
@@ -57,7 +55,7 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             OutputDirectorySnapshot stableAfter = stabilityWaiter.awaitStable(before, source);
             changedOutputCandidates = stableAfter.changedSince(before);
             CapturedScheduleResult<T> captured = resultCapture.capture(
-                    before, stableAfter, parser, hashStrategy, destination);
+                    before, stableAfter, parser, destination);
             return ScheduleRunResult.present(run, captured, changedOutputCandidates);
         } catch (HarnessException exception) {
             return ScheduleRunResult.incomplete(run, exception, changedOutputCandidates);

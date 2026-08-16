@@ -214,7 +214,6 @@ public final class RunApplicationService {
                         ProcessLimits.defaults()),
                 resultSource,
                 adapter.scheduleResultParser(),
-                adapter.semanticHashStrategy(),
                 raw.resolve("gantt.json"));
 
         Optional<AgentFailureDiagnostic> agentFailure = schedule.agentFailure();

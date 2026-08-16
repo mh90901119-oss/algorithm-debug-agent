@@ -10,7 +10,6 @@ import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -112,9 +111,5 @@ class AdapterCatalogTest {
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        public SemanticHashStrategy<Snapshot> semanticHashStrategy() {
-            throw new UnsupportedOperationException();
-        }
     }
 }

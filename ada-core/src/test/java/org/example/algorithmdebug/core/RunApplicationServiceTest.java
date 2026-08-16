@@ -10,7 +10,6 @@ import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
@@ -125,7 +124,7 @@ class RunApplicationServiceTest {
                 Files.createDirectories(reports);
                 Files.writeString(reports.resolve("TEST-a.b.TargetTest.xml"),
                         "<testsuite><testcase classname='a.b.TargetTest' name='runs'/></testsuite>");
-                Files.writeString(output.resolve("gantt.json"), "schedule:ok");
+                Files.writeString(output.resolve("gantt.json"), "{\"schedule\":\"ok\"}");
             } catch (java.io.IOException failure) {
                 throw new HarnessException("TEST_WRITE_FAILED", "test fixture write failed", failure);
             }
@@ -238,7 +237,7 @@ class RunApplicationServiceTest {
             return new AdapterDescriptor(
                     "stub", "1.0", "stub", Set.of(
                     AdapterCapability.BASELINE_EXECUTION, AdapterCapability.INPUT_LOCATION,
-                    AdapterCapability.SCHEDULE_RESULT, AdapterCapability.SEMANTIC_HASH));
+                    AdapterCapability.SCHEDULE_RESULT));
         }
 
         @Override
@@ -277,9 +276,5 @@ class RunApplicationServiceTest {
             };
         }
 
-        @Override
-        public SemanticHashStrategy<Snapshot> semanticHashStrategy() {
-            return ignored -> "b".repeat(64);
-        }
     }
 }

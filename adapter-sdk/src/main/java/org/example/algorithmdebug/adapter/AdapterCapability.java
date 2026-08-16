@@ -8,11 +8,8 @@ public enum AdapterCapability {
     INPUT_LOCATION,
     /** 能够定位并解析调度结果。 */
     SCHEDULE_RESULT,
-    /** 能够计算排除非业务噪声后的语义哈希。 */
-    SEMANTIC_HASH,
     /** 能够创建 Code Path Tracer 运行规格。 */
     CODE_PATH_COLLECTION,
     /** 能够创建 JDWP 调试运行规格。 */
     JDWP_COLLECTION
 }
-

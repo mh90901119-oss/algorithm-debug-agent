@@ -57,7 +57,4 @@ public interface TargetProjectAdapter<T extends ScheduleResultSnapshot> {
 
     /** @return 与泛型 T 一致的结果解析器 */
     ScheduleResultParser<T> scheduleResultParser();
-
-    /** @return 与泛型 T 一致的语义哈希策略 */
-    SemanticHashStrategy<T> semanticHashStrategy();
 }

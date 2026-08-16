@@ -39,7 +39,7 @@ class ScheduleProducingTestRunnerTest {
         AtomicLong nanos = new AtomicLong();
         OutputStabilityWaiter waiter = waiter(snapshotter, nanos);
         TargetTestExecutor executor = (spec, options) -> {
-            writeResult(output, "schedule:1");
+            writeResult(output, "{\"schedule\":1}");
             return runResult(RunCompletion.SUCCEEDED, OptionalInt.of(0));
         };
         ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
@@ -49,7 +49,7 @@ class ScheduleProducingTestRunnerTest {
                 new ScheduleResultCapture<>(snapshotter, 1024));
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
-                spec(), options(), source, this::parse, ignored -> "a".repeat(64),
+                spec(), options(), source, this::parse,
                 temporaryDirectory.resolve("run-success/result/gantt.json"));
 
         assertTrue(result.scheduleResult().isPresent());
@@ -66,7 +66,7 @@ class ScheduleProducingTestRunnerTest {
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         AtomicLong nanos = new AtomicLong();
         TargetTestExecutor executor = (spec, options) -> {
-            writeResult(output, "schedule:stale-partial");
+            writeResult(output, "{\"schedule\":\"stale-partial\"}");
             return runResult(RunCompletion.FAILED, OptionalInt.of(1));
         };
         ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
@@ -77,7 +77,7 @@ class ScheduleProducingTestRunnerTest {
         Path destination = temporaryDirectory.resolve("run-failed/result/gantt.json");
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
-                spec(), options(), source, this::parse, ignored -> "a".repeat(64), destination);
+                spec(), options(), source, this::parse, destination);
 
         assertTrue(result.scheduleResult().isPresent());
         assertEquals(GanttOutcome.PRESENT, result.ganttOutcome());
@@ -107,7 +107,6 @@ class ScheduleProducingTestRunnerTest {
                 path -> {
                     throw new AdapterException("TEST_INVALID_GANTT", "调度结果格式无效");
                 },
-                ignored -> "a".repeat(64),
                 temporaryDirectory.resolve("run-invalid/result/gantt.json"));
 
         assertEquals(RunCompletion.FAILED, result.run().completion());
@@ -127,7 +126,7 @@ class ScheduleProducingTestRunnerTest {
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         AtomicLong nanos = new AtomicLong();
         TargetTestExecutor executor = (spec, options) -> {
-            writeResult(output, "schedule:1");
+            writeResult(output, "{\"schedule\":1}");
             return runResult(RunCompletion.SUCCEEDED, OptionalInt.of(0));
         };
         ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
@@ -142,7 +141,6 @@ class ScheduleProducingTestRunnerTest {
                 path -> {
                     throw parserFailure;
                 },
-                ignored -> "a".repeat(64),
                 temporaryDirectory.resolve("run-unchecked/result/gantt.json"));
 
         assertEquals(RunCompletion.SUCCEEDED, result.run().completion());

@@ -9,7 +9,7 @@ public record CapturedScheduleResult<T extends ScheduleResultSnapshot>(
         Path sourcePath,
         Path capturedPath,
         String rawSha256,
-        String semanticHash,
+        String normalizedJsonSha256,
         long sizeBytes,
         T snapshot) {
 
@@ -21,8 +21,8 @@ public record CapturedScheduleResult<T extends ScheduleResultSnapshot>(
         if (rawSha256 == null || !rawSha256.matches("[0-9a-f]{64}")) {
             throw new IllegalArgumentException("rawSha256 非法");
         }
-        if (semanticHash == null || !semanticHash.matches("[0-9a-f]{64}")) {
-            throw new IllegalArgumentException("semanticHash 非法");
+        if (normalizedJsonSha256 == null || !normalizedJsonSha256.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("normalizedJsonSha256 非法");
         }
         if (sizeBytes < 0) {
             throw new IllegalArgumentException("sizeBytes 不能为负数");

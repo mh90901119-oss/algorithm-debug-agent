@@ -10,7 +10,6 @@ import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
@@ -155,9 +154,5 @@ class CaseApplicationServiceTest {
             throw new AssertionError("case open 不得解析运行输出");
         }
 
-        @Override
-        public SemanticHashStrategy<Snapshot> semanticHashStrategy() {
-            throw new AssertionError("case open 不得计算调度 Hash");
-        }
     }
 }
