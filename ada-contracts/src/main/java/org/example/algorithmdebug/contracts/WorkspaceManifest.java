@@ -1,5 +1,7 @@
 package org.example.algorithmdebug.contracts;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.Instant;
 
 /**
@@ -9,7 +11,10 @@ import java.time.Instant;
  * @param kind 固定的 Workspace 类型标识
  * @param createdAt Workspace 首次初始化时间
  */
-public record WorkspaceManifest(String schemaVersion, String kind, Instant createdAt) {
+public record WorkspaceManifest(
+        String schemaVersion,
+        String kind,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant createdAt) {
 
     /** Workspace 清单的固定类型标识。 */
     public static final String KIND = "ALGORITHM_DEBUG_WORKSPACE";

@@ -1,5 +1,7 @@
 package org.example.algorithmdebug.contracts;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import java.time.Instant;
 
 /**
@@ -28,7 +30,7 @@ public record ProjectRegistration(
         String pomPath,
         String buildTool,
         String pomSha256,
-        Instant registeredAt) {
+        @JsonFormat(shape = JsonFormat.Shape.STRING) Instant registeredAt) {
 
     private static final int MAX_DISPLAY_NAME_LENGTH = 256;
     private static final String MAVEN = "MAVEN";

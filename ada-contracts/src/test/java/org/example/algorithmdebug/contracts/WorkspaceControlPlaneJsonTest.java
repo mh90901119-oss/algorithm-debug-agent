@@ -13,6 +13,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorkspaceControlPlaneJsonTest {
 
@@ -46,6 +47,31 @@ class WorkspaceControlPlaneJsonTest {
         assertRoundTrip(registration, ProjectRegistration.class);
         assertRoundTrip(registrationResult, ProjectRegistrationResult.class);
         assertRoundTrip(doctorReport, DoctorReport.class);
+    }
+
+    @Test
+    void shouldSerializeContractInstantsAsSchemaCompatibleStrings() throws Exception {
+        WorkspaceManifest manifest = new WorkspaceManifest(
+                SchemaVersions.WORKSPACE_MANIFEST, WorkspaceManifest.KIND, RECORDED_AT);
+        ProjectRegistration registration = new ProjectRegistration(
+                SchemaVersions.PROJECT_REGISTRATION,
+                new ProjectId("algorithm-scheduler-a1b2c3d4e5f6"),
+                "algorithm-scheduler",
+                "D:/large-system",
+                "D:/large-system/algorithm-scheduler",
+                "D:/large-system/algorithm-scheduler",
+                "pom.xml",
+                "MAVEN",
+                "a".repeat(64),
+                RECORDED_AT);
+
+        JsonNode manifestJson = MAPPER.readTree(MAPPER.writeValueAsBytes(manifest));
+        JsonNode registrationJson = MAPPER.readTree(MAPPER.writeValueAsBytes(registration));
+
+        assertTrue(manifestJson.path("createdAt").isTextual());
+        assertEquals("2026-08-16T00:00:00Z", manifestJson.path("createdAt").asText());
+        assertTrue(registrationJson.path("registeredAt").isTextual());
+        assertEquals("2026-08-16T00:00:00Z", registrationJson.path("registeredAt").asText());
     }
 
     @Test
