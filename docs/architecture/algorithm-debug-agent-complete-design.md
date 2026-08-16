@@ -108,7 +108,7 @@ Run 2：JDWP 关键状态运行
 Run 3+：按需聚焦运行或 JDWP-MCP 交互式深挖
 ```
 
-不同采集技术无需同时压在一次运行上。每轮结果必须与基准结果的语义 Hash 一致。
+不同采集技术无需同时压在一次运行上。每轮结果必须与基准结果的 JSON 内容指纹或失败指纹一致。
 
 ### 3.4 JDI 不替代 JDWP
 
@@ -213,7 +213,7 @@ JOB-B.jobStartOrder = 2
 
 - 支持指定一个 Maven/JUnit 算法 UT；
 - 支持固定输入的多轮可重复运行；
-- 自动保存调度结果和语义 Hash；
+- 自动保存调度结果、原始 SHA-256 和忽略格式空白的 JSON 内容指纹；
 - 生成实际方法调用路径；
 - 根据问题生成不同的动态采集计划；
 - 无源码侵入地读取局部变量、对象字段和资源状态；
@@ -349,18 +349,15 @@ Run 0
   -> 执行原始 UT
   -> 保存 schedule-result.json
   -> 保存 test-result.json
-  -> 计算 result-semantic-hash.txt
+  -> 计算 run-result-fingerprint.json
 ```
 
-语义 Hash 计算前必须：
-
-- operation 按稳定字段排序；
-- Map 和资源列表排序；
-- 排除 capturedAt、runId 等非业务字段；
-- 使用规范化 JSON。
+内容指纹由通用 Harness 对合法结果执行流式 JSON Token Hash：忽略 Token 之间的缩进、换行和空格，
+但保留字符串内部空格、对象成员顺序、数组顺序和数值文本。当前阶段不由 Adapter 选择业务字段，也不
+生成字段级 Diff；指纹变化后保留两份原始结果供大模型按需分析。
 
 稳定阈值必须可配置。Phase 0 Reference Demo 使用两次以缩短集成测试时间，真实大型算法建议同一 UT
-连续运行三次或更多。每次结果先保存为不可变 Run；相同 `CaseFingerprint` 下语义哈希不一致时标记
+连续运行三次或更多。每次结果先保存为不可变 Run；相同 Context 下内容或失败指纹不一致时标记
 `BASELINE_UNSTABLE`，不能通过自动新建 Case 隐藏非确定性。
 
 动态结果文件不按“目录最新文件”猜测。Adapter 只返回 `ScheduleResultSource`，Harness 在 UT 运行前后
@@ -507,7 +504,7 @@ Debug Harness 是调试运行编排器，不是调试协议实现。
 - 监控超时和退出码；
 - 收集测试结果和调度结果；
 - 生成运行清单；
-- 对比基准语义 Hash。
+- 对比基准 JSON 内容指纹或失败指纹。
 
 ### 10.2 进程模型
 
@@ -1895,8 +1892,8 @@ JDWP：
 一个问题被视为完成定位，需要：
 
 1. 目标 UT 和输入明确；
-2. 基准 UT 通过；
-3. 多轮运行结果语义 Hash 一致；
+2. 基准 UT 产生可归档的成功结果或目标失败事实，Agent 自身没有崩溃；
+3. 用于确认根因的多轮采集结果与参考内容指纹或失败指纹一致；
 4. CodePath 或等价实际路径存在；
 5. 关键动态变量被观察；
 6. 关键代码位置被定位；
@@ -1921,7 +1918,7 @@ Debug Harness/Collector 位于父 JVM，原始 UT 位于子 JVM，避免调试�
 
 ### ADR-003：多轮确定性采集
 
-CodePath 和 JDWP 默认分轮运行，并以基准语义 Hash 校验行为未改变。
+CodePath 和 JDWP 默认分轮运行，并以基准 JSON 内容指纹或失败指纹校验可观察行为未改变。
 
 ### ADR-004：Derived Domain Trace
 

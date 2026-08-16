@@ -15,9 +15,10 @@ inspect its bounded history, explicitly run one supported JUnit method and appen
 Case/Context/Analysis/Run documents. Each completed Run returns orthogonal process, test, Gantt,
 target-failure and Agent-failure facts plus hashed Artifact references.
 
-Baseline comparison is deliberately still `NOT_COMPARED`. Input Analysis, Gantt business analysis,
-CodePathTracer/JDWP orchestration, Evidence construction, the OpenCode installer and end-to-end
-`/debug-case` model workflow remain planned.
+Baseline comparison is deliberately still `NOT_COMPARED`. The next approved slice only adds a
+whitespace-insensitive JSON content fingerprint and simple `MATCHED/CHANGED` comparison; field-level
+Gantt Diff is deferred. Input Analysis, CodePathTracer/JDWP orchestration, Evidence construction,
+the OpenCode installer and end-to-end `/debug-case` model workflow remain planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
 `algorithm-debug` Skill, bounded OpenCode agent/command/custom-tool contract assets and the Java

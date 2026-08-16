@@ -26,7 +26,7 @@
 
 截至 2026-08-16，已实现外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
 Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实 UT RunOutcome/Artifact
-归档，以及输出单个有界 ToolResponse JSON 的可执行 CLI。Input Analysis、Gantt 业务分析、Baseline 比较、
+归档，以及输出单个有界 ToolResponse JSON 的可执行 CLI。Input Analysis、JSON 内容指纹 Baseline 比较、
 OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端 `/debug-case` 模型流程仍未实现。
 
 2026-08-12 进一步确认当前 OpenCode 集成不使用 Algorithm Debug MCP：Agent 产品资产全部保存在本仓库，
@@ -136,7 +136,8 @@ LLM 不可以直接决定未经验证的类、行号、字段和采集预算。�
 
 ### 3.6 同一问题允许多次确定性重跑
 
-CodePath、JDWP 广域采集、JDWP 聚焦采集分别运行同一个 UT。每轮都必须验证输入、代码版本和调度结果语义 Hash 与 Baseline 一致。
+CodePath、JDWP 广域采集、JDWP 聚焦采集分别运行同一个 UT。每轮都必须验证输入、代码版本和 JSON
+内容指纹或失败指纹与 Baseline 一致。
 
 ## 4. 仓库边界
 
@@ -408,7 +409,6 @@ AnalysisRecordRepository
 CaseDigestBuilder
 ImmutableArtifactStore
 ReproductionComparator
-ScheduleResultDiffService
 ```
 
 ### 8.3 数据层级
@@ -538,7 +538,6 @@ public interface TargetProjectAdapter<T extends ScheduleResultSnapshot> {
             ProjectDescriptor project,
             TargetTest test);
     ScheduleResultParser<T> scheduleResultParser();
-    SemanticHashStrategy<T> semanticHashStrategy();
 }
 ```
 
@@ -551,7 +550,6 @@ public interface TargetProjectAdapter<T extends ScheduleResultSnapshot> {
 InputLocator
 ScheduleResultSource
 ScheduleResultParser
-SemanticHashStrategy
 ```
 
 `ScheduleResultSource`只描述绝对输出目录和是否递归，不包含时间戳、glob 或最新文件选择规则。
@@ -578,7 +576,7 @@ SemanticHashStrategy
 - 结果定位规则；
 - 源码include/exclude；
 - 允许采集的字段；
-- 语义Hash策略。
+- 结果 Parser 配置。
 
 ### 9.4 安全边界
 
@@ -638,12 +636,12 @@ VALIDATION_REPLAY
 
 ### 10.5 Baseline要求
 
-首次无采集 Run 默认冻结为复现参考，不因流程要求重复执行。检测到语义 Hash 漂移、算法包含随机或
+首次无采集 Run 默认冻结为复现参考，不因流程要求重复执行。检测到 JSON 内容或失败指纹漂移、算法包含随机或
 并发因素、采集前后结果冲突，或用户明确要求时，再按可配置阈值重复验证：
 
 - 测试均通过；
 - 输入Hash一致；
-- 调度结果语义Hash一致；
+- JSON 内容指纹或失败指纹一致；
 - 运行命令与环境被记录。
 
 同一 Fingerprint 的语义结果不一致时记录复现不稳定；与参考结果不一致的动态采集 Evidence 不得用于
@@ -823,7 +821,7 @@ minimum bytecode/runtime baseline of tracer: Java 17
 4. 外部JUnit Platform Launcher先安装Tracer，再发现和加载目标UT；
 5. Launcher执行原始`class#method`，并把方法进入/退出事件写成JSONL；
 6. 目标UT照常生成算法结果/Gantt JSON；
-7. Harness比较本轮结果语义Hash与Baseline，确认采集没有改变算法行为。
+7. Harness比较本轮 JSON 内容指纹或失败指纹与 Baseline，确认采集没有改变可观察行为。
 
 默认禁止：
 
@@ -888,7 +886,7 @@ distribution/tools/code-path-tracer/<version>/
   -> 原始UT生成正常Gantt JSON
   -> Bundle写raw-method-path.jsonl与运行摘要
   -> Harness写manifest、日志、Hash和状态
-  -> 比较Gantt语义Hash与Baseline
+  -> 比较Gantt JSON内容指纹与Baseline
 ```
 
 必须以登记的 Maven 执行目录为工作目录，否则 UT 中的相对输入/输出路径可能改变。对于当前具有独立
@@ -968,7 +966,7 @@ Manifest至少记录：
 - include/exclude规则与预算；
 - 测试发现/成功/失败数；
 - 事件数、截断状态、开始/结束时间和退出码；
-- 输入Hash、原始Gantt Hash、规范化后的语义Hash；
+- 输入 Hash、原始 Gantt SHA-256、忽略格式空白的 JSON 内容指纹；
 - 与Baseline是否一致。
 
 原始JSONL只作为不可变证据保存。`MethodPathSummarizer`再生成按线程的调用树、方法计数、实际命中策略和UT到Scheduler的最短路径；LLM默认只读取摘要或按条件查询的切片。
@@ -993,7 +991,7 @@ Manifest至少记录：
 - Java 21运行动态Attach时显式增加`-XX:+EnableDynamicAgentLoading`，可避免动态Agent警告；
 - Harness必须检查目标JDK是否允许Attach；失败时返回结构化错误，不能静默输出空Trace；
 - 子JVM不开放网络端口，CodePath采集不需要JDWP端口；
-- CodePath Run与JDWP Run默认分轮执行，用同一Baseline语义Hash关联；
+- CodePath Run与JDWP Run默认分轮执行，用同一 Baseline 内容/失败指纹关联；
 - 依赖JAR必须经过Hash校验，只允许从Agent受控distribution目录加载；
 - 目标classpath和输入可能含公司敏感路径，Manifest进入LLM前必须脱敏。
 
@@ -1153,7 +1151,7 @@ CollectorFailureClassifier
   -> 采集并持续写JSONL
   -> 目标UT结束
   -> 读取Manifest与Metrics
-  -> 比较Baseline语义Hash
+  -> 比较Baseline内容/失败指纹
 ```
 
 ### 15.4 兼容性锁
@@ -1282,7 +1280,7 @@ public interface TraceRule {
 - Run/Plan/Case引用完整；
 - 截断和采样情况可见；
 - schedule committed事件与Gantt操作对应；
-- 多轮运行语义Hash一致；
+- 用于确认根因的多轮运行内容/失败指纹一致；
 - 时间区间合法；
 - 同资源占用冲突。
 
@@ -1674,7 +1672,6 @@ adapters/wafer-demo-adapter/
 │   ├── WaferInputLocator.java
 │   ├── WaferScheduleResultLocator.java
 │   ├── WaferScheduleResultParser.java
-│   ├── WaferSemanticHashStrategy.java
 │   ├── WaferScheduleSnapshot.java
 │   └── WaferOperationSnapshot.java
 └── src/main/resources/
@@ -1815,7 +1812,7 @@ CLI参数
 2. ada case create
 3. CaseService生成CASE-001
 4. 按问题和证据需要执行一次或多次无采集UT，建立或复核复现参考
-5. Adapter解析Gantt并计算语义Hash
+5. Adapter 解析 Gantt，Harness 计算原始 SHA-256 和 JSON 内容指纹
 6. Gantt Analyzer锚定W1/W2/CH3时间窗
 7. Static Analyzer生成相关调用链和Tracepoint Catalog
 8. CodePath Collector重跑UT并确认实际路径
@@ -2000,7 +1997,7 @@ CLI创建Case
 
 验收：Schema、DTO和Fixture可互相校验。
 
-### Phase 1：Case + Baseline + Gantt
+### Phase 1：Case + JSON 内容指纹 Baseline
 
 交付：
 
@@ -2008,7 +2005,8 @@ CLI创建Case
 - Debug Harness；
 - Wafer Demo Adapter；
 - 可配置次数的Baseline确定性验证；
-- Gantt Analysis；
+- 原始 SHA-256 与忽略 JSON 格式空白的 Token SHA-256；
+- 成功 Gantt/失败指纹的简单 `MATCHED/CHANGED` 比较；
 - CLI基础命令。
 
 这是第一个可演示里程碑：虽然尚未自动Debug，但能指定UT建立可查询Case。
@@ -2023,7 +2021,7 @@ CLI创建Case
 
 ### Phase 4：JDWP Collector接入
 
-Collector/Core单点能力已经验证。此Phase只负责Agent侧接入：锁定JAR/commit/hash，编译计划，动态分配localhost端口，启动`suspend=y`目标UT，监管Collector，读取Trace/Manifest，并自动验证Gantt语义Hash和错误恢复。
+Collector/Core单点能力已经验证。此Phase只负责Agent侧接入：锁定JAR/commit/hash，编译计划，动态分配localhost端口，启动`suspend=y`目标UT，监管Collector，读取Trace/Manifest，并自动验证 Gantt JSON 内容指纹或失败指纹和错误恢复。
 
 ### Phase 5：Normalizer + Validator + Evidence
 
@@ -2049,7 +2047,7 @@ OpenCode 适配安装。安装后用户进入目标算法仓库直接运行 `ope
 ## 33. 第一版Definition of Done
 
 1. 能在不修改`hellomvn`算法源码和原始UT的情况下指定一个测试方法；
-2. 能在检测到漂移、随机/并发因素或用户要求时，按配置次数验证 Baseline 的 Gantt 语义 Hash 一致；
+2. 能在检测到漂移、随机/并发因素或用户要求时，按配置次数验证 Baseline 的 Gantt JSON 内容指纹或失败指纹一致；
 3. 能从用户问题定位Gantt中的Wafer/Resource/时间窗；
 4. 能输出UT到Scheduler决策点的静态和实际调用路径；
 5. 能按声明式计划采集至少五个指定局部变量或对象字段；
@@ -2094,9 +2092,10 @@ mavenExecutionRoot 和 pomPath；运行产物不得默认写入目标仓库。
 
 已确认MVP只支持Maven + JUnit 5 + 单测试方法；CodePath外部Launcher和JDWP Surefire fork均已完成单点验证。Gradle目标项目和TestNG后续扩展。
 
-### D7：语义Hash
+### D7：结果内容指纹
 
-建议由Adapter实现：忽略输出文件生成时间、随机ID和展示字段，只对调度操作关键字段规范排序后计算Hash。
+由 Harness 对 Adapter 已确认的合法 JSON 计算原始 SHA-256 和流式 Token SHA-256；后者只忽略 JSON
+格式空白，不忽略业务字段、不重排数组或对象成员。Adapter 不再实现 Hash 策略，字段级 Diff 后置。
 
 ### D8：LLM职责
 

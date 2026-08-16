@@ -635,7 +635,8 @@ OpenCode 安装器、Baseline 比较和采集/Evidence 链仍未实现。
 - 所有 Case 可生成独立 run 目录；
 - 结果中可确认输入 Hash、算法版本和模式。
 - 动态采集运行与参考 Gantt Hash 或异常特征不一致时，相关证据不得用于确认根因。
-- 不同 Context 的 Gantt 变化形成可分析 Diff；同一 Context 采集前后不一致才视为采集行为干扰。
+- 不同 Context 的 Gantt 内容 Hash 变化形成 `CHANGED` 事实并保留两份 Artifact；同一 Context 采集前后
+  不一致才视为采集行为干扰。字段级 Diff 按真实使用需求后置。
 
 ## Phase 1：候选决策循环与领域 Trace
 
@@ -928,7 +929,8 @@ TestLaunchSpec
   -> CaseDigest 查询
 ```
 
-下一步先实现 Baseline 比较和 Gantt 业务分析，使当前 Run 事实能够形成可验证的调度语义差异；随后进入
+下一步先实现 JSON 内容指纹和 Baseline 简单比较，使当前 Run 能可靠报告 `MATCHED/CHANGED`；字段级
+Gantt Diff 暂不实现，变化后由大模型按需读取参考与当前 Artifact。随后进入
 静态调用关系、CodePathTracer 采集计划/执行，再以其结果驱动 JDWP 方法内聚焦采集。OpenCode 一次性安装器
 在后端能力稳定后接入。后续同样不引入复杂 Case 状态机、线程转储或事件溯源。静态与动态分析的第一个
 可交付目标仍为：
