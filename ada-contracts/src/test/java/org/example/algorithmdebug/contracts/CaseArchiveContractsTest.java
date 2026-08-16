@@ -60,7 +60,7 @@ class CaseArchiveContractsTest {
         runs.add(runOutcome());
         CaseDigest digest = new CaseDigest(
                 SchemaVersions.CASE_DIGEST, CASE_ID, PROJECT_ID, TARGET_TEST,
-                CONTEXT_ID, ANALYSIS_ID, "继续分析设备空闲区间",
+                Optional.of(CONTEXT_ID), Optional.of(ANALYSIS_ID), "继续分析设备空闲区间",
                 Optional.of(new RunId("run-1")), runs, List.of(), List.of(),
                 1, 1, 1, false);
         runs.clear();
@@ -69,6 +69,17 @@ class CaseArchiveContractsTest {
         assertEquals("run-1", digest.latestRunId().orElseThrow().value());
         assertThrows(UnsupportedOperationException.class, () -> digest.recentRuns().clear());
         assertFalse(hasRecordComponent(RunOutcomeSummary.class, "latestRunForAnalysis"));
+    }
+
+    @Test
+    void shouldRepresentCaseWhoseFirstContextWasNotCommitted() {
+        CaseDigest digest = new CaseDigest(
+                SchemaVersions.CASE_DIGEST, CASE_ID, PROJECT_ID, TARGET_TEST,
+                Optional.empty(), Optional.empty(), "为什么有空闲？", Optional.empty(),
+                List.of(), List.of(), List.of(), 0, 0, 0, false);
+
+        assertTrue(digest.latestContextId().isEmpty());
+        assertTrue(digest.latestAnalysisId().isEmpty());
     }
 
     @Test

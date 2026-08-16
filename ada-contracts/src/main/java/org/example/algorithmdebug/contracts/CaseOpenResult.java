@@ -25,8 +25,8 @@ public record CaseOpenResult(
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         digest = ContractChecks.requireNonNull(digest, "digest");
         if (!caseId.equals(digest.caseId())
-                || !contextId.equals(digest.latestContextId())
-                || !analysisId.equals(digest.latestAnalysisId())) {
+                || !contextId.equals(digest.latestContextId().orElse(null))
+                || !analysisId.equals(digest.latestAnalysisId().orElse(null))) {
             throw new IllegalArgumentException("CaseOpenResult 与 Digest 身份不一致");
         }
     }

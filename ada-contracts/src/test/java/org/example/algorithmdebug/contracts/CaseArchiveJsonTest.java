@@ -44,7 +44,8 @@ class CaseArchiveJsonTest {
                 SchemaVersions.RUN_REQUEST, caseId, contextId, analysisId, new RunId("run-1"),
                 targetTest, "UNINSTRUMENTED", RECORDED_AT);
         CaseDigest digest = new CaseDigest(
-                SchemaVersions.CASE_DIGEST, caseId, projectId, targetTest, contextId, analysisId,
+                SchemaVersions.CASE_DIGEST, caseId, projectId, targetTest,
+                Optional.of(contextId), Optional.of(analysisId),
                 "问题", Optional.empty(), List.of(), List.of(), List.of(), 1, 1, 0, false);
 
         assertRoundTrip(manifest, CaseManifest.class);

@@ -10,8 +10,8 @@ import java.util.Optional;
  * @param caseId Case ID
  * @param projectId 项目 ID
  * @param targetTest 目标 UT
- * @param latestContextId 最新 Context
- * @param latestAnalysisId 最新 Analysis
+ * @param latestContextId 最新 Context；首次 Context 未提交时为空
+ * @param latestAnalysisId 最新 Analysis；首次 Analysis 未提交时为空
  * @param latestQuestionExcerpt 最新问题的有界摘录
  * @param latestRunId 最新已完成 Run；没有完成 Run 时为空
  * @param recentRuns 最近最多 20 个完成 Run
@@ -27,8 +27,8 @@ public record CaseDigest(
         CaseId caseId,
         ProjectId projectId,
         TargetTest targetTest,
-        ContextId latestContextId,
-        AnalysisId latestAnalysisId,
+        Optional<ContextId> latestContextId,
+        Optional<AnalysisId> latestAnalysisId,
         String latestQuestionExcerpt,
         Optional<RunId> latestRunId,
         List<RunOutcomeSummary> recentRuns,
@@ -54,8 +54,12 @@ public record CaseDigest(
         recentRuns = ContractChecks.immutableList(recentRuns, "recentRuns");
         incompleteRuns = ContractChecks.immutableList(incompleteRuns, "incompleteRuns");
         archiveWarnings = ContractChecks.immutableList(archiveWarnings, "archiveWarnings");
-        if (contextCount <= 0 || analysisCount <= 0 || runCount < 0) {
+        if (contextCount < 0 || analysisCount < 0 || runCount < 0) {
             throw new IllegalArgumentException("CaseDigest 计数非法");
+        }
+        if ((contextCount == 0) != latestContextId.isEmpty()
+                || (analysisCount == 0) != latestAnalysisId.isEmpty()) {
+            throw new IllegalArgumentException("CaseDigest latest ID 与计数不一致");
         }
         if (recentRuns.size() > 20 || incompleteRuns.size() > 20 || archiveWarnings.size() > 20) {
             throw new IllegalArgumentException("CaseDigest 列表超过 20 项上限");
