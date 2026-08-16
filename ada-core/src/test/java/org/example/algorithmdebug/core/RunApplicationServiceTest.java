@@ -58,6 +58,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RunApplicationServiceTest {
@@ -175,6 +176,45 @@ class RunApplicationServiceTest {
                 outcome.agentFailure().orElseThrow().code());
         assertTrue(Files.isRegularFile(workspace.resolve(
                 "projects/project-1/cases/case-1/runs/run-1/run-outcome.json")));
+    }
+
+    @Test
+    void missingMavenStillArchivesANotStartedOutcome() {
+        AtomicInteger starts = new AtomicInteger();
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "1"), Clock.fixed(TIME, ZoneOffset.UTC),
+                (spec, options) -> {
+                    starts.incrementAndGet();
+                    throw new AssertionError("Maven 缺失时不得启动外部进程");
+                },
+                new RunArtifactArchiver(), Optional.empty());
+
+        RunOutcomeSummary outcome = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+
+        assertEquals(0, starts.get());
+        assertEquals(ProcessOutcome.NOT_STARTED, outcome.processOutcome());
+        assertEquals(TestOutcome.NOT_EXECUTED, outcome.testOutcome());
+        assertEquals("MAVEN_NOT_FOUND", outcome.agentFailure().orElseThrow().code());
+        assertTrue(Files.isRegularFile(workspace.resolve(
+                "projects/project-1/cases/case-1/runs/run-1/run-outcome.json")));
+    }
+
+    @Test
+    void workspaceFailureIsExposedAsStableCaseRunError() {
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "1"), Clock.fixed(TIME, ZoneOffset.UTC),
+                (spec, options) -> {
+                    throw new AssertionError("无效 Workspace 不得启动外部进程");
+                },
+                new RunArtifactArchiver(), mavenExecutable);
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () -> service.execute(
+                workspace.getRoot(), PROJECT_ID, opened.caseId(), opened.analysisId()));
+
+        assertEquals("WORKSPACE_PATH_INVALID", failure.code());
     }
 
     private CaseArchiveRepository archive() {

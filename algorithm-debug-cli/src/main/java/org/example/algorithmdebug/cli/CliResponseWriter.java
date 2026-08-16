@@ -2,6 +2,7 @@ package org.example.algorithmdebug.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.example.algorithmdebug.contracts.ToolResponse;
 
 import java.io.IOException;
@@ -15,9 +16,11 @@ public final class CliResponseWriter {
 
     private final ObjectMapper mapper;
 
-    /** 使用 Java 时间模块创建稳定 JSON 写入器。 */
+    /** 使用 Java 时间和 JDK8 Optional 模块创建稳定 JSON 写入器。 */
     public CliResponseWriter() {
-        this.mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        this.mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .registerModule(new Jdk8Module());
     }
 
     /**

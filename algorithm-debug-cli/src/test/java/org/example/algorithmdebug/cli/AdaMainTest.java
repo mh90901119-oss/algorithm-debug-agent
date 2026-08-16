@@ -3,6 +3,7 @@ package org.example.algorithmdebug.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.core.CaseRunException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -105,6 +106,92 @@ class AdaMainTest {
         assertFalse(invocation.stdout().contains("IllegalStateException"));
         assertFalse(invocation.stderr().contains("IllegalStateException"));
         assertEquals("INTERNAL_ERROR" + System.lineSeparator(), invocation.stderr());
+    }
+
+    @Test
+    void caseDomainFailureUsesExitThreeWithoutLeakingTargetLogs() throws Exception {
+        String targetLog = "[ERROR] company secret algorithm output";
+        AdaMain application = new AdaMain(
+                command -> {
+                    throw new CaseRunException(
+                            "CASE_TARGET_TEST_MISMATCH", "different test " + targetLog);
+                },
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "case", "inspect", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1");
+
+        assertFailure(invocation, 3, "CASE_TARGET_TEST_MISMATCH");
+        assertFalse(invocation.stdout().contains(targetLog));
+        assertEquals("", invocation.stderr());
+    }
+
+    @Test
+    void caseOpenDoesNotRunUtAndRejectsReusingCaseForAnotherTargetTest() throws Exception {
+        AdaMain application = AdaMain.defaultApplication();
+        Path workspace = temporaryDirectory.resolve("case-workspace");
+        Path repository = Files.createDirectories(temporaryDirectory.resolve("case-repository"));
+        Files.createDirectories(repository.resolve(".git"));
+        Path module = Files.createDirectories(repository.resolve("algorithm-module"));
+        Files.writeString(module.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
+        Path testSource = module.resolve(
+                "src/test/java/org/example/scheduler/wafer/WaferSchedulingReproductionTest.java");
+        Files.createDirectories(testSource.getParent());
+        Files.writeString(testSource, "class WaferSchedulingReproductionTest {}", StandardCharsets.UTF_8);
+        Path input = module.resolve("input/cases/20260810101501.json");
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "{}", StandardCharsets.UTF_8);
+        Path firstQuestion = Files.writeString(
+                temporaryDirectory.resolve("question-1.txt"), "为什么调度结果异常？", StandardCharsets.UTF_8);
+        Path secondQuestion = Files.writeString(
+                temporaryDirectory.resolve("question-2.txt"), "请分析另一个测试", StandardCharsets.UTF_8);
+
+        assertSuccess(invoke(application, "workspace", "init", "--root", workspace.toString()));
+        Invocation registered = invoke(application,
+                "project", "register", "--workspace", workspace.toString(),
+                "--project", module.toString());
+        String projectId = registered.response().path("data").path("registration")
+                .path("projectId").textValue();
+        Invocation opened = invoke(application,
+                "case", "open", "--workspace", workspace.toString(),
+                "--project-id", projectId,
+                "--test", "org.example.scheduler.wafer.WaferSchedulingReproductionTest"
+                        + "#reproduceComplexSchedulingFromTimestampedInput",
+                "--question-file", firstQuestion.toString());
+        String caseId = opened.response().path("data").path("caseId").textValue();
+        Invocation inspected = invoke(application,
+                "case", "inspect", "--workspace", workspace.toString(),
+                "--project-id", projectId, "--case-id", caseId);
+        Invocation mismatched = invoke(application,
+                "case", "open", "--workspace", workspace.toString(),
+                "--project-id", projectId,
+                "--test", "org.example.scheduler.wafer.WaferSchedulingReproductionTest#anotherCase",
+                "--question-file", secondQuestion.toString(),
+                "--case-id", caseId);
+
+        assertSuccess(registered);
+        assertSuccess(opened);
+        assertSuccess(inspected);
+        assertEquals(caseId, inspected.response().path("data").path("caseId").textValue());
+        assertEquals(0, opened.response().path("data").path("digest").path("runCount").intValue());
+        assertFalse(Files.exists(module.resolve("target")));
+        assertFailure(mismatched, 3, "CASE_TARGET_TEST_MISMATCH");
+    }
+
+    @Test
+    void malformedQuestionFileReturnsArgumentExitCode() throws Exception {
+        AdaMain application = AdaMain.defaultApplication();
+        Path malformed = Files.write(
+                temporaryDirectory.resolve("malformed-question.txt"),
+                new byte[]{(byte) 0xC3, (byte) 0x28});
+
+        Invocation invocation = invoke(application,
+                "case", "open", "--workspace", "workspace", "--project-id", "demo",
+                "--test", "a.b.Test#case1", "--question-file", malformed.toString());
+
+        assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
+        assertEquals("", invocation.stderr());
     }
 
     @Test

@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.IntSupplier;
 
 /**
@@ -75,6 +76,20 @@ public final class ControlPlaneServices {
             boolean windows,
             List<TargetProjectAdapter<?>> adapters,
             Path mavenExecutable) {
+        return create(
+                clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, Optional.ofNullable(mavenExecutable));
+    }
+
+    /** 装配完整服务集合；Maven 缺失不会阻止只读/Case 命令。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Optional<Path> mavenExecutable) {
         if (adapters == null || mavenExecutable == null) {
             throw new IllegalArgumentException("完整控制面必须提供 adapters 和 mavenExecutable");
         }
@@ -90,7 +105,7 @@ public final class ControlPlaneServices {
             String pathSeparator,
             boolean windows,
             List<TargetProjectAdapter<?>> adapters,
-            Path mavenExecutable) {
+            Optional<Path> mavenExecutable) {
         if (clock == null || javaFeatureSupplier == null || environment == null
                 || pathSeparator == null || pathSeparator.isEmpty()) {
             throw new IllegalArgumentException("控制面装配参数不能为空");
@@ -156,10 +171,10 @@ public final class ControlPlaneServices {
         return cases;
     }
 
-    /** @return 完整装配下的 Run 用例；基础控制面装配不提供 */
+    /** @return 完整装配下的 Run 用例；基础控制面装配不提供，Maven 可在执行时报告缺失 */
     public RunApplicationService runs() {
         if (runs == null) {
-            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter/Maven");
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
         }
         return runs;
     }

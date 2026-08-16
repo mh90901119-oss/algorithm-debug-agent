@@ -70,7 +70,7 @@ public final class RunApplicationService {
     private final Clock clock;
     private final TargetTestExecutor executor;
     private final RunArtifactArchiver artifacts;
-    private final Path mavenExecutable;
+    private final Optional<Path> mavenExecutable;
     private final SurefireReportSnapshotter surefireSnapshotter;
     private final SurefireTestResultReader surefireReader;
     private final RunOutcomeAssembler assembler;
@@ -86,6 +86,21 @@ public final class RunApplicationService {
             TargetTestExecutor executor,
             RunArtifactArchiver artifacts,
             Path mavenExecutable) {
+        this(registrations, mapper, writer, adapters, ids, clock, executor, artifacts,
+                Optional.ofNullable(mavenExecutable));
+    }
+
+    /** 注入可缺失的 Maven；缺失时一次 Run 会可靠收尾为 NOT_STARTED。 */
+    public RunApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            AdapterCatalog adapters,
+            OpaqueIdGenerator ids,
+            Clock clock,
+            TargetTestExecutor executor,
+            RunArtifactArchiver artifacts,
+            Optional<Path> mavenExecutable) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || executor == null || artifacts == null
                 || mavenExecutable == null) {
@@ -99,7 +114,7 @@ public final class RunApplicationService {
         this.clock = clock;
         this.executor = executor;
         this.artifacts = artifacts;
-        this.mavenExecutable = mavenExecutable.toAbsolutePath().normalize();
+        this.mavenExecutable = mavenExecutable.map(path -> path.toAbsolutePath().normalize());
         this.surefireSnapshotter = new SurefireReportSnapshotter();
         this.surefireReader = new SurefireTestResultReader();
         this.assembler = new RunOutcomeAssembler();
@@ -116,47 +131,57 @@ public final class RunApplicationService {
         if (projectId == null || caseId == null || analysisId == null) {
             throw new IllegalArgumentException("run execute 参数不能为空");
         }
-        WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
-        ProjectRegistration registration = requireRegistration(layout, projectId);
-        CaseArchiveRepository archive = archive(layout, projectId);
-        CaseManifest manifest = requireCase(archive, caseId);
-        if (!manifest.projectId().equals(projectId)) {
-            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于请求项目");
-        }
-        AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
-        ContextSnapshot context = requireContext(archive, caseId, analysis.contextId());
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            ProjectRegistration registration = requireRegistration(layout, projectId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            CaseManifest manifest = requireCase(archive, caseId);
+            if (!manifest.projectId().equals(projectId)) {
+                throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于请求项目");
+            }
+            AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
+            ContextSnapshot context = requireContext(archive, caseId, analysis.contextId());
 
-        RunId runId = ids.newRunId();
-        RunRequest request = new RunRequest(
-                SchemaVersions.RUN_REQUEST, caseId, context.contextId(), analysisId, runId,
-                manifest.targetTest(), "UNINSTRUMENTED", clock.instant());
-        try {
-            archive.startRun(request);
-        } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "无法创建 RunRequest", failure);
-        }
+            RunId runId = ids.newRunId();
+            RunRequest request = new RunRequest(
+                    SchemaVersions.RUN_REQUEST, caseId, context.contextId(), analysisId, runId,
+                    manifest.targetTest(), "UNINSTRUMENTED", clock.instant());
+            try {
+                archive.startRun(request);
+            } catch (WorkspaceException failure) {
+                throw new CaseRunException(failure.code(), "无法创建 RunRequest", failure);
+            }
 
-        Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
-        AdapterCatalog.AdapterSelection selection;
-        try {
-            selection = adapters.select(
-                    moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
-        } catch (CaseRunException failure) {
-            return completeNotStarted(archive, request, failure.code(), failure);
-        }
-        try {
-            return executeSelected(archive, request, selection, moduleRoot);
-        } catch (AdapterException failure) {
-            return completeNotStarted(archive, request, failure.code(), failure);
-        } catch (SurefireDiagnosticException failure) {
-            return completeNotStarted(
-                    archive, request, "SUREFIRE_SNAPSHOT_FAILED", failure);
-        } catch (HarnessException failure) {
-            if ("HARNESS_PROCESS_START_FAILED".equals(failure.code())) {
+            if (mavenExecutable.isEmpty()) {
+                return completeNotStarted(
+                        archive, request, "MAVEN_NOT_FOUND",
+                        new IllegalStateException("Maven executable unavailable"));
+            }
+
+            Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
+            AdapterCatalog.AdapterSelection selection;
+            try {
+                selection = adapters.select(
+                        moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
+            } catch (CaseRunException failure) {
                 return completeNotStarted(archive, request, failure.code(), failure);
             }
-            throw new CaseRunException(
-                    failure.code(), "UT 执行未能形成可信进程结果，Run 保持不完整", failure);
+            try {
+                return executeSelected(archive, request, selection, moduleRoot);
+            } catch (AdapterException failure) {
+                return completeNotStarted(archive, request, failure.code(), failure);
+            } catch (SurefireDiagnosticException failure) {
+                return completeNotStarted(
+                        archive, request, "SUREFIRE_SNAPSHOT_FAILED", failure);
+            } catch (HarnessException failure) {
+                if ("HARNESS_PROCESS_START_FAILED".equals(failure.code())) {
+                    return completeNotStarted(archive, request, failure.code(), failure);
+                }
+                throw new CaseRunException(
+                        failure.code(), "UT 执行未能形成可信进程结果，Run 保持不完整", failure);
+            }
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(failure.code(), "读取或写入 Case Workspace 失败", failure);
         }
     }
 
@@ -184,7 +209,8 @@ public final class RunApplicationService {
         ScheduleRunResult<T> schedule = runner.run(
                 spec,
                 new MavenExecutionOptions(
-                        mavenExecutable, raw.resolve("stdout.log"), raw.resolve("stderr.log"),
+                        mavenExecutable.orElseThrow(),
+                        raw.resolve("stdout.log"), raw.resolve("stderr.log"),
                         ProcessLimits.defaults()),
                 resultSource,
                 adapter.scheduleResultParser(),

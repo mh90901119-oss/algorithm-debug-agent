@@ -1,6 +1,9 @@
 package org.example.algorithmdebug.cli;
 
 import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.CaseId;
+import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -49,6 +52,33 @@ class CliArgumentsTest {
     }
 
     @Test
+    void shouldParseCaseAndRunCommands() {
+        assertEquals(
+                new CliCommand.CaseOpen(
+                        Path.of("workspace"), new ProjectId("demo"),
+                        new TargetTest("a.b.Test", "case1"), Path.of("question.txt"),
+                        Optional.empty(), Optional.empty()),
+                CliArguments.parse(new String[]{
+                        "case", "open", "--workspace", "workspace",
+                        "--project-id", "demo", "--test", "a.b.Test#case1",
+                        "--question-file", "question.txt"}));
+        assertEquals(
+                new CliCommand.CaseInspect(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1")),
+                CliArguments.parse(new String[]{
+                        "case", "inspect", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1"}));
+        assertEquals(
+                new CliCommand.RunExecute(
+                        Path.of("workspace"), new ProjectId("demo"),
+                        new CaseId("case-1"), new AnalysisId("analysis-1")),
+                CliArguments.parse(new String[]{
+                        "run", "execute", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--analysis-id", "analysis-1"}));
+    }
+
+    @Test
     void shouldRejectUnknownCommandsOptionsDuplicatesAndExtraArguments() {
         List<String[]> invalid = List.of(
                 new String[]{},
@@ -57,7 +87,11 @@ class CliArgumentsTest {
                 new String[]{"workspace", "init", "--unknown", "x"},
                 new String[]{"workspace", "init", "--root", "x", "--root", "y"},
                 new String[]{"workspace", "init", "--root", "x", "extra"},
-                new String[]{"doctor", "--workspace", "x", "--project-id", "id"});
+                new String[]{"doctor", "--workspace", "x", "--project-id", "id"},
+                new String[]{"case", "open", "--workspace", "w", "--project-id", "p",
+                        "--test", "missing-separator", "--question-file", "q"},
+                new String[]{"run", "execute", "--workspace", "w", "--project-id", "p",
+                        "--case-id", "c"});
 
         for (String[] arguments : invalid) {
             assertThrows(IllegalArgumentException.class, () -> CliArguments.parse(arguments));

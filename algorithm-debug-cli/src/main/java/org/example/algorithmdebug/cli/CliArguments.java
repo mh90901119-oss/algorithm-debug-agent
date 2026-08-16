@@ -1,6 +1,9 @@
 package org.example.algorithmdebug.cli;
 
+import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.TargetTest;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -16,7 +19,7 @@ public final class CliArguments {
     }
 
     /**
-     * 解析唯一支持的三类命令，拒绝未知、重复、缺值和多余参数。
+     * 解析支持的控制面命令，拒绝未知、重复、缺值和多余参数。
      *
      * @param arguments main 参数
      * @return 封闭命令 DTO
@@ -39,6 +42,39 @@ public final class CliArguments {
                     path(options.get("--workspace"), "--workspace"),
                     path(options.get("--project"), "--project"),
                     projectId);
+        }
+        if (matches(arguments, "case", "open")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--test", "--question-file",
+                    "--case-id", "--adapter"));
+            requirePresent(options, "--workspace", "--project-id", "--test", "--question-file");
+            return new CliCommand.CaseOpen(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    targetTest(options.get("--test")),
+                    path(options.get("--question-file"), "--question-file"),
+                    Optional.ofNullable(options.get("--case-id")).map(CaseId::new),
+                    Optional.ofNullable(options.get("--adapter")));
+        }
+        if (matches(arguments, "case", "inspect")) {
+            Map<String, String> options = options(
+                    arguments, 2, Set.of("--workspace", "--project-id", "--case-id"));
+            requireExactly(options, Set.of("--workspace", "--project-id", "--case-id"));
+            return new CliCommand.CaseInspect(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")));
+        }
+        if (matches(arguments, "run", "execute")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            return new CliCommand.RunExecute(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")),
+                    new AnalysisId(options.get("--analysis-id")));
         }
         if ("doctor".equals(arguments[0])) {
             Map<String, String> options = options(arguments, 1, Set.of("--workspace", "--project"));
@@ -99,6 +135,19 @@ public final class CliArguments {
             return Path.of(value);
         } catch (InvalidPathException failure) {
             throw invalid("路径选项无效: " + option);
+        }
+    }
+
+    private static TargetTest targetTest(String selector) {
+        int separator = selector == null ? -1 : selector.lastIndexOf('#');
+        if (separator <= 0 || separator == selector.length() - 1) {
+            throw invalid("--test 必须使用 fully.qualified.Class#method 格式");
+        }
+        try {
+            return new TargetTest(
+                    selector.substring(0, separator), selector.substring(separator + 1));
+        } catch (IllegalArgumentException failure) {
+            throw invalid("--test 不是有效的目标测试选择器");
         }
     }
 

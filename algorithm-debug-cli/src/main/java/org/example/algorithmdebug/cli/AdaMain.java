@@ -1,14 +1,20 @@
 package org.example.algorithmdebug.cli;
 
+import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.core.CaseRunException;
 import org.example.algorithmdebug.core.ControlPlaneException;
 import org.example.algorithmdebug.core.ControlPlaneServices;
+import org.example.algorithmdebug.core.MavenExecutableLocator;
 
 import java.io.File;
 import java.io.PrintStream;
 import java.time.Clock;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.ServiceLoader;
+import java.util.stream.Collectors;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
 public final class AdaMain {
@@ -61,6 +67,17 @@ public final class AdaMain {
             Object result = execution.execute(command);
             responseWriter.write(ToolResponse.success(result, List.of()), stdout);
             return EXIT_SUCCESS;
+        } catch (CliInputException failure) {
+            responseWriter.write(
+                    ToolResponse.failure(
+                            "CLI_INVALID_ARGUMENTS", "Invalid CLI arguments", List.of()),
+                    stdout);
+            return EXIT_INVALID_ARGUMENTS;
+        } catch (CaseRunException failure) {
+            responseWriter.write(
+                    ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
+                    stdout);
+            return EXIT_DOMAIN_FAILURE;
         } catch (ControlPlaneException failure) {
             responseWriter.write(
                     ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
@@ -76,18 +93,34 @@ public final class AdaMain {
     }
 
     static AdaMain defaultApplication() {
+        CliCommandExecutor executor = defaultExecutor();
+        return new AdaMain(executor::execute, new CliResponseWriter());
+    }
+
+    /** 装配默认 CLI 执行器；保留包级测试缝以验证组合根。 */
+    static CliCommandExecutor defaultExecutor() {
         boolean windows = System.getProperty("os.name", "")
                 .toLowerCase(Locale.ROOT)
                 .contains("win");
+        List<TargetProjectAdapter<?>> adapters = List.copyOf(ServiceLoader
+                .load(TargetProjectAdapter.class)
+                .stream()
+                .map(ServiceLoader.Provider::get)
+                .map(adapter -> (TargetProjectAdapter<?>) adapter)
+                .collect(Collectors.toList()));
+        MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
+                System.getenv(), File.pathSeparator, windows);
         ControlPlaneServices services = ControlPlaneServices.create(
                 Clock.systemUTC(),
                 () -> Runtime.version().feature(),
                 System.getenv(),
                 File.pathSeparator,
-                windows);
-        CliCommandExecutor executor = new CliCommandExecutor(
-                services.workspace(), services.project(), services.doctor());
-        return new AdaMain(executor::execute, new CliResponseWriter());
+                windows,
+                adapters,
+                mavenLocator.locate(Optional.empty()));
+        return new CliCommandExecutor(
+                services.workspace(), services.project(), services.doctor(),
+                services.cases(), services.runs());
     }
 
     private static String safeDomainMessage(String code) {
@@ -101,6 +134,16 @@ public final class AdaMain {
             case "PROJECT_PATH_CONFLICT" -> "Project path conflicts with an existing registration";
             case "PROJECT_REGISTRATION_INVALID" -> "Project registration is invalid";
             case "CONFIG_INVALID" -> "Workspace configuration is invalid";
+            case "PROJECT_NOT_REGISTERED" -> "Project is not registered";
+            case "ADAPTER_NOT_FOUND" -> "No compatible adapter is available";
+            case "ADAPTER_AMBIGUOUS" -> "More than one adapter matches the project";
+            case "CASE_NOT_FOUND" -> "Case was not found";
+            case "CONTEXT_NOT_FOUND" -> "Case context was not found";
+            case "ANALYSIS_NOT_FOUND" -> "Case analysis was not found";
+            case "CASE_PROJECT_MISMATCH" -> "Case belongs to another project";
+            case "CASE_TARGET_TEST_MISMATCH" -> "Case belongs to another target test";
+            case "MAVEN_NOT_FOUND" -> "Maven executable is unavailable";
+            case "RUN_ARCHIVE_WRITE_FAILED" -> "Run outcome could not be archived";
             default -> "Workspace operation failed";
         };
     }
