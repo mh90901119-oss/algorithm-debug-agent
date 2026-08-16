@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -26,8 +27,12 @@ public final class BoundedDocumentMapper {
 
     /** 使用项目锁定的 Jackson 配置创建 Mapper。 */
     public BoundedDocumentMapper() {
-        this.jsonMapper = new ObjectMapper().registerModule(new JavaTimeModule());
-        this.yamlMapper = new ObjectMapper(new YAMLFactory()).registerModule(new JavaTimeModule());
+        this.jsonMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .registerModule(new Jdk8Module());
+        this.yamlMapper = new ObjectMapper(new YAMLFactory())
+                .registerModule(new JavaTimeModule())
+                .registerModule(new Jdk8Module());
     }
 
     /**
