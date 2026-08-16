@@ -11,6 +11,7 @@ import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
+import org.example.algorithmdebug.casecore.ReproductionComparator;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
@@ -20,12 +21,14 @@ import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
+import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.harness.HarnessException;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
@@ -43,6 +46,7 @@ import org.example.algorithmdebug.harness.SurefireReportSnapshotter;
 import org.example.algorithmdebug.harness.SurefireTestResult;
 import org.example.algorithmdebug.harness.SurefireTestResultReader;
 import org.example.algorithmdebug.harness.TargetTestExecutor;
+import org.example.algorithmdebug.harness.TargetFailureFingerprinter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -61,6 +65,7 @@ public final class RunApplicationService {
     private static final long MAX_GANTT_BYTES = 64L * 1024 * 1024;
     private static final long MAX_SUREFIRE_BYTES = 10L * 1024 * 1024;
     private static final int MAX_MARKER_BYTES_PER_LOG = 32 * 1024;
+    private static final long MAX_FINGERPRINT_BYTES = 8L * 1024;
 
     private final ProjectRegistrationRepository registrations;
     private final BoundedDocumentMapper mapper;
@@ -74,6 +79,8 @@ public final class RunApplicationService {
     private final SurefireReportSnapshotter surefireSnapshotter;
     private final SurefireTestResultReader surefireReader;
     private final RunOutcomeAssembler assembler;
+    private final TargetFailureFingerprinter failureFingerprinter;
+    private final ReproductionComparator reproductionComparator;
 
     /** 注入项目/归档、Adapter、ID、时钟、执行端口、Artifact 与 Maven 路径。 */
     public RunApplicationService(
@@ -118,6 +125,8 @@ public final class RunApplicationService {
         this.surefireSnapshotter = new SurefireReportSnapshotter();
         this.surefireReader = new SurefireTestResultReader();
         this.assembler = new RunOutcomeAssembler();
+        this.failureFingerprinter = new TargetFailureFingerprinter();
+        this.reproductionComparator = new ReproductionComparator();
     }
 
     /**
@@ -258,11 +267,149 @@ public final class RunApplicationService {
 
         String markerText = boundedLogText(schedule.run().stdout().path())
                 + "\n" + boundedLogText(schedule.run().stderr().path());
+        RunOutcomeSummary observed = assembler.assemble(
+                request, Optional.of(schedule.run()), testResult, ganttOutcome,
+                agentFailure, markerText, references,
+                ComparisonOutcome.NOT_COMPARED,
+                "No valid reproduction reference");
+        ComparisonDecision decision;
+        try {
+            Optional<RunResultFingerprint> fingerprint =
+                    createFingerprint(request, schedule, observed);
+            decision = archiveAndCompare(archive, fingerprint, references);
+        } catch (HarnessException failure) {
+            agentFailure = mergeFailure(agentFailure,
+                    diagnostic("TARGET_FAILURE_FINGERPRINT_FAILED", failure));
+            decision = incomparable("TARGET_FAILURE_FINGERPRINT_FAILED");
+        } catch (CaseRunException failure) {
+            agentFailure = mergeFailure(agentFailure, diagnostic(failure.code(), failure));
+            decision = incomparable(failure.code());
+        }
         RunOutcomeSummary outcome = assembler.assemble(
                 request, Optional.of(schedule.run()), testResult, ganttOutcome,
-                agentFailure, markerText, references);
+                agentFailure, markerText, references,
+                decision.outcome(), decision.summary());
         complete(archive, outcome);
         return outcome;
+    }
+
+    private Optional<RunResultFingerprint> createFingerprint(
+            RunRequest request,
+            ScheduleRunResult<?> schedule,
+            RunOutcomeSummary observed) throws HarnessException {
+        Optional<String> rawHash = Optional.empty();
+        Optional<String> normalizedHash = Optional.empty();
+        if (observed.ganttOutcome() == GanttOutcome.PRESENT
+                && schedule.scheduleResult().isPresent()) {
+            rawHash = Optional.of(schedule.scheduleResult().orElseThrow().rawSha256());
+            normalizedHash = Optional.of(
+                    schedule.scheduleResult().orElseThrow().normalizedJsonSha256());
+        }
+        Optional<String> failureHash = Optional.empty();
+        if (observed.targetFailure().isPresent()) {
+            failureHash = Optional.of(failureFingerprinter.sha256(
+                    observed.targetFailure().orElseThrow()));
+        }
+        if (rawHash.isEmpty() && failureHash.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT,
+                request.caseId(), request.contextId(), request.runId(),
+                rawHash, normalizedHash, failureHash));
+    }
+
+    private ComparisonDecision archiveAndCompare(
+            CaseArchiveRepository archive,
+            Optional<RunResultFingerprint> current,
+            List<ArtifactReference> references) {
+        if (current.isEmpty()) {
+            return new ComparisonDecision(
+                    ComparisonOutcome.NOT_COMPARED, "No valid target observation");
+        }
+        RunResultFingerprint fingerprint = current.orElseThrow();
+        Path fingerprintPath;
+        try {
+            fingerprintPath = archive.createRunResultFingerprint(fingerprint);
+            references.add(artifacts.reference(
+                    fingerprintPath.getParent(), fingerprintPath,
+                    "artifact-run-result-fingerprint", "RUN_RESULT_FINGERPRINT",
+                    "application/json", MAX_FINGERPRINT_BYTES));
+        } catch (WorkspaceException | CaseRunException failure) {
+            throw new CaseRunException(
+                    "RUN_FINGERPRINT_WRITE_FAILED", "无法保存或引用 Run 结果指纹", failure);
+        }
+
+        Optional<RunResultFingerprint> sameContext;
+        try {
+            sameContext = archive.findReproduction(
+                    fingerprint.caseId(), fingerprint.contextId());
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(
+                    "REPRODUCTION_REFERENCE_INVALID", "当前 Context 参考无效", failure);
+        }
+        if (sameContext.isPresent()) {
+            return compare(sameContext.orElseThrow(), fingerprint,
+                    ReproductionComparator.Scope.SAME_CONTEXT);
+        }
+
+        Optional<RunResultFingerprint> previous;
+        try {
+            previous = archive.findLatestReproductionBefore(
+                    fingerprint.caseId(), fingerprint.contextId());
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(
+                    "REPRODUCTION_REFERENCE_INVALID", "旧 Context 参考无效", failure);
+        }
+
+        RunResultFingerprint established;
+        try {
+            established = archive.createReproductionIfAbsent(fingerprint);
+        } catch (WorkspaceException failure) {
+            if (isInvalidReferenceFailure(failure)) {
+                throw new CaseRunException(
+                        "REPRODUCTION_REFERENCE_INVALID", "当前 Context 参考无效", failure);
+            }
+            throw new CaseRunException(
+                    "REPRODUCTION_REFERENCE_WRITE_FAILED", "无法建立当前 Context 参考", failure);
+        }
+        if (!established.equals(fingerprint)) {
+            return compare(established, fingerprint,
+                    ReproductionComparator.Scope.SAME_CONTEXT);
+        }
+        if (previous.isPresent()) {
+            return compare(previous.orElseThrow(), fingerprint,
+                    ReproductionComparator.Scope.CROSS_CONTEXT);
+        }
+        return new ComparisonDecision(
+                ComparisonOutcome.NOT_COMPARED,
+                "No prior reproduction reference; current run stored as context reference");
+    }
+
+    private ComparisonDecision compare(
+            RunResultFingerprint reference,
+            RunResultFingerprint current,
+            ReproductionComparator.Scope scope) {
+        try {
+            ReproductionComparator.Result result =
+                    reproductionComparator.compare(reference, current, scope);
+            return new ComparisonDecision(result.outcome(), result.summary());
+        } catch (RuntimeException failure) {
+            throw new CaseRunException(
+                    "RUN_COMPARISON_INCOMPARABLE", "Run 结果指纹无法可信比较", failure);
+        }
+    }
+
+    private static ComparisonDecision incomparable(String reasonCode) {
+        return new ComparisonDecision(
+                ComparisonOutcome.INCOMPARABLE,
+                "Comparison INCOMPARABLE; reason=" + reasonCode);
+    }
+
+    private static boolean isInvalidReferenceFailure(WorkspaceException failure) {
+        return "CASE_DOCUMENT_INVALID".equals(failure.code())
+                || "CASE_ARCHIVE_IDENTITY_MISMATCH".equals(failure.code())
+                || "RUN_NOT_FOUND".equals(failure.code());
     }
 
     private Optional<AgentFailureDiagnostic> referenceLogs(
@@ -295,7 +442,9 @@ public final class RunApplicationService {
             Throwable failure) {
         RunOutcomeSummary outcome = assembler.assemble(
                 request, Optional.empty(), Optional.empty(), GanttOutcome.ABSENT,
-                Optional.of(diagnostic(code, failure)), "", List.of());
+                Optional.of(diagnostic(code, failure)), "", List.of(),
+                ComparisonOutcome.NOT_COMPARED,
+                "No valid target observation");
         complete(archive, outcome);
         return outcome;
     }
@@ -376,5 +525,10 @@ public final class RunApplicationService {
         } catch (IOException | SecurityException failure) {
             return "";
         }
+    }
+
+    private record ComparisonDecision(
+            ComparisonOutcome outcome,
+            String summary) {
     }
 }

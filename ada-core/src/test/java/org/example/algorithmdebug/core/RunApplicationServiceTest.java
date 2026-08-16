@@ -24,6 +24,7 @@ import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProcessOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -153,6 +154,153 @@ class RunApplicationServiceTest {
     }
 
     @Test
+    void comparesRepeatedRunsAgainstFirstContextReference() throws Exception {
+        AtomicInteger starts = new AtomicInteger();
+        List<String> ganttContents = List.of(
+                "{\"schedule\":\"ok\"}",
+                " { \"schedule\" : \"ok\" } \n",
+                "{\"schedule\":\"changed\"}");
+        TargetTestExecutor executor = (spec, options) -> {
+            int invocation = starts.getAndIncrement();
+            try {
+                Files.writeString(options.stdoutLog(), "[INFO] build ok " + invocation);
+                Files.writeString(options.stderrLog(), "");
+                Path reports = module.resolve("target/surefire-reports");
+                Files.createDirectories(reports);
+                Files.writeString(reports.resolve(
+                                "TEST-a.b.TargetTest-" + invocation + ".xml"),
+                        "<testsuite><testcase classname='a.b.TargetTest' name='runs'/></testsuite>");
+                Files.writeString(output.resolve("gantt-" + invocation + ".json"),
+                        ganttContents.get(invocation));
+            } catch (java.io.IOException failure) {
+                throw new HarnessException("TEST_WRITE_FAILED", "test fixture write failed", failure);
+            }
+            return new RunResult(
+                    RunCompletion.SUCCEEDED, OptionalInt.of(0), TIME, TIME.plusSeconds(1),
+                    Duration.ofSeconds(1), 42,
+                    new RunLog(options.stdoutLog(), 16, 0, false),
+                    new RunLog(options.stderrLog(), 0, 0, false),
+                    TerminationReport.notAttempted());
+        };
+        ArrayDeque<String> runIds = new ArrayDeque<>(List.of("1", "2", "3"));
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(runIds::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC),
+                executor, new RunArtifactArchiver(), mavenExecutable);
+
+        RunOutcomeSummary first = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+        RunOutcomeSummary second = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+        RunOutcomeSummary third = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+
+        assertEquals(3, starts.get());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
+        assertEquals(ComparisonOutcome.MATCHED, second.comparisonOutcome());
+        assertEquals(ComparisonOutcome.CHANGED, third.comparisonOutcome());
+        assertTrue(second.artifacts().stream().anyMatch(
+                artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
+        Path caseRoot = caseRoot();
+        assertTrue(Files.isRegularFile(caseRoot.resolve(
+                "runs/run-2/run-result-fingerprint.json")));
+        assertTrue(Files.isRegularFile(caseRoot.resolve(
+                "contexts/context-1/reproduction.json")));
+    }
+
+    @Test
+    void corruptedReferenceMakesComparisonIncomparableWithoutErasingTargetFacts()
+            throws Exception {
+        AtomicInteger starts = new AtomicInteger();
+        TargetTestExecutor executor = (spec, options) -> {
+            int invocation = starts.getAndIncrement();
+            try {
+                Files.writeString(options.stdoutLog(), "[INFO] build ok " + invocation);
+                Files.writeString(options.stderrLog(), "");
+                Path reports = module.resolve("target/surefire-reports");
+                Files.createDirectories(reports);
+                Files.writeString(reports.resolve(
+                                "TEST-a.b.TargetTest-" + invocation + ".xml"),
+                        "<testsuite><testcase classname='a.b.TargetTest' name='runs'/></testsuite>");
+                Files.writeString(output.resolve("gantt-" + invocation + ".json"),
+                        "{\"schedule\":\"ok\"}");
+            } catch (java.io.IOException failure) {
+                throw new HarnessException("TEST_WRITE_FAILED", "test fixture write failed", failure);
+            }
+            return new RunResult(
+                    RunCompletion.SUCCEEDED, OptionalInt.of(0), TIME, TIME.plusSeconds(1),
+                    Duration.ofSeconds(1), 42,
+                    new RunLog(options.stdoutLog(), 16, 0, false),
+                    new RunLog(options.stderrLog(), 0, 0, false),
+                    TerminationReport.notAttempted());
+        };
+        ArrayDeque<String> runIds = new ArrayDeque<>(List.of("1", "2"));
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(runIds::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC),
+                executor, new RunArtifactArchiver(), mavenExecutable);
+        service.execute(workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+        Files.writeString(caseRoot().resolve("contexts/context-1/reproduction.json"), "{broken");
+
+        RunOutcomeSummary outcome = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+
+        assertEquals(2, starts.get());
+        assertEquals(ProcessOutcome.SUCCEEDED, outcome.processOutcome());
+        assertEquals(TestOutcome.PASSED, outcome.testOutcome());
+        assertEquals(GanttOutcome.PRESENT, outcome.ganttOutcome());
+        assertEquals(ComparisonOutcome.INCOMPARABLE, outcome.comparisonOutcome());
+        assertEquals("REPRODUCTION_REFERENCE_INVALID",
+                outcome.agentFailure().orElseThrow().code());
+        assertTrue(outcome.artifacts().stream().anyMatch(
+                artifact -> "GANTT".equals(artifact.artifactType())));
+        assertTrue(outcome.artifacts().stream().anyMatch(
+                artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
+    }
+
+    @Test
+    void fingerprintWriteFailureDoesNotEraseSuccessfulTargetFacts() {
+        TargetTestExecutor executor = (spec, options) -> {
+            try {
+                Files.writeString(options.stdoutLog(), "[INFO] build ok");
+                Files.writeString(options.stderrLog(), "");
+                Path reports = module.resolve("target/surefire-reports");
+                Files.createDirectories(reports);
+                Files.writeString(reports.resolve("TEST-a.b.TargetTest.xml"),
+                        "<testsuite><testcase classname='a.b.TargetTest' name='runs'/></testsuite>");
+                Files.writeString(output.resolve("gantt.json"), "{\"schedule\":\"ok\"}");
+                Files.writeString(options.stdoutLog().getParent().getParent()
+                        .resolve("run-result-fingerprint.json"), "reserved");
+            } catch (java.io.IOException failure) {
+                throw new HarnessException("TEST_WRITE_FAILED", "test fixture write failed", failure);
+            }
+            return new RunResult(
+                    RunCompletion.SUCCEEDED, OptionalInt.of(0), TIME, TIME.plusSeconds(1),
+                    Duration.ofSeconds(1), 42,
+                    new RunLog(options.stdoutLog(), 15, 0, false),
+                    new RunLog(options.stderrLog(), 0, 0, false),
+                    TerminationReport.notAttempted());
+        };
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "1"), Clock.fixed(TIME, ZoneOffset.UTC),
+                executor, new RunArtifactArchiver(), mavenExecutable);
+
+        RunOutcomeSummary outcome = service.execute(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+
+        assertEquals(ProcessOutcome.SUCCEEDED, outcome.processOutcome());
+        assertEquals(TestOutcome.PASSED, outcome.testOutcome());
+        assertEquals(GanttOutcome.PRESENT, outcome.ganttOutcome());
+        assertEquals(ComparisonOutcome.INCOMPARABLE, outcome.comparisonOutcome());
+        assertEquals("RUN_FINGERPRINT_WRITE_FAILED",
+                outcome.agentFailure().orElseThrow().code());
+        assertTrue(Files.isRegularFile(caseRoot().resolve("runs/run-1/run-outcome.json")));
+        assertTrue(outcome.artifacts().stream().anyMatch(
+                artifact -> "GANTT".equals(artifact.artifactType())));
+    }
+
+    @Test
     void processStartFailureStillCompletesStructuredRunOutcome() {
         TargetTestExecutor executor = (spec, options) -> {
             Path requestPath = workspace.resolve(
@@ -175,6 +323,7 @@ class RunApplicationServiceTest {
                 outcome.agentFailure().orElseThrow().code());
         assertTrue(Files.isRegularFile(workspace.resolve(
                 "projects/project-1/cases/case-1/runs/run-1/run-outcome.json")));
+        assertNoFingerprintArchives("run-1");
     }
 
     @Test
@@ -198,6 +347,7 @@ class RunApplicationServiceTest {
         assertEquals("MAVEN_NOT_FOUND", outcome.agentFailure().orElseThrow().code());
         assertTrue(Files.isRegularFile(workspace.resolve(
                 "projects/project-1/cases/case-1/runs/run-1/run-outcome.json")));
+        assertNoFingerprintArchives("run-1");
     }
 
     @Test
@@ -219,6 +369,17 @@ class RunApplicationServiceTest {
     private CaseArchiveRepository archive() {
         return new CaseArchiveRepository(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer);
+    }
+
+    private Path caseRoot() {
+        return workspace.resolve("projects/project-1/cases/case-1");
+    }
+
+    private void assertNoFingerprintArchives(String runId) {
+        assertTrue(Files.notExists(caseRoot().resolve(
+                "runs/" + runId + "/run-result-fingerprint.json")));
+        assertTrue(Files.notExists(caseRoot().resolve(
+                "contexts/context-1/reproduction.json")));
     }
 
     private ProjectRegistration registration() {

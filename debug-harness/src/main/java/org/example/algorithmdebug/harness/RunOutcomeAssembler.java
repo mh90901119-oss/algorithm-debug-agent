@@ -20,6 +20,7 @@ import java.util.Optional;
 public final class RunOutcomeAssembler {
 
     private static final int MAX_MARKER_TEXT = 65_536;
+    private static final int MAX_COMPARISON_SUMMARY = 2_048;
 
     /**
      * 组装六个正交结果维度；该方法不读文件、不写归档、不推断算法业务根因。
@@ -31,6 +32,8 @@ public final class RunOutcomeAssembler {
      * @param agentFailure Agent/Harness 独立失败
      * @param boundedMavenOutput 有界 Maven 输出，仅用于粗粒度阶段标记
      * @param artifacts 已归档的不可变产物引用
+     * @param comparisonOutcome 调用方确定的参考比较结果
+     * @param comparisonSummary 有界的确定性比较摘要
      */
     public RunOutcomeSummary assemble(
             RunRequest request,
@@ -39,9 +42,12 @@ public final class RunOutcomeAssembler {
             GanttOutcome ganttOutcome,
             Optional<AgentFailureDiagnostic> agentFailure,
             String boundedMavenOutput,
-            List<ArtifactReference> artifacts) {
+            List<ArtifactReference> artifacts,
+            ComparisonOutcome comparisonOutcome,
+            String comparisonSummary) {
         if (request == null || run == null || surefireResult == null || ganttOutcome == null
-                || agentFailure == null || boundedMavenOutput == null || artifacts == null) {
+                || agentFailure == null || boundedMavenOutput == null || artifacts == null
+                || comparisonOutcome == null || comparisonSummary == null) {
             throw new IllegalArgumentException("RunOutcomeAssembler 参数不能为空");
         }
         if (boundedMavenOutput.length() > MAX_MARKER_TEXT) {
@@ -53,6 +59,11 @@ public final class RunOutcomeAssembler {
         if (run.isEmpty() && agentFailure.isEmpty()) {
             throw new IllegalArgumentException("进程未启动时必须包含 Agent 诊断");
         }
+        comparisonSummary = comparisonSummary.strip();
+        if (comparisonSummary.isEmpty()
+                || comparisonSummary.length() > MAX_COMPARISON_SUMMARY) {
+            throw new IllegalArgumentException("比较摘要必须为非空且不超过 2 KiB");
+        }
 
         ProcessOutcome processOutcome = processOutcome(run);
         TestFacts testFacts = testFacts(run, surefireResult, boundedMavenOutput);
@@ -62,8 +73,8 @@ public final class RunOutcomeAssembler {
                 request.caseId(), request.contextId(), request.analysisId(), request.runId(),
                 processOutcome, testFacts.outcome(), ganttOutcome,
                 testFacts.failure(), agentFailure,
-                ComparisonOutcome.NOT_COMPARED,
-                "Baseline comparison is not implemented in this slice",
+                comparisonOutcome,
+                comparisonSummary,
                 artifacts);
     }
 

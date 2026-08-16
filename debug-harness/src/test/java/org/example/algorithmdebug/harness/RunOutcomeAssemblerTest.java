@@ -27,6 +27,7 @@ import java.util.Optional;
 import java.util.OptionalInt;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RunOutcomeAssemblerTest {
@@ -152,6 +153,37 @@ class RunOutcomeAssemblerTest {
                 outcome.agentFailure().orElseThrow().code());
     }
 
+    @Test
+    void keepsExplicitComparisonDecisionFromCaller() {
+        SurefireTestResult test = new SurefireTestResult(
+                TestOutcome.PASSED, Optional.empty(), Path.of("TEST-a.b.TargetTest.xml"));
+
+        RunOutcomeSummary outcome = assembler.assemble(
+                request(), Optional.of(run(RunCompletion.SUCCEEDED)), Optional.of(test),
+                GanttOutcome.PRESENT, Optional.empty(), "", List.of(gantt()),
+                ComparisonOutcome.MATCHED,
+                "Baseline MATCHED; scope=SAME_CONTEXT; referenceRunId=run-0; "
+                        + "changedDimensions=NONE");
+
+        assertEquals(ComparisonOutcome.MATCHED, outcome.comparisonOutcome());
+        assertEquals(
+                "Baseline MATCHED; scope=SAME_CONTEXT; referenceRunId=run-0; "
+                        + "changedDimensions=NONE",
+                outcome.comparisonSummary());
+    }
+
+    @Test
+    void rejectsBlankOrOversizedComparisonSummary() {
+        assertThrows(IllegalArgumentException.class, () -> assembler.assemble(
+                request(), Optional.of(run(RunCompletion.SUCCEEDED)), Optional.empty(),
+                GanttOutcome.ABSENT, Optional.empty(), "", List.of(),
+                ComparisonOutcome.NOT_COMPARED, " "));
+        assertThrows(IllegalArgumentException.class, () -> assembler.assemble(
+                request(), Optional.of(run(RunCompletion.SUCCEEDED)), Optional.empty(),
+                GanttOutcome.ABSENT, Optional.empty(), "", List.of(),
+                ComparisonOutcome.NOT_COMPARED, "x".repeat(2_049)));
+    }
+
     private RunOutcomeSummary assemble(
             Optional<RunResult> run,
             Optional<SurefireTestResult> test,
@@ -160,7 +192,8 @@ class RunOutcomeAssemblerTest {
             String boundedMavenOutput,
             List<ArtifactReference> artifacts) {
         return assembler.assemble(
-                request(), run, test, ganttOutcome, agentFailure, boundedMavenOutput, artifacts);
+                request(), run, test, ganttOutcome, agentFailure, boundedMavenOutput, artifacts,
+                ComparisonOutcome.NOT_COMPARED, "No valid reproduction reference");
     }
 
     private RunRequest request() {
