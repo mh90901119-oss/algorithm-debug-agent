@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- 不穷举 Java/业务异常；确定性代码只输出 `BUILD_FAILURE`、`TEST_FAILURE`、`TEST_ERROR`、`TEST_NOT_EXECUTED`、`AGENT_FAILURE`、`UNKNOWN`。
+- 不穷举 Java/业务异常；目标失败只输出 `BUILD_FAILURE`、`TEST_FAILURE`、`TEST_ERROR`、`TEST_NOT_EXECUTED`、`UNKNOWN`；Agent 失败使用独立诊断。
 - 目标异常与 Agent 异常独立，失败或断言失败的 UT 仍可引用 Gantt。
 - 原始 stdout、stderr、Surefire XML 和 Gantt 只读保存；摘要只带有界文本与引用。
 - `ToolResponse` 删除固定动作状态机属于破坏性变更，Schema 从 `1.0` 升级到 `2.0`，并同步迁移说明与测试。

@@ -11,6 +11,8 @@
 > 后续边界：本文记录已实现的 Phase 0 动态结果捕获、Fingerprint 和稳定性行为；同一问题的多轮
 > OpenCode 持久化与代码变化延续规则，以
 > `2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 和 ADR-006 为准。
+> 2026-08-13 已完成迁移：当前代码的 Fingerprint 变化返回 `NEW_CONTEXT`，不再创建 Revision；
+> Inquiry/Turn 和复杂 Case 生命周期类型已经删除。本文相应术语只描述历史实现，不是当前 API。
 
 ## 1. 背景与问题
 
@@ -280,8 +282,8 @@ sequenceDiagram
 异常诊断和多轮 Analysis/Evidence 分别追加保存。本设计已经实现的动态结果捕获、Fingerprint、
 Artifact Store 和可选稳定性服务继续复用，不再承担复杂 Case State Repository 的设计依据。
 同一问题在源码、输入或 UT 内容变化后由新设计追加 Context Snapshot；本设计已实现的
-`CaseResolutionService` 创建 Revision 行为保留为历史 Phase 0 事实，但不再作为新 OpenCode 入口的
-延续规则。
+`CaseResolutionService` 创建 Revision 行为只保留为历史 Phase 0 事实；当前实现已经替换为
+`NEW_CONTEXT/REUSE_CONTEXT` 规则。
 
 ## 18. 变更记录
 
@@ -291,3 +293,4 @@ Artifact Store 和可选稳定性服务继续复用，不再承担复杂 Case St
 | 2026-08-11 | 1.1 | 完成 Phase 0 垂直实现并记录真实两次运行验证 | Codex / zhao1k |
 | 2026-08-12 | 1.2 | 明确后续多轮持久化由简化 Case/Run/Analysis 设计接管 | Codex / mh90901119-oss |
 | 2026-08-12 | 1.3 | 明确 Fingerprint 变化在同一问题中映射为 Context Snapshot | Codex / mh90901119-oss |
+| 2026-08-13 | 1.4 | 记录 Revision/Inquiry/Turn 迁移已经落地，本文旧术语仅为历史 | Codex / mh90901119-oss |

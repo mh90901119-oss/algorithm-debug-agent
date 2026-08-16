@@ -43,8 +43,8 @@ Algorithm Debug Agent 的实际入口是用户在目标算法仓库中通过 Ope
 
 ## 影响
 
-- `CaseLifecycleState` 不再驱动后续分析流程；现有类型在迁移期保留，但新持久化 API 不依赖它；
-- `InquiryId` 和 `TurnId` 不进入本次持久化切片，OpenCode 对话通过 `caseId`、`analysisId` 关联；
+- `CaseLifecycleState` 已删除；Baseline 兼容数据只使用专用 `BaselineStabilityState`，且保留原 JSON 枚举字面值；
+- `InquiryId` 和 `TurnId` 已删除，OpenCode 对话通过 `caseId`、`analysisId` 关联；
 - Case 只冻结项目、目标 UT selector 和问题身份；每个 Run、Analysis、Artifact 和 Evidence 均标注
   `contextId`，防止把历史运行事实误写成当前代码事实；
 - 缺少 `run-outcome.json` 的 Run 被读取为不完整事实，不需要恢复任务重写为 `ABORTED`；
