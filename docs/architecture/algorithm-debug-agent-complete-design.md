@@ -1,8 +1,8 @@
 # Algorithm Debug Agent 完整架构与开发计划
 
 - 文档状态：实施基线（已按工具单点验证校准）
-- 版本：1.3
-- 更新日期：2026-08-12
+- 版本：1.4
+- 更新日期：2026-08-16
 - 基线算法项目：`D:\javacode\hellomvn`
 - 现有 JDWP 项目：`D:\mcpcode\mcp-jdwp-java`
 - 产品定位：半导体设备晶圆调度算法的离线问题定位 Agent
@@ -38,6 +38,11 @@ Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库
 引用”返回，Skill 指导大模型自主决定是否继续读取、运行或采集。
 
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
+
+当前实现边界：外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor 和有界
+JSON CLI 已实现。Workspace 位于目标算法仓库之外，目标模块及其上层大型软件仓库保持只读。
+Case/Context/Run/Analysis Repository、Input Analysis、OpenCode 安装器、CodePath/JDWP 编排、Evidence
+和端到端 `/debug-case` 仍未实现；以下相关内容描述目标架构，不代表当前可调用能力。
 
 ## 2. 执行摘要
 

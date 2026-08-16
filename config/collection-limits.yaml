@@ -1,7 +1,6 @@
 schemaVersion: "1.0"
-maxTotalRuns: 6
-maxCodePathRuns: 1
+maxTotalRuns: 8
+maxCodePathRuns: 3
 maxJdwpRuns: 4
 maxTraceBytesPerRun: 52428800
 maxWallClockMinutes: 20
-

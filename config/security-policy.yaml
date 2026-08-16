@@ -3,4 +3,3 @@ allowNetwork: false
 allowAlgorithmSourceMutation: false
 allowProductionSystemAccess: false
 requireBaselineSemanticHash: true
-

@@ -1,7 +1,7 @@
 # 外部 Workspace 控制面可实施设计
 
-- 文档状态：Review
-- 设计版本：0.3
+- 文档状态：Implemented
+- 设计版本：0.4
 - 创建日期：2026-08-16
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：P0 - 外部 Workspace 控制面
@@ -10,7 +10,7 @@
 
 ## 1. 背景与问题
 
-当前 `CaseWorkspace` 接受调用方提供的目录，因此底层类并未强制把 Case 写入目标算法仓库；但产品默认配置仍使用
+本切片实施前，`CaseWorkspace` 接受调用方提供的目录，因此底层类并未强制把 Case 写入目标算法仓库；但产品默认配置仍使用
 `.algorithm-debug/runs`，也不存在 Workspace 初始化、项目注册、配置发现、环境诊断或可执行 CLI。结果是已经实现的
 Harness、Adapter 和 Baseline 能力无法通过稳定控制面组合，OpenCode 薄适配也找不到真实 `ada` 命令。
 
@@ -374,6 +374,7 @@ stdout 必须只有一个 UTF-8 ToolResponse JSON 文档。普通诊断写 stder
 
 - 目标算法模块和整个软件仓库只读；项目登记不在其中创建文件；
 - Workspace 所有写入目标必须经过根路径边界校验；
+- Workspace 根目录不得是文件系统根目录，且项目登记时 Workspace 与目标 Git 仓库不得存在祖先/子孙重叠；
 - 终态 Manifest 和项目登记记录使用 create-new 语义，不允许覆盖；
 - 临时文件必须和目标文件位于同一目录，优先原子移动；不支持原子移动时明确失败，不静默降级为覆盖；
 - 不读取或输出凭据环境变量；
@@ -486,14 +487,14 @@ Workspace 初始化和项目登记不得递归遍历大型软件仓库。登记�
 
 ## 17. 文档同步清单
 
-- [ ] `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`
-- [ ] `docs/architecture/algorithm-debug-agent-complete-design.md`
-- [ ] `docs/designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md`
-- [ ] `docs/decisions/ADR-007-opencode-adapter-via-cli.md`
-- [ ] `config/README.md` 与配置模板
-- [ ] `integrations/opencode/README.md`
-- [ ] 根 README 与受影响模块 README
-- [ ] Workspace/Project/Doctor Schema 示例
+- [x] `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`
+- [x] `docs/architecture/algorithm-debug-agent-complete-design.md`
+- [x] `docs/designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md`
+- [x] `docs/decisions/ADR-007-opencode-adapter-via-cli.md`
+- [x] `config/README.md` 与配置模板
+- [x] `integrations/opencode/README.md`
+- [x] 根 README 与受影响模块 README
+- [x] Workspace/Project/Doctor Schema 与契约 JSON 测试
 
 ## 18. 自审结果
 
@@ -507,6 +508,17 @@ Workspace 初始化和项目登记不得递归遍历大型软件仓库。登记�
 - 测试覆盖成功、幂等、冲突、损坏配置、路径逃逸和 Maven 缺失；
 - 本切片没有提前实现 Input Analysis、Collector 或 MCP。
 
+### 18.1 实施验证记录
+
+- `mvn -pl ada-contracts,case-management,ada-core,algorithm-debug-cli -am test`：通过；
+- `mvn test`：158 tests，0 failures，0 errors，2 skipped；
+- `node --test integrations/opencode/test/ada-cli.test.mjs`：11 tests 通过；
+- `mvn -pl algorithm-debug-cli -am package`：生成可执行 shaded JAR；
+- 新建外部 Workspace，针对真实 `D:\javacode\hellomvn` 连续执行 init、register、重复 register 和
+  doctor：退出码均为 0，第二次登记 `created=false`，Doctor 为 PASS；目标仓库递归文件/Hash 快照不变；
+- 文档扫描未发现活动设计中的目标仓库 `.algorithm-debug`、统一工作流状态机、固定三次
+  Baseline、旧轮次编号或未验证的显式命令回退描述。
+
 ## 19. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
@@ -514,3 +526,4 @@ Workspace 初始化和项目登记不得递归遍历大型软件仓库。登记�
 | 2026-08-16 | 0.1 | 根据完整现状审计和用户确认，定义外部 Workspace 控制面首个实施切片 | Codex / mh90901119-oss |
 | 2026-08-16 | 0.2 | 支持大型软件仓库内具有独立 POM 的算法模块，拆分仓库、模块和 Maven 执行路径 | Codex / mh90901119-oss |
 | 2026-08-16 | 0.3 | 实施计划自审时补齐 DoctorReport 的显式 Schema 版本字段 | Codex / mh90901119-oss |
+| 2026-08-16 | 0.4 | 完成控制面、CLI、配置与文档实施；记录全量测试、真实仓库只读验收和路径安全审计结果 | Codex / mh90901119-oss |
