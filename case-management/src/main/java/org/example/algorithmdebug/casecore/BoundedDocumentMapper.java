@@ -41,6 +41,20 @@ public final class BoundedDocumentMapper {
         return read(path, type, yamlMapper, "YAML");
     }
 
+    <T> T readYaml(byte[] content, Class<T> type) {
+        if (content == null || type == null) {
+            throw new IllegalArgumentException("content 和 type 不能为空");
+        }
+        try {
+            ensureWithinLimit(content.length);
+            return yamlMapper.readValue(content, type);
+        } catch (WorkspaceException failure) {
+            throw failure;
+        } catch (IOException | RuntimeException failure) {
+            throw new WorkspaceException("解析内置 YAML Workspace 文档失败", failure);
+        }
+    }
+
     /**
      * 将对象序列化为有界 YAML 字节。
      *

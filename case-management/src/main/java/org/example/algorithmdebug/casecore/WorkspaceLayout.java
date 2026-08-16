@@ -73,6 +73,11 @@ public final class WorkspaceLayout {
         return resolveWithinRoot(Path.of("projects", segment, "cases"));
     }
 
+    Path projectConfigurationRoot(ProjectId projectId) {
+        String segment = safeProjectSegment(projectId);
+        return resolveWithinRoot(Path.of("config", "projects", segment));
+    }
+
     List<Path> standardDirectories() {
         return List.of(
                 configRoot(),
