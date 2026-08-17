@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -42,7 +43,6 @@ class WaferDemoAdapterTest {
         assertTrue(adapter.descriptor().supports(AdapterCapability.BASELINE_EXECUTION));
         assertTrue(adapter.descriptor().supports(AdapterCapability.INPUT_LOCATION));
         assertTrue(adapter.descriptor().supports(AdapterCapability.SCHEDULE_RESULT));
-        assertTrue(adapter.descriptor().supports(AdapterCapability.SEMANTIC_HASH));
     }
 
     @Test
@@ -90,6 +90,19 @@ class WaferDemoAdapterTest {
                 () -> adapter.inspect(otherProject));
 
         assertEquals("ADAPTER_PROJECT_NOT_SUPPORTED", exception.code());
+    }
+
+    @Test
+    void missingInputDoesNotPreventProjectInspection() throws Exception {
+        java.nio.file.Files.delete(
+                projectRoot.resolve("input/cases/20260810101501.json"));
+
+        ProjectDescriptor project = assertDoesNotThrow(() -> adapter.inspect(projectRoot));
+        AdapterException failure = assertThrows(AdapterException.class,
+                () -> adapter.inputLocator().locate(
+                        project, target("reproduceComplexSchedulingFromTimestampedInput")));
+
+        assertEquals("ADAPTER_INPUT_NOT_FOUND", failure.code());
     }
 
     private static TargetTest target(String method) {

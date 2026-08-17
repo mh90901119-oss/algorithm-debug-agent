@@ -23,9 +23,10 @@ public final class CaseWorkspace {
         }
         String segment = safeSegment(caseId.value(), "caseId");
         Path root = casesRoot.toAbsolutePath().normalize().resolve(segment).normalize();
-        Files.createDirectories(root.resolve("baseline"));
+        Files.createDirectories(root.resolve("contexts"));
         Files.createDirectories(root.resolve("runs"));
-        Files.createDirectories(root.resolve("inquiries"));
+        Files.createDirectories(root.resolve("analyses"));
+        Files.createDirectories(root.resolve("evidence"));
         return new CaseWorkspace(root);
     }
 

@@ -2,6 +2,17 @@
 
 > 历史草案说明：本文档保留早期方案，包含“算法内部 Domain Trace Sink”等已被调整的设计。当前实施请以 [Algorithm Debug Agent 完整架构与开发计划](../architecture/algorithm-debug-agent-complete-design.md) 为准；主方案采用算法源码零侵入、外部 Debug Harness、CodePathTracer、JDWP Batch Collector 和 Derived Domain Trace。
 
+> 2026-08-12 当前实施修订：OpenCode 是唯一 Agent Runtime；Agent 通过仓库内 Skill 与薄
+> Custom Tool 调用 `ada` CLI，不实现 Algorithm Debug MCP Server。一次性 OpenCode 适配登记
+> Agent 安装目录后，用户进入目标算法仓库直接运行 `opencode`。UT 结果采用结构化摘要、原始 Artifact
+> 引用与 Skill 指引协作，异常分类不推断业务根因。
+
+> 2026-08-16 实施状态：Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、
+> 真实目标 UT 的 RunOutcome/Artifact 归档，以及 `case open/inspect`、`run execute` CLI 已实现并通过
+> 六类隔离 Maven 场景与真实 Wafer UT 验收。2026-08-17 已完成 JSON Token 内容/目标失败指纹、
+> write-once Context reproduction reference 和 `MATCHED/CHANGED/INCOMPARABLE` 简单比较。
+> 动态采集、Evidence 和 OpenCode 安装器仍待实现。
+
 
 - 文档状态：Draft for Implementation
 - 版本：0.1
@@ -580,7 +591,6 @@ algorithm-debug-parent
   algorithm-debug-validator
   algorithm-debug-reporter
   algorithm-debug-cli
-  algorithm-debug-mcp
 ```
 
 拆分触发条件：
@@ -594,7 +604,10 @@ algorithm-debug-parent
 
 ## Phase 0：基线冻结与契约版本化
 
-状态：核心垂直闭环已于 2026-08-11 实现；通用 Maven Runner、锁与持久化恢复继续迭代。
+状态：核心 Maven Runner 已于 2026-08-11 实现；2026-08-13 完成早期 Case/Context Resolution、
+RunOutcomeSummary、Surefire 通用诊断和 OpenCode 有界适配契约；2026-08-16 已完成正式
+Case/Context/Analysis/Run Repository、Context Snapshot、Case Digest 和可执行 Case/Run CLI。
+JSON 内容/失败指纹和简单 Baseline 比较已于 2026-08-17 实现；OpenCode 安装器与采集/Evidence 链仍未实现。
 
 目标：把当前 Demo 固化成后续迭代的可比较基线。
 
@@ -604,20 +617,28 @@ algorithm-debug-parent
 - Case Manifest；
 - 当前四类 Case 的 golden summary；
 - 结果 Schema 文档；
-- Run Manifest；
+- Run Start/Outcome；
 - 可重复运行 Hash。
 - 运行前 `CaseFingerprint` 与运行后 `ExecutionIdentity`；
 - 动态输出目录运行前后差分；
 - 不可变 Run 结果捕获；
-- `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
-- Case 复用、新建与 Revision 决策。
+- 可选的 `BASELINE_STABLE/BASELINE_UNSTABLE` 判定；
+- Case 新建、Context 复用与新增决策。
+- 同一问题修改源码、输入或 UT 内容时追加 Context Snapshot，不自动拆分 Case；
+- 同一 Case 下多轮 Analysis 对历史 Run、Artifact 和 Evidence 的显式复用；
+- 面向 LLM 的有界 RunOutcomeSummary，明确本轮 runId、目标/Agent 结果和 Artifact 引用；
+- 异常类、消息、cause 和业务栈帧的通用提取，不建立异常到业务根因的穷举规则；
+- 仓库内唯一 `skills/algorithm-debug` 与 OpenCode 适配目录；
+- 幂等的一次性 OpenCode 适配安装，安装后直接使用 `opencode`（待实现）。
 
 验收：
 
-- 稳定阈值可配置；Demo 连续运行两次，生产 Case 建议三次以上；
+- 首次无采集 Run 默认作为复现参考；检测到漂移、并发/随机因素或用户要求时再执行重复稳定性验证；
 - 所有 Case 可生成独立 run 目录；
 - 结果中可确认输入 Hash、算法版本和模式。
-- 相同 Fingerprint 结果不一致时进入 `BASELINE_UNSTABLE`，不自动新建 Case。
+- 动态采集运行与参考 Gantt Hash 或异常特征不一致时，相关证据不得用于确认根因。
+- 不同 Context 的 Gantt 内容 Hash 变化形成 `CHANGED` 事实并保留两份 Artifact；同一 Context 采集前后
+  不一致才视为采集行为干扰。字段级 Diff 按真实使用需求后置。
 
 ## Phase 1：候选决策循环与领域 Trace
 
@@ -753,7 +774,7 @@ algorithm-debug-parent
 - 不允许把 LLM hypothesis 写成 validator conclusion；
 - 能回答至少五类核心“为什么”问题。
 
-## Phase 8：Debug Viewer 与 MCP
+## Phase 8：Debug Viewer 与 OpenCode 适配完善
 
 目标：形成可交互的完整问题定位体验。
 
@@ -762,14 +783,17 @@ algorithm-debug-parent
 - Gantt + decision + finding 综合 Viewer；
 - operation 到证据链的交互跳转；
 - compare view；
-- algorithm-debug-mcp；
-- 工作流 Skill。
+- 版本化工作流 Skill；
+- OpenCode Agent、Command 和薄 Custom Tool；
+- OpenCode 适配安装、升级、检查与卸载。
 
 验收：
 
 - 点击异常 Gantt Bar 可以看到输入字段、候选、过滤器、代码位置和 finding；
-- MCP 工具返回结构化事实，不返回未经约束的大对象；
-- Skill 只编排工作流，不承担确定性判断。
+- OpenCode Custom Tool 原样返回 CLI 结构化事实和 Artifact 引用，不返回未经约束的大对象；
+- Skill 只指导模型理解证据和选择下一步，不承担确定性判断；
+- 一次适配后，用户在目标算法仓库直接运行 `opencode` 即可提问；
+- 当前阶段没有 Algorithm Debug MCP Server 运行依赖。
 
 ## 10. 推荐近期迭代 Backlog
 
@@ -894,7 +918,7 @@ algorithm-debug-parent
 
 ## 15. 下一步启动建议
 
-Phase 0 Baseline 的结果发现、稳定性判定和正式 Maven/JUnit Runner 已完成。已实现的纵向切片为：
+Phase 0 的结果发现、稳定性原型、正式 Maven/JUnit Runner 和 Case/Run 归档纵向切片已完成。当前可执行链路为：
 
 ```text
 TestLaunchSpec
@@ -903,11 +927,15 @@ TestLaunchSpec
   -> 超时进程树清理
   -> 文件稳定轮询
   -> ScheduleResultCapture
-  -> 真实 Demo 两次 Baseline
+  -> RunOutcome + 不可变 Artifact
+  -> CaseDigest 查询
 ```
 
-下一步先完成 Run Manifest 与 Case State 持久化，再提供 `algorithm-debug-cli baseline`，使上述能力可以
-脱离 JUnit 集成测试正式调用。之后进入 Gantt Focus 与静态分析；后者的第一个可交付目标仍为：
+JSON 内容指纹和 Baseline 简单比较已完成，当前 Run 可可靠报告 `MATCHED/CHANGED/INCOMPARABLE`；
+字段级 Gantt Diff 继续后置，变化后由大模型按需读取参考与当前 Artifact。下一步进入静态调用关系、
+CodePathTracer 采集计划/执行，再以其结果驱动 JDWP 方法内聚焦采集。OpenCode 一次性安装器
+在后端能力稳定后接入。后续同样不引入复杂 Case 状态机、线程转储或事件溯源。静态与动态分析的第一个
+可交付目标仍为：
 
 ```text
 运行 complex-parallel-three-jobs-five-chambers Case

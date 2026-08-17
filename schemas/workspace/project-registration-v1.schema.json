@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/workspace/project-registration-v1.schema.json",
+  "title": "ProjectRegistration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "displayName",
+    "repositoryRoot",
+    "moduleRoot",
+    "mavenExecutionRoot",
+    "pomPath",
+    "buildTool",
+    "pomSha256",
+    "registeredAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "projectId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "repositoryRoot": { "type": "string", "minLength": 1 },
+    "moduleRoot": { "type": "string", "minLength": 1 },
+    "mavenExecutionRoot": { "type": "string", "minLength": 1 },
+    "pomPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+    },
+    "buildTool": { "const": "MAVEN" },
+    "pomSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "registeredAt": { "type": "string", "format": "date-time" }
+  }
+}

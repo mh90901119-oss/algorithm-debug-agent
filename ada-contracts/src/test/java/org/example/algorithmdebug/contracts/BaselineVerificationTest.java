@@ -1,5 +1,6 @@
 package org.example.algorithmdebug.contracts;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BaselineVerificationTest {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void freezesRunObservationsAndStableState() {
@@ -20,7 +23,7 @@ class BaselineVerificationTest {
                 "a".repeat(64),
                 2,
                 List.of(first, second),
-                CaseLifecycleState.BASELINE_STABLE);
+                BaselineStabilityState.BASELINE_STABLE);
 
         assertEquals(2, verification.observations().size());
         assertThrows(UnsupportedOperationException.class,
@@ -35,6 +38,15 @@ class BaselineVerificationTest {
                 "a".repeat(64),
                 2,
                 List.of(new BaselineRunObservation(new RunId("RUN-001"), "a".repeat(64))),
-                CaseLifecycleState.BASELINE_STABLE));
+                BaselineStabilityState.BASELINE_STABLE));
+    }
+
+    @Test
+    void preservesBaselineV1JsonEnumValuesAfterJavaTypeSplit() throws Exception {
+        String json = objectMapper.writeValueAsString(BaselineStabilityState.BASELINE_STABLE);
+
+        assertEquals("\"BASELINE_STABLE\"", json);
+        assertEquals(BaselineStabilityState.BASELINE_STABLE,
+                objectMapper.readValue(json, BaselineStabilityState.class));
     }
 }

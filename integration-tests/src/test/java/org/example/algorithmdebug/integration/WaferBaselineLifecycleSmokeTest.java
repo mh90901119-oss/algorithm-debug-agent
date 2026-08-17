@@ -11,9 +11,10 @@ import org.example.algorithmdebug.casecore.CaseWorkspace;
 import org.example.algorithmdebug.contracts.BaselineVerification;
 import org.example.algorithmdebug.contracts.CaseFingerprint;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.CaseLifecycleState;
+import org.example.algorithmdebug.contracts.BaselineStabilityState;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.core.MavenExecutableLocator;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
 import org.example.algorithmdebug.harness.MavenTestExecutor;
@@ -29,11 +30,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -86,12 +89,13 @@ class WaferBaselineLifecycleSmokeTest {
                 adapter.descriptor().adapterVersion());
         BaselineStabilityService stability = new BaselineStabilityService(2);
         BaselineVerification verification = stability.start(
-                fingerprint, new RunId("RUN-001"), first.semanticHash());
+                fingerprint, new RunId("RUN-001"), first.normalizedJsonSha256());
         verification = stability.record(
-                verification, new RunId("RUN-002"), second.semanticHash());
+                verification, new RunId("RUN-002"), second.normalizedJsonSha256());
 
-        assertEquals(first.semanticHash(), second.semanticHash());
-        assertEquals(CaseLifecycleState.BASELINE_STABLE, verification.state());
+        assertEquals(first.normalizedJsonSha256(), second.normalizedJsonSha256());
+        assertEquals(first.rawSha256(), second.rawSha256());
+        assertEquals(BaselineStabilityState.BASELINE_STABLE, verification.state());
         assertEquals(165, second.snapshot().operations().size());
         assertTrue(Files.isRegularFile(
                 workspace.caseRoot().resolve("runs/RUN-001/result/gantt.json")));
@@ -113,7 +117,6 @@ class WaferBaselineLifecycleSmokeTest {
                         ProcessLimits.defaults()),
                 source,
                 adapterParser(),
-                adapterHashStrategy(),
                 runDirectory.resolve("result/gantt.json"));
         assertEquals(RunCompletion.SUCCEEDED, result.run().completion(),
                 () -> "目标 UT 失败，stdout=" + result.run().stdout().path()
@@ -127,25 +130,22 @@ class WaferBaselineLifecycleSmokeTest {
 
     private static Path mavenExecutable() {
         String configured = System.getProperty("ada.maven.executable");
-        if (configured != null && !configured.isBlank()) {
-            return Path.of(configured).toAbsolutePath().normalize();
-        }
-        String executable = System.getProperty("os.name").toLowerCase().contains("win")
-                ? "mvn.cmd"
-                : "mvn";
-        return Path.of(System.getProperty("maven.home"), "bin", executable)
-                .toAbsolutePath()
-                .normalize();
+        Optional<Path> explicit = configured == null || configured.isBlank()
+                ? Optional.empty()
+                : Optional.of(Path.of(configured));
+        boolean windows = System.getProperty("os.name", "")
+                .toLowerCase(java.util.Locale.ROOT)
+                .contains("win");
+        return new MavenExecutableLocator(
+                System.getenv(), File.pathSeparator, windows)
+                .locate(explicit)
+                .orElseThrow(() -> new AssertionError(
+                        "真实 Smoke 要求 ada.maven.executable、MAVEN_HOME、M2_HOME 或 PATH 提供 Maven"));
     }
 
     private static org.example.algorithmdebug.adapter.ScheduleResultParser<WaferScheduleSnapshot>
             adapterParser() {
         return new WaferDemoAdapter().scheduleResultParser();
-    }
-
-    private static org.example.algorithmdebug.adapter.SemanticHashStrategy<WaferScheduleSnapshot>
-            adapterHashStrategy() {
-        return new WaferDemoAdapter().semanticHashStrategy();
     }
 
     private static String sha256(Path path) throws Exception {

@@ -1,8 +1,8 @@
 # Algorithm Debug Agent 完整架构与开发计划
 
 - 文档状态：实施基线（已按工具单点验证校准）
-- 版本：1.1
-- 更新日期：2026-08-10
+- 版本：1.4
+- 更新日期：2026-08-16
 - 基线算法项目：`D:\javacode\hellomvn`
 - 现有 JDWP 项目：`D:\mcpcode\mcp-jdwp-java`
 - 产品定位：半导体设备晶圆调度算法的离线问题定位 Agent
@@ -26,7 +26,24 @@
 
 本文档是后续实现的主设计基线。早期文档中提出的“在算法内部增加 Domain Trace Sink”不再作为主方案；真实算法和当前 Demo 均优先采用外部、零源码侵入的数据采集方式。
 
+Case 与多轮协作模型已由 `ADR-006-case-as-analysis-dossier.md` 和
+`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 修订：Case 是一个用户问题的
+分析档案；源码、输入或 UT 内容变化在同一 Case 内追加 Context Snapshot；Run、Analysis、Artifact 和
+Evidence 按 `contextId` 作用域追加保存。本文中更早的复杂 Case State、Inquiry/Turn 或代码变化拆分
+Revision Case 描述不再作为实施依据。
+
+OpenCode 接入进一步由上述详细设计收敛：当前不实现 Algorithm Debug MCP Server；OpenCode 通过仓库内
+Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库，一次性适配安装只登记
+外部路径；此后用户进入目标算法仓库直接运行 `opencode`。每次 UT 运行以“结构化摘要 + 原始 Artifact
+引用”返回，Skill 指导大模型自主决定是否继续读取、运行或采集。
+
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
+
+当前实现边界：外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
+Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实目标 UT 的结构化
+RunOutcome/Artifact 归档和有界 JSON CLI 已实现。Workspace 位于目标算法仓库之外；Agent 不修改目标源码、
+UT、POM 或输入。Input Analysis、Baseline 比较、OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端
+`/debug-case` 模型流程仍未实现；以下相关内容描述目标架构，不代表当前可调用能力。
 
 ## 2. 执行摘要
 
@@ -91,7 +108,7 @@ Run 2：JDWP 关键状态运行
 Run 3+：按需聚焦运行或 JDWP-MCP 交互式深挖
 ```
 
-不同采集技术无需同时压在一次运行上。每轮结果必须与基准结果的语义 Hash 一致。
+不同采集技术无需同时压在一次运行上。每轮结果必须与基准结果的 JSON 内容指纹或失败指纹一致。
 
 ### 3.4 JDI 不替代 JDWP
 
@@ -196,7 +213,7 @@ JOB-B.jobStartOrder = 2
 
 - 支持指定一个 Maven/JUnit 算法 UT；
 - 支持固定输入的多轮可重复运行；
-- 自动保存调度结果和语义 Hash；
+- 自动保存调度结果、原始 SHA-256 和忽略格式空白的 JSON 内容指纹；
 - 生成实际方法调用路径；
 - 根据问题生成不同的动态采集计划；
 - 无源码侵入地读取局部变量、对象字段和资源状态；
@@ -332,18 +349,15 @@ Run 0
   -> 执行原始 UT
   -> 保存 schedule-result.json
   -> 保存 test-result.json
-  -> 计算 result-semantic-hash.txt
+  -> 计算 run-result-fingerprint.json
 ```
 
-语义 Hash 计算前必须：
-
-- operation 按稳定字段排序；
-- Map 和资源列表排序；
-- 排除 capturedAt、runId 等非业务字段；
-- 使用规范化 JSON。
+内容指纹由通用 Harness 对合法结果执行流式 JSON Token Hash：忽略 Token 之间的缩进、换行和空格，
+但保留字符串内部空格、对象成员顺序、数组顺序和数值文本。当前阶段不由 Adapter 选择业务字段，也不
+生成字段级 Diff；指纹变化后保留两份原始结果供大模型按需分析。
 
 稳定阈值必须可配置。Phase 0 Reference Demo 使用两次以缩短集成测试时间，真实大型算法建议同一 UT
-连续运行三次或更多。每次结果先保存为不可变 Run；相同 `CaseFingerprint` 下语义哈希不一致时标记
+连续运行三次或更多。每次结果先保存为不可变 Run；相同 Context 下内容或失败指纹不一致时标记
 `BASELINE_UNSTABLE`，不能通过自动新建 Case 隐藏非确定性。
 
 动态结果文件不按“目录最新文件”猜测。Adapter 只返回 `ScheduleResultSource`，Harness 在 UT 运行前后
@@ -490,7 +504,7 @@ Debug Harness 是调试运行编排器，不是调试协议实现。
 - 监控超时和退出码；
 - 收集测试结果和调度结果；
 - 生成运行清单；
-- 对比基准语义 Hash。
+- 对比基准 JSON 内容指纹或失败指纹。
 
 ### 10.2 进程模型
 
@@ -1392,28 +1406,20 @@ LangChain 仍然只是可选集成层。
 ### 22.1 目录
 
 ```text
-.opencode/
-├── agents/
-│   ├── algorithm-debug.md
-│   ├── evidence-critic.md
-│   └── debug-reporter.md
-├── commands/
-│   ├── algorithm-debug.md
-│   └── evaluate-agent.md
-└── tools/
-    ├── run-baseline.ts
-    ├── profile-case.ts
-    ├── static-analyze.ts
-    ├── collect-code-path.ts
-    ├── build-debug-plan.ts
-    ├── collect-jdwp.ts
-    ├── normalize-trace.ts
-    ├── query-evidence.ts
-    ├── validate-evidence.ts
-    ├── search-knowledge.ts
-    ├── agent-state.ts
-    └── run-evaluation.ts
+skills/algorithm-debug/
+├── SKILL.md
+└── references/
+
+integrations/opencode/
+├── agents/algorithm-debug.md
+├── commands/debug-case.md
+├── commands/resume-debug-case.md
+├── tools/algorithm-debug.ts
+└── opencode-template.json
 ```
+
+Skill 只有一份正式源码。`ada install opencode` 一次性登记 Agent 安装路径、Skill 来源和薄 Custom Tool；
+日常使用是进入目标算法仓库直接运行 `opencode`。不把 Skill 复制到全局 Skill 目录或目标仓库。
 
 ### 22.2 工具实现
 
@@ -1422,12 +1428,15 @@ TypeScript 只做薄封装：
 ```text
 OpenCode Custom Tool
   -> 参数 Schema 校验
-  -> 调用 java -jar algorithm-debug-cli.jar
-  -> 读取结果摘要
-  -> 返回 artifact path 和结构化状态
+  -> 从tool context取得当前directory/worktree
+  -> 调用ada CLI
+  -> 读取ToolResponse/RunOutcomeSummary
+  -> 返回有界摘要和Artifact引用
 ```
 
-不要把完整大型 Trace 返回模型。模型通过 `query_evidence` 按 wafer、resource、eventType、timeRange 查询证据切片。
+不要把完整大型 Trace 或日志返回模型。模型先阅读本轮结构化摘要，需要时再通过 `query_evidence` 或
+`artifact_read` 按 wafer、resource、eventType、timeRange 和 Artifact 引用查询有界切片。Custom Tool 不解释
+异常或改变事实；具体根因由大模型结合 Skill、源码和 Evidence 分析。
 
 ### 22.3 Agent 权限
 
@@ -1883,8 +1892,8 @@ JDWP：
 一个问题被视为完成定位，需要：
 
 1. 目标 UT 和输入明确；
-2. 基准 UT 通过；
-3. 多轮运行结果语义 Hash 一致；
+2. 基准 UT 产生可归档的成功结果或目标失败事实，Agent 自身没有崩溃；
+3. 用于确认根因的多轮采集结果与参考内容指纹或失败指纹一致；
 4. CodePath 或等价实际路径存在；
 5. 关键动态变量被观察；
 6. 关键代码位置被定位；
@@ -1909,7 +1918,7 @@ Debug Harness/Collector 位于父 JVM，原始 UT 位于子 JVM，避免调试�
 
 ### ADR-003：多轮确定性采集
 
-CodePath 和 JDWP 默认分轮运行，并以基准语义 Hash 校验行为未改变。
+CodePath 和 JDWP 默认分轮运行，并以基准 JSON 内容指纹或失败指纹校验可观察行为未改变。
 
 ### ADR-004：Derived Domain Trace
 
@@ -1929,7 +1938,8 @@ Plan Compiler 决定真实代码位置和安全捕获动作。
 
 ### ADR-008：OpenCode 为第一阶段 Agent Runtime
 
-不引入 LangChain。确定性工具通过 OpenCode Custom Tools 暴露。
+不引入 LangChain。确定性工具通过 OpenCode Custom Tools 调用稳定 `ada` CLI 暴露；当前不实现
+Algorithm Debug MCP Server，也不适配其他客户端。
 
 ### ADR-009：文件作为第一阶段持久化
 
@@ -1937,7 +1947,8 @@ Agent State、Trace、Evidence、Eval 均使用版本化文件，不使用数据
 
 ### ADR-010：MCP 是深挖层而非批量采集层
 
-完整批量 Trace 由 Collector 流式落盘；MCP 用于问题已聚焦后的交互式调试。
+该历史决策只描述外部 JDWP-MCP 调试工具：完整批量 Trace 由 Collector 流式落盘，JDWP-MCP 仅保留为
+可选人工疑难排查工具。它不表示 Algorithm Debug Agent 当前通过 MCP 接入 OpenCode。
 
 ## 32. 推荐立即启动的 Backlog
 
@@ -1953,8 +1964,10 @@ Agent State、Trace、Evidence、Eval 均使用版本化文件，不使用数据
 10. 将已验证的`raw-trace.jsonl`接入Case Run目录并自动校验Manifest；
 11. 将 Trace 与 `schedule-result.json` 对齐；
 12. 生成第一份代码级 `debug-report.md`；
-13. 封装 OpenCode `run_baseline/collect_path/collect_jdwp/query_evidence` 工具；
-14. 建立第一个 Golden Evaluation。
+13. 冻结 RunOutcomeSummary、Artifact 引用和 Skill 协作契约；
+14. 封装 OpenCode `run_test/collect_path/collect_jdwp/query_evidence` 薄 Custom Tool；
+15. 实现幂等 `ada install opencode` 适配安装与直接 `opencode` 使用链路；
+16. 建立第一个 Golden Evaluation。
 
 ## 33. 参考资料
 

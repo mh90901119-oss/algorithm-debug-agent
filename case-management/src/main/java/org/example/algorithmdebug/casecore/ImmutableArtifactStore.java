@@ -4,7 +4,6 @@ import org.example.algorithmdebug.contracts.ArtifactReference;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -14,6 +13,20 @@ import java.util.HexFormat;
 
 /** 使用临时文件和原子提交向 Run 目录写入不可变产物。 */
 public final class ImmutableArtifactStore {
+
+    private final MoveOperation moveOperation;
+
+    /** 使用底层文件系统原子移动提交产物。 */
+    public ImmutableArtifactStore() {
+        this((source, target) -> Files.move(source, target, StandardCopyOption.ATOMIC_MOVE));
+    }
+
+    ImmutableArtifactStore(MoveOperation moveOperation) {
+        if (moveOperation == null) {
+            throw new IllegalArgumentException("moveOperation 不能为空");
+        }
+        this.moveOperation = moveOperation;
+    }
 
     /**
      * 复制一份产物并返回相对于 Run 根目录的可移植引用；目标已存在时拒绝覆盖。
@@ -46,11 +59,7 @@ public final class ImmutableArtifactStore {
         Path temporary = Files.createTempFile(target.getParent(), ".artifact-", ".tmp");
         try {
             Files.copy(source, temporary, StandardCopyOption.REPLACE_EXISTING);
-            try {
-                Files.move(temporary, target, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException exception) {
-                Files.move(temporary, target);
-            }
+            moveOperation.move(temporary, target);
         } finally {
             Files.deleteIfExists(temporary);
         }
@@ -80,5 +89,10 @@ public final class ImmutableArtifactStore {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("当前 JVM 不支持 SHA-256", exception);
         }
+    }
+
+    @FunctionalInterface
+    interface MoveOperation {
+        void move(Path source, Path target) throws IOException;
     }
 }

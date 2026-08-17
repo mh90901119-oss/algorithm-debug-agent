@@ -9,10 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,7 +40,6 @@ class TargetProjectAdapterContractTest {
         ScheduleResultSource resultSource = adapter.scheduleResultSource(project, targetTest);
         Path resultPath = resultSource.outputDirectory().resolve("result.json");
         TextScheduleSnapshot snapshot = adapter.scheduleResultParser().parse(resultPath);
-        String semanticHash = adapter.semanticHashStrategy().semanticHash(snapshot);
 
         assertEquals("fake-adapter", adapter.descriptor().adapterId());
         assertEquals(project, launchSpec.project());
@@ -51,8 +47,12 @@ class TargetProjectAdapterContractTest {
         assertEquals(projectRoot.resolve("input/case.json"), input.orElseThrow());
         assertEquals(projectRoot.resolve("output"), resultSource.outputDirectory());
         assertEquals("{\"makespan\":13}", snapshot.payload());
-        assertEquals(64, semanticHash.length());
-        assertTrue(semanticHash.matches("[0-9a-f]{64}"));
+        assertEquals(Set.of(
+                        "descriptor", "inspect", "createLaunchSpec", "inputLocator",
+                        "scheduleResultSource", "scheduleResultParser"),
+                java.util.Arrays.stream(TargetProjectAdapter.class.getDeclaredMethods())
+                        .map(java.lang.reflect.Method::getName)
+                        .collect(java.util.stream.Collectors.toSet()));
     }
 
     private record TextScheduleSnapshot(String schemaVersion, String payload)
@@ -70,8 +70,7 @@ class TargetProjectAdapterContractTest {
                     Set.of(
                             AdapterCapability.BASELINE_EXECUTION,
                             AdapterCapability.INPUT_LOCATION,
-                            AdapterCapability.SCHEDULE_RESULT,
-                            AdapterCapability.SEMANTIC_HASH));
+                            AdapterCapability.SCHEDULE_RESULT));
         }
 
         @Override
@@ -127,18 +126,5 @@ class TargetProjectAdapterContractTest {
             };
         }
 
-        @Override
-        public SemanticHashStrategy<TextScheduleSnapshot> semanticHashStrategy() {
-            return snapshot -> {
-                try {
-                    byte[] digest = MessageDigest.getInstance("SHA-256")
-                            .digest(snapshot.payload().getBytes(StandardCharsets.UTF_8));
-                    return HexFormat.of().formatHex(digest);
-                } catch (NoSuchAlgorithmException exception) {
-                    throw new AdapterException(
-                            "ADAPTER_SEMANTIC_HASH_FAILED", "SHA-256 不可用", exception);
-                }
-            };
-        }
     }
 }

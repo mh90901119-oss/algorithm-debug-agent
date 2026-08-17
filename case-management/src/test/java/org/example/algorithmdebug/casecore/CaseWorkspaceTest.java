@@ -35,8 +35,11 @@ class CaseWorkspaceTest {
                 "SCHEDULE_RESULT",
                 "application/json");
 
-        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("baseline")));
-        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("inquiries")));
+        assertTrue(Files.notExists(workspace.caseRoot().resolve("baseline")));
+        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("contexts")));
+        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("analyses")));
+        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("evidence")));
+        assertTrue(Files.notExists(workspace.caseRoot().resolve("inquiries")));
         assertTrue(Files.isRegularFile(run.resolve("result/gantt.json")));
         assertEquals("result/gantt.json", reference.relativePath());
         assertThrows(FileAlreadyExistsException.class, () -> store.copy(

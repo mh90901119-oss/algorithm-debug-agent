@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="a.b.TargetTest" tests="1" failures="1" errors="0">
+  <testcase classname="a.b.TargetTest" name="runs">
+    <failure type="org.opentest4j.AssertionFailedError" message="expected: &lt;1&gt; but was: &lt;2&gt;">org.opentest4j.AssertionFailedError: expected: &lt;1&gt; but was: &lt;2&gt;
+ at a.b.TargetTest.runs(TargetTest.java:18)
+ at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60)</failure>
+  </testcase>
+</testsuite>

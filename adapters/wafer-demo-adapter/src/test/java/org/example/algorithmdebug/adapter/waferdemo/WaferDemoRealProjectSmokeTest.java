@@ -31,12 +31,9 @@ class WaferDemoRealProjectSmokeTest {
                     .orElseThrow();
         }
         WaferScheduleSnapshot snapshot = adapter.scheduleResultParser().parse(result);
-        String semanticHash = adapter.semanticHashStrategy().semanticHash(snapshot);
-
         assertTrue(java.nio.file.Files.isRegularFile(input));
         assertEquals("20260810101501.json", input.getFileName().toString());
         assertEquals(165, snapshot.operations().size());
         assertEquals(15, snapshot.finalWaferLocations().size());
-        assertEquals(64, semanticHash.length());
     }
 }

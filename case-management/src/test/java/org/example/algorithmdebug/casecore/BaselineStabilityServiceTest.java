@@ -2,7 +2,7 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.BaselineVerification;
 import org.example.algorithmdebug.contracts.CaseFingerprint;
-import org.example.algorithmdebug.contracts.CaseLifecycleState;
+import org.example.algorithmdebug.contracts.BaselineStabilityState;
 import org.example.algorithmdebug.contracts.RunId;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +18,7 @@ class BaselineStabilityServiceTest {
         BaselineVerification first = service.start(fingerprint, new RunId("RUN-001"), "a".repeat(64));
         BaselineVerification second = service.record(first, new RunId("RUN-002"), "a".repeat(64));
 
-        assertEquals(CaseLifecycleState.BASELINE_STABLE, second.state());
+        assertEquals(BaselineStabilityState.BASELINE_STABLE, second.state());
         assertEquals(2, second.observations().size());
     }
 
@@ -27,6 +27,6 @@ class BaselineStabilityServiceTest {
         BaselineVerification first = service.start(fingerprint, new RunId("RUN-001"), "a".repeat(64));
         BaselineVerification second = service.record(first, new RunId("RUN-002"), "b".repeat(64));
 
-        assertEquals(CaseLifecycleState.BASELINE_UNSTABLE, second.state());
+        assertEquals(BaselineStabilityState.BASELINE_UNSTABLE, second.state());
     }
 }

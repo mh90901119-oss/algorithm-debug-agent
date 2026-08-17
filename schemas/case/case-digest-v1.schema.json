@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/case-digest-v1.schema.json",
+  "title": "CaseDigest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "projectId", "targetTest", "latestContextId", "latestAnalysisId", "latestQuestionExcerpt", "latestRunId", "recentRuns", "incompleteRuns", "archiveWarnings", "contextCount", "analysisCount", "runCount", "truncated"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "caseId": { "$ref": "#/$defs/id" },
+    "projectId": { "$ref": "#/$defs/id" },
+    "targetTest": { "$ref": "#/$defs/targetTest" },
+    "latestContextId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }] },
+    "latestAnalysisId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }] },
+    "latestQuestionExcerpt": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "latestRunId": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/id" }] },
+    "recentRuns": { "type": "array", "maxItems": 20, "items": { "type": "object" } },
+    "incompleteRuns": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/id" } },
+    "archiveWarnings": {
+      "type": "array", "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["code", "message", "relativePath"],
+        "properties": {
+          "code": { "$ref": "#/$defs/id" },
+          "message": { "type": "string", "minLength": 1, "maxLength": 2048 },
+          "relativePath": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "contextCount": { "type": "integer", "minimum": 0 },
+    "analysisCount": { "type": "integer", "minimum": 0 },
+    "runCount": { "type": "integer", "minimum": 0 },
+    "truncated": { "type": "boolean" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "targetTest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName"],
+      "properties": {
+        "className": { "type": "string", "minLength": 3 },
+        "methodName": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

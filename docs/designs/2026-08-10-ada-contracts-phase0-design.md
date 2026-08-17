@@ -1,5 +1,12 @@
 # ada-contracts Phase 0 可实施详细设计
 
+> 2026-08-12 兼容性修订：`ToolResponse` 1.0 的 `nextAllowedActions` 固定状态机已由 ADR-006
+> 废弃；当前实现升级为 2.0，由 `data` 中的自描述事实和版本化 Skill 指导大模型决策。
+>
+> 2026-08-13 架构收敛：本文的 Inquiry/Turn 与复杂 Case 生命周期内容只保留为历史 Phase 0 记录。
+> 当前契约以 ADR-006 和 `2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 为准；
+> Java 实现已删除 `InquiryId`、`TurnId`、`CaseLifecycleState`，Baseline 使用专用状态枚举。
+
 - 文档状态：Implemented
 - 设计版本：1.1
 - 创建日期：2026-08-10
@@ -171,11 +178,12 @@ mvn test
 |---|---|---|
 | 2026-08-10 | 1.0 | Phase 0 实施设计 |
 | 2026-08-10 | 1.0 | 完成实现并记录测试结果 |
-| 2026-08-11 | 1.1 | 增加 CaseFingerprint、BaselineVerification 与 Case 生命周期；BaselineManifest 升级 2.0 |
+| 2026-08-11 | 1.1 | 增加 CaseFingerprint、BaselineVerification 与历史 Case 生命周期；BaselineManifest 升级 2.0 |
+| 2026-08-13 | 1.2 | 标记 Inquiry/Turn/复杂 Case 生命周期已被 Case/Context/Analysis 架构取代 |
 
 ## 13. Phase 0 Baseline 生命周期扩展
 
 跨模块设计 `2026-08-11-case-baseline-lifecycle-design.md` 已将运行身份拆分为运行前
 `CaseFingerprint` 与运行后 `ExecutionIdentity`，并新增 `BaselineRunObservation`、
-`BaselineVerification`、`CaseLifecycleState` 和 `RunStatus`。旧 `ExecutionIdentity` JSON 属于未发布
+`BaselineVerification`、历史 `CaseLifecycleState` 和 `RunStatus`。旧 `ExecutionIdentity` JSON 属于未发布
 的 0.1.0 契约，随 `BaselineManifest` Schema 2.0 一次迁移。

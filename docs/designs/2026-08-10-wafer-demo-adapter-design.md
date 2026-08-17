@@ -9,7 +9,9 @@
 
 > 本文 1.0～1.2 记录历史实现。2026-08-11 起由
 > `2026-08-11-case-baseline-lifecycle-design.md` 取代：Adapter 不再识别时间戳或选择最新文件，
-> 只描述专用复现 UT 的公共结果目录；运行窗口差分由 Debug Harness 负责。
+> 只描述专用复现 UT 的公共结果目录；运行窗口差分由 Debug Harness 负责。2026-08-17 起专属
+> `WaferSemanticHashStrategy` 也已删除，当前通用 JSON 内容指纹设计见
+> `2026-08-17-json-content-fingerprint-baseline-design.md`。
 
 ## 1. 背景与问题
 

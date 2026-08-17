@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/tool/tool-response-v2.schema.json",
+  "title": "ToolResponse v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "success", "code", "message", "data", "artifacts"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "success": { "type": "boolean" },
+    "code": { "type": "string", "minLength": 1 },
+    "message": { "type": "string", "minLength": 1 },
+    "data": {},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+        "properties": {
+          "artifactId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "artifactType": { "type": "string", "minLength": 1 },
+          "relativePath": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+          },
+          "mediaType": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+          "sizeBytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "success": { "const": true } }, "required": ["success"] },
+      "then": { "properties": { "data": { "not": { "type": "null" } } } }
+    },
+    {
+      "if": { "properties": { "success": { "const": false } }, "required": ["success"] },
+      "then": { "properties": { "data": { "type": "null" } } }
+    }
+  ]
+}

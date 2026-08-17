@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/workspace/workspace-manifest-v1.schema.json",
+  "title": "WorkspaceManifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "kind", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "kind": { "const": "ALGORITHM_DEBUG_WORKSPACE" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

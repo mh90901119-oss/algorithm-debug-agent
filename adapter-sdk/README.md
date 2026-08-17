@@ -1,7 +1,7 @@
 # adapter-sdk
 
 Algorithm Debug Agent 的目标项目适配 SPI。它把通用 Agent 与具体算法仓库的 Maven 启动方式、
-输入位置、结果格式和语义哈希规则隔离开。
+输入位置和结果格式隔离开。调度结果内容指纹由 Debug Harness 统一计算，不属于目标项目 Adapter。
 
 ## 当前能力
 
@@ -12,7 +12,6 @@ Algorithm Debug Agent 的目标项目适配 SPI。它把通用 Agent 与具体�
 - `InputLocator`；
 - `ScheduleResultLocator`；
 - 泛型 `ScheduleResultParser<T>`；
-- 泛型 `SemanticHashStrategy<T>`；
 - 无状态组合接口 `TargetProjectAdapter<T>`；
 - 带稳定错误码和 cause 的 `AdapterException`。
 
@@ -30,7 +29,7 @@ Algorithm Debug Agent 的目标项目适配 SPI。它把通用 Agent 与具体�
 ```java
 public final class MyAlgorithmAdapter
         implements TargetProjectAdapter<MyScheduleSnapshot> {
-    // 实现 inspect、启动规格和四个组合策略。
+    // 实现 inspect、启动规格、输入定位、结果源和结果解析。
 }
 ```
 
@@ -44,4 +43,3 @@ mvn -pl adapter-sdk -am test
 ```
 
 详细设计见 `docs/designs/2026-08-10-adapter-sdk-design.md`。
-

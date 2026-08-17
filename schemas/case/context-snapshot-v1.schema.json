@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/context-snapshot-v1.schema.json",
+  "title": "ContextSnapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "contextId", "projectId", "targetTest", "repositoryRevision", "sourceSnapshot", "inputSnapshot", "buildSnapshot", "completeness", "fingerprintSha256", "warnings", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "caseId": { "$ref": "#/$defs/id" },
+    "contextId": { "$ref": "#/$defs/id" },
+    "projectId": { "$ref": "#/$defs/id" },
+    "targetTest": { "$ref": "#/$defs/targetTest" },
+    "repositoryRevision": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "sourceSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sha256", "fileCount", "totalBytes", "completeness"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "fileCount": { "type": "integer", "minimum": 0 },
+        "totalBytes": { "type": "integer", "minimum": 0 },
+        "completeness": { "$ref": "#/$defs/completeness" }
+      }
+    },
+    "inputSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "relativePath", "sha256", "sizeBytes", "diagnostic"],
+      "properties": {
+        "status": { "enum": ["PRESENT", "MISSING", "NOT_APPLICABLE", "UNRESOLVED"] },
+        "relativePath": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^(?:[0-9a-f]{64})?$" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "diagnostic": { "type": "string", "maxLength": 2048 }
+      }
+    },
+    "buildSnapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pomSha256", "javaVersion", "adapterId", "adapterVersion"],
+      "properties": {
+        "pomSha256": { "$ref": "#/$defs/sha256" },
+        "javaVersion": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "adapterId": { "$ref": "#/$defs/id" },
+        "adapterVersion": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "completeness": { "$ref": "#/$defs/completeness" },
+    "fingerprintSha256": { "$ref": "#/$defs/sha256" },
+    "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "minLength": 1, "maxLength": 2048 } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "completeness": { "enum": ["COMPLETE", "INCOMPLETE"] },
+    "targetTest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName"],
+      "properties": {
+        "className": { "type": "string", "minLength": 3 },
+        "methodName": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

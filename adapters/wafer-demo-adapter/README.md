@@ -11,11 +11,11 @@
 - 生成 Maven 测试启动规格；
 - 定位复现 UT 的输入，并描述算法公共结果目录；
 - 严格解析调度结果为不可变快照；
-- 计算排除非语义文本噪声的 SHA-256；
 - 通过 Java `ServiceLoader` 发布 `WaferDemoAdapter`。
 
 Adapter 是无状态描述层，不启动 Maven、不注入 CodePath/JDWP，也不直接执行采集。后续
-`debug-harness` 会消费 `TestLaunchSpec`，Collector Adapter 会按采集计划扩展子 JVM 参数。
+`debug-harness` 会消费 `TestLaunchSpec`，在不可变复制结果后统一计算原始文件 SHA-256 和
+JSON Token 内容 SHA-256；Collector Adapter 会按采集计划扩展子 JVM 参数。
 
 ## 支持的复杂 Case
 
@@ -62,7 +62,7 @@ Adapter 不选择最新文件，也不约束文件名。Debug Harness 比较运�
 
 ## 设计文档
 
-完整约束、类设计、哈希字段和测试证据见：
+完整约束、类设计和测试证据见：
 
 ```text
 docs/designs/2026-08-10-wafer-demo-adapter-design.md

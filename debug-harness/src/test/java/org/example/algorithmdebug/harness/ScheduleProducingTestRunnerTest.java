@@ -8,6 +8,7 @@ import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,8 +22,9 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ScheduleProducingTestRunnerTest {
 
@@ -37,7 +39,7 @@ class ScheduleProducingTestRunnerTest {
         AtomicLong nanos = new AtomicLong();
         OutputStabilityWaiter waiter = waiter(snapshotter, nanos);
         TargetTestExecutor executor = (spec, options) -> {
-            writeResult(output, "schedule:1");
+            writeResult(output, "{\"schedule\":1}");
             return runResult(RunCompletion.SUCCEEDED, OptionalInt.of(0));
         };
         ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
@@ -47,21 +49,24 @@ class ScheduleProducingTestRunnerTest {
                 new ScheduleResultCapture<>(snapshotter, 1024));
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
-                spec(), options(), source, this::parse, ignored -> "a".repeat(64),
+                spec(), options(), source, this::parse,
                 temporaryDirectory.resolve("run-success/result/gantt.json"));
 
         assertTrue(result.scheduleResult().isPresent());
+        assertEquals(GanttOutcome.PRESENT, result.ganttOutcome());
+        assertTrue(result.agentFailure().isEmpty());
+        assertEquals(1, result.changedOutputCandidates().size());
         assertTrue(Files.isRegularFile(result.scheduleResult().orElseThrow().capturedPath()));
     }
 
     @Test
-    void shouldNotInspectOrCaptureOutputAfterFailedRun() throws Exception {
+    void shouldCaptureStableOutputAfterFailedRun() throws Exception {
         Path output = temporaryDirectory.resolve("output-failed");
         ScheduleResultSource source = new ScheduleResultSource(output, false);
         OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
         AtomicLong nanos = new AtomicLong();
         TargetTestExecutor executor = (spec, options) -> {
-            writeResult(output, "schedule:stale-partial");
+            writeResult(output, "{\"schedule\":\"stale-partial\"}");
             return runResult(RunCompletion.FAILED, OptionalInt.of(1));
         };
         ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
@@ -72,10 +77,79 @@ class ScheduleProducingTestRunnerTest {
         Path destination = temporaryDirectory.resolve("run-failed/result/gantt.json");
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
-                spec(), options(), source, this::parse, ignored -> "a".repeat(64), destination);
+                spec(), options(), source, this::parse, destination);
 
+        assertTrue(result.scheduleResult().isPresent());
+        assertEquals(GanttOutcome.PRESENT, result.ganttOutcome());
+        assertTrue(result.agentFailure().isEmpty());
+        assertEquals(1, result.changedOutputCandidates().size());
+        assertTrue(Files.isRegularFile(destination));
+    }
+
+    @Test
+    void shouldRetainFailedRunWhenGanttCaptureFails() throws Exception {
+        Path output = temporaryDirectory.resolve("output-invalid");
+        ScheduleResultSource source = new ScheduleResultSource(output, false);
+        OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
+        AtomicLong nanos = new AtomicLong();
+        TargetTestExecutor executor = (spec, options) -> {
+            writeResult(output, "not-a-schedule");
+            return runResult(RunCompletion.FAILED, OptionalInt.of(1));
+        };
+        ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
+                executor,
+                snapshotter,
+                waiter(snapshotter, nanos),
+                new ScheduleResultCapture<>(snapshotter, 1024));
+
+        ScheduleRunResult<TextSnapshot> result = runner.run(
+                spec(), options(), source,
+                path -> {
+                    throw new AdapterException("TEST_INVALID_GANTT", "调度结果格式无效");
+                },
+                temporaryDirectory.resolve("run-invalid/result/gantt.json"));
+
+        assertEquals(RunCompletion.FAILED, result.run().completion());
+        assertEquals(1, result.run().exitCode().orElseThrow());
+        assertEquals(GanttOutcome.INCOMPLETE, result.ganttOutcome());
         assertTrue(result.scheduleResult().isEmpty());
-        assertFalse(Files.exists(destination));
+        assertEquals("HARNESS_RESULT_NOT_PRODUCED", result.agentFailure().orElseThrow().code());
+        assertEquals(List.of(output.resolve("result.json")), result.changedOutputCandidates());
+        assertThrows(UnsupportedOperationException.class,
+                () -> result.changedOutputCandidates().clear());
+    }
+
+    @Test
+    void shouldConvertUncheckedGanttFailureAfterRunIntoAgentDiagnostic() throws Exception {
+        Path output = temporaryDirectory.resolve("output-unchecked");
+        ScheduleResultSource source = new ScheduleResultSource(output, false);
+        OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(100);
+        AtomicLong nanos = new AtomicLong();
+        TargetTestExecutor executor = (spec, options) -> {
+            writeResult(output, "{\"schedule\":1}");
+            return runResult(RunCompletion.SUCCEEDED, OptionalInt.of(0));
+        };
+        ScheduleProducingTestRunner<TextSnapshot> runner = new ScheduleProducingTestRunner<>(
+                executor,
+                snapshotter,
+                waiter(snapshotter, nanos),
+                new ScheduleResultCapture<>(snapshotter, 1024));
+
+        IllegalStateException parserFailure = new IllegalStateException("unexpected parser failure");
+        ScheduleRunResult<TextSnapshot> result = runner.run(
+                spec(), options(), source,
+                path -> {
+                    throw parserFailure;
+                },
+                temporaryDirectory.resolve("run-unchecked/result/gantt.json"));
+
+        assertEquals(RunCompletion.SUCCEEDED, result.run().completion());
+        assertEquals(GanttOutcome.INCOMPLETE, result.ganttOutcome());
+        assertEquals("HARNESS_GANTT_PROCESSING_FAILED", result.agentFailure().orElseThrow().code());
+        assertEquals("java.lang.IllegalStateException",
+                result.agentFailure().orElseThrow().exceptionClass());
+        assertEquals(parserFailure, result.agentFailureCause().orElseThrow());
+        assertEquals(List.of(output.resolve("result.json")), result.changedOutputCandidates());
     }
 
     private OutputStabilityWaiter waiter(OutputDirectorySnapshotter snapshotter, AtomicLong nanos) {

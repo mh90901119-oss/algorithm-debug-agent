@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,13 +44,12 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
             OutputDirectorySnapshot before,
             ScheduleResultSource source,
             ScheduleResultParser<T> parser,
-            SemanticHashStrategy<T> hashStrategy,
             Path destination) throws HarnessException {
-        if (before == null || source == null || parser == null || hashStrategy == null || destination == null) {
+        if (before == null || source == null || parser == null || destination == null) {
             throw new IllegalArgumentException("捕获参数不能为空");
         }
         OutputDirectorySnapshot after = snapshotter.snapshot(source);
-        return capture(before, after, parser, hashStrategy, destination);
+        return capture(before, after, parser, destination);
     }
 
     /**
@@ -61,9 +59,8 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
             OutputDirectorySnapshot before,
             OutputDirectorySnapshot after,
             ScheduleResultParser<T> parser,
-            SemanticHashStrategy<T> hashStrategy,
             Path destination) throws HarnessException {
-        if (before == null || after == null || parser == null || hashStrategy == null || destination == null) {
+        if (before == null || after == null || parser == null || destination == null) {
             throw new IllegalArgumentException("捕获参数不能为空");
         }
         List<Path> changed = after.changedSince(before);
@@ -95,18 +92,18 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
         Path captured = copyAtomically(selected.path(), destination);
         try {
             String rawHash = sha256(captured);
-            String semanticHash = hashStrategy.semanticHash(selected.snapshot());
+            String normalizedJsonHash = new JsonTokenContentHasher().sha256(captured);
             return new CapturedScheduleResult<>(
                     selected.path(),
                     captured,
                     rawHash,
-                    semanticHash,
+                    normalizedJsonHash,
                     selected.sizeBytes(),
                     selected.snapshot());
-        } catch (IOException | AdapterException exception) {
+        } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_RESULT_HASH_FAILED",
-                    "无法计算已捕获调度结果哈希: " + captured,
+                    "无法计算已捕获调度结果原始哈希: " + captured,
                     exception);
         }
     }

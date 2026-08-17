@@ -9,7 +9,6 @@ import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
-import org.example.algorithmdebug.adapter.SemanticHashStrategy;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -37,14 +36,11 @@ public final class WaferDemoAdapter implements TargetProjectAdapter<WaferSchedul
             Set.of(
                     AdapterCapability.BASELINE_EXECUTION,
                     AdapterCapability.INPUT_LOCATION,
-                    AdapterCapability.SCHEDULE_RESULT,
-                    AdapterCapability.SEMANTIC_HASH));
+                    AdapterCapability.SCHEDULE_RESULT));
 
     private final InputLocator inputLocator = new WaferInputLocator();
     private final ScheduleResultParser<WaferScheduleSnapshot> resultParser =
             new WaferScheduleResultParser();
-    private final SemanticHashStrategy<WaferScheduleSnapshot> hashStrategy =
-            new WaferSemanticHashStrategy();
 
     @Override
     public AdapterDescriptor descriptor() {
@@ -72,12 +68,6 @@ public final class WaferDemoAdapter implements TargetProjectAdapter<WaferSchedul
             throw new AdapterException(
                     "ADAPTER_PROJECT_NOT_SUPPORTED",
                     "未找到 Wafer Demo 目标测试源码: " + root.resolve(TEST_SOURCE));
-        }
-        Path complexInput = root.resolve(WaferDemoCaseCatalog.complexInputRelativePath());
-        if (!Files.isRegularFile(complexInput)) {
-            throw new AdapterException(
-                    "ADAPTER_INPUT_NOT_FOUND",
-                    "未找到 Wafer Demo 复杂 Case 输入: " + complexInput);
         }
         return new ProjectDescriptor(
                 new ProjectId(WaferDemoChecks.PROJECT_ID),
@@ -134,8 +124,4 @@ public final class WaferDemoAdapter implements TargetProjectAdapter<WaferSchedul
         return resultParser;
     }
 
-    @Override
-    public SemanticHashStrategy<WaferScheduleSnapshot> semanticHashStrategy() {
-        return hashStrategy;
-    }
 }
