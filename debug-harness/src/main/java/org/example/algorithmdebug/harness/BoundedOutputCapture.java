@@ -49,8 +49,20 @@ public final class BoundedOutputCapture {
     /** 排空到已经由 {@link #prepare(Path)} 创建的空日志。 */
     RunLog capturePrepared(InputStream input, Path destination, long maximumBytes)
             throws HarnessException {
+        return capturePrepared(input, destination, maximumBytes, (bytes, offset, length) -> { });
+    }
+
+    /** 排空日志并把每个原始字节块同步通知给有界观察者。 */
+    RunLog capturePrepared(
+            InputStream input,
+            Path destination,
+            long maximumBytes,
+            OutputChunkObserver observer) throws HarnessException {
         if (input == null || destination == null || maximumBytes <= 0) {
             throw new IllegalArgumentException("input、destination 和 maximumBytes 必须有效");
+        }
+        if (observer == null) {
+            throw new IllegalArgumentException("observer 不能为空");
         }
         Path normalized = destination.toAbsolutePath().normalize();
         OutputStream output;
@@ -72,6 +84,7 @@ public final class BoundedOutputCapture {
                 if (read == 0) {
                     continue;
                 }
+                observer.accept(buffer, 0, read);
                 int writable = (int) Math.min(read, maximumBytes - captured);
                 if (writable > 0) {
                     output.write(buffer, 0, writable);
