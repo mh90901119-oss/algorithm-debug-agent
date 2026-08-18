@@ -5,6 +5,11 @@ import org.example.algorithmdebug.core.DoctorApplicationService;
 import org.example.algorithmdebug.core.ProjectApplicationService;
 import org.example.algorithmdebug.core.RunApplicationService;
 import org.example.algorithmdebug.core.WorkspaceApplicationService;
+import org.example.algorithmdebug.core.StaticAnalysisApplicationService;
+import org.example.algorithmdebug.core.CollectionApplicationService;
+import org.example.algorithmdebug.plan.CodePathPlanRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,6 +29,8 @@ public final class CliCommandExecutor {
     private final DoctorApplicationService doctorService;
     private final CaseApplicationService caseService;
     private final RunApplicationService runService;
+    private final StaticAnalysisApplicationService staticAnalysisService;
+    private final CollectionApplicationService collectionService;
 
     private static final int MAX_QUESTION_BYTES = 65_536;
 
@@ -41,9 +48,12 @@ public final class CliCommandExecutor {
             ProjectApplicationService projectService,
             DoctorApplicationService doctorService,
             CaseApplicationService caseService,
-            RunApplicationService runService) {
+            RunApplicationService runService,
+            StaticAnalysisApplicationService staticAnalysisService,
+            CollectionApplicationService collectionService) {
         if (workspaceService == null || projectService == null || doctorService == null
-                || caseService == null || runService == null) {
+                || caseService == null || runService == null || staticAnalysisService == null
+                || collectionService == null) {
             throw new IllegalArgumentException("CLI Core 服务不能为空");
         }
         this.workspaceService = workspaceService;
@@ -51,6 +61,8 @@ public final class CliCommandExecutor {
         this.doctorService = doctorService;
         this.caseService = caseService;
         this.runService = runService;
+        this.staticAnalysisService = staticAnalysisService;
+        this.collectionService = collectionService;
     }
 
     /**
@@ -82,6 +94,19 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.RunExecute run) {
             return runService.execute(
                     run.workspace(), run.projectId(), run.caseId(), run.analysisId());
+        }
+        if (command instanceof CliCommand.StaticAnalyze analyze) {
+            return staticAnalysisService.analyze(
+                    analyze.workspace(), analyze.projectId(), analyze.caseId(), analyze.analysisId());
+        }
+        if (command instanceof CliCommand.CodePathPlanCreate create) {
+            return staticAnalysisService.createCodePathPlan(
+                    create.workspace(), create.projectId(), create.caseId(), create.analysisId(),
+                    readPlanRequest(create.requestFile()));
+        }
+        if (command instanceof CliCommand.CodePathCollectionExecute collect) {
+            return collectionService.executeCodePath(
+                    collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
         }
         throw new IllegalArgumentException("不支持的 CLI 命令类型");
     }
@@ -120,5 +145,48 @@ public final class CliCommandExecutor {
             throw new CliInputException("question-file 内容不能为空");
         }
         return question;
+    }
+
+    /** 严格读取 64 KiB 内的 CodePath 计划请求 JSON。 */
+    static CodePathPlanRequest readPlanRequest(Path path) {
+        byte[] bytes = readBoundedFile(path, "request-file");
+        String json = decodeUtf8(bytes, "request-file");
+        try {
+            return new ObjectMapper().registerModule(new JavaTimeModule())
+                    .readValue(json, CodePathPlanRequest.class);
+        } catch (IOException | RuntimeException failure) {
+            throw new CliInputException("request-file 不是有效的 CodePathPlanRequest JSON", failure);
+        }
+    }
+
+    private static String decodeUtf8(byte[] bytes, String label) {
+        try {
+            String value = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes)).toString();
+            return value.startsWith("\uFEFF") ? value.substring(1) : value;
+        } catch (CharacterCodingException failure) {
+            throw new CliInputException(label + " 不是有效 UTF-8", failure);
+        }
+    }
+
+    private static byte[] readBoundedFile(Path path, String label) {
+        if (path == null) {
+            throw new CliInputException(label + " 不能为空");
+        }
+        Path normalized = path.toAbsolutePath().normalize();
+        if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
+            throw new CliInputException(label + " 不存在或不是普通文件");
+        }
+        try (java.io.InputStream input = Files.newInputStream(normalized)) {
+            byte[] bytes = input.readNBytes(MAX_QUESTION_BYTES + 1);
+            if (bytes.length > MAX_QUESTION_BYTES) {
+                throw new CliInputException(label + " 超过 64 KiB");
+            }
+            return bytes;
+        } catch (IOException | SecurityException failure) {
+            throw new CliInputException("无法读取 " + label, failure);
+        }
     }
 }

@@ -46,6 +46,10 @@ public final class SchemaVersions {
     /** 环境诊断报告 Schema 版本。 */
     public static final String DOCTOR_REPORT = "1.0";
 
+    /** 目标 UT 静态方法目录 Schema 版本。 */
+    public static final String METHOD_CATALOG = "1.0";
+    public static final String CODEPATH_COLLECTION_PLAN = "1.0";
+
     private SchemaVersions() {
     }
 }

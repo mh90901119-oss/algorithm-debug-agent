@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/codepath-plan-v1.schema.json",
+  "title": "CodePath Collection Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planId", "caseId", "contextId", "analysisId", "targetTest", "sourceFingerprintSha256", "selectors", "packagePrefixes", "captureScope", "budget", "estimatedPackageEvents", "rationale", "createdAt"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "planId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "caseId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "contextId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "analysisId": {"type": "string", "minLength": 1, "maxLength": 128},
+    "targetTest": {"$ref": "#/$defs/targetTest"},
+    "sourceFingerprintSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "selectors": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"$ref": "#/$defs/selector"}},
+    "packagePrefixes": {"type": "array", "minItems": 1, "maxItems": 200, "items": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*$"}},
+    "captureScope": {"const": "PACKAGE_SUPERSET"},
+    "budget": {"$ref": "#/$defs/budget"},
+    "estimatedPackageEvents": {"type": "integer", "minimum": 0, "maximum": 1000000},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^\\S(?:[\\s\\S]*\\S)?(?![\\s\\S])"},
+    "createdAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "targetTest": {"type": "object", "additionalProperties": false, "required": ["className", "methodName"], "properties": {"className": {"type": "string", "minLength": 3, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+$"}, "methodName": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"}}},
+    "selector": {"type": "object", "additionalProperties": false, "allOf": [{"if": {"properties": {"methodName": {"const": "<init>"}}, "required": ["methodName"]}, "then": {"properties": {"descriptor": {"pattern": "^.*\\)V$"}}}}], "required": ["methodKey", "className", "methodName", "descriptor", "sourceSha256"], "properties": {"methodKey": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+#(?:<init>|[A-Za-z_$][A-Za-z0-9_$]*)\\((?:(?:[BCDFIJSZ]|\\[{1,255}(?:[BCDFIJSZ]|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;))*\\)(?:V|[BCDFIJSZ]|\\[{1,255}(?:[BCDFIJSZ]|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)$"}, "className": {"type": "string", "minLength": 3, "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+$"}, "methodName": {"type": "string", "minLength": 1, "pattern": "^(?:<init>|[A-Za-z_$][A-Za-z0-9_$]*)$"}, "descriptor": {"type": "string", "minLength": 3, "maxLength": 512, "pattern": "^\\((?:(?:[BCDFIJSZ]|\\[{1,255}(?:[BCDFIJSZ]|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;))*\\)(?:V|[BCDFIJSZ]|\\[{1,255}(?:[BCDFIJSZ]|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)|L[A-Za-z_$][A-Za-z0-9_$]*(?:/[A-Za-z_$][A-Za-z0-9_$]*)*;)$"}, "sourceSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+    "budget": {"type": "object", "additionalProperties": false, "required": ["maxEvents", "maxBytes", "timeoutMillis", "maxCallDepth"], "properties": {"maxEvents": {"type": "integer", "minimum": 1, "maximum": 1000000}, "maxBytes": {"type": "integer", "minimum": 1, "maximum": 52428800}, "timeoutMillis": {"type": "integer", "minimum": 1, "maximum": 1200000}, "maxCallDepth": {"type": "integer", "minimum": 1, "maximum": 10000}}}
+  }
+}

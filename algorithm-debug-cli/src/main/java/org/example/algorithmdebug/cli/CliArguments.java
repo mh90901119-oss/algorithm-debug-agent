@@ -4,6 +4,7 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.PlanId;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -75,6 +76,40 @@ public final class CliArguments {
                     new ProjectId(options.get("--project-id")),
                     new CaseId(options.get("--case-id")),
                     new AnalysisId(options.get("--analysis-id")));
+        }
+        if (matches(arguments, "static", "analyze")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            return new CliCommand.StaticAnalyze(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")),
+                    new AnalysisId(options.get("--analysis-id")));
+        }
+        if (arguments.length >= 3 && "plan".equals(arguments[0])
+                && "codepath".equals(arguments[1]) && "create".equals(arguments[2])) {
+            Map<String, String> options = options(arguments, 3, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--request-file"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--request-file"));
+            return new CliCommand.CodePathPlanCreate(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")),
+                    new AnalysisId(options.get("--analysis-id")),
+                    path(options.get("--request-file"), "--request-file"));
+        }
+        if (arguments.length >= 3 && "collection".equals(arguments[0])
+                && "codepath".equals(arguments[1]) && "execute".equals(arguments[2])) {
+            Map<String, String> options = options(arguments, 3, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--plan-id"));
+            requireExactly(options, Set.of("--workspace", "--project-id", "--case-id", "--plan-id"));
+            return new CliCommand.CodePathCollectionExecute(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")), new PlanId(options.get("--plan-id")));
         }
         if ("doctor".equals(arguments[0])) {
             Map<String, String> options = options(arguments, 1, Set.of("--workspace", "--project"));

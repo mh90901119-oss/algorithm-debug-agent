@@ -1,7 +1,11 @@
 {
   "schemaVersion": "1.0",
   "java": { "recommended": 21, "minimum": 17 },
-  "codePathTracer": { "version": "0.1.0-SNAPSHOT", "gitCommit": "f8be120" },
+  "codePathTracer": {
+    "version": "0.1.0-SNAPSHOT",
+    "gitCommit": "f8be120694a5d5bb1405c0f3e1a4396e89b6dfa1",
+    "launcherSha256": "669a2cc634e5238db8abd35f924f9ad1cc4e9403fb84d7dcb650b612641c6590",
+    "license": "Apache-2.0"
+  },
   "jdwpCollector": { "status": "TO_BE_LOCKED" }
 }
-

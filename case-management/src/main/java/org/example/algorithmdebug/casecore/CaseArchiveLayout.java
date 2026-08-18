@@ -4,6 +4,8 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.CollectionId;
 
 import java.nio.file.Path;
 
@@ -76,8 +78,47 @@ public final class CaseArchiveLayout {
 
     /** @return 指定 Analysis 请求文档 */
     public Path analysisDocument(AnalysisId analysisId) {
-        return child(child(analysesRoot(), safeSegment(analysisId.value(), "analysisId")),
-                "analysis-request.json");
+        return child(analysisRoot(analysisId), "analysis-request.json");
+    }
+
+    /** @return 指定 Analysis 目录 */
+    public Path analysisRoot(AnalysisId analysisId) {
+        return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
+    }
+
+    /** @return 指定 Analysis 的静态方法目录 */
+    public Path analysisMethodCatalog(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "method-catalog.json");
+    }
+
+    /** @return 指定 Analysis 的采集计划根目录 */
+    public Path analysisPlansRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "plans");
+    }
+
+    /** @return 指定 CodePath 计划文档 */
+    public Path planDocument(AnalysisId analysisId, PlanId planId) {
+        return child(analysisPlansRoot(analysisId), safeSegment(planId.value(), "planId") + ".json");
+    }
+
+    /** @return 当前 Case 的动态采集根目录 */
+    public Path collectionsRoot() {
+        return child(caseRoot, "collections");
+    }
+
+    /** @return 指定动态采集目录 */
+    public Path collectionRoot(CollectionId collectionId) {
+        return child(collectionsRoot(), safeSegment(collectionId.value(), "collectionId"));
+    }
+
+    /** @return Collector 启动前的不可变请求文档 */
+    public Path collectionRequest(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "collection-request.json");
+    }
+
+    /** @return 动态采集的 Baseline 一致性检查文档 */
+    public Path collectionBaselineCheck(CollectionId collectionId) {
+        return child(child(collectionRoot(collectionId), "validation"), "baseline-check.json");
     }
 
     /** @return Run 根目录 */

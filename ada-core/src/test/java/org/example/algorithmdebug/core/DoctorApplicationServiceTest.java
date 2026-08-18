@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -119,6 +120,25 @@ class DoctorApplicationServiceTest {
         assertTrue(codes(report).contains("WORKSPACE_PATH_INVALID"));
         assertTrue(codes(report).contains("WORKSPACE_WRITE_FAILED"));
         assertTrue(codes(report).contains("PROJECT_NOT_REQUESTED"));
+    }
+
+    @Test
+    void shouldIncludeInjectedCodePathToolDiagnostic() {
+        Path workspace = initializeWorkspace();
+        DoctorApplicationService doctor = new DoctorApplicationService(
+                () -> 21,
+                new MavenExecutableLocator(Map.of(), ";", true),
+                manifestRepository(),
+                List.of(() -> new DoctorCheck(
+                        "codepath", DoctorStatus.FAIL,
+                        "CODEPATH_TOOL_HASH_MISMATCH", "Launcher Hash 不匹配")));
+
+        DoctorReport report = doctor.diagnose(
+                workspace, Optional.empty(), Optional.empty());
+
+        assertEquals(6, report.checks().size());
+        assertTrue(codes(report).contains("CODEPATH_TOOL_HASH_MISMATCH"));
+        assertEquals(DoctorStatus.FAIL, report.overallStatus());
     }
 
     private Path initializeWorkspace() {

@@ -13,6 +13,13 @@ import org.example.algorithmdebug.casecore.WorkspaceInitializer;
 import org.example.algorithmdebug.casecore.WorkspaceManifestRepository;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.harness.MavenTestExecutor;
+import org.example.algorithmdebug.plan.CodePathPlanCompiler;
+import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
+import org.example.algorithmdebug.methodpath.MethodPathCollector;
+import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
+import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
+import org.example.algorithmdebug.contracts.DoctorCheck;
+import org.example.algorithmdebug.contracts.DoctorStatus;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -31,18 +38,24 @@ public final class ControlPlaneServices {
     private final DoctorApplicationService doctor;
     private final CaseApplicationService cases;
     private final RunApplicationService runs;
+    private final StaticAnalysisApplicationService staticAnalysis;
+    private final CollectionApplicationService collections;
 
     private ControlPlaneServices(
             WorkspaceApplicationService workspace,
             ProjectApplicationService project,
             DoctorApplicationService doctor,
             CaseApplicationService cases,
-            RunApplicationService runs) {
+            RunApplicationService runs,
+            StaticAnalysisApplicationService staticAnalysis,
+            CollectionApplicationService collections) {
         this.workspace = workspace;
         this.project = project;
         this.doctor = doctor;
         this.cases = cases;
         this.runs = runs;
+        this.staticAnalysis = staticAnalysis;
+        this.collections = collections;
     }
 
     /**
@@ -62,7 +75,8 @@ public final class ControlPlaneServices {
             String pathSeparator,
             boolean windows) {
         return createInternal(
-                clock, javaFeatureSupplier, environment, pathSeparator, windows, null, null);
+                clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                null, null, null, null, List.of());
     }
 
     /**
@@ -93,9 +107,58 @@ public final class ControlPlaneServices {
         if (adapters == null || mavenExecutable == null) {
             throw new IllegalArgumentException("完整控制面必须提供 adapters 和 mavenExecutable");
         }
-        return createInternal(
-                clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                List.copyOf(adapters), mavenExecutable);
+        MethodPathCollector unavailableCollector = request -> {
+            throw new MethodPathCollectionException(
+                    "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath launcher 未配置", null);
+        };
+        TargetClasspathResolver unavailableClasspath = (maven, module, output) -> {
+            throw new MethodPathCollectionException(
+                    "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath classpath resolver 未配置", null);
+        };
+        return create(clock, javaFeatureSupplier, environment, pathSeparator, windows, adapters,
+                mavenExecutable, unavailableCollector, unavailableClasspath,
+                () -> new DoctorCheck(
+                        "codepath", DoctorStatus.FAIL, "CODEPATH_TOOL_NOT_CONFIGURED",
+                        "CodePath launcher 未配置"));
+    }
+
+    /** CLI 组合根显式注入 Collector 实现；Core 仅依赖稳定 SPI。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Optional<Path> mavenExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver) {
+        return create(clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, mavenExecutable, collector, classpathResolver,
+                () -> new DoctorCheck(
+                        "codepath", DoctorStatus.PASS, "CODEPATH_TOOL_INJECTED",
+                        "CodePath Collector 已由组合根注入"));
+    }
+
+    /** CLI 组合根同时注入 Collector 与其确定性 Doctor 探针。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Optional<Path> mavenExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver,
+            ToolDoctorProbe toolProbe) {
+        if (adapters == null || mavenExecutable == null || collector == null
+                || classpathResolver == null || toolProbe == null) {
+            throw new IllegalArgumentException("完整控制面组合根依赖不能为空");
+        }
+        return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                List.of(toolProbe));
     }
 
     private static ControlPlaneServices createInternal(
@@ -105,9 +168,12 @@ public final class ControlPlaneServices {
             String pathSeparator,
             boolean windows,
             List<TargetProjectAdapter<?>> adapters,
-            Optional<Path> mavenExecutable) {
+            Optional<Path> mavenExecutable,
+            MethodPathCollector methodPathCollector,
+            TargetClasspathResolver classpathResolver,
+            List<ToolDoctorProbe> toolProbes) {
         if (clock == null || javaFeatureSupplier == null || environment == null
-                || pathSeparator == null || pathSeparator.isEmpty()) {
+                || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null) {
             throw new IllegalArgumentException("控制面装配参数不能为空");
         }
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
@@ -128,6 +194,8 @@ public final class ControlPlaneServices {
                 environment, pathSeparator, windows);
         CaseApplicationService cases = null;
         RunApplicationService runs = null;
+        StaticAnalysisApplicationService staticAnalysis = null;
+        CollectionApplicationService collections = null;
         if (adapters != null) {
             AdapterCatalog catalog = new AdapterCatalog(adapters);
             OpaqueIdGenerator ids = new OpaqueIdGenerator();
@@ -139,13 +207,24 @@ public final class ControlPlaneServices {
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                     catalog, ids, clock, new MavenTestExecutor(),
                     new RunArtifactArchiver(), mavenExecutable);
+            staticAnalysis = new StaticAnalysisApplicationService(
+                    new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                    new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), clock);
+            collections = new CollectionApplicationService(
+                    new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
+                    ids, clock, mavenExecutable, currentJavaExecutable(windows),
+                    methodPathCollector, classpathResolver,
+                    new ContextSnapshotBuilder()::captureSourceSnapshot);
         }
         return new ControlPlaneServices(
                 new WorkspaceApplicationService(initializer),
                 new ProjectApplicationService(registry),
-                new DoctorApplicationService(javaFeatureSupplier, mavenLocator, manifestRepository),
+                new DoctorApplicationService(
+                        javaFeatureSupplier, mavenLocator, manifestRepository, toolProbes),
                 cases,
-                runs);
+                runs,
+                staticAnalysis,
+                collections);
     }
 
     /** @return Workspace 初始化服务 */
@@ -177,5 +256,26 @@ public final class ControlPlaneServices {
             throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
         }
         return runs;
+    }
+
+    /** @return 静态分析与 CodePath 计划用例；基础控制面装配不提供 */
+    public StaticAnalysisApplicationService staticAnalysis() {
+        if (staticAnalysis == null) {
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
+        }
+        return staticAnalysis;
+    }
+
+    /** @return CodePath/JDWP 动态采集用例；基础控制面装配不提供 */
+    public CollectionApplicationService collections() {
+        if (collections == null) {
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
+        }
+        return collections;
+    }
+
+    private static Path currentJavaExecutable(boolean windows) {
+        return Path.of(System.getProperty("java.home"), "bin", windows ? "java.exe" : "java")
+                .toAbsolutePath().normalize();
     }
 }

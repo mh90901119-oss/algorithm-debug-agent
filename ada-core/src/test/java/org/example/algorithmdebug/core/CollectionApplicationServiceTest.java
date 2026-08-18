@@ -1,0 +1,405 @@
+package org.example.algorithmdebug.core;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.HexFormat;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.example.algorithmdebug.adapter.AdapterCapability;
+import org.example.algorithmdebug.adapter.AdapterDescriptor;
+import org.example.algorithmdebug.adapter.BuildTool;
+import org.example.algorithmdebug.adapter.InputLocator;
+import org.example.algorithmdebug.adapter.ProjectDescriptor;
+import org.example.algorithmdebug.adapter.RunMode;
+import org.example.algorithmdebug.adapter.ScheduleResultParser;
+import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
+import org.example.algorithmdebug.adapter.ScheduleResultSource;
+import org.example.algorithmdebug.adapter.TargetProjectAdapter;
+import org.example.algorithmdebug.adapter.TestLaunchSpec;
+import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
+import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
+import org.example.algorithmdebug.casecore.CaseArchiveRepository;
+import org.example.algorithmdebug.casecore.ContextInputProbe;
+import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
+import org.example.algorithmdebug.casecore.ContextSnapshotRequest;
+import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
+import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
+import org.example.algorithmdebug.casecore.WorkspaceLayout;
+import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.CaseId;
+import org.example.algorithmdebug.contracts.CaseManifest;
+import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
+import org.example.algorithmdebug.contracts.ContextId;
+import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.ProjectRegistration;
+import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.RunRequest;
+import org.example.algorithmdebug.contracts.RunResultFingerprint;
+import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SourceSnapshot;
+import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.methodpath.CollectionCompletion;
+import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
+import org.example.algorithmdebug.methodpath.MethodPathCollectionResult;
+import org.example.algorithmdebug.methodpath.MethodPathCollector;
+import org.example.algorithmdebug.methodpath.MethodPathManifest;
+import org.example.algorithmdebug.plan.CodePathPlanCompiler;
+import org.example.algorithmdebug.plan.CodePathPlanRequest;
+import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+class CollectionApplicationServiceTest {
+
+    private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
+    private static final CaseId CASE_ID = new CaseId("case-1");
+    private static final ContextId CONTEXT_ID = new ContextId("context-1");
+    private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
+    private static final ProjectId PROJECT_ID = new ProjectId("project-1");
+    private static final PlanId PLAN_ID = new PlanId("plan-1");
+    private static final TargetTest TARGET =
+            new TargetTest("fixture.TargetTest", "caseUnderTest");
+
+    @TempDir
+    Path temporaryDirectory;
+
+    private Path workspace;
+    private Path module;
+    private Path scheduleOutput;
+    private ContextSnapshot context;
+    private BoundedDocumentMapper mapper;
+    private AtomicDocumentWriter writer;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        workspace = Files.createDirectory(temporaryDirectory.resolve("workspace"));
+        module = Files.createDirectory(temporaryDirectory.resolve("module"));
+        scheduleOutput = Files.createDirectories(module.resolve("target/schedules"));
+        Files.writeString(module.resolve("pom.xml"), "<project/>");
+        Path targetSource = module.resolve("src/test/java/fixture/TargetTest.java");
+        Files.createDirectories(targetSource.getParent());
+        Files.writeString(targetSource, """
+                package fixture;
+                class TargetTest { void caseUnderTest() { } }
+                """);
+
+        mapper = new BoundedDocumentMapper();
+        writer = new AtomicDocumentWriter();
+        WorkspaceLayout layout = WorkspaceLayout.of(workspace);
+        Files.createDirectories(layout.projectCases(PROJECT_ID));
+        context = new ContextSnapshotBuilder().build(new ContextSnapshotRequest(
+                CASE_ID, CONTEXT_ID, PROJECT_ID, TARGET, module, temporaryDirectory,
+                "UNAVAILABLE", "21", "fixture", "1.0",
+                ContextInputProbe.missing("input/case.json", "not required"), NOW));
+        new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
+                SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
+                portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
+                context.buildSnapshot().pomSha256(), NOW));
+        CaseArchiveRepository archive = archive();
+        archive.createCase(new CaseManifest(
+                SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET, "why", NOW));
+        archive.createContext(context);
+        archive.createAnalysis(new AnalysisRequest(
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+
+        StaticAnalysisApplicationService staticAnalysis = new StaticAnalysisApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());
+        staticAnalysis.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        staticAnalysis.createCodePathPlan(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
+                new CodePathPlanRequest(
+                        PLAN_ID, List.of("fixture.TargetTest#caseUnderTest()V"), "定位",
+                        org.example.algorithmdebug.contracts.CollectionBudget.defaults(), 0, NOW));
+    }
+
+    @Test
+    void archivesRequestAgentFailureManifestAndBaselineWhenMavenIsUnavailable() {
+        AtomicInteger collectorCalls = new AtomicInteger();
+        CollectionApplicationService service = new CollectionApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "fixed"), fixedClock(), Optional.empty(),
+                Path.of("java"), request -> {
+                    collectorCalls.incrementAndGet();
+                    throw new AssertionError("Collector must not start without Maven");
+                }, (maven, root, output) -> {
+                    throw new AssertionError("Classpath resolution must not start without Maven");
+                }, ignored -> context.sourceSnapshot());
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
+
+        assertEquals("MAVEN_NOT_FOUND", failure.code());
+        assertEquals(0, collectorCalls.get());
+        Path collection = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                .resolve("case-1/collections/collection-fixed");
+        assertTrue(Files.isRegularFile(collection.resolve("collection-request.json")));
+        assertTrue(Files.isRegularFile(collection.resolve("manifest.json")));
+        assertTrue(Files.isRegularFile(collection.resolve("validation/baseline-check.json")));
+        MethodPathManifest manifest = mapper.readJson(
+                collection.resolve("manifest.json"), MethodPathManifest.class);
+        assertEquals(CollectionCompletion.AGENT_FAILED, manifest.completion());
+        assertFalse(manifest.processStarted());
+        assertEquals(-1, manifest.exitCode());
+        assertEquals("MAVEN_NOT_FOUND", manifest.agentFailure().orElseThrow().code());
+    }
+
+    @Test
+    void refusesSourceDriftBeforeClasspathOrCollectorAndArchivesTheReason() {
+        AtomicInteger downstreamCalls = new AtomicInteger();
+        SourceSnapshot changed = new SourceSnapshot(
+                "f".repeat(64), context.sourceSnapshot().fileCount(),
+                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
+        CollectionApplicationService service = new CollectionApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "fixed"), fixedClock(), Optional.of(Path.of("mvn")),
+                Path.of("java"), request -> {
+                    downstreamCalls.incrementAndGet();
+                    throw new AssertionError("Collector must not start after source drift");
+                }, (maven, root, output) -> {
+                    downstreamCalls.incrementAndGet();
+                    throw new AssertionError("Classpath must not resolve after source drift");
+                }, ignored -> changed);
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
+
+        assertEquals("COLLECTION_SOURCE_DRIFT_BEFORE", failure.code());
+        assertEquals(0, downstreamCalls.get());
+        Path manifestPath = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                .resolve("case-1/collections/collection-fixed/manifest.json");
+        MethodPathManifest manifest = mapper.readJson(manifestPath, MethodPathManifest.class);
+        assertEquals(CollectionCompletion.AGENT_FAILED, manifest.completion());
+        assertEquals("COLLECTION_SOURCE_DRIFT_BEFORE",
+                manifest.agentFailure().orElseThrow().code());
+    }
+
+    @Test
+    void successfulCollectionWithMatchingBaselineReturnsOnlyExistingArtifactReferences()
+            throws Exception {
+        String gantt = "{\"schedule\":1}";
+        establishBaseline(gantt);
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of(gantt)),
+                ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals("SUCCESS", result.summary().completion());
+        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertTrue(result.summary().evidenceUsable());
+        assertEquals(
+                result.artifacts().stream().map(
+                        org.example.algorithmdebug.contracts.ArtifactReference::relativePath).toList(),
+                result.summary().artifactRelativePaths());
+        Path caseRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(CASE_ID.value());
+        assertTrue(result.artifacts().stream().allMatch(reference ->
+                Files.isRegularFile(caseRoot.resolve(reference.relativePath()))));
+    }
+
+    @Test
+    void targetFailureWithGanttRemainsAnalyzableButCannotBecomeConfirmationEvidence()
+            throws Exception {
+        String gantt = "{\"schedule\":1}";
+        establishBaseline(gantt);
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.TARGET_FAILED, Optional.of(gantt)),
+                ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals("TARGET_FAILED", result.summary().completion());
+        assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "GANTT_RAW".equals(reference.artifactType())));
+    }
+
+    @Test
+    void sourceDriftAfterCollectionRetainsArtifactsButBlocksEvidence() throws Exception {
+        String gantt = "{\"schedule\":1}";
+        establishBaseline(gantt);
+        AtomicInteger snapshots = new AtomicInteger();
+        SourceSnapshot changed = new SourceSnapshot(
+                "f".repeat(64), context.sourceSnapshot().fileCount(),
+                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of(gantt)),
+                ignored -> snapshots.getAndIncrement() == 0 ? context.sourceSnapshot() : changed);
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "CODEPATH_RAW".equals(reference.artifactType())));
+    }
+
+    @Test
+    void changedGanttIsArchivedButRejectedByBaselineGate() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":2}")),
+                ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
+        assertFalse(result.summary().evidenceUsable());
+    }
+
+    private CollectionApplicationService service(
+            MethodPathCollector collector, SourceSnapshotReader snapshots) {
+        return new CollectionApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "fixed"), fixedClock(), Optional.of(Path.of("mvn")),
+                Path.of("java"), collector, (maven, root, output) -> List.of("classes"), snapshots);
+    }
+
+    private MethodPathCollector collector(
+            CollectionCompletion completion, Optional<String> ganttJson) {
+        return request -> {
+            try {
+                Path raw = request.collectionDirectory().resolve("raw/codepath.jsonl");
+                Path filtered = request.collectionDirectory().resolve("derived/method-path.jsonl");
+                Path stdout = request.collectionDirectory().resolve("logs/stdout.log");
+                Path stderr = request.collectionDirectory().resolve("logs/stderr.log");
+                Files.createDirectories(raw.getParent());
+                Files.createDirectories(filtered.getParent());
+                Files.createDirectories(stdout.getParent());
+                Files.writeString(raw, "{\"eventId\":1}\n");
+                Files.writeString(filtered, "{\"eventId\":1}\n");
+                Files.writeString(stdout, "collector summary\n");
+                Files.writeString(stderr, completion == CollectionCompletion.TARGET_FAILED
+                        ? "java.lang.AssertionError: expected schedule\n" : "");
+                if (ganttJson.isPresent()) {
+                    Files.writeString(scheduleOutput.resolve("result.json"), ganttJson.orElseThrow());
+                }
+                MethodPathManifest manifest = new MethodPathManifest(
+                        "1.0", request.caseId(), request.contextId(), request.analysisId(),
+                        request.runId(), request.plan().planId(), request.collectionId(),
+                        "code-path-tracer", "0.1.0", Optional.of("a".repeat(64)),
+                        sha(mapper.writeJson(request.plan())), "PACKAGE_SUPERSET",
+                        "METHOD_ALLOWLIST", "EXACT_DESCRIPTOR", request.plan().packagePrefixes(),
+                        completion, "COMPLETE", true,
+                        completion == CollectionCompletion.TARGET_FAILED ? 2 : 0, false,
+                        1, 1, 1, 0, Files.size(raw), Files.size(filtered),
+                        Optional.of(sha(Files.readAllBytes(raw))),
+                        Optional.of(sha(Files.readAllBytes(filtered))), List.of(), Optional.empty(),
+                        "logs/stdout.log", "logs/stderr.log", NOW, NOW);
+                return new MethodPathCollectionResult(
+                        request, manifest, raw, filtered, stdout, stderr);
+            } catch (java.io.IOException failure) {
+                throw new MethodPathCollectionException(
+                        "TEST_COLLECTOR_IO", "测试 Collector 无法写入产物", failure);
+            }
+        };
+    }
+
+    private void establishBaseline(String ganttJson) throws Exception {
+        Path reference = Files.writeString(
+                temporaryDirectory.resolve("baseline-gantt.json"), ganttJson);
+        RunId baselineRun = new RunId("baseline-run");
+        CaseArchiveRepository archive = archive();
+        archive.startRun(new RunRequest(
+                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                baselineRun, TARGET, "UNINSTRUMENTED", NOW));
+        RunResultFingerprint fingerprint = new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
+                Optional.of(sha(Files.readAllBytes(reference))),
+                Optional.of(new org.example.algorithmdebug.harness.JsonTokenContentHasher()
+                        .sha256(reference)), Optional.empty());
+        archive.createRunResultFingerprint(fingerprint);
+        archive.createReproductionIfAbsent(fingerprint);
+    }
+
+    private static String sha(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (java.security.NoSuchAlgorithmException failure) {
+            throw new IllegalStateException(failure);
+        }
+    }
+
+    private CaseArchiveRepository archive() {
+        return new CaseArchiveRepository(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer);
+    }
+
+    private static Clock fixedClock() {
+        return Clock.fixed(NOW, ZoneOffset.UTC);
+    }
+
+    private static String portable(Path path) {
+        return path.toAbsolutePath().normalize().toString().replace('\\', '/');
+    }
+
+    private record Snapshot(String schemaVersion, String value) implements ScheduleResultSnapshot {
+    }
+
+    private final class StubAdapter implements TargetProjectAdapter<Snapshot> {
+        @Override
+        public AdapterDescriptor descriptor() {
+            return new AdapterDescriptor(
+                    "fixture", "1.0", "fixture", Set.of(
+                    AdapterCapability.BASELINE_EXECUTION,
+                    AdapterCapability.INPUT_LOCATION,
+                    AdapterCapability.SCHEDULE_RESULT));
+        }
+
+        @Override
+        public ProjectDescriptor inspect(Path root) {
+            return new ProjectDescriptor(
+                    PROJECT_ID, "fixture", root.toAbsolutePath(), BuildTool.MAVEN, Path.of("pom.xml"));
+        }
+
+        @Override
+        public TestLaunchSpec createLaunchSpec(
+                ProjectDescriptor project, TargetTest targetTest, RunMode runMode) {
+            return new TestLaunchSpec(
+                    project, targetTest, runMode, List.of("test"),
+                    Map.of("test", targetTest.selector()), List.of(), Duration.ofSeconds(10));
+        }
+
+        @Override
+        public InputLocator inputLocator() {
+            return (project, targetTest) -> Optional.empty();
+        }
+
+        @Override
+        public ScheduleResultSource scheduleResultSource(
+                ProjectDescriptor project, TargetTest targetTest) {
+            return new ScheduleResultSource(scheduleOutput, false);
+        }
+
+        @Override
+        public ScheduleResultParser<Snapshot> scheduleResultParser() {
+            return path -> new Snapshot("1.0", "unused");
+        }
+    }
+}

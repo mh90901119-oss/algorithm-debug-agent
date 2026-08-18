@@ -100,6 +100,24 @@ public final class ContextSnapshotBuilder {
                 fingerprint, boundedWarnings, request.createdAt());
     }
 
+    /**
+     * 使用与 Context 创建完全相同的规则重新采样当前源码摘要。
+     *
+     * @param moduleRoot 已登记 Maven 模块根目录
+     * @return 当前 allowlist 源码摘要
+     */
+    public SourceSnapshot captureSourceSnapshot(Path moduleRoot) {
+        if (moduleRoot == null) {
+            throw new IllegalArgumentException("moduleRoot 不能为空");
+        }
+        Path normalized = moduleRoot.toAbsolutePath().normalize();
+        if (!Files.isDirectory(normalized, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(normalized)) {
+            throw new WorkspaceException("CONTEXT_SNAPSHOT_FAILED", "moduleRoot 不是普通目录");
+        }
+        return sourceSnapshot(normalized, nanoTime.getAsLong(), new ArrayList<>());
+    }
+
     private SourceSnapshot sourceSnapshot(Path moduleRoot, long started, List<String> warnings) {
         List<Path> candidates = new ArrayList<>();
         boolean complete = true;

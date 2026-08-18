@@ -4,3 +4,9 @@ maxCodePathRuns: 3
 maxJdwpRuns: 4
 maxTraceBytesPerRun: 52428800
 maxWallClockMinutes: 20
+codePath:
+  defaultMaxEvents: 100000
+  hardMaxEvents: 1000000
+  defaultMaxBytes: 16777216
+  hardMaxBytes: 52428800
+  maxSelectedMethods: 200

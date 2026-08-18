@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.algorithmdebug.contracts.ToolResponse;
 import org.example.algorithmdebug.core.CaseRunException;
+import org.example.algorithmdebug.core.ArtifactBackedResult;
+import org.example.algorithmdebug.plan.PlanCompilationException;
+import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,7 +52,9 @@ class AdaMainTest {
         assertSuccess(diagnosed);
         assertTrue(initialized.response().path("data").path("created").booleanValue());
         assertEquals(portable(module), registered.response().path("data").path("registration").path("moduleRoot").textValue());
-        assertEquals(5, diagnosed.response().path("data").path("checks").size());
+        assertEquals(6, diagnosed.response().path("data").path("checks").size());
+        assertTrue(diagnosed.response().path("data").path("checks").toString()
+                .contains("CODEPATH_TOOL_NOT_CONFIGURED"));
         assertTrue(Files.isRegularFile(workspace.resolve("workspace.yaml")));
         assertEquals("", initialized.stderr());
     }
@@ -125,6 +130,78 @@ class AdaMainTest {
         assertFailure(invocation, 3, "CASE_TARGET_TEST_MISMATCH");
         assertFalse(invocation.stdout().contains(targetLog));
         assertEquals("", invocation.stderr());
+    }
+
+    @Test
+    void staticAndPlanExpectedFailuresUseStageCodesInsteadOfInternalError() throws Exception {
+        AdaMain staticApplication = new AdaMain(
+                command -> { throw new StaticAnalysisException("local source detail"); },
+                new CliResponseWriter());
+        AdaMain planApplication = new AdaMain(
+                command -> { throw new PlanCompilationException("model rationale detail"); },
+                new CliResponseWriter());
+
+        Invocation staticFailure = invoke(staticApplication,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+        Path request = Files.writeString(temporaryDirectory.resolve("plan.json"), "{}");
+        Invocation planFailure = invoke(planApplication,
+                "plan", "codepath", "create", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1",
+                "--analysis-id", "analysis-1", "--request-file", request.toString());
+
+        assertFailure(staticFailure, 3, "STATIC_ANALYSIS_FAILED");
+        assertFailure(planFailure, 3, "PLAN_COMPILATION_FAILED");
+        assertEquals("", staticFailure.stderr());
+        assertEquals("", planFailure.stderr());
+    }
+
+    @Test
+    void artifactBackedSuccessKeepsLargeDocumentOutOfData() throws Exception {
+        org.example.algorithmdebug.contracts.ArtifactReference artifact =
+                new org.example.algorithmdebug.contracts.ArtifactReference(
+                        "analysis-1", "METHOD_CATALOG",
+                        "analyses/analysis-1/method-catalog.json", "application/json",
+                        "a".repeat(64), 123);
+        AdaMain application = new AdaMain(
+                command -> new ArtifactBackedResult<>(
+                        java.util.Map.of("methodCount", 3, "edgeCount", 2), artifact),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+
+        assertSuccess(invocation);
+        assertEquals(3, invocation.response().path("data").path("methodCount").intValue());
+        assertFalse(invocation.response().path("data").has("entries"));
+        assertEquals("analyses/analysis-1/method-catalog.json",
+                invocation.response().path("artifacts").get(0).path("relativePath").textValue());
+    }
+
+    @Test
+    void multiArtifactCollectionSuccessReturnsStandardReferences() throws Exception {
+        var manifest = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "collection-1-manifest", "CODEPATH_MANIFEST",
+                "collections/collection-1/manifest.json", "application/json",
+                "a".repeat(64), 321);
+        var raw = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "collection-1-raw", "CODEPATH_RAW",
+                "collections/collection-1/raw/codepath.jsonl", "application/x-ndjson",
+                "b".repeat(64), 654);
+        AdaMain application = new AdaMain(
+                command -> new org.example.algorithmdebug.core.MultiArtifactBackedResult<>(
+                        java.util.Map.of("completion", "SUCCESS"), List.of(manifest, raw)),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "collection", "codepath", "execute", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1", "--plan-id", "plan-1");
+
+        assertSuccess(invocation);
+        assertEquals(2, invocation.response().path("artifacts").size());
+        assertEquals("CODEPATH_MANIFEST",
+                invocation.response().path("artifacts").get(0).path("artifactType").textValue());
     }
 
     @Test

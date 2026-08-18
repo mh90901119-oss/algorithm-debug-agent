@@ -11,7 +11,9 @@ import java.util.Optional;
 /** CLI 严格解析后交给执行器的封闭命令集合。 */
 public sealed interface CliCommand
         permits CliCommand.WorkspaceInit, CliCommand.ProjectRegister, CliCommand.Doctor,
-        CliCommand.CaseOpen, CliCommand.CaseInspect, CliCommand.RunExecute {
+        CliCommand.CaseOpen, CliCommand.CaseInspect, CliCommand.RunExecute,
+        CliCommand.StaticAnalyze, CliCommand.CodePathPlanCreate,
+        CliCommand.CodePathCollectionExecute {
 
     /**
      * 初始化外部 Workspace。
@@ -98,6 +100,40 @@ public sealed interface CliCommand
             require(projectId, "projectId");
             require(caseId, "caseId");
             require(analysisId, "analysisId");
+        }
+    }
+
+    /** 为已有 Analysis 生成并归档静态方法目录。 */
+    record StaticAnalyze(
+            Path workspace, ProjectId projectId, CaseId caseId, AnalysisId analysisId)
+            implements CliCommand {
+        /** 校验命令参数。 */
+        public StaticAnalyze {
+            require(workspace, "workspace"); require(projectId, "projectId");
+            require(caseId, "caseId"); require(analysisId, "analysisId");
+        }
+    }
+
+    /** 从有界 UTF-8 JSON 请求创建 CodePath 计划。 */
+    record CodePathPlanCreate(
+            Path workspace, ProjectId projectId, CaseId caseId, AnalysisId analysisId,
+            Path requestFile) implements CliCommand {
+        /** 校验命令参数。 */
+        public CodePathPlanCreate {
+            require(workspace, "workspace"); require(projectId, "projectId");
+            require(caseId, "caseId"); require(analysisId, "analysisId");
+            require(requestFile, "requestFile");
+        }
+    }
+
+    /** 执行一个已归档的 CodePath 计划并创建新的 Collection。 */
+    record CodePathCollectionExecute(
+            Path workspace, ProjectId projectId, CaseId caseId, org.example.algorithmdebug.contracts.PlanId planId)
+            implements CliCommand {
+        /** 校验命令参数。 */
+        public CodePathCollectionExecute {
+            require(workspace, "workspace"); require(projectId, "projectId");
+            require(caseId, "caseId"); require(planId, "planId");
         }
     }
 

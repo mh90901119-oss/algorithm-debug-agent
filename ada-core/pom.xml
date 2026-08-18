@@ -35,6 +35,21 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>static-analysis</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>debug-plan-engine</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>method-path-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

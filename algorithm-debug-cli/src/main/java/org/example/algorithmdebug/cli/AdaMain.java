@@ -2,10 +2,22 @@ package org.example.algorithmdebug.cli;
 
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.contracts.DoctorCheck;
+import org.example.algorithmdebug.contracts.DoctorStatus;
 import org.example.algorithmdebug.core.CaseRunException;
 import org.example.algorithmdebug.core.ControlPlaneException;
 import org.example.algorithmdebug.core.ControlPlaneServices;
+import org.example.algorithmdebug.core.ArtifactBackedResult;
 import org.example.algorithmdebug.core.MavenExecutableLocator;
+import org.example.algorithmdebug.core.MultiArtifactBackedResult;
+import org.example.algorithmdebug.core.ToolDoctorProbe;
+import org.example.algorithmdebug.plan.PlanCompilationException;
+import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
+import org.example.algorithmdebug.codepath.CodePathProcessCollector;
+import org.example.algorithmdebug.codepath.CodePathToolConfiguration;
+import org.example.algorithmdebug.codepath.CodePathAdapterException;
+import org.example.algorithmdebug.codepath.MavenTestClasspathResolver;
+import org.example.algorithmdebug.methodpath.MethodPathCollector;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -65,7 +77,15 @@ public final class AdaMain {
 
         try {
             Object result = execution.execute(command);
-            responseWriter.write(ToolResponse.success(result, List.of()), stdout);
+            if (result instanceof ArtifactBackedResult<?> artifactBacked) {
+                responseWriter.write(ToolResponse.success(
+                        artifactBacked.summary(), List.of(artifactBacked.artifact())), stdout);
+            } else if (result instanceof MultiArtifactBackedResult<?> artifactBacked) {
+                responseWriter.write(ToolResponse.success(
+                        artifactBacked.summary(), artifactBacked.artifacts()), stdout);
+            } else {
+                responseWriter.write(ToolResponse.success(result, List.of()), stdout);
+            }
             return EXIT_SUCCESS;
         } catch (CliInputException failure) {
             responseWriter.write(
@@ -81,6 +101,18 @@ public final class AdaMain {
         } catch (ControlPlaneException failure) {
             responseWriter.write(
                     ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
+                    stdout);
+            return EXIT_DOMAIN_FAILURE;
+        } catch (StaticAnalysisException failure) {
+            responseWriter.write(
+                    ToolResponse.failure(
+                            "STATIC_ANALYSIS_FAILED", safeDomainMessage("STATIC_ANALYSIS_FAILED"), List.of()),
+                    stdout);
+            return EXIT_DOMAIN_FAILURE;
+        } catch (PlanCompilationException failure) {
+            responseWriter.write(
+                    ToolResponse.failure(
+                            "PLAN_COMPILATION_FAILED", safeDomainMessage("PLAN_COMPILATION_FAILED"), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (RuntimeException failure) {
@@ -110,6 +142,10 @@ public final class AdaMain {
                 .collect(Collectors.toList()));
         MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
                 System.getenv(), File.pathSeparator, windows);
+        java.nio.file.Path javaExecutable = java.nio.file.Path.of(
+                System.getProperty("java.home"), "bin", windows ? "java.exe" : "java")
+                .toAbsolutePath().normalize();
+        ConfiguredCodePath codePath = configuredCodePath(javaExecutable);
         ControlPlaneServices services = ControlPlaneServices.create(
                 Clock.systemUTC(),
                 () -> Runtime.version().feature(),
@@ -117,10 +153,53 @@ public final class AdaMain {
                 File.pathSeparator,
                 windows,
                 adapters,
-                mavenLocator.locate(Optional.empty()));
+                mavenLocator.locate(Optional.empty()),
+                codePath.collector(),
+                new MavenTestClasspathResolver(),
+                codePath.doctorProbe());
         return new CliCommandExecutor(
                 services.workspace(), services.project(), services.doctor(),
-                services.cases(), services.runs());
+                services.cases(), services.runs(), services.staticAnalysis(), services.collections());
+    }
+
+    private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
+        String jar = System.getenv("ADA_CODEPATH_LAUNCHER_JAR");
+        String sha = System.getenv("ADA_CODEPATH_LAUNCHER_SHA256");
+        if (jar == null || jar.isBlank() || sha == null || sha.isBlank()) {
+            MethodPathCollector unavailable = request -> {
+                throw new org.example.algorithmdebug.methodpath.MethodPathCollectionException(
+                        "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath launcher 未配置", null);
+            };
+            return new ConfiguredCodePath(unavailable, () -> new DoctorCheck(
+                    "codepath", DoctorStatus.FAIL, "CODEPATH_TOOL_NOT_CONFIGURED",
+                    "CodePath launcher 未配置"));
+        }
+        CodePathToolConfiguration configuration = new CodePathToolConfiguration(
+                javaExecutable, java.nio.file.Path.of(jar), sha, "0.1.0-SNAPSHOT",
+                "org.example.algorithmdebug.codepath.launcher.ExternalJUnitTraceLauncher");
+        ToolDoctorProbe probe = () -> {
+            if (!java.nio.file.Files.isRegularFile(javaExecutable)) {
+                return new DoctorCheck(
+                        "codepath", DoctorStatus.FAIL, "CODEPATH_JAVA_MISSING",
+                        "CodePath Java executable 不可用");
+            }
+            try {
+                configuration.verifyTool();
+                return new DoctorCheck(
+                        "codepath", DoctorStatus.PASS, "CODEPATH_TOOL_OK",
+                        "CodePath launcher 配置和 SHA-256 校验通过");
+            } catch (CodePathAdapterException failure) {
+                return new DoctorCheck(
+                        "codepath", DoctorStatus.FAIL, failure.code(),
+                        "CodePath launcher 配置校验失败");
+            }
+        };
+        return new ConfiguredCodePath(new CodePathProcessCollector(configuration), probe);
+    }
+
+    private record ConfiguredCodePath(
+            MethodPathCollector collector,
+            ToolDoctorProbe doctorProbe) {
     }
 
     private static String safeDomainMessage(String code) {
@@ -144,6 +223,11 @@ public final class AdaMain {
             case "CASE_TARGET_TEST_MISMATCH" -> "Case belongs to another target test";
             case "MAVEN_NOT_FOUND" -> "Maven executable is unavailable";
             case "RUN_ARCHIVE_WRITE_FAILED" -> "Run outcome could not be archived";
+            case "STATIC_SOURCE_DRIFT" -> "Source changed relative to the analysis context";
+            case "STATIC_ANALYSIS_FAILED" -> "Static analysis could not be completed";
+            case "STATIC_ARCHIVE_FAILED" -> "Static analysis artifact could not be archived";
+            case "PLAN_COMPILATION_FAILED" -> "Collection plan could not be compiled";
+            case "PLAN_ARCHIVE_FAILED" -> "Collection plan could not be archived";
             default -> "Workspace operation failed";
         };
     }

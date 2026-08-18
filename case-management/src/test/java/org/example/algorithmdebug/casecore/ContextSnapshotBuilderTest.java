@@ -6,6 +6,7 @@ import org.example.algorithmdebug.contracts.ContextSnapshot;
 import org.example.algorithmdebug.contracts.InputSnapshotStatus;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
+import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,16 @@ class ContextSnapshotBuilderTest {
         assertNotEquals(first.sourceSnapshot().sha256(), second.sourceSnapshot().sha256());
         assertNotEquals(first.fingerprintSha256(), second.fingerprintSha256());
         assertEquals(SnapshotCompleteness.COMPLETE, second.completeness());
+    }
+
+    @Test
+    void shouldRecaptureSourceWithTheSameCanonicalDigestAlgorithm() {
+        ContextSnapshotBuilder builder = new ContextSnapshotBuilder();
+
+        SourceSnapshot recaptured = builder.captureSourceSnapshot(moduleRoot);
+        ContextSnapshot context = builder.build(request(new ContextId("context-1")));
+
+        assertEquals(context.sourceSnapshot(), recaptured);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.casecore;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
@@ -43,6 +44,20 @@ public final class AtomicDocumentWriter {
         if (target == null || content == null) {
             throw new IllegalArgumentException("target 和 content 不能为空");
         }
+        writeNew(target, Math.max(1L, content.length), output -> output.write(content));
+    }
+
+    /**
+     * 以流式、硬字节上限方式原子创建大型 Artifact，不在内存中组装完整文档。
+     *
+     * @param target 终态 Artifact 路径
+     * @param maximumBytes 流式写入硬上限
+     * @param contentWriter 将内容写入给定流的回调
+     */
+    void writeNew(Path target, long maximumBytes, StreamContentWriter contentWriter) {
+        if (target == null || contentWriter == null || maximumBytes < 1) {
+            throw new IllegalArgumentException("target、maximumBytes 和 contentWriter 非法");
+        }
         Path normalizedTarget = target.toAbsolutePath().normalize();
         Path parent = normalizedTarget.getParent();
         if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
@@ -59,13 +74,16 @@ public final class AtomicDocumentWriter {
         Throwable primaryFailure = null;
         try {
             temporary = Files.createTempFile(parent, "." + normalizedTarget.getFileName() + "-", ".tmp");
-            writeAndFlush(temporary, content);
+            writeAndFlush(temporary, maximumBytes, contentWriter);
             moveOperation.move(temporary, normalizedTarget);
             temporary = null;
         } catch (IOException | SecurityException failure) {
             primaryFailure = failure;
             throw new WorkspaceException(
                     "WORKSPACE_WRITE_FAILED", "原子创建 Workspace 文档失败: " + normalizedTarget, failure);
+        } catch (RuntimeException failure) {
+            primaryFailure = failure;
+            throw failure;
         } finally {
             if (temporary != null) {
                 cleanupTemporary(temporary, primaryFailure);
@@ -73,15 +91,15 @@ public final class AtomicDocumentWriter {
         }
     }
 
-    private static void writeAndFlush(Path temporary, byte[] content) throws IOException {
+    private static void writeAndFlush(
+            Path temporary, long maximumBytes, StreamContentWriter contentWriter) throws IOException {
         try (FileChannel channel = FileChannel.open(
                 temporary,
                 StandardOpenOption.WRITE,
                 StandardOpenOption.TRUNCATE_EXISTING)) {
-            ByteBuffer buffer = ByteBuffer.wrap(content);
-            while (buffer.hasRemaining()) {
-                channel.write(buffer);
-            }
+            OutputStream output = new BoundedChannelOutputStream(channel, maximumBytes);
+            contentWriter.write(output);
+            output.flush();
             channel.force(true);
         }
     }
@@ -102,5 +120,44 @@ public final class AtomicDocumentWriter {
     @FunctionalInterface
     interface MoveOperation {
         void move(Path source, Path target) throws IOException;
+    }
+
+    @FunctionalInterface
+    interface StreamContentWriter {
+        void write(OutputStream output) throws IOException;
+    }
+
+    private static final class BoundedChannelOutputStream extends OutputStream {
+        private final FileChannel channel;
+        private final long maximumBytes;
+        private long written;
+
+        private BoundedChannelOutputStream(FileChannel channel, long maximumBytes) {
+            this.channel = channel;
+            this.maximumBytes = maximumBytes;
+        }
+
+        @Override
+        public void write(int value) throws IOException {
+            write(new byte[]{(byte) value}, 0, 1);
+        }
+
+        @Override
+        public void write(byte[] bytes, int offset, int length) throws IOException {
+            if (bytes == null) {
+                throw new NullPointerException("bytes");
+            }
+            if (offset < 0 || length < 0 || offset + length > bytes.length) {
+                throw new IndexOutOfBoundsException();
+            }
+            if (written + length > maximumBytes) {
+                throw new IOException("流式 Artifact 超过最大字节数 " + maximumBytes);
+            }
+            ByteBuffer buffer = ByteBuffer.wrap(bytes, offset, length);
+            while (buffer.hasRemaining()) {
+                channel.write(buffer);
+            }
+            written += length;
+        }
     }
 }

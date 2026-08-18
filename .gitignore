@@ -7,4 +7,5 @@ target/
 .algorithm-debug/
 distribution/build/
 examples/workspace/
-
+.superpowers/
+.tmp-tests/

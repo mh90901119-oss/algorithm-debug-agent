@@ -23,6 +23,7 @@ public final class DoctorApplicationService {
     private final IntSupplier javaFeatureSupplier;
     private final MavenExecutableLocator mavenLocator;
     private final WorkspaceManifestRepository manifestRepository;
+    private final List<ToolDoctorProbe> toolProbes;
 
     /**
      * 创建环境诊断应用服务。
@@ -35,12 +36,32 @@ public final class DoctorApplicationService {
             IntSupplier javaFeatureSupplier,
             MavenExecutableLocator mavenLocator,
             WorkspaceManifestRepository manifestRepository) {
+        this(javaFeatureSupplier, mavenLocator, manifestRepository, List.of());
+    }
+
+    /**
+     * 创建带外部采集工具检查的环境诊断服务。
+     *
+     * @param javaFeatureSupplier Java feature 版本提供器
+     * @param mavenLocator Maven 可执行文件定位器
+     * @param manifestRepository Workspace Manifest 仓储
+     * @param toolProbes 由组合根提供的工具诊断端口
+     */
+    public DoctorApplicationService(
+            IntSupplier javaFeatureSupplier,
+            MavenExecutableLocator mavenLocator,
+            WorkspaceManifestRepository manifestRepository,
+            List<ToolDoctorProbe> toolProbes) {
         if (javaFeatureSupplier == null || mavenLocator == null || manifestRepository == null) {
             throw new IllegalArgumentException("DoctorApplicationService 依赖不能为空");
         }
         this.javaFeatureSupplier = javaFeatureSupplier;
         this.mavenLocator = mavenLocator;
         this.manifestRepository = manifestRepository;
+        this.toolProbes = List.copyOf(java.util.Objects.requireNonNull(toolProbes, "toolProbes"));
+        if (this.toolProbes.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("toolProbes 不能包含 null");
+        }
     }
 
     /**
@@ -59,13 +80,27 @@ public final class DoctorApplicationService {
             throw new IllegalArgumentException("workspace、module 和 explicitMaven 不能为空");
         }
         Optional<WorkspaceLayout> layout = safeWorkspaceLayout(workspace);
-        List<DoctorCheck> checks = new ArrayList<>(5);
+        List<DoctorCheck> checks = new ArrayList<>(5 + toolProbes.size());
         checks.add(checkJava());
         checks.add(checkMaven(explicitMaven));
         checks.add(checkWorkspaceManifest(layout));
         checks.add(checkWorkspaceWrite(layout));
         checks.add(checkProject(module));
+        for (ToolDoctorProbe probe : toolProbes) {
+            checks.add(checkTool(probe));
+        }
         return DoctorReport.fromChecks(checks);
+    }
+
+    private DoctorCheck checkTool(ToolDoctorProbe probe) {
+        try {
+            DoctorCheck check = probe.check();
+            return check != null
+                    ? check
+                    : fail("tool", "TOOL_DIAGNOSTIC_FAILED", "工具诊断未返回结果");
+        } catch (RuntimeException failure) {
+            return fail("tool", "TOOL_DIAGNOSTIC_FAILED", "工具诊断执行失败");
+        }
     }
 
     private DoctorCheck checkJava() {

@@ -5,7 +5,7 @@ package org.example.algorithmdebug.contracts;
  *
  * @param artifactId 运行内唯一的产物 ID
  * @param artifactType 可扩展的产物类型代码
- * @param relativePath 使用 `/` 分隔、相对于运行根目录的路径
+ * @param relativePath 使用 `/` 分隔、相对于 Case 根目录的路径
  * @param mediaType 产物媒体类型
  * @param sha256 产物内容 SHA-256
  * @param sizeBytes 产物字节数
@@ -30,4 +30,3 @@ public record ArtifactReference(
         }
     }
 }
-

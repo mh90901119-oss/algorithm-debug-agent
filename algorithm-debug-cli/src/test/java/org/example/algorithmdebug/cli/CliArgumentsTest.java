@@ -4,6 +4,7 @@ import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.PlanId;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -76,6 +77,27 @@ class CliArgumentsTest {
                         "run", "execute", "--workspace", "workspace",
                         "--project-id", "demo", "--case-id", "case-1",
                         "--analysis-id", "analysis-1"}));
+        assertEquals(
+                new CliCommand.StaticAnalyze(Path.of("workspace"), new ProjectId("demo"),
+                        new CaseId("case-1"), new AnalysisId("analysis-1")),
+                CliArguments.parse(new String[]{
+                        "static", "analyze", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--analysis-id", "analysis-1"}));
+        assertEquals(
+                new CliCommand.CodePathPlanCreate(Path.of("workspace"), new ProjectId("demo"),
+                        new CaseId("case-1"), new AnalysisId("analysis-1"), Path.of("plan.json")),
+                CliArguments.parse(new String[]{
+                        "plan", "codepath", "create", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--analysis-id", "analysis-1", "--request-file", "plan.json"}));
+        assertEquals(
+                new CliCommand.CodePathCollectionExecute(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        new PlanId("plan-1")),
+                CliArguments.parse(new String[]{
+                        "collection", "codepath", "execute", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1", "--plan-id", "plan-1"}));
     }
 
     @Test

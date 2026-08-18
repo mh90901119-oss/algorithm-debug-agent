@@ -17,6 +17,10 @@ final class ContractChecks {
     private static final Pattern JAVA_QUALIFIED_NAME = Pattern.compile(
             "[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+");
     private static final Pattern JAVA_METHOD_NAME = Pattern.compile("[A-Za-z_$][A-Za-z0-9_$]*");
+    private static final Pattern JAVA_PACKAGE_NAME = Pattern.compile(
+            "[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*");
+    private static final Pattern JVM_INTERNAL_NAME = Pattern.compile(
+            "[A-Za-z_$][A-Za-z0-9_$]*(/[A-Za-z_$][A-Za-z0-9_$]*)*");
 
     private ContractChecks() {
     }
@@ -56,6 +60,78 @@ final class ContractChecks {
             throw new IllegalArgumentException(fieldName + " 不是有效的 Java 方法名: " + checked);
         }
         return checked;
+    }
+
+    static String requireJavaPackageName(String value, String fieldName) {
+        String checked = requireBoundedText(value, fieldName, 512, false);
+        if (!JAVA_PACKAGE_NAME.matcher(checked).matches()) {
+            throw new IllegalArgumentException(fieldName + " 不是有效的 Java package 名: " + checked);
+        }
+        return checked;
+    }
+
+    static String requireJavaExecutableName(String value, String fieldName) {
+        String checked = requireNonBlank(value, fieldName);
+        if (!"<init>".equals(checked) && !JAVA_METHOD_NAME.matcher(checked).matches()) {
+            throw new IllegalArgumentException(fieldName + " 不是有效的 Java 可执行成员名: " + checked);
+        }
+        return checked;
+    }
+
+    static String requireJvmMethodDescriptor(
+            String value, String fieldName, String executableName) {
+        String checked = requireBoundedText(value, fieldName, 512, false);
+        int cursor = 0;
+        if (checked.charAt(cursor++) != '(') {
+            throw invalidDescriptor(fieldName);
+        }
+        while (cursor < checked.length() && checked.charAt(cursor) != ')') {
+            cursor = parseFieldDescriptor(checked, cursor, fieldName);
+        }
+        if (cursor >= checked.length() || checked.charAt(cursor++) != ')' || cursor >= checked.length()) {
+            throw invalidDescriptor(fieldName);
+        }
+        boolean returnsVoid = checked.charAt(cursor) == 'V';
+        cursor = returnsVoid ? cursor + 1 : parseFieldDescriptor(checked, cursor, fieldName);
+        if (cursor != checked.length() || ("<init>".equals(executableName) && !returnsVoid)) {
+            throw invalidDescriptor(fieldName);
+        }
+        return checked;
+    }
+
+    private static int parseFieldDescriptor(String value, int start, String fieldName) {
+        if (start >= value.length()) {
+            throw invalidDescriptor(fieldName);
+        }
+        int cursor = start;
+        int dimensions = 0;
+        while (cursor < value.length() && value.charAt(cursor) == '[') {
+            dimensions++;
+            cursor++;
+        }
+        if (dimensions > 255 || cursor >= value.length()) {
+            throw invalidDescriptor(fieldName);
+        }
+        char kind = value.charAt(cursor);
+        if ("BCDFIJSZ".indexOf(kind) >= 0) {
+            return cursor + 1;
+        }
+        if (kind != 'L') {
+            throw invalidDescriptor(fieldName);
+        }
+        int terminator = value.indexOf(';', cursor + 1);
+        if (terminator < 0 || terminator == cursor + 1) {
+            throw invalidDescriptor(fieldName);
+        }
+        String internalName = value.substring(cursor + 1, terminator);
+        if (!JVM_INTERNAL_NAME.matcher(internalName).matches()) {
+            throw invalidDescriptor(fieldName);
+        }
+        return terminator + 1;
+    }
+
+    private static IllegalArgumentException invalidDescriptor(String fieldName) {
+        return new IllegalArgumentException(fieldName + " 不是有效的 JVM 方法描述符");
     }
 
     static String requireSha256(String value, String fieldName) {

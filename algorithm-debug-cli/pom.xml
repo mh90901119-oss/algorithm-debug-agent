@@ -31,6 +31,11 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>method-path-codepathtracer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
             <artifactId>wafer-demo-adapter</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
