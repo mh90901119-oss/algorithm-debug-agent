@@ -45,6 +45,7 @@ import org.example.algorithmdebug.harness.OutputDirectorySnapshotter;
 import org.example.algorithmdebug.harness.OutputStabilityPolicy;
 import org.example.algorithmdebug.harness.OutputStabilityWaiter;
 import org.example.algorithmdebug.harness.ScheduleResultCapture;
+import org.example.algorithmdebug.harness.SurefireDiagnosticException;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionRequest;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionResult;
@@ -135,7 +136,7 @@ public final class CollectionApplicationService {
                     Path.of(registration.mavenExecutionRoot()), collectionRoot,
                     javaExecutable, classpath, plan.targetTest().selector()));
             stage = "PROCESS_COMPLETED";
-            baseline = checkBaseline(archive, record, result, capture);
+            baseline = checkBaseline(archive, record, result, capture, moduleRoot);
             var afterSource = sourceSnapshots.capture(moduleRoot);
             if (afterSource.completeness() != SnapshotCompleteness.COMPLETE
                     || !afterSource.equals(context.sourceSnapshot())) {
@@ -335,14 +336,24 @@ public final class CollectionApplicationService {
             CaseArchiveRepository archive,
             MethodPathCollectionRecord record,
             MethodPathCollectionResult result,
-            Optional<CaptureContext> captureContext) {
-        if (captureContext.isEmpty() || result.manifest().completion()
+            Optional<CaptureContext> captureContext,
+            Path moduleRoot) {
+        if (result.manifest().completion()
                 == org.example.algorithmdebug.methodpath.CollectionCompletion.TOOL_FAILED
                 || result.manifest().completion()
                 == org.example.algorithmdebug.methodpath.CollectionCompletion.TIMED_OUT) {
             return incomparable(record, "No comparable Gantt observation from dynamic collection");
         }
         try {
+            if (result.manifest().completion()
+                    == org.example.algorithmdebug.methodpath.CollectionCompletion.TARGET_FAILED) {
+                return checkTargetFailureBaseline(
+                        archive, record, captureContext, moduleRoot,
+                        result.request().collectionDirectory());
+            }
+            if (captureContext.isEmpty()) {
+                return incomparable(record, "No comparable Gantt observation from dynamic collection");
+            }
             CapturedScheduleResult<?> captured = capture(captureContext.orElseThrow(),
                     result.request().collectionDirectory().resolve("raw/gantt.json"));
             Optional<RunResultFingerprint> reference = archive.findReproduction(
@@ -353,15 +364,6 @@ public final class CollectionApplicationService {
                         record.collectionId(), ComparisonOutcome.NOT_COMPARED, Optional.empty(),
                         Optional.of(captured.normalizedJsonSha256()), false,
                         "No uninstrumented same-context reproduction reference", clock.instant());
-            }
-            if (result.manifest().completion()
-                    == org.example.algorithmdebug.methodpath.CollectionCompletion.TARGET_FAILED) {
-                return new CollectionBaselineCheck(
-                        "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                        record.collectionId(), ComparisonOutcome.INCOMPARABLE,
-                        Optional.of(reference.orElseThrow().runId()),
-                        Optional.of(captured.normalizedJsonSha256()), false,
-                        "Target failed; matching failure fingerprint was not available", clock.instant());
             }
             RunResultFingerprint current = new RunResultFingerprint(
                     SchemaVersions.RUN_RESULT_FINGERPRINT, record.caseId(), record.contextId(), record.runId(),
@@ -374,10 +376,35 @@ public final class CollectionApplicationService {
                     record.collectionId(), compared.outcome(), Optional.of(reference.orElseThrow().runId()),
                     Optional.of(captured.normalizedJsonSha256()),
                     compared.outcome() == ComparisonOutcome.MATCHED, compared.summary(), clock.instant());
-        } catch (HarnessException | WorkspaceException failure) {
+        } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "Gantt capture or baseline comparison failed: "
                     + failure.getClass().getSimpleName());
         }
+    }
+
+    private CollectionBaselineCheck checkTargetFailureBaseline(
+            CaseArchiveRepository archive,
+            MethodPathCollectionRecord record,
+            Optional<CaptureContext> captureContext,
+            Path moduleRoot,
+            Path collectionRoot)
+            throws WorkspaceException, HarnessException, SurefireDiagnosticException {
+        Optional<CapturedScheduleResult<?>> captured = captureChangedOutput(captureContext,
+                collectionRoot.resolve("raw/gantt.json"));
+        return new TargetFailureBaselineEvaluator(clock).evaluate(
+                archive, TargetFailureBaselineEvaluator.Identity.from(record),
+                moduleRoot, captured);
+    }
+
+    private Optional<CapturedScheduleResult<?>> captureChangedOutput(
+            Optional<CaptureContext> context,
+            Path destination) throws HarnessException {
+        if (context.isEmpty()) return Optional.empty();
+        CaptureContext value = context.orElseThrow();
+        if (value.snapshotter().snapshot(value.source()).equals(value.before())) {
+            return Optional.empty();
+        }
+        return Optional.of(capture(value, destination));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

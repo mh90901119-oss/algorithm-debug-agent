@@ -238,6 +238,42 @@ class CollectionApplicationServiceTest {
     }
 
     @Test
+    void targetFailureWithoutGanttMatchesFailureBaselineAndKeepsPreFailureTraceUsable()
+            throws Exception {
+        establishFailureBaseline("No solution after maximum iterations");
+        writeFailureReport("No solution after maximum iterations");
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()),
+                ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertTrue(result.summary().evidenceUsable());
+        var baseline = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1/collections/collection-fixed/validation/baseline-check.json"),
+                org.example.algorithmdebug.contracts.CollectionBaselineCheck.class);
+        assertTrue(baseline.currentGanttSha256().isEmpty());
+    }
+
+    @Test
+    void changedTargetFailureFingerprintIsRejected() throws Exception {
+        establishFailureBaseline("No solution after maximum iterations");
+        writeFailureReport("Input file was not found");
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()),
+                ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
+        assertFalse(result.summary().evidenceUsable());
+    }
+
+    @Test
     void sourceDriftAfterCollectionRetainsArtifactsButBlocksEvidence() throws Exception {
         String gantt = "{\"schedule\":1}";
         establishBaseline(gantt);
@@ -336,6 +372,39 @@ class CollectionApplicationServiceTest {
                         .sha256(reference)), Optional.empty());
         archive.createRunResultFingerprint(fingerprint);
         archive.createReproductionIfAbsent(fingerprint);
+    }
+
+    private void establishFailureBaseline(String message) throws Exception {
+        RunId baselineRun = new RunId("baseline-run");
+        CaseArchiveRepository archive = archive();
+        archive.startRun(new RunRequest(
+                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                baselineRun, TARGET, "UNINSTRUMENTED", NOW));
+        var diagnostic = new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
+                org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
+                "java.lang.IllegalStateException", message, "",
+                "fixture.Algorithm.solve(Algorithm.java:42)");
+        RunResultFingerprint fingerprint = new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
+                Optional.empty(), Optional.empty(), Optional.of(
+                        new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
+                                .sha256(diagnostic)));
+        archive.createRunResultFingerprint(fingerprint);
+        archive.createReproductionIfAbsent(fingerprint);
+    }
+
+    private void writeFailureReport(String message) throws Exception {
+        Path reports = Files.createDirectories(module.resolve("target/surefire-reports"));
+        Files.writeString(reports.resolve("TEST-fixture.TargetTest.xml"), """
+                <testsuite>
+                  <testcase classname="fixture.TargetTest" name="caseUnderTest">
+                    <error type="java.lang.IllegalStateException" message="%s"><![CDATA[
+                java.lang.IllegalStateException: %s
+                    at fixture.Algorithm.solve(Algorithm.java:42)
+                    ]]></error>
+                  </testcase>
+                </testsuite>
+                """.formatted(message, message));
     }
 
     private static String sha(byte[] bytes) {

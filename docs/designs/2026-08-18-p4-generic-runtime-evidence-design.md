@@ -49,7 +49,8 @@ P4 必须把 Raw Trace 确定性整理成通用运行时事实，同时保留原
 - 不实现字段级 Gantt Diff；Gantt 仍使用 JSON 内容指纹和原始 Artifact；
 - 不修改目标算法源码、UT、POM 或生产配置；
 - 不修改或 fork CodePathTracer、JDWP Collector；
-- 不在 P4 补齐 JDWP local allowlist、字段投影、采样或 Collector 内部字节硬截止；
+- 不在 P4 引入 JDWP 字段分类或内容过滤；更精细的字段投影、采样和 Collector 内部字节硬截止
+  只有在真实性能数据证明需要时才单独设计；
 - 不建设通用领域规则引擎、图数据库、向量数据库或复杂 Case 状态机；
 - 不让 `LLM_HYPOTHESIS` 满足任何确定性证据维度。
 
@@ -119,7 +120,7 @@ Validator 只判断证据技术可信度；Evidence Engine 只组织证据和覆
 | `ada-contracts/MethodPathSummary` | 通用方法统计、保留路径和异常 | CodePath Raw | summary | contracts |
 | `ada-contracts/JdwpSnapshotSummary` | 通用命中、栈和有界值事实 | JDWP Raw | summary | contracts |
 | `ada-contracts/CollectionValidation` | 统一可信度和 Findings | collection artifacts | validation | contracts |
-| `ada-contracts/EvidenceBuildRequest` | 声明 Context、Collections 和要求维度 | IDs、budgets、allowlist | request | contracts |
+| `ada-contracts/EvidenceBuildRequest` | 声明 Context、Collections 和要求维度 | IDs、budgets、显式 Collection 列表 | request | contracts |
 | `ada-contracts/EvidenceBundle` | 有界证据目录和覆盖 | validated sources | bundle | contracts |
 | `ada-contracts/SufficiencyEvaluation` | 充分、不足、矛盾与缺口 | bundle、requirements | evaluation | contracts |
 | `trace-normalizer/BoundedJsonlReader` | 字节有界逐记录读取并跟踪行号 | Path、record limit | record stream | JDK/Jackson core |
@@ -400,7 +401,7 @@ EVIDENCE_ARCHIVE_FAILED
 
 ### 12.5 测试夹具与 Golden 数据
 
-- 使用脱敏、最小化的 P2/P3 Raw JSONL 形状；
+- 使用合成、最小化的 P2/P3 Raw JSONL 形状；
 - Fixture 不包含真实公司输入、绝对路径或大型 Trace；
 - Golden 变更必须说明 Schema/规则版本和行为原因，禁止为通过测试随意更新。
 
@@ -424,14 +425,15 @@ EVIDENCE_ARCHIVE_FAILED
 - 重新归一化使用新 `evidenceId`，旧派生结果保持可复现；
 - P4 回滚后 P2/P3 采集仍可独立使用，Raw Trace 不丢失；
 - 未来增加 Adapter 业务投影时，以 P4 通用 Summary 为输入并生成独立派生产物，不修改 v1 Summary；
-- 未来 Collector P0 增加 allowlist/projection 后，通过新 Plan/Manifest 能力字段演进，不偷换 P3 v1 含义。
+- 如果未来真实算法证明需要更精细的字段投影，只能基于采集效率需求通过新 Plan/Manifest 能力字段演进，
+  不在 P4 预置字段分类规则，也不偷换 P3 v1 含义。
 
 ## 15. 风险与已知约束
 
 | 风险/问题 | 影响 | 缓解措施 | 状态 |
 |---|---|---|---|
 | CodePath 大包先产生采集超集 | 目标运行开销仍可能较大 | P1 成本预览、P2 硬预算、真实大型包压力测试；必要时增强上游源头过滤 | Accepted |
-| JDWP 全 locals 采集过宽 | 暂停、Raw 体积和敏感值风险 | stack-first、小 hits/depth、P4 披露策略；Collector P0 后续完成 | Accepted for P4 |
+| JDWP 全 locals 采集过宽 | 暂停目标 UT、Raw 体积失控 | stack-first、小 hits/depth、事件数、字节数和超时预算 | Accepted for P4 |
 | 通用摘要缺少直接业务语义 | 大模型需要结合源码/知识 | 保留精确 Source/Raw 引用；业务 Mapping 作为可选后续层 | Resolved by design |
 | 复杂值扁平化丢失关系 | 解释可能不充分 | 保存路径、类型、结构标记和 Raw 引用；不足时请求聚焦采集 | Accepted |
 | 摘要预算导致 PARTIAL | 不能确认完整事实 | 明确 INCONCLUSIVE 和缺口，不静默裁剪 | Resolved by design |

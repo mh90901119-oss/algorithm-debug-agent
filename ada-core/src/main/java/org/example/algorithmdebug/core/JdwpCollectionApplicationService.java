@@ -53,6 +53,7 @@ import org.example.algorithmdebug.harness.OutputStabilityPolicy;
 import org.example.algorithmdebug.harness.OutputStabilityWaiter;
 import org.example.algorithmdebug.harness.ProcessLimits;
 import org.example.algorithmdebug.harness.ScheduleResultCapture;
+import org.example.algorithmdebug.harness.SurefireDiagnosticException;
 import org.example.algorithmdebug.jdwp.JdwpAdapterException;
 import org.example.algorithmdebug.jdwp.JdwpExecutionRequest;
 import org.example.algorithmdebug.jdwp.JdwpExecutionResult;
@@ -168,7 +169,8 @@ public final class JdwpCollectionApplicationService {
             observedCollectorExitCode = exitCode(result.collector());
             ExternalCollectorManifest external = archiveExternalOutputs(
                     collectionRoot, request, result.completion(), plan);
-            baseline = checkBaseline(archive, record, result.completion(), capture, collectionRoot);
+            baseline = checkBaseline(
+                    archive, record, result.completion(), capture, collectionRoot, moduleRoot);
             SourceSnapshot after = sourceSnapshots.capture(moduleRoot);
             boolean sourceStable = after.completeness() == SnapshotCompleteness.COMPLETE
                     && after.equals(context.sourceSnapshot());
@@ -214,7 +216,8 @@ public final class JdwpCollectionApplicationService {
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         List<ArtifactReference> artifacts = describeArtifacts(
                 caseRoot, collectionRoot, plan, collectionId);
-        boolean usable = manifest.completion() == JdwpCollectionCompletion.SUCCESS
+        boolean usable = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
+                || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
                 && manifest.eventCount() > 0 && !manifest.truncated()
                 && baseline.evidenceUsable();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
@@ -380,13 +383,21 @@ public final class JdwpCollectionApplicationService {
             JdwpCollectionRecord record,
             JdwpCollectionCompletion completion,
             Optional<CaptureContext> captureContext,
-            Path collectionRoot) {
-        if (captureContext.isEmpty() || completion == JdwpCollectionCompletion.TOOL_FAILED
+            Path collectionRoot,
+            Path moduleRoot) {
+        if (completion == JdwpCollectionCompletion.TOOL_FAILED
                 || completion == JdwpCollectionCompletion.TIMED_OUT
                 || completion == JdwpCollectionCompletion.TRUNCATED) {
             return incomparable(record, "No comparable Gantt observation from JDWP collection");
         }
         try {
+            if (completion == JdwpCollectionCompletion.TARGET_FAILED) {
+                return checkTargetFailureBaseline(
+                        archive, record, captureContext, collectionRoot, moduleRoot);
+            }
+            if (captureContext.isEmpty()) {
+                return incomparable(record, "No comparable Gantt observation from JDWP collection");
+            }
             CapturedScheduleResult<?> captured = capture(
                     captureContext.orElseThrow(), collectionRoot.resolve("raw/gantt.json"));
             Optional<RunResultFingerprint> reference = archive.findReproduction(
@@ -397,14 +408,6 @@ public final class JdwpCollectionApplicationService {
                         record.collectionId(), ComparisonOutcome.NOT_COMPARED, Optional.empty(),
                         Optional.of(captured.normalizedJsonSha256()), false,
                         "No uninstrumented same-context reproduction reference", clock.instant());
-            }
-            if (completion == JdwpCollectionCompletion.TARGET_FAILED) {
-                return new CollectionBaselineCheck(
-                        "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                        record.collectionId(), ComparisonOutcome.INCOMPARABLE,
-                        Optional.of(reference.orElseThrow().runId()),
-                        Optional.of(captured.normalizedJsonSha256()), false,
-                        "Target failed; matching failure fingerprint was not available", clock.instant());
             }
             RunResultFingerprint current = new RunResultFingerprint(
                     SchemaVersions.RUN_RESULT_FINGERPRINT, record.caseId(), record.contextId(),
@@ -419,10 +422,35 @@ public final class JdwpCollectionApplicationService {
                     Optional.of(captured.normalizedJsonSha256()),
                     compared.outcome() == ComparisonOutcome.MATCHED,
                     compared.summary(), clock.instant());
-        } catch (HarnessException | WorkspaceException failure) {
+        } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "Gantt capture or baseline comparison failed: "
                     + failure.getClass().getSimpleName());
         }
+    }
+
+    private CollectionBaselineCheck checkTargetFailureBaseline(
+            CaseArchiveRepository archive,
+            JdwpCollectionRecord record,
+            Optional<CaptureContext> captureContext,
+            Path collectionRoot,
+            Path moduleRoot)
+            throws WorkspaceException, HarnessException, SurefireDiagnosticException {
+        Optional<CapturedScheduleResult<?>> captured = captureChangedOutput(
+                captureContext, collectionRoot.resolve("raw/gantt.json"));
+        return new TargetFailureBaselineEvaluator(clock).evaluate(
+                archive, TargetFailureBaselineEvaluator.Identity.from(record),
+                moduleRoot, captured);
+    }
+
+    private Optional<CapturedScheduleResult<?>> captureChangedOutput(
+            Optional<CaptureContext> context,
+            Path destination) throws HarnessException {
+        if (context.isEmpty()) return Optional.empty();
+        CaptureContext value = context.orElseThrow();
+        if (value.snapshotter().snapshot(value.source()).equals(value.before())) {
+            return Optional.empty();
+        }
+        return Optional.of(capture(value, destination));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})

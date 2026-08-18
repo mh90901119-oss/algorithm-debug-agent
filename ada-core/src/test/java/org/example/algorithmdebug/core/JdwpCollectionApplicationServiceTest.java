@@ -237,6 +237,34 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
+    void targetFailureWithoutGanttMatchesFailureBaselineAndKeepsPreFailureSnapshotsUsable()
+            throws Exception {
+        establishFailureBaseline("No solution after maximum iterations");
+        writeFailureReport("No solution after maximum iterations");
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"temporary\":true}");
+                Files.deleteIfExists(scheduleOutput.resolve("result.json"));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.TARGET_FAILED, true, true,
+                        Optional.of(failedRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 111)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 112)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "测试产物写入失败", failure);
+            }
+        }, ignored -> context.sourceSnapshot());
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertTrue(result.summary().evidenceUsable());
+    }
+
+    @Test
     void attachFailurePreservesStructuredCauseAndFailureArtifacts() {
         JdwpCollectionApplicationService service = service(request -> {
             throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
@@ -409,6 +437,39 @@ class JdwpCollectionApplicationServiceTest {
                         .sha256(reference)), Optional.empty());
         archive.createRunResultFingerprint(fingerprint);
         archive.createReproductionIfAbsent(fingerprint);
+    }
+
+    private void establishFailureBaseline(String message) throws Exception {
+        RunId runId = new RunId("baseline-run");
+        CaseArchiveRepository archive = archive();
+        archive.startRun(new RunRequest(
+                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                runId, TARGET, "UNINSTRUMENTED", NOW));
+        var diagnostic = new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
+                org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
+                "java.lang.IllegalStateException", message, "",
+                "fixture.Algorithm.solve(Algorithm.java:42)");
+        RunResultFingerprint fingerprint = new RunResultFingerprint(
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
+                Optional.empty(), Optional.empty(), Optional.of(
+                        new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
+                                .sha256(diagnostic)));
+        archive.createRunResultFingerprint(fingerprint);
+        archive.createReproductionIfAbsent(fingerprint);
+    }
+
+    private void writeFailureReport(String message) throws Exception {
+        Path reports = Files.createDirectories(module.resolve("target/surefire-reports"));
+        Files.writeString(reports.resolve("TEST-fixture.TargetTest.xml"), """
+                <testsuite>
+                  <testcase classname="fixture.TargetTest" name="caseUnderTest">
+                    <error type="java.lang.IllegalStateException" message="%s"><![CDATA[
+                java.lang.IllegalStateException: %s
+                    at fixture.Algorithm.solve(Algorithm.java:42)
+                    ]]></error>
+                  </testcase>
+                </testsuite>
+                """.formatted(message, message));
     }
 
     private CaseArchiveRepository archive() {
