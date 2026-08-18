@@ -3,6 +3,8 @@ package org.example.algorithmdebug.casecore;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.AnalysisResult;
+import org.example.algorithmdebug.contracts.ArtifactReference;
+import org.example.algorithmdebug.contracts.CaseArtifactRegistration;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.ContextId;
@@ -28,6 +30,7 @@ import org.example.algorithmdebug.contracts.JdwpSnapshotSummary;
 import org.example.algorithmdebug.contracts.MethodPathSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
+import org.example.algorithmdebug.contracts.SchemaVersions;
 
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
@@ -82,6 +85,7 @@ public final class CaseArchiveRepository {
             Files.createDirectory(layout.runsRoot());
             Files.createDirectory(layout.evidenceRoot());
             Files.createDirectory(layout.collectionsRoot());
+            Files.createDirectory(layout.artifactsRoot());
             writer.writeNew(layout.caseDocument(), mapper.writeJson(manifest));
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);
@@ -131,6 +135,8 @@ public final class CaseArchiveRepository {
                 checked.caseId(), id));
         checked.referencedEvidenceIds().forEach(id -> requireEvidenceRequest(
                 checked.caseId(), id));
+        checked.referencedArtifactIds().forEach(id -> requireArtifactRegistration(
+                checked.caseId(), id));
         Path document = layout(checked.caseId()).analysisResult(checked.analysisId());
         return createP4Document(document, checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
     }
@@ -142,6 +148,40 @@ public final class CaseArchiveRepository {
                 "ANALYSIS_RESULT_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
             throw identityMismatch("AnalysisResult 文档身份与路径不一致");
+        }
+        return value;
+    }
+
+    /** 校验 Artifact 当前内容后，按 ID 原子追加注册。 */
+    public Path registerArtifact(
+            CaseId caseId, ArtifactReference artifact, java.time.Instant registeredAt) {
+        requireCase(requireNonNull(caseId, "caseId"));
+        ArtifactReference checked = requireNonNull(artifact, "artifact");
+        CaseArtifactAccess access = new CaseArtifactAccess(casesRoot);
+        Path file = access.requireRegularArtifact(
+                caseId, checked.relativePath(), Math.max(1L, checked.sizeBytes()));
+        ArtifactReference actual = access.describe(
+                caseId, checked.artifactId(), checked.artifactType(), checked.mediaType(), file);
+        if (!actual.equals(checked)) {
+            throw new WorkspaceException(
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 注册前内容校验失败");
+        }
+        CaseArtifactRegistration registration = new CaseArtifactRegistration(
+                SchemaVersions.CASE_ARTIFACT_REGISTRATION, caseId, checked,
+                requireNonNull(registeredAt, "registeredAt"));
+        return createP4Document(layout(caseId).artifactRegistration(checked.artifactId()),
+                registration, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 读取指定 Artifact ID 的不可变注册。 */
+    public CaseArtifactRegistration requireArtifactRegistration(
+            CaseId caseId, String artifactId) {
+        CaseArtifactRegistration value = requireDocument(
+                layout(caseId).artifactRegistration(artifactId),
+                CaseArtifactRegistration.class, "CASE_ARTIFACT_NOT_REGISTERED");
+        if (!caseId.equals(value.caseId())
+                || !artifactId.equals(value.artifact().artifactId())) {
+            throw identityMismatch("Artifact 注册身份与路径不一致");
         }
         return value;
     }
@@ -770,8 +810,18 @@ public final class CaseArchiveRepository {
         return CaseArchiveLayout.of(casesRoot, caseId);
     }
 
+    /** @return 指定 Case 的本地归档根目录；仅供同一控制面的确定性产物归档使用 */
+    public Path caseRoot(CaseId caseId) {
+        requireNonNull(caseId, "caseId");
+        return layout(caseId).caseRoot();
+    }
+
     BoundedDocumentMapper mapper() {
         return mapper;
+    }
+
+    Path casesRoot() {
+        return casesRoot;
     }
 
     List<Path> childDirectories(Path root) {

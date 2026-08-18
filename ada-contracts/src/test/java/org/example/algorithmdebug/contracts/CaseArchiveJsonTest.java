@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Path;
@@ -20,7 +21,8 @@ class CaseArchiveJsonTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
-            .registerModule(new Jdk8Module());
+            .registerModule(new Jdk8Module())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private static final Instant RECORDED_AT = Instant.parse("2026-08-16T00:00:00Z");
 
     @Test
@@ -48,6 +50,12 @@ class CaseArchiveJsonTest {
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, caseId, contextId, new RunId("run-1"),
                 Optional.of("d".repeat(64)), Optional.of("e".repeat(64)), Optional.empty());
+        ArtifactReference artifact = new ArtifactReference(
+                "artifact-1", "LOG", "runs/run-1/stdout.log", "text/plain",
+                "a".repeat(64), 6);
+        CaseArtifactRegistration registration = new CaseArtifactRegistration(
+                SchemaVersions.CASE_ARTIFACT_REGISTRATION, caseId, artifact, RECORDED_AT);
+        ArtifactTextExcerpt excerpt = new ArtifactTextExcerpt(artifact, 0, 6, false, "output");
 
         assertRoundTrip(manifest, CaseManifest.class);
         assertRoundTrip(context, ContextRecord.class);
@@ -55,6 +63,12 @@ class CaseArchiveJsonTest {
         assertRoundTrip(result, AnalysisResult.class);
         assertRoundTrip(run, RunRequest.class);
         assertRoundTrip(fingerprint, RunResultFingerprint.class);
+        assertRoundTrip(registration, CaseArtifactRegistration.class);
+        assertRoundTrip(excerpt, ArtifactTextExcerpt.class);
+        JsonSchemaTestSupport.assertValid(schemaPath("case", "artifact-registration-v1.schema.json"),
+                MAPPER.writeValueAsString(registration));
+        JsonSchemaTestSupport.assertValid(schemaPath("tool", "artifact-text-excerpt-v1.schema.json"),
+                MAPPER.writeValueAsString(excerpt));
     }
 
     @Test
@@ -81,6 +95,9 @@ class CaseArchiveJsonTest {
                         "conclusions", "referencedRunIds", "referencedCollectionIds",
                         "referencedEvidenceIds", "referencedArtifactIds", "missingEvidence",
                         "completedAt"));
+        assertSchema("case", "artifact-registration-v1.schema.json",
+                SchemaVersions.CASE_ARTIFACT_REGISTRATION,
+                Set.of("schemaVersion", "caseId", "artifact", "registeredAt"));
         assertSchema("case", "case-digest-v2.schema.json", SchemaVersions.CASE_DIGEST,
                 Set.of("schemaVersion", "caseId", "projectId", "targetTest", "latestContextId",
                         "latestAnalysisId", "latestQuestionExcerpt", "latestRunId", "recentRuns",
@@ -110,5 +127,10 @@ class CaseArchiveJsonTest {
         Set<String> actual = new HashSet<>();
         schema.path("required").forEach(node -> actual.add(node.asText()));
         assertEquals(required, actual);
+    }
+
+    private static Path schemaPath(String directory, String fileName) {
+        String reactorRoot = System.getProperty("maven.multiModuleProjectDirectory", "..");
+        return Path.of(reactorRoot, "schemas", directory, fileName);
     }
 }

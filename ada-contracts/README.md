@@ -25,6 +25,8 @@ Algorithm Debug Agent 的稳定基础契约模块。它定义跨模块、跨进�
 - `MethodCatalog`、精确 `CodePathCollectionPlan`、`MethodPathSummary` 和 JDWP 计划/采集契约；
 - `CaseDigest`、`CaseOpenResult`：有界恢复最近 Run、Collection、Evidence 与 Analysis 结果；
 - `AnalysisResult`、`AnalysisConclusion`：只保存面向用户的最终回答、分级结论和证据引用，不保存思维链；
+- `CaseArtifactRegistration`、`ArtifactTextExcerpt`：登记 Case 内不可变产物并返回可续读的有界 UTF-8
+  片段；Artifact ID 在整个 Case 内唯一；
 - `RunOutcomeSummary`、`TargetFailureDiagnostic`、`AgentFailureDiagnostic` 及正交结果枚举。
 
 Baseline 稳定性只使用专用 `BaselineStabilityState`；Case/多轮对话不使用统一生命周期状态机。

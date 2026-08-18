@@ -113,6 +113,30 @@ public final class CliArguments {
                     new ProjectId(options.get("--project-id")),
                     new CaseId(options.get("--case-id")), new PlanId(options.get("--plan-id")));
         }
+        if (matches(arguments, "artifact", "read")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--artifact-id",
+                    "--offset-bytes", "--max-bytes"));
+            requirePresent(options, "--workspace", "--project-id", "--case-id", "--artifact-id");
+            return new CliCommand.ArtifactRead(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")), options.get("--artifact-id"),
+                    nonNegativeLong(options.getOrDefault("--offset-bytes", "0"), "--offset-bytes"),
+                    boundedInt(options.getOrDefault("--max-bytes", "16384"), "--max-bytes", 1, 65_536));
+        }
+        if (matches(arguments, "analysis", "complete")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--result-file"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--result-file"));
+            return new CliCommand.AnalysisComplete(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")),
+                    new AnalysisId(options.get("--analysis-id")),
+                    path(options.get("--result-file"), "--result-file"));
+        }
         if (arguments.length >= 3 && "plan".equals(arguments[0])
                 && "jdwp".equals(arguments[1]) && "create".equals(arguments[2])) {
             Map<String, String> options = options(arguments, 3, Set.of(
@@ -219,6 +243,26 @@ public final class CliArguments {
             return ContextMode.CREATE_NEW;
         }
         throw invalid("CONTEXT_MODE_INVALID: --context-mode 仅支持 reuse 或 new");
+    }
+
+    private static long nonNegativeLong(String value, String option) {
+        try {
+            long parsed = Long.parseLong(value);
+            if (parsed < 0) throw invalid(option + " 必须为非负整数");
+            return parsed;
+        } catch (NumberFormatException failure) {
+            throw invalid(option + " 必须为非负整数");
+        }
+    }
+
+    private static int boundedInt(String value, String option, int minimum, int maximum) {
+        try {
+            int parsed = Integer.parseInt(value);
+            if (parsed < minimum || parsed > maximum) throw invalid(option + " 超出范围");
+            return parsed;
+        } catch (NumberFormatException failure) {
+            throw invalid(option + " 必须为整数");
+        }
     }
 
     private static IllegalArgumentException invalid(String message) {

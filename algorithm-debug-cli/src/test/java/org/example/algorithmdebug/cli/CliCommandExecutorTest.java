@@ -79,4 +79,27 @@ class CliCommandExecutorTest {
         assertThrows(CliInputException.class,
                 () -> CliCommandExecutor.readJdwpPlanRequest(unsupported));
     }
+
+    @Test
+    void analysisResultFileContainsOnlySupportedFinalResultFields() throws Exception {
+        Path valid = Files.writeString(temporaryDirectory.resolve("analysis-result.json"), """
+                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
+                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
+                 "referencedRunIds":[],"referencedCollectionIds":[],
+                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
+                 "missingEvidence":[],"completedAt":"2026-08-19T00:00:00Z"}
+                """);
+        Path reasoning = Files.writeString(temporaryDirectory.resolve("reasoning.json"), """
+                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
+                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
+                 "referencedRunIds":[],"referencedCollectionIds":[],
+                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
+                 "missingEvidence":[],"reasoning":"hidden",
+                 "completedAt":"2026-08-19T00:00:00Z"}
+                """);
+
+        assertEquals("回答", CliCommandExecutor.readAnalysisResult(valid).finalAnswer());
+        assertThrows(CliInputException.class,
+                () -> CliCommandExecutor.readAnalysisResult(reasoning));
+    }
 }

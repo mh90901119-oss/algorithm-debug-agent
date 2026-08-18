@@ -3,7 +3,7 @@ package org.example.algorithmdebug.contracts;
 /**
  * 对某次运行目录内不可变产物的可移植引用。
  *
- * @param artifactId 运行内唯一的产物 ID
+ * @param artifactId Case 内唯一的产物 ID
  * @param artifactType 可扩展的产物类型代码
  * @param relativePath 使用 `/` 分隔、相对于 Case 根目录的路径
  * @param mediaType 产物媒体类型

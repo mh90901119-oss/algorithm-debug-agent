@@ -101,7 +101,8 @@ flowchart LR
   摘要只保留回答摘录、最多 5 条分级结论和最多 10 条证据缺口，完整内容由 Artifact 读取；
 - Digest 通过请求时间和完成时间排序；损坏或缺失的 Collection、Evidence、Analysis Result 子文档只产生
   有界告警，不导致整个 Case 无法恢复；
-- `artifact read` 只接受 Case 内已登记 Artifact ID，并返回有界文本片段和截断状态；
+- `artifact read` 只接受 Case 内已登记 Artifact ID，并返回最多 64 KiB 的严格 UTF-8 文本片段、
+  字节续读位置和截断状态；每次读取重新校验 Case 相对路径、符号链接、大小与 SHA-256；
 - Raw Trace、Plan、Gantt 与 Artifact 内容 Hash 继续作为证据 provenance。
 
 ## 8. 核心流程
@@ -207,3 +208,4 @@ sequenceDiagram
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-19 | 1.0 | 用户批准本地 OpenCode Demo 必要链路 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.1 | Task 4 实现 Case 内 Artifact 登记/有界读取与 Analysis 完成 CLI；审计修复 Run Artifact 原先错误的 Run 相对路径和跨 Run ID 冲突 | Codex / mh90901119-oss |

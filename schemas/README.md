@@ -5,10 +5,12 @@
 - `execution/run-result-fingerprint-v1.schema.json`：一次 Run 的 Gantt 内容与目标失败确定性指纹；
   Gantt 原始/JSON Token Hash 成对出现，且至少存在一种目标观察。
 - `tool/tool-response-v2.schema.json`：CLI 与客户端薄适配之间的成功/失败、data 和 Artifact 响应边界。
+- `tool/artifact-text-excerpt-v1.schema.json`：按字节偏移返回的有界 UTF-8 Artifact 片段和续读位置。
 - `case/case-manifest-v2.schema.json`：Case 的 Project、目标 UT、冻结 Adapter 和初始问题身份。
 - `case/context-record-v2.schema.json`：显式分析版本身份；不包含源码、输入、POM 或环境快照。
 - `case/analysis-request-v1.schema.json`：一次用户问题对应的追加式 Analysis 请求。
 - `case/analysis-result-v1.schema.json`：一轮 Analysis 的最终用户回答、分级结论和显式证据引用；不包含模型思维链。
+- `case/artifact-registration-v1.schema.json`：Case 内按唯一 Artifact ID 保存的路径、类型、大小和 SHA-256 注册记录。
 - `case/case-digest-v1.schema.json`：历史 Case Digest v1 格式，仅保留用于版本审计。
 - `case/case-digest-v2.schema.json`：当前查询时重建的有界 Case 历史摘要，包含最近 Run、Collection、Evidence 和 Analysis Result。
 - `analysis/method-catalog-v2.schema.json`：从目标 UT 出发生成的有界方法目录、静态调用边、方法源码锚点与截断信息。

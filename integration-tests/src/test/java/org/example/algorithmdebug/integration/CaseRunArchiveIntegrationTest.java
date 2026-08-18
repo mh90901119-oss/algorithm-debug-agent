@@ -12,7 +12,10 @@ import org.example.algorithmdebug.adapter.ScheduleResultSource;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
+import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
+import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.ContextMode;
+import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
@@ -225,9 +228,9 @@ class CaseRunArchiveIntegrationTest {
             RunOutcomeSummary outcome,
             boolean expectSurefire,
             boolean expectGantt) throws Exception {
-        Path runRoot = workspace.resolve("projects").resolve(projectId.value())
-                .resolve("cases").resolve(outcome.caseId().value())
-                .resolve("runs").resolve(outcome.runId().value());
+        Path caseRoot = workspace.resolve("projects").resolve(projectId.value())
+                .resolve("cases").resolve(outcome.caseId().value());
+        Path runRoot = caseRoot.resolve("runs").resolve(outcome.runId().value());
         assertTrue(Files.isRegularFile(runRoot.resolve("run-request.json")));
         Path outcomePath = runRoot.resolve("run-outcome.json");
         assertTrue(Files.isRegularFile(outcomePath));
@@ -241,12 +244,17 @@ class CaseRunArchiveIntegrationTest {
         assertTrue(types.contains("STDERR"));
         assertEquals(expectSurefire, types.contains("SUREFIRE_XML"));
         assertEquals(expectGantt, types.contains("GANTT"));
+        CaseArchiveRepository archive = new CaseArchiveRepository(
+                WorkspaceLayout.of(workspace).projectCases(projectId),
+                new BoundedDocumentMapper(), new AtomicDocumentWriter());
         for (ArtifactReference artifact : outcome.artifacts()) {
-            Path archived = runRoot.resolve(artifact.relativePath()).normalize();
+            Path archived = caseRoot.resolve(artifact.relativePath()).normalize();
             assertTrue(archived.startsWith(runRoot));
             assertTrue(Files.isRegularFile(archived));
             assertEquals(artifact.sizeBytes(), Files.size(archived));
             assertEquals(artifact.sha256(), sha256(archived));
+            assertEquals(artifact, archive.requireArtifactRegistration(
+                    outcome.caseId(), artifact.artifactId()).artifact());
         }
     }
 

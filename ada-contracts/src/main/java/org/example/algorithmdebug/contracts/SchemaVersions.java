@@ -31,6 +31,9 @@ public final class SchemaVersions {
     /** Analysis 面向用户的完成结果 Schema 版本。 */
     public static final String ANALYSIS_RESULT = "1.0";
 
+    /** Case 内单个 Artifact 注册 Schema 版本。 */
+    public static final String CASE_ARTIFACT_REGISTRATION = "1.0";
+
     /** Run 启动请求 Schema 版本。 */
     public static final String RUN_REQUEST = "1.0";
 

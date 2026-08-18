@@ -52,6 +52,16 @@ public final class CaseArchiveLayout {
         return child(caseRoot, "case.json");
     }
 
+    /** @return 当前 Case 的 Artifact 注册根目录 */
+    public Path artifactsRoot() {
+        return child(caseRoot, "artifacts");
+    }
+
+    /** @return 指定 Artifact ID 的不可变注册文档 */
+    public Path artifactRegistration(String artifactId) {
+        return child(artifactsRoot(), safeSegment(artifactId, "artifactId") + ".json");
+    }
+
     /** @return Context 根目录 */
     public Path contextsRoot() {
         return child(caseRoot, "contexts");

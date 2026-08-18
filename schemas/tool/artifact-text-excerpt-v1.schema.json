@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/tool/artifact-text-excerpt-v1.schema.json",
+  "title": "ArtifactTextExcerpt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact", "offsetBytes", "nextOffsetBytes", "truncated", "text"],
+  "properties": {
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "offsetBytes": {"type": "integer", "minimum": 0},
+    "nextOffsetBytes": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"},
+    "text": {"type": "string", "maxLength": 65536}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactType": {"type": "string", "minLength": 1, "maxLength": 128},
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
+        "mediaType": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

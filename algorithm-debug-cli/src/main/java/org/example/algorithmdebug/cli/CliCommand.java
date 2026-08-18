@@ -15,7 +15,8 @@ public sealed interface CliCommand
         CliCommand.CaseOpen, CliCommand.CaseInspect, CliCommand.RunExecute,
         CliCommand.StaticAnalyze, CliCommand.CodePathPlanCreate,
         CliCommand.CodePathCollectionExecute, CliCommand.JdwpPlanCreate,
-        CliCommand.JdwpCollectionExecute {
+        CliCommand.JdwpCollectionExecute, CliCommand.ArtifactRead,
+        CliCommand.AnalysisComplete {
 
     /**
      * 初始化外部 Workspace。
@@ -161,6 +162,32 @@ public sealed interface CliCommand
         public JdwpCollectionExecute {
             require(workspace, "workspace"); require(projectId, "projectId");
             require(caseId, "caseId"); require(planId, "planId");
+        }
+    }
+
+    /** 按注册 Artifact ID 读取一个有界 UTF-8 片段。 */
+    record ArtifactRead(
+            Path workspace, ProjectId projectId, CaseId caseId, String artifactId,
+            long offsetBytes, int maxBytes) implements CliCommand {
+        /** 校验解析后的 Artifact 读取参数。 */
+        public ArtifactRead {
+            require(workspace, "workspace"); require(projectId, "projectId");
+            require(caseId, "caseId"); require(artifactId, "artifactId");
+            if (offsetBytes < 0 || maxBytes < 1 || maxBytes > 65_536) {
+                throw new IllegalArgumentException("Artifact 读取预算非法");
+            }
+        }
+    }
+
+    /** 从有界 JSON 文件原子完成一轮 Analysis。 */
+    record AnalysisComplete(
+            Path workspace, ProjectId projectId, CaseId caseId, AnalysisId analysisId,
+            Path resultFile) implements CliCommand {
+        /** 校验命令参数。 */
+        public AnalysisComplete {
+            require(workspace, "workspace"); require(projectId, "projectId");
+            require(caseId, "caseId"); require(analysisId, "analysisId");
+            require(resultFile, "resultFile");
         }
     }
 

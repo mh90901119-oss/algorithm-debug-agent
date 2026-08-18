@@ -208,6 +208,7 @@ public final class RunApplicationService {
         Path reports = moduleRoot.resolve("target/surefire-reports").normalize();
         SurefireReportSnapshot before = surefireSnapshotter.snapshot(reports, request.targetTest());
         Path raw = archive.runRawDirectory(request.caseId(), request.runId());
+        Path caseRoot = archive.caseRoot(request.caseId());
 
         OutputDirectorySnapshotter outputSnapshotter = new OutputDirectorySnapshotter(20_000);
         ScheduleProducingTestRunner<T> runner = new ScheduleProducingTestRunner<>(
@@ -237,14 +238,16 @@ public final class RunApplicationService {
         }
 
         List<ArtifactReference> references = new ArrayList<>();
-        agentFailure = referenceLogs(schedule, raw, references, agentFailure);
+        agentFailure = referenceLogs(
+                request.runId(), schedule, caseRoot, references, agentFailure);
         GanttOutcome ganttOutcome = schedule.ganttOutcome();
         if (schedule.scheduleResult().isPresent()) {
             try {
                 references.add(artifacts.reference(
-                        raw.getParent(),
+                        caseRoot,
                         schedule.scheduleResult().orElseThrow().capturedPath(),
-                        "artifact-gantt", "GANTT", "application/json", MAX_GANTT_BYTES));
+                        runArtifactId(request.runId(), "gantt"),
+                        "GANTT", "application/json", MAX_GANTT_BYTES));
             } catch (CaseRunException failure) {
                 ganttOutcome = GanttOutcome.INCOMPLETE;
                 agentFailure = mergeFailure(agentFailure,
@@ -255,9 +258,11 @@ public final class RunApplicationService {
             try {
                 Path report = testResult.orElseThrow().sourceReport();
                 references.add(artifacts.copy(
-                        raw.getParent(), report,
-                        Path.of("raw", "surefire", report.getFileName().toString()),
-                        "artifact-surefire", "SUREFIRE_XML", "application/xml",
+                        caseRoot, report,
+                        caseRoot.relativize(raw.resolve("surefire")
+                                .resolve(report.getFileName().toString())),
+                        runArtifactId(request.runId(), "surefire"),
+                        "SUREFIRE_XML", "application/xml",
                         MAX_SUREFIRE_BYTES));
             } catch (CaseRunException failure) {
                 agentFailure = mergeFailure(agentFailure,
@@ -276,7 +281,7 @@ public final class RunApplicationService {
         try {
             Optional<RunResultFingerprint> fingerprint =
                     createFingerprint(request, schedule, observed);
-            decision = archiveAndCompare(archive, fingerprint, references);
+            decision = archiveAndCompare(archive, caseRoot, fingerprint, references);
         } catch (HarnessException failure) {
             agentFailure = mergeFailure(agentFailure,
                     diagnostic("TARGET_FAILURE_FINGERPRINT_FAILED", failure));
@@ -321,6 +326,7 @@ public final class RunApplicationService {
 
     private ComparisonDecision archiveAndCompare(
             CaseArchiveRepository archive,
+            Path caseRoot,
             Optional<RunResultFingerprint> current,
             List<ArtifactReference> references) {
         if (current.isEmpty()) {
@@ -332,8 +338,9 @@ public final class RunApplicationService {
         try {
             fingerprintPath = archive.createRunResultFingerprint(fingerprint);
             references.add(artifacts.reference(
-                    fingerprintPath.getParent(), fingerprintPath,
-                    "artifact-run-result-fingerprint", "RUN_RESULT_FINGERPRINT",
+                    caseRoot, fingerprintPath,
+                    runArtifactId(fingerprint.runId(), "result-fingerprint"),
+                    "RUN_RESULT_FINGERPRINT",
                     "application/json", MAX_FINGERPRINT_BYTES));
         } catch (WorkspaceException | CaseRunException failure) {
             throw new CaseRunException(
@@ -413,22 +420,25 @@ public final class RunApplicationService {
     }
 
     private Optional<AgentFailureDiagnostic> referenceLogs(
+            RunId runId,
             ScheduleRunResult<?> schedule,
-            Path raw,
+            Path caseRoot,
             List<ArtifactReference> references,
             Optional<AgentFailureDiagnostic> current) {
         Optional<AgentFailureDiagnostic> result = current;
         try {
             references.add(artifacts.reference(
-                    raw.getParent(), schedule.run().stdout().path(),
-                    "artifact-stdout", "STDOUT", "text/plain", MAX_LOG_BYTES));
+                    caseRoot, schedule.run().stdout().path(),
+                    runArtifactId(runId, "stdout"),
+                    "STDOUT", "text/plain", MAX_LOG_BYTES));
         } catch (CaseRunException failure) {
             result = mergeFailure(result, diagnostic(failure.code(), failure));
         }
         try {
             references.add(artifacts.reference(
-                    raw.getParent(), schedule.run().stderr().path(),
-                    "artifact-stderr", "STDERR", "text/plain", MAX_LOG_BYTES));
+                    caseRoot, schedule.run().stderr().path(),
+                    runArtifactId(runId, "stderr"),
+                    "STDERR", "text/plain", MAX_LOG_BYTES));
         } catch (CaseRunException failure) {
             result = mergeFailure(result, diagnostic(failure.code(), failure));
         }
@@ -449,9 +459,11 @@ public final class RunApplicationService {
         return outcome;
     }
 
-    private static void complete(CaseArchiveRepository archive, RunOutcomeSummary outcome) {
+    private void complete(CaseArchiveRepository archive, RunOutcomeSummary outcome) {
         try {
             archive.completeRun(outcome);
+            outcome.artifacts().forEach(artifact ->
+                    archive.registerArtifact(outcome.caseId(), artifact, clock.instant()));
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
                     "RUN_ARCHIVE_WRITE_FAILED", "无法写入 RunOutcome", failure);
@@ -513,6 +525,10 @@ public final class RunApplicationService {
                 "MULTIPLE_AGENT_FAILURES",
                 "多个 Agent 后处理步骤未完成: " + first.code() + "," + next.code(),
                 first.exceptionClass().isEmpty() ? next.exceptionClass() : first.exceptionClass()));
+    }
+
+    private static String runArtifactId(RunId runId, String kind) {
+        return runId.value() + "-" + kind;
     }
 
     private static String boundedLogText(Path path) {

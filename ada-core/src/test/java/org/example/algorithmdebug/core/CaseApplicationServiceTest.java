@@ -15,10 +15,13 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.ContextMode;
+import org.example.algorithmdebug.casecore.CaseArchiveRepository;
+import org.example.algorithmdebug.casecore.CaseArtifactAccess;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
@@ -104,6 +107,36 @@ class CaseApplicationServiceTest {
                 ContextMode.REUSE_LATEST);
 
         assertEquals(opened.digest(), service.inspect(workspace, PROJECT_ID, opened.caseId()));
+    }
+
+    @Test
+    void completesAnalysisAndReadsOnlyRegisteredArtifact() throws Exception {
+        ArrayDeque<String> ids = new ArrayDeque<>(List.of("1", "1", "1"));
+        CaseApplicationService service = new CaseApplicationService(
+                registrations, mapper, writer,
+                new AdapterCatalog(List.of(new MissingInputAdapter())),
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
+        CaseOpenResult opened = service.open(
+                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty(),
+                ContextMode.REUSE_LATEST);
+        Path casesRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID);
+        CaseArchiveRepository archive = new CaseArchiveRepository(casesRoot, mapper, writer);
+        Path artifactFile = Files.writeString(
+                casesRoot.resolve("case-1/sample.txt"), "runtime evidence");
+        var artifact = new CaseArtifactAccess(casesRoot).describe(
+                opened.caseId(), "artifact-1", "TRACE", "text/plain", artifactFile);
+        archive.registerArtifact(opened.caseId(), artifact, TIME);
+        AnalysisResult result = new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, opened.caseId(), opened.contextId(),
+                opened.analysisId(), "最终回答", List.of(), List.of(), List.of(), List.of(),
+                List.of("artifact-1"), List.of(), TIME.plusSeconds(1));
+
+        assertEquals(result, service.completeAnalysis(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId(), result));
+        assertEquals("runtime evidence", service.readArtifact(
+                workspace, PROJECT_ID, opened.caseId(), "artifact-1", 0, 64).text());
+        assertEquals(1, service.inspect(workspace, PROJECT_ID, opened.caseId())
+                .completedAnalysisCount());
     }
 
     private ProjectRegistration registration() {

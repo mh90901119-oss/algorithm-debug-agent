@@ -8,12 +8,16 @@ import org.example.algorithmdebug.casecore.CaseSessionRequest;
 import org.example.algorithmdebug.casecore.CaseSessionService;
 import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
+import org.example.algorithmdebug.casecore.RegisteredArtifactReader;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
+import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.AnalysisResult;
+import org.example.algorithmdebug.contracts.ArtifactTextExcerpt;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.TargetTest;
@@ -97,6 +101,43 @@ public final class CaseApplicationService {
             return new CaseDigestReader(archive).read(caseId);
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "检查 Case 失败", failure);
+        }
+    }
+
+    /** 原子完成一轮 Analysis，只归档最终回答、分级结论和显式引用。 */
+    public AnalysisResult completeAnalysis(
+            Path workspaceRoot, ProjectId projectId, CaseId caseId,
+            AnalysisId analysisId, AnalysisResult result) {
+        if (caseId == null || analysisId == null || result == null) {
+            throw new IllegalArgumentException("analysis complete 参数不能为空");
+        }
+        if (!caseId.equals(result.caseId()) || !analysisId.equals(result.analysisId())) {
+            throw new CaseRunException(
+                    "ANALYSIS_RESULT_IDENTITY_MISMATCH", "Analysis 结果与命令身份不一致");
+        }
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            requireRegistration(layout, projectId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            archive.completeAnalysis(result);
+            return result;
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(failure.code(), "完成 Analysis 失败", failure);
+        }
+    }
+
+    /** 只按已注册 Artifact ID 读取有界 UTF-8 片段。 */
+    public ArtifactTextExcerpt readArtifact(
+            Path workspaceRoot, ProjectId projectId, CaseId caseId,
+            String artifactId, long offsetBytes, int maxBytes) {
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            requireRegistration(layout, projectId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            return new RegisteredArtifactReader(archive).read(
+                    caseId, artifactId, offsetBytes, maxBytes);
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(failure.code(), "读取 Artifact 失败", failure);
         }
     }
 

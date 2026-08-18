@@ -200,6 +200,13 @@ class RunApplicationServiceTest {
         assertTrue(second.artifacts().stream().anyMatch(
                 artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
         Path caseRoot = caseRoot();
+        assertTrue(second.artifacts().stream().allMatch(
+                artifact -> artifact.relativePath().startsWith("runs/run-2/")));
+        assertEquals("run-2-stdout", second.artifacts().stream()
+                .filter(artifact -> "STDOUT".equals(artifact.artifactType()))
+                .findFirst().orElseThrow().artifactId());
+        assertEquals("run-2-stdout", archive().requireArtifactRegistration(
+                opened.caseId(), "run-2-stdout").artifact().artifactId());
         assertTrue(Files.isRegularFile(caseRoot.resolve(
                 "runs/run-2/run-result-fingerprint.json")));
         assertTrue(Files.isRegularFile(caseRoot.resolve(

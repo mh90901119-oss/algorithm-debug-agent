@@ -21,7 +21,9 @@ Gantt comparison deliberately ignores JSON formatting whitespace but preserves o
 string content. It reports only changed dimensions, not a field-level Diff. Context is now an explicit,
 minimal analysis-version identity: an existing Case reuses the latest Context by default and appends a
 new one only when `--context-mode new` is requested. Static method analysis, exact method-level
-CodePathTracer Plan/collection and the JDWP Plan/collection application flow are implemented.
+CodePathTracer Plan/collection and the JDWP Plan/collection application flow are implemented. Every
+successful Run, static Plan and Collection response now registers its Case-local Artifact references;
+the CLI can read a hash-verified UTF-8 excerpt by Artifact ID and append a final Analysis result.
 The P3 JDWP release audit and real Wafer one-point smoke are complete: the target UT produced three
 bounded hits, its normalized Gantt Hash matched the no-collection same-Context baseline, and no
 managed process survived. Input Analysis, Evidence construction, the OpenCode installer and
@@ -64,6 +66,8 @@ java -jar $ada plan codepath create --workspace D:\agent-workspace --project-id 
 java -jar $ada collection codepath execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
 java -jar $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
 java -jar $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
+java -jar $ada artifact read --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --artifact-id <artifactId> [--offset-bytes 0] [--max-bytes 16384]
+java -jar $ada analysis complete --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --result-file analysis-result.json
 ```
 
 JDWP execution treats the Collector as one configured local JAR. Before starting OpenCode/CLI,

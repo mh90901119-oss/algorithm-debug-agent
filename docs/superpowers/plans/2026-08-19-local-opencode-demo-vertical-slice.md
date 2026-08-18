@@ -63,10 +63,10 @@
 
 **Produces:** `artifact read` and `analysis complete` ToolResponse commands.
 
-- [ ] Add failing tests for valid excerpt, truncation, unknown artifact, traversal and symlink escape.
-- [ ] Verify RED with `mvn -pl case-management,ada-core,algorithm-debug-cli -am test`.
-- [ ] Implement registered-Artifact-only reads and append-only Analysis completion.
-- [ ] Add CLI parsing and stable JSON responses; run affected tests and commit.
+- [x] Add failing tests for valid excerpt, truncation, unknown artifact, traversal and symlink escape.
+- [x] Verify RED with `mvn -pl case-management,ada-core,algorithm-debug-cli -am test`.
+- [x] Implement registered-Artifact-only reads and append-only Analysis completion.
+- [x] Add CLI parsing and stable JSON responses; run affected tests and commit.
 
 ### Task 5: Provide a local ADA launcher
 

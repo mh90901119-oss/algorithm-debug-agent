@@ -82,7 +82,9 @@ public final class StaticAnalysisApplicationService {
             Path document = archive.createMethodCatalog(catalog);
             ArtifactReference artifact = describeArtifact(
                     layout.projectCases(projectId).resolve(caseId.value()), document,
-                    analysisId.value(), "METHOD_CATALOG", "STATIC_");
+                    scopedArtifactId(analysisId.value() + "-method-catalog"),
+                    "METHOD_CATALOG", "STATIC_");
+            archive.registerArtifact(caseId, artifact, clock.instant());
             return new ArtifactBackedResult<>(new StaticAnalysisSummary(
                     catalog.caseId(), catalog.contextId(), catalog.analysisId(),
                     catalog.completeness(), catalog.entries().size(), catalog.edges().size(),
@@ -107,7 +109,9 @@ public final class StaticAnalysisApplicationService {
             Path document = archive.createCodePathPlan(plan);
             ArtifactReference artifact = describeArtifact(
                     layout.projectCases(projectId).resolve(caseId.value()), document,
-                    plan.planId().value(), "CODEPATH_PLAN", "PLAN_");
+                    scopedArtifactId(analysisId.value() + "-codepath-plan-" + plan.planId().value()),
+                    "CODEPATH_PLAN", "PLAN_");
+            archive.registerArtifact(caseId, artifact, clock.instant());
             return new ArtifactBackedResult<>(new CodePathPlanSummary(
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.selectors().size()), artifact);
@@ -132,7 +136,9 @@ public final class StaticAnalysisApplicationService {
             Path document = archive.createJdwpPlan(plan);
             ArtifactReference artifact = describeArtifact(
                     layout.projectCases(projectId).resolve(caseId.value()), document,
-                    plan.planId().value(), "JDWP_PLAN", "JDWP_PLAN_");
+                    scopedArtifactId(analysisId.value() + "-jdwp-plan-" + plan.planId().value()),
+                    "JDWP_PLAN", "JDWP_PLAN_");
+            archive.registerArtifact(caseId, artifact, clock.instant());
             return new ArtifactBackedResult<>(new JdwpPlanSummary(
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),
@@ -178,6 +184,19 @@ public final class StaticAnalysisApplicationService {
                     HexFormat.of().formatHex(digest.digest()), Files.size(normalizedDocument));
         } catch (IOException | NoSuchAlgorithmException failure) {
             throw new CaseRunException(errorPrefix + "ARTIFACT_REFERENCE_FAILED", "无法校验归档产物", failure);
+        }
+    }
+
+    private static String scopedArtifactId(String candidate) {
+        if (candidate.length() <= 128 && !candidate.contains("/")
+                && !candidate.contains("\\") && !candidate.contains(":")) {
+            return candidate;
+        }
+        try {
+            return "artifact-" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(candidate.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException failure) {
+            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
         }
     }
 }

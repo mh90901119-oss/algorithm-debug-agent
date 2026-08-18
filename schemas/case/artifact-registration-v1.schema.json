@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/artifact-registration-v1.schema.json",
+  "title": "CaseArtifactRegistration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "artifact", "registeredAt"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "caseId": {"$ref": "#/$defs/id"},
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "registeredAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactType": {"type": "string", "minLength": 1, "maxLength": 128},
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
+        "mediaType": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

@@ -8,6 +8,10 @@
 - `CaseDigestReader`：重建面向模型的有界历史摘要，包含最近 Run、Collection、Evidence 和 Analysis 结果，
   帮助模型决定复用证据、运行 UT 或继续采集；损坏的子文档只形成告警。
 - `CaseArchiveRepository.completeAnalysis`：以 create-new 方式归档一轮最终回答和显式证据引用。
+- `CaseArchiveRepository.registerArtifact`：把 Agent 已生成的 Case 相对产物按 Case 内唯一 ID 追加登记，
+  登记前校验实际大小和 SHA-256；Run、Plan、Collection 和派生 Evidence 产物使用同一登记入口。
+- `RegisteredArtifactReader`：只按登记 ID 返回最多 64 KiB 的严格 UTF-8 字节片段；每次读取重新校验
+  路径边界、符号链接、大小和 SHA-256，不接受调用方提供的任意路径。
 - `ReproductionComparator`：只比较 Gantt JSON 内容与目标失败指纹，输出 `MATCHED/CHANGED/INCOMPARABLE`，不解释业务根因。
 - `ImmutableArtifactStore` 和 `AtomicDocumentWriter`：以不可覆盖、临时文件加原子提交的方式保存产物。
 

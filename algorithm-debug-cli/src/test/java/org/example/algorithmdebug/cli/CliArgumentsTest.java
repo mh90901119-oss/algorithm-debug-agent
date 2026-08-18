@@ -125,6 +125,21 @@ class CliArgumentsTest {
                         "collection", "jdwp", "execute", "--workspace", "workspace",
                         "--project-id", "demo", "--case-id", "case-1",
                         "--plan-id", "jdwp-plan-1"}));
+        assertEquals(
+                new CliCommand.ArtifactRead(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        "artifact-1", 0, 16_384),
+                CliArguments.parse(new String[]{
+                        "artifact", "read", "--workspace", "workspace", "--project-id", "demo",
+                        "--case-id", "case-1", "--artifact-id", "artifact-1"}));
+        assertEquals(
+                new CliCommand.AnalysisComplete(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        new AnalysisId("analysis-1"), Path.of("result.json")),
+                CliArguments.parse(new String[]{
+                        "analysis", "complete", "--workspace", "workspace", "--project-id", "demo",
+                        "--case-id", "case-1", "--analysis-id", "analysis-1",
+                        "--result-file", "result.json"}));
     }
 
     @Test

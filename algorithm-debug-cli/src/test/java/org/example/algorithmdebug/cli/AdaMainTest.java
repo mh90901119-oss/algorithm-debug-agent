@@ -207,6 +207,28 @@ class AdaMainTest {
     }
 
     @Test
+    void artifactReadReturnsBoundedContinuationMetadataInToolResponse() throws Exception {
+        var artifact = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "run-1-stdout", "STDOUT", "runs/run-1/raw/stdout.log", "text/plain",
+                "a".repeat(64), 12);
+        AdaMain application = new AdaMain(
+                command -> new org.example.algorithmdebug.contracts.ArtifactTextExcerpt(
+                        artifact, 0, 6, true, "output"),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "artifact", "read", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1",
+                "--artifact-id", "run-1-stdout", "--max-bytes", "6");
+
+        assertSuccess(invocation);
+        assertEquals("output", invocation.response().path("data").path("text").textValue());
+        assertEquals(6, invocation.response().path("data").path("nextOffsetBytes").longValue());
+        assertTrue(invocation.response().path("data").path("truncated").booleanValue());
+        assertFalse(invocation.stdout().contains(temporaryDirectory.toString()));
+    }
+
+    @Test
     void caseOpenDoesNotRunUtAndRejectsReusingCaseForAnotherTargetTest() throws Exception {
         AdaMain application = AdaMain.defaultApplication();
         Path workspace = temporaryDirectory.resolve("case-workspace");

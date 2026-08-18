@@ -264,6 +264,14 @@ public final class AdaMain {
             case "CASE_NOT_FOUND" -> "Case was not found";
             case "CONTEXT_NOT_FOUND" -> "Case context was not found";
             case "ANALYSIS_NOT_FOUND" -> "Case analysis was not found";
+            case "ANALYSIS_RESULT_IDENTITY_MISMATCH" -> "Analysis result identity does not match the command";
+            case "ANALYSIS_RESULT_NOT_FOUND" -> "Analysis result was not found";
+            case "CASE_ARTIFACT_NOT_REGISTERED" -> "Artifact ID is not registered in this case";
+            case "CASE_ARTIFACT_PATH_INVALID" -> "Artifact path is invalid";
+            case "CASE_ARTIFACT_OFFSET_INVALID" -> "Artifact offset is invalid";
+            case "CASE_ARTIFACT_INTEGRITY_MISMATCH" -> "Artifact content no longer matches its registration";
+            case "CASE_ARTIFACT_NOT_UTF8" -> "Artifact is not valid UTF-8 text";
+            case "CASE_ARTIFACT_BUDGET_TOO_SMALL" -> "Artifact read budget is too small";
             case "CASE_PROJECT_MISMATCH" -> "Case belongs to another project";
             case "CASE_TARGET_TEST_MISMATCH" -> "Case belongs to another target test";
             case "MAVEN_NOT_FOUND" -> "Maven executable is unavailable";

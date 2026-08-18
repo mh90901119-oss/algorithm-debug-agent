@@ -10,6 +10,7 @@ import org.example.algorithmdebug.core.CollectionApplicationService;
 import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -36,6 +37,7 @@ public final class CliCommandExecutor {
     private final JdwpCollectionApplicationService jdwpCollectionService;
 
     private static final int MAX_QUESTION_BYTES = 65_536;
+    private static final int MAX_ANALYSIS_RESULT_BYTES = 256 * 1024;
 
     /**
      * 创建 CLI 命令执行器。
@@ -140,6 +142,16 @@ public final class CliCommandExecutor {
             return jdwpCollectionService.execute(
                     collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
         }
+        if (command instanceof CliCommand.ArtifactRead read) {
+            return caseService.readArtifact(
+                    read.workspace(), read.projectId(), read.caseId(), read.artifactId(),
+                    read.offsetBytes(), read.maxBytes());
+        }
+        if (command instanceof CliCommand.AnalysisComplete complete) {
+            return caseService.completeAnalysis(
+                    complete.workspace(), complete.projectId(), complete.caseId(),
+                    complete.analysisId(), readAnalysisResult(complete.resultFile()));
+        }
         throw new IllegalArgumentException("不支持的 CLI 命令类型");
     }
 
@@ -203,6 +215,18 @@ public final class CliCommandExecutor {
         }
     }
 
+    /** 严格读取 256 KiB 内的 AnalysisResult JSON。 */
+    static AnalysisResult readAnalysisResult(Path path) {
+        byte[] bytes = readBoundedFile(path, "result-file", MAX_ANALYSIS_RESULT_BYTES);
+        String json = decodeUtf8(bytes, "result-file");
+        try {
+            return new ObjectMapper().registerModule(new JavaTimeModule())
+                    .readValue(json, AnalysisResult.class);
+        } catch (IOException | RuntimeException failure) {
+            throw new CliInputException("result-file 不是有效的 AnalysisResult JSON", failure);
+        }
+    }
+
     private static String decodeUtf8(byte[] bytes, String label) {
         try {
             String value = StandardCharsets.UTF_8.newDecoder()
@@ -216,6 +240,10 @@ public final class CliCommandExecutor {
     }
 
     private static byte[] readBoundedFile(Path path, String label) {
+        return readBoundedFile(path, label, MAX_QUESTION_BYTES);
+    }
+
+    private static byte[] readBoundedFile(Path path, String label, int maximumBytes) {
         if (path == null) {
             throw new CliInputException(label + " 不能为空");
         }
@@ -224,9 +252,9 @@ public final class CliCommandExecutor {
             throw new CliInputException(label + " 不存在或不是普通文件");
         }
         try (java.io.InputStream input = Files.newInputStream(normalized)) {
-            byte[] bytes = input.readNBytes(MAX_QUESTION_BYTES + 1);
-            if (bytes.length > MAX_QUESTION_BYTES) {
-                throw new CliInputException(label + " 超过 64 KiB");
+            byte[] bytes = input.readNBytes(maximumBytes + 1);
+            if (bytes.length > maximumBytes) {
+                throw new CliInputException(label + " 超过读取预算");
             }
             return bytes;
         } catch (IOException | SecurityException failure) {
