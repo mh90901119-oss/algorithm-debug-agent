@@ -98,7 +98,7 @@
 2. RED: target starts first; Collector starts only after bounded JDWP listening output appears.
 3. RED: target compilation/start failure, readiness timeout, Collector start/attach failure, Collector nonzero exit, target timeout and both-success paths.
 4. RED: Collector failure after target suspension always cleans the Maven/Surefire tree.
-5. GREEN: inject port allocator, clock/process runner and tool paths for deterministic tests.
+5. GREEN: application flow allocates loopback port before writing the Collector Plan; pass that exact port into the execution request, and inject clock/process runner and tool paths for deterministic tests.
 6. GREEN: archive separate target and Collector logs; normalize external output paths only in the Agent Manifest layer.
 7. Add a conditional real Collector smoke against a minimal fixture, then Wafer Demo one-point stack-only smoke.
 8. Run `mvn -pl jdwp-collector-adapter -am test`.

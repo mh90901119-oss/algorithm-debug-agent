@@ -1,0 +1,113 @@
+package org.example.algorithmdebug.jdwp;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.HashSet;
+import java.util.List;
+import org.example.algorithmdebug.adapter.RunMode;
+import org.example.algorithmdebug.adapter.TestLaunchSpec;
+import org.example.algorithmdebug.harness.MavenExecutionOptions;
+import org.example.algorithmdebug.harness.ProcessLimits;
+
+/**
+ * 一次 JDWP 双进程运行所需的机器边界、日志路径和时间预算。
+ *
+ * <p>该类型是 Agent 内部执行请求，不接收大模型拼接后的 argv。</p>
+ *
+ * @param targetLaunch 目标 UT 的 JDWP 模式启动规格
+ * @param targetOptions Maven 可执行文件、目标日志和进程限制
+ * @param port 已写入并归档到 Collector Plan 的 loopback 端口
+ * @param javaExecutable 启动 Collector 的 Java 21 可执行文件
+ * @param collectorJar 锁定的 Collector JAR
+ * @param expectedCollectorSha256 工具锁声明的 Collector JAR SHA-256
+ * @param collectorPlan 已归档的 Collector Plan
+ * @param collectorOutputDirectory 本次 Collector Raw 输出目录
+ * @param collectorStdoutLog Collector stdout create-new 日志
+ * @param collectorStderrLog Collector stderr create-new 日志
+ * @param collectorProcessLimits Collector 日志和终止预算
+ * @param maximumRawBytes Raw Trace 最大允许字节数
+ * @param targetReadyTimeout 目标 JDWP listening 标记等待预算
+ * @param overallTimeout 双进程整体执行预算
+ */
+public record JdwpExecutionRequest(
+        TestLaunchSpec targetLaunch,
+        MavenExecutionOptions targetOptions,
+        int port,
+        Path javaExecutable,
+        Path collectorJar,
+        String expectedCollectorSha256,
+        Path collectorPlan,
+        Path collectorOutputDirectory,
+        Path collectorStdoutLog,
+        Path collectorStderrLog,
+        ProcessLimits collectorProcessLimits,
+        long maximumRawBytes,
+        Duration targetReadyTimeout,
+        Duration overallTimeout) {
+
+    /** 校验运行模式、工具输入、日志隔离和有界超时。 */
+    public JdwpExecutionRequest {
+        if (targetLaunch == null || targetOptions == null || collectorProcessLimits == null) {
+            throw new IllegalArgumentException("目标启动规格、执行选项和 Collector 限制不能为空");
+        }
+        if (targetLaunch.runMode() != RunMode.JDWP) {
+            throw new IllegalArgumentException("targetLaunch.runMode 必须为 JDWP");
+        }
+        JdwpTargetCommandFactory.requirePort(port);
+        javaExecutable = requireFile(javaExecutable, "javaExecutable");
+        collectorJar = requireFile(collectorJar, "collectorJar");
+        if (expectedCollectorSha256 == null || !expectedCollectorSha256.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("expectedCollectorSha256 必须是小写 SHA-256");
+        }
+        collectorPlan = requireFile(collectorPlan, "collectorPlan");
+        collectorOutputDirectory = requireAbsolute(collectorOutputDirectory, "collectorOutputDirectory");
+        if (Files.exists(collectorOutputDirectory.resolve("raw-trace.jsonl"))
+                || Files.exists(collectorOutputDirectory.resolve("collection-manifest.json"))) {
+            throw new IllegalArgumentException("Collector 输出目录不得包含历史 Raw Trace 或 Manifest");
+        }
+        collectorStdoutLog = requireAbsolute(collectorStdoutLog, "collectorStdoutLog");
+        collectorStderrLog = requireAbsolute(collectorStderrLog, "collectorStderrLog");
+        List<Path> logPaths = List.of(
+                targetOptions.stdoutLog(), targetOptions.stderrLog(),
+                collectorStdoutLog, collectorStderrLog);
+        if (new HashSet<>(logPaths).size() != logPaths.size()) {
+            throw new IllegalArgumentException("目标与 Collector 的四个日志路径必须互不相同");
+        }
+        if (maximumRawBytes < 1 || maximumRawBytes > 50L * 1024 * 1024) {
+            throw new IllegalArgumentException("maximumRawBytes 必须在 1 到 50 MiB 之间");
+        }
+        requirePositive(targetReadyTimeout, "targetReadyTimeout");
+        requirePositive(overallTimeout, "overallTimeout");
+        if (targetReadyTimeout.compareTo(overallTimeout) > 0) {
+            throw new IllegalArgumentException("targetReadyTimeout 不能超过 overallTimeout");
+        }
+    }
+
+    /** @return 锁定 Collector 在 outputDirectory 下使用的 Raw Trace 路径 */
+    public Path rawTracePath() {
+        return collectorOutputDirectory.resolve("raw-trace.jsonl");
+    }
+
+    private static Path requireFile(Path value, String field) {
+        Path path = requireAbsolute(value, field);
+        if (!Files.isRegularFile(path)) {
+            throw new IllegalArgumentException(field + " 必须是已存在的普通文件: " + path);
+        }
+        return path;
+    }
+
+    private static Path requireAbsolute(Path value, String field) {
+        if (value == null || !value.isAbsolute()) {
+            throw new IllegalArgumentException(field + " 必须是绝对路径");
+        }
+        return value.normalize();
+    }
+
+    private static void requirePositive(Duration value, String field) {
+        if (value == null || value.isZero() || value.isNegative()
+                || value.compareTo(Duration.ofMinutes(20)) > 0) {
+            throw new IllegalArgumentException(field + " 必须在 0 到 20 分钟之间");
+        }
+    }
+}

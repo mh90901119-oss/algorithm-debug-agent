@@ -79,8 +79,10 @@ P1 已能从目标 UT 建立带源码 Hash 的静态方法目录，P2 已能按�
 flowchart LR
     LLM["OpenCode 大模型"] --> REQ["JDWP 采集意图"]
     REQ --> COMP["JdwpPlanCompiler\n源码和能力校验"]
-    COMP --> PLAN["归档 Agent Plan\n和 Collector Plan"]
-    PLAN --> COORD["JdwpCollectionCoordinator"]
+    COMP --> APLAN["归档 Agent Plan"]
+    APLAN --> PORT["分配 loopback 临时端口"]
+    PORT --> CPLAN["生成并归档 Collector Plan"]
+    CPLAN --> COORD["同一端口创建 ExecutionRequest\n并立即执行"]
     COORD --> TARGET["Maven / Surefire 目标 UT\nsuspend=y, loopback"]
     COORD --> COLLECTOR["锁定 JDWP Batch Collector"]
     TARGET --> COLLECTOR
@@ -109,10 +111,10 @@ flowchart LR
 | `debug-plan-engine/CollectorDebugPlanWriter` | 生成外部精确 JSON | Agent Plan + port | `collector-plan.json` | Jackson |
 | `debug-harness/ManagedProcessRunner` | 启动、异步排日志、等待和终止一个进程树 | argv/目录/预算 | ManagedProcess | JDK |
 | `debug-harness/ManagedProcess` | 表达唯一进程所有权和幂等关闭 | Process + log pumps | 完成事实 | JDK |
-| `jdwp-collector-adapter/LoopbackPortAllocator` | 仅从 loopback 临时分配端口 | 无 | port | JDK |
+| `jdwp-collector-adapter/LoopbackPortAllocator` | 在应用服务生成 Collector Plan 前，仅从 loopback 临时分配端口 | 无 | port | JDK |
 | `jdwp-collector-adapter/JdwpTargetCommandFactory` | 向 Adapter 启动规格注入 JDWP JVM 参数 | TestLaunchSpec + port | argv/spec | harness/adapter-sdk |
 | `jdwp-collector-adapter/JdwpCollectorCommandFactory` | 构造锁定 Collector argv | JAR/plan/output | argv | JDK |
-| `jdwp-collector-adapter/JdwpCollectionCoordinator` | 协调目标、就绪、Collector、退出和清理 | execution request | collection result | harness |
+| `jdwp-collector-adapter/JdwpCollectionCoordinator` | 使用请求中已归档的同一端口，协调目标、就绪、Collector、退出和清理 | execution request（含 port） | collection result | harness |
 | `case-management/CaseArchiveRepository` | 新增 JDWP plan/request/manifest 追加读写 | contracts | Case 路径 | contracts |
 | `ada-core/JdwpCollectionApplicationService` | 源码、执行、Gantt、Baseline 和摘要编排 | Case + plan | ToolResponse facts | 上述模块 |
 | `algorithm-debug-cli` | `plan jdwp create`、`collection jdwp execute` | JSON/参数 | ToolResponse 2.0 | core |
@@ -188,7 +190,11 @@ sequenceDiagram
     C->>C: create-new 归档 Plan
     L->>C: execute(planId)
     C->>C: 新建 runId/collectionId，保存请求并复验源码
-    C->>H: 执行计划
+    C->>C: 分配 loopback 端口
+    C->>P: 用该端口生成 Collector Plan
+    P-->>C: Collector Plan JSON
+    C->>C: create-new 归档 Collector Plan
+    C->>H: 用同一端口立即执行
     H->>T: 启动 suspend=y 的目标测试
     H->>H: 等待有界的 JDWP listening 日志标记
     H->>J: 启动锁定 Collector 并 attach
@@ -205,6 +211,11 @@ sequenceDiagram
 标记；就绪超时或目标提前退出时不启动 Collector。Collector 一旦启动失败或非零退出，Coordinator 立即清理目标
 Maven 进程及其完整子进程树，防止 suspended JVM 遗留。正常情况下同时等待 Collector 和目标完成，任何一侧超过
 独立预算都进入有界终止。
+
+端口分配必须发生在 Collector Plan 写出之前。`JdwpCollectionApplicationService` 分配端口后立即用该端口生成并
+create-new 归档 Collector Plan，再把同一端口放入 `JdwpExecutionRequest`。Coordinator 不得重新分配或替换端口；
+Collector CLI 的 `--port` 仅用于与已归档 Plan 显式保持一致，不能用来掩盖 Plan 中的不同端口。临时端口关闭与目标
+JVM 实际绑定之间仍存在很短的竞争窗口，启动失败必须结构化报告且不得无界重试。
 
 ## 9. 错误处理与可观测性
 
@@ -308,8 +319,8 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 ## 16. 文档同步清单
 
 - [x] P3 详细设计与 Mermaid 流程
-- [ ] JDWP Schema 与示例
-- [ ] `config/toolchain-lock.json` 和 `config/collection-limits.yaml`
+- [x] JDWP Schema 与示例
+- [x] `config/toolchain-lock.json` 和 `config/collection-limits.yaml`
 - [ ] 架构模块详细设计与工具验证基线
 - [ ] README/CLI 使用说明
 - [ ] OpenCode Skill 的 JDWP 采集决策指引
@@ -317,15 +328,20 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 
 ## 17. 实现完成记录
 
-- 实际变更：尚未实施。
-- 相对设计的偏差：无。
-- 测试与命令：规划阶段仅执行文档和仓库现状审计。
-- 性能结果：沿用 Collector MVP 已验证小规模基线，P3 实施后重新记录。
+- 实际变更：P3 Task 1～4 已实施，包括版本化契约/Schema、SourceAnchor 计划编译、异步受管进程、loopback
+  端口、目标/Collector 双进程协调、工具 Hash/Plan 端口预检和 Raw 字节监控；Case/Core/CLI 归档流仍待 Task 5。
+- 相对设计的偏差：实现中发现 Collector Plan 在端口分配前归档会造成计划与实际 argv 不一致，已按 1.1 版改为
+  应用服务先分配端口、再生成/归档 Plan，并由 Coordinator 校验同一端口后立即执行。
+- 测试与命令：`mvn test` 全部 21 个模块通过（原有条件式 Wafer Smoke 跳过）；显式指定锁定 Collector JAR 的
+  `mvn -pl jdwp-collector-adapter -am -Djdwp.collector.jar=... test` 通过 17 个 Adapter 测试和全部上游测试。
+- 性能结果：最小真实 Smoke 命中 1 个 tracepoint，写出 3 个生命周期/命中事件、Raw 963 字节；仅作为功能基线，
+  不代表大型算法性能结论。
 - 已知限制：无变量白名单、字段投影、采样和 Collector 内部字节硬限制。
-- 提交/版本：待实施。
+- 提交/版本：Task 1 `8a46f93`、Task 2 `7b36b40`、Task 3 `5472d8f`；Task 4 本检查点提交待生成。
 
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-18 | 1.0 | 明确以能力如实、保守预算方式集成当前 Collector MVP | Codex |
+| 2026-08-18 | 1.1 | 明确端口先于 Collector Plan 分配和归档，Plan、argv 与 Manifest 必须使用同一端口 | Codex |

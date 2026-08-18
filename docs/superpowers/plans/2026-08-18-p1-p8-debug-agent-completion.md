@@ -299,10 +299,10 @@ Collector MVP；变量 allowlist、字段投影、采样和 Collector 内部 Raw
 
 **Files:** `jdwp-collector-adapter/pom.xml`; new `LoopbackPortAllocator`, `JdwpLaunchSpec`, `JdwpTargetCommandFactory`, `JdwpCollectorCommandFactory`, `JdwpCollectionCoordinator`; tests.
 
-- [ ] RED tests for loopback allocation, argv, attach ordering, collector failure before/after resume, timeout, process survivors and bounded logs.
-- [ ] Implement with injected ports/process starters/supervisor and explicit lifecycle states.
-- [ ] Add conditional real Collector Smoke using pinned JAR and Wafer tracepoint.
-- [ ] Audit resume safety, localhost binding, JAR hash and target fact preservation; commit `feat: coordinate jdwp collection processes`.
+- [x] RED tests for loopback allocation, argv, attach ordering, collector failure before/after resume, timeout, process survivors and bounded logs.
+- [x] Implement application-assigned loopback port, injected process starters/supervisor and explicit lifecycle stages.
+- [x] Add conditional real Collector Smoke using the pinned JAR; minimal tracepoint hit/resume is verified. Wafer one-point Smoke remains in the P3 release audit.
+- [x] Audit resume safety, localhost binding, JAR hash, Raw byte cutoff and target/Collector fact preservation; checkpoint commit follows this task.
 
 ### Task 12: JDWP Collection Application Flow
 
