@@ -540,7 +540,7 @@ sequenceDiagram
 - 测试与命令：2026-08-18 最终执行 `mvn -Pcodepath-launcher clean test`，22 个模块全部成功；97 份 Surefire 报告合计 356 个测试，0 failure、0 error、3 个需显式真实环境参数的条件性跳过，Launcher 12 个测试全部通过。重新打包后使用锁定 JAR 对 `hellomvn` 指定 UT 执行非跳过 CodePath Smoke，1 个测试通过、0 跳过。19 个 Schema 全部可解析，Core 依赖边界、锁定 SHA、NOTICE、生产代码绝对路径扫描和 `git diff --check` 均通过。
 - 性能结果：大型 Catalog 回归覆盖约 2 MiB JSON 的流式归档；新增长 key/path 与 4,000 源调用边的预算回归，截断后实际 Jackson JSON 为 764,293 bytes，小于 16 MiB 分析预算；Artifact 读取在 128 MiB + 1 byte 时于解析前拒绝。Launcher 的 1,000,000 次有界回调回归通过，确认不逐事件 flush，事件和字节计数精确；未据此宣称真实磁盘吞吐提升。
 - 已知限制：CodePath 仅支持单一 package 边界树超集；JDK AST 为 best-effort；MethodCatalog 超过分析预算时截断并在 128 MiB writer 上限处 fail-closed；`javac` hard timeout 需要未来 worker process；发行级 SBOM/许可证聚合在 P8 完成；OpenCode 版本待 P6 锁定。
-- 提交/版本：待本轮验证后提交；设计版本 0.6。
+- 提交/版本：P1/P2 实现与审计修复已由提交 `6895212` 归档；设计版本 0.6。
 
 ## 18. 变更记录
 

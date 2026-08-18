@@ -68,7 +68,7 @@ Use existing `OpaqueIdentifier`, `ContractChecks`, `SchemaVersions`, lower-case 
 
 Run the Task 1 command, parse every file under `schemas`, and verify `ada-contracts` has no implementation-module dependency.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**（与 P1/P2 其余变更合并归档于 `6895212`）
 
 Commit message: `feat: define static method catalog contract`.
 
@@ -111,7 +111,7 @@ Scan only module `src/main/java` and `src/test/java`, reject symlinks, hash sour
 
 Run module tests. Audit descriptor stability, Windows paths, compiler diagnostics, file handle closure and deterministic sorting.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**（与 P1/P2 其余变更合并归档于 `6895212`）
 
 Commit message: `feat: build bounded java method catalog`.
 
@@ -136,7 +136,7 @@ Commit message: `feat: build bounded java method catalog`.
 - [x] **Step 2: Verify RED** with `mvn -pl debug-plan-engine -am test`.
 - [x] **Step 3: Implement contracts, Schema and compiler** with default 50 methods/100k events/16 MiB/5 minutes and hard values from the design.
 - [x] **Step 4: GREEN and audit** Schema parity, no LLM calls, stable method/package ordering and explicit `PACKAGE_SUPERSET` scope.
-- [ ] **Step 5: Commit** as `feat: compile bounded codepath plans`.
+- [x] **Step 5: Commit**（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 ### Task 4: Static Catalog and Plan Archiving/CLI
 
@@ -159,7 +159,7 @@ Commit message: `feat: build bounded java method catalog`.
 - [x] **Step 2: Verify RED** across `case-management,ada-core,algorithm-debug-cli`.
 - [x] **Step 3: Implement minimal orchestration and commands**; request files are UTF-8 regular non-symlink files under 64 KiB.
 - [x] **Step 4: GREEN and P1 audit**: run affected reactor, `mvn test`, Schema parse, `git diff --check`, public Javadoc and stale empty-module scan.
-- [ ] **Step 5: Fix audit findings with regression tests, rerun P1 gates, commit** as `feat: archive static analysis plans`.
+- [x] **Step 5: Fix audit findings with regression tests, rerun P1 gates, commit**（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 ### P1 Audit Remediation: Bounded Analysis and Large Catalog Compatibility
 
@@ -216,7 +216,7 @@ reactor, all Schema parsing, dependency-boundary scan and `git diff --check` are
   raw/filtered digest+bytes, logs, capture/evidence scope, match precision and path escape.
 - [x] Run `mvn -pl method-path-spi -am test` and confirm missing types.
 - [x] Implement immutable SPI DTOs and Schema with tool/run/plan/provenance metrics.
-- [ ] Run GREEN, Schema parity audit and commit `feat: define method path collector spi`.
+- [x] Run GREEN and Schema parity audit（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 ### Task 6: Streaming Method Path JSONL Filter
 
@@ -228,7 +228,7 @@ reactor, all Schema parsing, dependency-boundary scan and `git diff --check` are
   giant no-newline input, max events, max bytes, depth and deterministic truncation.
 - [x] Verify RED with focused Maven test.
 - [x] Implement Jackson streaming line parsing, SHA-256, counters and bounded error details.
-- [ ] GREEN, generated 1,000,000-event performance test, memory/bytes audit, commit `feat: filter bounded method path traces`.
+- [x] GREEN, generated 1,000,000-event performance test and memory/bytes audit（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 ### Task 7: External CodePath Process Collector
 
@@ -246,7 +246,7 @@ reactor, all Schema parsing, dependency-boundary scan and `git diff --check` are
   arbitrary nonzero exit, structured target failure, oversized Raw breach and manifest facts.
 - [x] Implement using existing process supervision abstractions extracted from `debug-harness` only if needed through a small shared port; do not duplicate process-tree cleanup.
 - [x] Add real CodePath Bundle conditional Smoke against Wafer Demo and verify configured/pinned Bundle SHA.
-- [ ] Audit license/NOTICE, package-superset disclosure, unbounded external launcher risk and refusal preview; commit `feat: integrate codepath collector process`.
+- [x] Audit license/NOTICE, package-superset disclosure, unbounded external launcher risk and refusal preview（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 ### Task 8: CodePath Collection Application Flow
 
@@ -262,7 +262,7 @@ reactor, all Schema parsing, dependency-boundary scan and `git diff --check` are
 - [x] Return bounded ToolResponse summary with standard case-relative `ArtifactReference` entries; make
   configured Java/Launcher/hash drive runtime and Doctor checks, without absolute development paths.
 - [x] P2 audit and repair: affected tests, real Smoke, root `mvn test`, path/provenance/cleanup scan.
-- [ ] Commit `feat: execute archived codepath collections`.
+- [x] Commit（与 P1/P2 其余变更合并归档于 `6895212`）。
 
 **P2 final audit remediation (2026-08-18):**
 
