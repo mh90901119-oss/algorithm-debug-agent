@@ -1,22 +1,35 @@
 # OpenCode integration
 
-这是当前唯一客户端适配层，调用链为 OpenCode Model → canonical Skill → OpenCode Custom Tool →
-`ada` CLI → Java Core。该目录不复制或改写事实，也不包含算法业务语义。
+这是当前唯一客户端适配层，调用链为：OpenCode 大模型 → canonical Skill → OpenCode Custom Tool →
+`ada` CLI → Java Core。适配层只负责稳定的参数映射和进程边界，不复制事实、不判断算法业务语义。
 
-- `tools/algorithm-debug.ts`：最终 Tool 契约源码；安装器还需把当前 `context.directory` 映射到已登记项目，
-  注入外部 Workspace/`projectId`，并把尚未实现的高层命令映射到稳定 CLI 后才能登记使用。
-- `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限读取；只原样返回通过 ToolResponse 2.0 校验的
-  stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误返回结构化 Adapter 失败、终止 CLI
-  且不回显原始日志。
-- `agents/algorithm-debug.md`：待安装器登记和实测的显式 Debug Agent 资产。
-- `commands/debug-case.md`：待安装器和模型端到端验证的 `/debug-case` 命令资产。
+## 当前资产
 
-规范 Skill 位于 `skills/algorithm-debug/SKILL.md`。仓库现已提供可执行 CLI 的 Workspace init、Project
-register、Doctor、Case/Run、静态分析以及 CodePath/JDWP Plan/Collection 后端命令；本目录仍不是可直接使用的安装包：
-OpenCode 一次性安装器、锁定版本的外部目录发现验证和模型端到端 `/debug-case` 编排尚未实现。不能假设
-任意外部目录会被 OpenCode 自动发现。最终体验仍是进入算法仓库后直接执行 `opencode` 并提问。当前不提供
-Agent MCP Server。
+- `tools/algorithm-debug.ts`：10 个真实 Tool，覆盖 Case 创建/续接与检查、UT 单次运行、静态分析、
+  CodePath/JDWP 计划和采集、Artifact 分段读取以及 Analysis 完成归档；
+- `lib/tool-runtime.mjs`：每次调用先幂等初始化外部 Workspace、登记当前 Maven 模块，并从结构化响应
+  取得 `projectId`。用户和大模型不需要填写 Workspace 或 `projectId`；
+- `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限，只原样返回通过 ToolResponse 2.0 校验的
+  stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误均转为结构化 Adapter 失败；
+- `agents/algorithm-debug.md`、`commands/debug-case.md`：待一次性安装器登记和实测的 OpenCode 资产；
+- 规范 Skill 位于 `skills/algorithm-debug/SKILL.md`。
 
-适配层不猜 Context：已有 Case 默认传 `--context-mode reuse`；只有模型根据用户明确说明确认目标算法源码、
-UT 或输入被有意修改时才传 `--context-mode new`。Gantt `CHANGED` 只是提供给模型的事实，不触发自动切换。
-CodePath 必须先从 Method Catalog 选择精确方法并归档 Plan，再按需执行一次或多次 Collection。
+## 路径与临时文件
+
+本仓库内运行时默认调用仓库自己的 `bin/ada.cmd`；可用 `ADA_CLI` 显式覆盖启动器。外部 Case
+Workspace 默认位于当前用户数据目录下的 `algorithm-debug-agent/workspace`，可用 `ADA_WORKSPACE`
+覆盖。Workspace 不写入目标算法模块。
+
+问题、CodePath/JDWP Plan 请求和 Analysis 结果通过系统临时目录中的 UTF-8 普通文件传给 Java CLI，
+上限分别为 64 KiB、64 KiB 和 256 KiB；成功或失败后都清理。Artifact 每次最多读取 64 KiB，
+只接受 Case 内已登记的 Artifact ID，不接受任意文件路径。
+
+## 使用状态
+
+Java 后端和 Tool 映射已经对齐，但本目录仍不是可直接复制使用的安装包。下一阶段需要实现并验证
+OpenCode 1.18.15 的一次性 `install/check`：进入目标算法模块执行 `opencode` 后即可发现仓库拥有的
+Skill、Agent、Command 和 Tools。当前不提供 MCP Server。
+
+适配层不猜 Context：已有 Case 默认使用 `reuse`；只有模型根据用户明确说明确认目标算法源码、UT
+或输入被有意修改时才使用 `new`。Gantt `CHANGED` 只是模型可分析的事实，不触发自动切换。
+CodePath 和 JDWP 都必须先归档 Plan，再按当前证据缺口执行一次或多次 Collection。

@@ -203,6 +203,15 @@ sequenceDiagram
 - 测试与命令：实施完成后填写
 - 已知限制：实施完成后填写
 
+### Task 6：OpenCode Tool 与真实 CLI 对齐
+
+- 实际变更：实现 10 个 Tool；每次调用幂等执行 `workspace init` 与 `project register`，自动取得
+  `projectId`；问题、Plan 和 Analysis 结果使用有界 UTF-8 临时文件传递并在成功或失败后清理；
+- 相对设计的偏差：未引入项目注册表或客户端缓存。注册由现有 Java CLI 确定性完成，适配层保持无状态；
+- 测试与命令：先确认旧启动器和缺失 Runtime 的 RED，再执行
+  `node --test integrations/opencode/test/*.test.mjs`，17 个测试通过；
+- 已知限制：Tool 源码尚未通过 OpenCode 1.18.15 一次性安装和真实发现验证，该项属于 Task 7。
+
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
@@ -210,3 +219,4 @@ sequenceDiagram
 | 2026-08-19 | 1.0 | 用户批准本地 OpenCode Demo 必要链路 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.1 | Task 4 实现 Case 内 Artifact 登记/有界读取与 Analysis 完成 CLI；审计修复 Run Artifact 原先错误的 Run 相对路径和跨 Run ID 冲突 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.2 | Task 5 增加仓库内 `ada.cmd`、被 Git 忽略的本机配置入口和 `hellomvn doctor` 进程级验证 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.3 | Task 6 将 10 个 OpenCode Tool 对齐真实 CLI，并增加自动项目准备、有界临时文件和失败清理 | Codex / mh90901119-oss |

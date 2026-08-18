@@ -84,10 +84,10 @@
 
 **Produces:** begin, inspect, run, static, CodePath plan/collect, JDWP plan/collect, artifact read and analysis complete tools.
 
-- [ ] Add failing Node tests for every actual argv mapping and temporary request-file cleanup.
-- [ ] Run `node --test integrations/opencode/test/*.test.mjs` and confirm RED.
-- [ ] Replace placeholder command names with real CLI calls; resolve the current project and external Workspace deterministically.
-- [ ] Keep stdout/stderr/time budgets and ToolResponse validation; run Node tests and commit.
+- [x] Add failing Node tests for every actual argv mapping and temporary request-file cleanup.
+- [x] Run `node --test integrations/opencode/test/*.test.mjs` and confirm RED.
+- [x] Replace placeholder command names with real CLI calls; resolve the current project and external Workspace deterministically.
+- [x] Keep stdout/stderr/time budgets and ToolResponse validation; run Node tests and commit.
 
 ### Task 7: Install and verify OpenCode 1.18.15 integration
 

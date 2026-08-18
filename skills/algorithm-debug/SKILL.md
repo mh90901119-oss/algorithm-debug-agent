@@ -27,6 +27,10 @@ Gantt output, scheduling behavior, or a change across analysis rounds.
 
 After every user message:
 
+OpenCode tools prepare the external Agent Workspace and register the current Maven module automatically.
+Do not ask the user to provide a `projectId` or registry path. Use `analysis_begin` to create or continue
+the Case, and use `case_inspect` when historical evidence may already answer the new question.
+
 1. Determine whether the target UT belongs to an existing Case. Unless the user or model已明确知道目标源码、UT 或输入发生了有意修改，复用最近 Context；不要自行扫描工作区判断。
 2. Reuse prior immutable evidence when it already answers the question. A new chat turn does not require a new UT run.
 3. If execution facts are missing or stale for the question, call the test-run tool. Inspect the returned summary even when the command reports target failure.
@@ -38,6 +42,8 @@ After every user message:
 5. Read stdout, stderr, Surefire XML, or Gantt artifacts only by reference and only within the requested byte/line budget.
 6. Request CodePathTracer when a bounded runtime call path would close a stated gap. First read the current Method Catalog, choose 1–50 exact `class + method + descriptor` selectors, archive a Plan, then collect. A Case may contain multiple Plans and Collections. Request JDWP only for named methods/variables and bounded hits/depth/bytes.
 7. Before a confirmed root-cause claim, verify evidence coverage, contradictions, truncation, and semantic-baseline consistency.
+8. Before answering the user, call `analysis_complete` with a strict `AnalysisResult` containing the final
+   answer, graded conclusions, and explicit evidence references. Do not put hidden reasoning in that record.
 
 ## JDWP refinement loop
 
