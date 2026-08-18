@@ -55,6 +55,21 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>trace-normalizer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>trace-validator</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>evidence-engine</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>

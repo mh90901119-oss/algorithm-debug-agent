@@ -2,6 +2,11 @@
 
 > **修订说明（2026-08-18）：** 本文的通用 Evidence、Provenance 和有界后处理继续有效；CodePath
 > package 超集/二次过滤、线程字段、匹配精度和 Context 源码事实由 ADR-010 与精简设计取代。
+>
+> **修订说明（2026-08-19）：** 本地 OpenCode Demo 阶段由 `ada-core/CollectionPostProcessingService`
+> 在每次存在 Raw Trace 的 CodePath/JDWP Collection 后自动执行本设计的规范化、校验、Bundle 和充分性
+> 评估，不再要求用户或模型额外调用 Evidence 命令。Evidence 请求引用 Baseline Check 中明确记录的已完成
+> 无采集 `referenceRunId`；后处理失败与 Collector 完成状态分离，并保留 Raw/Manifest。
 
 - 文档状态：Approved for Implementation
 - 设计版本：0.2
@@ -59,7 +64,8 @@ P4 必须把 Raw Trace 确定性整理成通用运行时事实，同时保留原
 
 ## 3. 现状与约束
 
-- `trace-normalizer`、`trace-validator`、`evidence-engine` 当前只有 Maven 模块骨架；
+- `trace-normalizer`、`trace-validator`、`evidence-engine` 已提供确定性的规范化、校验、Bundle 与充分性实现；
+  当前 Demo 由 Collection 后处理服务在存在 Raw Trace 时自动编排这些能力；
 - CodePath Raw 事件包含 `eventId/eventType/depth/threadName/className/methodName`，descriptor 可能缺失；
 - P2 过滤结果只保留计划方法，因而只能形成“最近保留祖先”，不能宣称完整直接调用边；
 - JDWP Raw v1 生命周期事件与 `tracepoint_hit` 均包含 `sequence/timestamp/eventType`；命中事件包含
@@ -135,7 +141,7 @@ Validator 只判断证据技术可信度；Evidence Engine 只组织证据和覆
 | `trace-validator/ProvenanceVerifier` | 检查 summary 引用的 Raw 行/sequence/eventId | summary + Raw | findings | contracts |
 | `evidence-engine/EvidenceBundleBuilder` | 组合同 Context 多轮证据 | request + validations | bundle | contracts |
 | `evidence-engine/EvidenceSufficiencyEvaluator` | 确定性检查要求维度 | bundle | evaluation | contracts |
-| `ada-core/EvidenceApplicationService` | 分配 Evidence、编排派生/校验/归档 | CLI request | ToolResponse | ports/modules |
+| `ada-core/CollectionPostProcessingService` | 在采集后分配 Evidence，编排派生、校验和归档 | Collection、Plan、Manifest、Baseline | Evidence 产物引用与可用性 | ports/modules |
 
 模块依赖固定为：
 
@@ -285,26 +291,28 @@ cases/<caseId>/
 ```mermaid
 sequenceDiagram
     participant L as LLM/OpenCode
-    participant C as EvidenceApplicationService
+    participant C as Collection Application Service
+    participant P as CollectionPostProcessingService
     participant R as Case Archive
     participant N as Trace Normalizer
     participant V as Collection Validator
     participant E as Evidence Engine
-    L->>C: evidence build(case/context/analysis/collections/requirements)
-    C->>R: 分配evidenceId并create-new保存request
-    loop 每个显式Collection
-        C->>R: 读取Plan/Manifest/Baseline/Raw引用
-        C->>N: 流式归一化
-        N-->>R: 追加Manifest和Summary
-        C->>V: 校验原始与派生产物
-        V-->>R: 追加CollectionValidation
-    end
-    C->>E: 组合Context/Run/Source/Gantt和有效Collection
+    L->>C: collect codepath/jdwp(planId)
+    C->>R: 追加保存Plan、Manifest、Raw和Baseline Check
+    C->>P: 传入Collection事实
+    P->>R: 分配evidenceId并create-new保存request
+    P->>N: 流式归一化Raw
+    N-->>R: 追加Manifest和Summary
+    P->>V: 校验原始与派生产物
+    V-->>R: 追加CollectionValidation
+    P->>E: 组合Context、参考Run和有效Collection
     E-->>R: EvidenceBundle + Sufficiency
-    C-->>L: 有界状态、缺口和Artifact引用
+    P-->>C: Evidence可用性和Artifact引用
+    C-->>L: 有界采集结果和Artifact引用
 ```
 
-若历史 Evidence 已足够，大模型可以直接读取它，不调用 `evidence build`。若用户修改代码但仍讨论旧数据，
+首版不暴露额外 `evidence build` 命令：只要采集产生 Raw Trace，就自动完成上述确定性后处理。若历史 Evidence
+已足够，大模型可以直接读取它而不重新采集。若用户修改代码但仍讨论旧数据，
 旧 Evidence 继续可读并明确标注旧 `contextId`；若结论需要代表当前代码，必须建立新 Context 并重新取得相应证据。
 
 ## 9. 错误处理与可观测性

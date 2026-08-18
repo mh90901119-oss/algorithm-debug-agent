@@ -5,6 +5,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.EvidenceId;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -50,6 +51,11 @@ public final class OpaqueIdGenerator {
     /** @return 新 Collection ID */
     public CollectionId newCollectionId() {
         return new CollectionId(value("collection"));
+    }
+
+    /** @return 新 Evidence ID */
+    public EvidenceId newEvidenceId() {
+        return new EvidenceId(value("evidence"));
     }
 
     private String value(String prefix) {

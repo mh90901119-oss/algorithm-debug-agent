@@ -39,11 +39,11 @@
 
 **Produces:** after each successful or partial collection, archived normalization, validation, Evidence Bundle and sufficiency documents plus references in the CLI result.
 
-- [ ] Add failing Core/integration tests for CodePath and JDWP collection-to-evidence output.
-- [ ] Verify RED with `mvn -pl ada-core,integration-tests -am test`.
-- [ ] Add only the existing normalizer/validator/evidence dependencies and implement one post-processing service shared by both collectors.
-- [ ] Preserve Raw/Manifest when post-processing fails and expose a separate structured Agent failure.
-- [ ] Cover success, zero hit, truncation, target failure and baseline change; run affected tests and commit.
+- [x] Add failing Core/integration tests for CodePath and JDWP collection-to-evidence output.
+- [x] Verify RED with `mvn -pl ada-core,integration-tests -am test`.
+- [x] Add only the existing normalizer/validator/evidence dependencies and implement one post-processing service shared by both collectors.
+- [x] Preserve Raw/Manifest when post-processing fails and expose a separate structured Agent failure.
+- [x] Cover success, zero hit, truncation, target failure and baseline change; run affected tests and commit.
 
 ### Task 3: Complete the bounded multi-turn Case view
 

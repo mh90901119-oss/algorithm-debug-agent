@@ -147,13 +147,22 @@ public final class CollectionApplicationService {
             throw failure;
         }
         archive.createCollectionBaselineCheck(baseline);
+        CollectionPostProcessingResult postProcessing = Files.isRegularFile(
+                collectionRoot.resolve("raw/codepath.jsonl"))
+                ? new CollectionPostProcessingService(
+                        layout.projectCases(projectId), archive, mapper, writer, ids, clock)
+                        .processCodePath(record, plan, result.manifest(), baseline)
+                : new CollectionPostProcessingResult(false, List.of());
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
-        List<ArtifactReference> artifacts = describeArtifacts(
-                caseRoot, collectionRoot, collectionId);
+        List<ArtifactReference> artifacts = new java.util.ArrayList<>(describeArtifacts(
+                caseRoot, collectionRoot, collectionId));
+        artifacts.addAll(postProcessing.artifacts());
+        artifacts = List.copyOf(artifacts);
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
                 result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
-                        result.manifest().completion(), result.manifest().capturedEventCount(), baseline),
+                        result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
+                        && postProcessing.confirmationUsable(),
                 artifacts.stream().map(ArtifactReference::relativePath).toList());
         return new MultiArtifactBackedResult<>(summary, artifacts);
     }

@@ -44,18 +44,24 @@ import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.ContextRecord;
+import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionCompletion;
 import org.example.algorithmdebug.contracts.JdwpCollectionManifest;
 import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.ProcessOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.TestOutcome;
+import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
+import org.example.algorithmdebug.contracts.SufficiencyStatus;
 import org.example.algorithmdebug.harness.RunCompletion;
 import org.example.algorithmdebug.harness.RunLog;
 import org.example.algorithmdebug.harness.RunResult;
@@ -154,9 +160,47 @@ class JdwpCollectionApplicationServiceTest {
                 "JDWP_PLAN", "COLLECTION_REQUEST", "JDWP_COLLECTOR_PLAN", "JDWP_RAW",
                 "JDWP_EXTERNAL_MANIFEST", "JDWP_MANIFEST", "GANTT_RAW",
                 "COLLECTION_BASELINE", "TARGET_STDOUT", "TARGET_STDERR",
-                "COLLECTOR_STDOUT", "COLLECTOR_STDERR")));
+                "COLLECTOR_STDOUT", "COLLECTOR_STDERR", "JDWP_SNAPSHOT_SUMMARY",
+                "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
+                "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE", "SUFFICIENCY_EVALUATION")));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
                 Path.of(reference.relativePath()).isAbsolute()));
+        assertEquals(SufficiencyStatus.SUFFICIENT, mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                        "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class).status());
+    }
+
+    @Test
+    void truncatedCollectionStillProducesInconclusiveEvidence() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.TRUNCATED, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 121)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 122)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "fixture write failed", failure);
+            }
+        });
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertEquals(SufficiencyStatus.INSUFFICIENT, mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                        "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class).status());
     }
 
     @Test
@@ -332,8 +376,9 @@ class JdwpCollectionApplicationServiceTest {
             org.example.algorithmdebug.jdwp.JdwpExecutionRequest request, String gantt)
             throws java.io.IOException {
         Files.createDirectories(request.collectorOutputDirectory());
-        Files.writeString(request.rawTracePath(),
-                "{\"eventType\":\"tracepoint_hit\",\"tracepointId\":\"target-entry\"}\n");
+        Files.writeString(request.rawTracePath(), """
+                {"schemaVersion":"1.0","sessionId":"jdwp-plan-1","sequence":1,"timestamp":"2026-08-18T00:00:00Z","eventType":"tracepoint_hit","tracepointId":"target-entry","hit":1,"thread":{"id":1,"name":"main"},"location":{"className":"fixture.TargetTest","methodName":"caseUnderTest","line":3,"codeIndex":0},"frames":[{"index":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","line":3}]}
+                """);
         Files.writeString(request.collectorOutputDirectory().resolve("collection-manifest.json"), """
                 {"schemaVersion":"1.0","sessionId":"jdwp-plan-1",
                  "target":{"host":"127.0.0.1","port":51234},
@@ -393,6 +438,7 @@ class JdwpCollectionApplicationServiceTest {
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
+        archive.completeRun(successfulBaselineOutcome(runId));
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
                 Optional.of(sha(read(reference))),
@@ -408,6 +454,15 @@ class JdwpCollectionApplicationServiceTest {
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
+        archive.completeRun(new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.FAILED,
+                TestOutcome.ERROR, GanttOutcome.ABSENT,
+                Optional.of(new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
+                        org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
+                        "java.lang.IllegalStateException", message, "",
+                        "fixture.Algorithm.solve(Algorithm.java:42)")), Optional.empty(),
+                ComparisonOutcome.NOT_COMPARED, "not compared", List.of()));
         var diagnostic = new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
                 org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
                 "java.lang.IllegalStateException", message, "",
@@ -451,6 +506,13 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     private static Clock fixedClock() { return Clock.fixed(NOW, ZoneOffset.UTC); }
+    private static RunOutcomeSummary successfulBaselineOutcome(RunId runId) {
+        return new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
+                TestOutcome.PASSED, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(),
+                ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
+    }
     private static String portable(Path path) {
         return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }

@@ -37,20 +37,27 @@ import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.ContextRecord;
+import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.ProcessOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.TestOutcome;
+import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
+import org.example.algorithmdebug.contracts.SufficiencyStatus;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionResult;
@@ -178,6 +185,16 @@ class CollectionApplicationServiceTest {
         Path caseRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(CASE_ID.value());
         assertTrue(result.artifacts().stream().allMatch(reference ->
                 Files.isRegularFile(caseRoot.resolve(reference.relativePath()))));
+        Set<String> types = result.artifacts().stream()
+                .map(org.example.algorithmdebug.contracts.ArtifactReference::artifactType)
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(types.containsAll(Set.of(
+                "METHOD_PATH_SUMMARY", "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
+                "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE", "SUFFICIENCY_EVALUATION")));
+        SufficiencyEvaluation sufficiency = mapper.readJson(
+                caseRoot.resolve("evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class);
+        assertEquals(SufficiencyStatus.SUFFICIENT, sufficiency.status());
     }
 
     @Test
@@ -245,6 +262,78 @@ class CollectionApplicationServiceTest {
         assertFalse(result.summary().evidenceUsable());
     }
 
+    @Test
+    void zeroHitCollectionStillProducesInconclusiveEvidence() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        MultiArtifactBackedResult<CollectionExecutionSummary> zeroHit = service(collector(
+                CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}"), "", 0,
+                List.of())).executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertFalse(zeroHit.summary().evidenceUsable());
+        assertTrue(zeroHit.artifacts().stream().anyMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        assertTrue(zeroHit.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertEquals(SufficiencyStatus.INSUFFICIENT, mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                        "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class).status());
+
+    }
+
+    @Test
+    void truncatedCollectionStillProducesInconclusiveEvidence() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service(collector(
+                CollectionCompletion.TRUNCATED, Optional.of("{\"schedule\":1}")))
+                .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertEquals(SufficiencyStatus.INSUFFICIENT, mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                        "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class).status());
+    }
+
+    @Test
+    void malformedRawKeepsCollectorArtifactsAndExposesSeparatePostProcessingFailure()
+            throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        MethodPathCollector malformed = request -> {
+            MethodPathCollectionResult collected = collector(
+                    CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}")).collect(request);
+            try {
+                Files.writeString(collected.rawTrace(), "{}\n");
+                return collected;
+            } catch (java.io.IOException failure) {
+                throw new MethodPathCollectionException("TEST_IO", "fixture write failed", failure);
+            }
+        };
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service(malformed)
+                .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "CODEPATH_RAW".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "CODEPATH_MANIFEST".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        Path collectionRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                "case-1/collections/collection-fixed");
+        AgentFailureDiagnostic diagnostic = mapper.readJson(
+                collectionRoot.resolve("validation/post-processing-failure.json"),
+                AgentFailureDiagnostic.class);
+        assertEquals("COLLECTION_POST_PROCESSING_FAILED", diagnostic.code());
+        assertEquals(CollectionCompletion.SUCCESS, mapper.readJson(
+                collectionRoot.resolve("manifest.json"), MethodPathManifest.class).completion());
+    }
+
     private CollectionApplicationService service(MethodPathCollector collector) {
         return new CollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
@@ -255,6 +344,19 @@ class CollectionApplicationServiceTest {
 
     private MethodPathCollector collector(
             CollectionCompletion completion, Optional<String> ganttJson) {
+        return collector(completion, ganttJson, """
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V"}
+                {"eventId":2,"eventType":"METHOD_EXIT","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V"}
+                """, 2, completion == CollectionCompletion.TRUNCATED
+                ? List.of("EVENT_BUDGET_EXCEEDED") : List.of());
+    }
+
+    private MethodPathCollector collector(
+            CollectionCompletion completion,
+            Optional<String> ganttJson,
+            String rawJsonl,
+            long eventCount,
+            List<String> truncationReasons) {
         return request -> {
             try {
                 Path raw = request.collectionDirectory().resolve("raw/codepath.jsonl");
@@ -262,7 +364,7 @@ class CollectionApplicationServiceTest {
                 Path stderr = request.collectionDirectory().resolve("logs/stderr.log");
                 Files.createDirectories(raw.getParent());
                 Files.createDirectories(stdout.getParent());
-                Files.writeString(raw, "{\"eventId\":1}\n");
+                Files.writeString(raw, rawJsonl);
                 Files.writeString(stdout, "collector summary\n");
                 Files.writeString(stderr, completion == CollectionCompletion.TARGET_FAILED
                         ? "java.lang.AssertionError: expected schedule\n" : "");
@@ -278,9 +380,9 @@ class CollectionApplicationServiceTest {
                         completion == CollectionCompletion.TARGET_FAILED ? "FAILED" : "PASSED",
                         1, completion == CollectionCompletion.TARGET_FAILED ? 0 : 1, 0,
                         completion == CollectionCompletion.TARGET_FAILED ? 1 : 0,
-                        1, Files.size(raw),
+                        eventCount, Files.size(raw),
                         Optional.of(sha(Files.readAllBytes(raw))),
-                        List.of(), Optional.empty(), "raw/codepath.jsonl",
+                        truncationReasons, Optional.empty(), "raw/codepath.jsonl",
                         "logs/stdout.log", "logs/stderr.log", NOW, NOW);
                 return new MethodPathCollectionResult(
                         request, manifest, raw, stdout, stderr);
@@ -299,6 +401,7 @@ class CollectionApplicationServiceTest {
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 baselineRun, TARGET, "UNINSTRUMENTED", NOW));
+        archive.completeRun(successfulBaselineOutcome(baselineRun));
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
                 Optional.of(sha(Files.readAllBytes(reference))),
@@ -314,6 +417,15 @@ class CollectionApplicationServiceTest {
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 baselineRun, TARGET, "UNINSTRUMENTED", NOW));
+        archive.completeRun(new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, baselineRun, ProcessOutcome.FAILED,
+                TestOutcome.ERROR, GanttOutcome.ABSENT,
+                Optional.of(new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
+                        org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
+                        "java.lang.IllegalStateException", message, "",
+                        "fixture.Algorithm.solve(Algorithm.java:42)")),
+                Optional.empty(), ComparisonOutcome.NOT_COMPARED, "not compared", List.of()));
         var diagnostic = new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
                 org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
                 "java.lang.IllegalStateException", message, "",
@@ -347,6 +459,14 @@ class CollectionApplicationServiceTest {
         } catch (java.security.NoSuchAlgorithmException failure) {
             throw new IllegalStateException(failure);
         }
+    }
+
+    private static RunOutcomeSummary successfulBaselineOutcome(RunId runId) {
+        return new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
+                TestOutcome.PASSED, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(),
+                ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
     }
 
     private CaseArchiveRepository archive() {

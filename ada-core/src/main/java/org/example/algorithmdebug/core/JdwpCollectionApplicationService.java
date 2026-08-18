@@ -202,12 +202,20 @@ public final class JdwpCollectionApplicationService {
         }
 
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
-        List<ArtifactReference> artifacts = describeArtifacts(
-                caseRoot, collectionRoot, plan, collectionId);
+        CollectionPostProcessingResult postProcessing = Files.isRegularFile(
+                collectionRoot.resolve("raw/jdwp.jsonl"))
+                ? new CollectionPostProcessingService(
+                        layout.projectCases(projectId), archive, mapper, writer, ids, clock)
+                        .processJdwp(record, plan, manifest, baseline)
+                : new CollectionPostProcessingResult(false, List.of());
+        List<ArtifactReference> artifacts = new ArrayList<>(describeArtifacts(
+                caseRoot, collectionRoot, plan, collectionId));
+        artifacts.addAll(postProcessing.artifacts());
+        artifacts = List.copyOf(artifacts);
         boolean usable = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
                 || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
                 && manifest.eventCount() > 0 && !manifest.truncated()
-                && baseline.evidenceUsable();
+                && baseline.evidenceUsable() && postProcessing.confirmationUsable();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
                 manifest.completion().name(), baseline.outcome(), usable,
@@ -369,9 +377,14 @@ public final class JdwpCollectionApplicationService {
             Optional<CaptureContext> captureContext,
             Path collectionRoot,
             Path moduleRoot) {
+        if (completion == JdwpCollectionCompletion.TRUNCATED) {
+            Optional<RunId> reference = archive.findReproduction(
+                    record.caseId(), record.contextId()).map(RunResultFingerprint::runId);
+            return incomparable(record, reference,
+                    "JDWP collection was truncated before a comparable Gantt result");
+        }
         if (completion == JdwpCollectionCompletion.TOOL_FAILED
-                || completion == JdwpCollectionCompletion.TIMED_OUT
-                || completion == JdwpCollectionCompletion.TRUNCATED) {
+                || completion == JdwpCollectionCompletion.TIMED_OUT) {
             return incomparable(record, "No comparable Gantt observation from JDWP collection");
         }
         try {
@@ -449,9 +462,14 @@ public final class JdwpCollectionApplicationService {
     }
 
     private CollectionBaselineCheck incomparable(JdwpCollectionRecord record, String summary) {
+        return incomparable(record, Optional.empty(), summary);
+    }
+
+    private CollectionBaselineCheck incomparable(
+            JdwpCollectionRecord record, Optional<RunId> referenceRunId, String summary) {
         return new CollectionBaselineCheck(
                 "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                record.collectionId(), ComparisonOutcome.INCOMPARABLE, Optional.empty(),
+                record.collectionId(), ComparisonOutcome.INCOMPARABLE, referenceRunId,
                 Optional.empty(), false, summary, clock.instant());
     }
 

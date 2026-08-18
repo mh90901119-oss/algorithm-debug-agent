@@ -2024,7 +2024,12 @@ Collector/Core单点能力已经验证。此 Phase 只负责 Agent 侧接入：�
 
 ### Phase 5：Normalizer + Validator + Evidence
 
-建立第一条完整证据链：
+已实现 CodePath/JDWP Collection 的自动确定性后处理：存在 Raw Trace 时，`ada-core` 依次生成通用运行时摘要、
+校验结果、Evidence Bundle 和充分性结论，并把小型 Artifact 引用合并到本次采集响应。后处理失败不会改写
+Collector Manifest 或 Raw Trace，而是在同一 Collection 下追加独立结构化失败诊断。首版本地 Demo 不要求
+模型再调用单独的 Evidence 命令。
+
+该阶段建立的证据链为：
 
 ```text
 输入 -> 代码 -> 运行时 -> Gantt
