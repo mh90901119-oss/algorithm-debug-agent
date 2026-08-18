@@ -18,6 +18,14 @@ import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
+import org.example.algorithmdebug.contracts.CollectionValidation;
+import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
+import org.example.algorithmdebug.contracts.EvidenceBundle;
+import org.example.algorithmdebug.contracts.EvidenceId;
+import org.example.algorithmdebug.contracts.JdwpSnapshotSummary;
+import org.example.algorithmdebug.contracts.MethodPathSummary;
+import org.example.algorithmdebug.contracts.NormalizationManifest;
+import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 
 import java.io.IOException;
 import java.nio.file.FileAlreadyExistsException;
@@ -326,6 +334,7 @@ public final class CaseArchiveRepository {
         try {
             Files.createDirectory(root);
             Files.createDirectory(root.resolve("raw"));
+            Files.createDirectory(root.resolve("derived"));
             Files.createDirectory(root.resolve("logs"));
             Files.createDirectory(root.resolve("validation"));
             writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
@@ -397,6 +406,118 @@ public final class CaseArchiveRepository {
         } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
+    }
+
+    /** 在归一化开始前创建 Evidence 目录和不可变构建请求。 */
+    public Path createEvidenceRequest(EvidenceBuildRequest request) {
+        EvidenceBuildRequest checked = requireNonNull(request, "request");
+        requireCase(checked.caseId());
+        requireContext(checked.caseId(), checked.contextId());
+        AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
+        if (!analysis.contextId().equals(checked.contextId())) {
+            throw identityMismatch("Evidence 请求 Context 与 Analysis 不一致");
+        }
+        CaseArchiveLayout layout = layout(checked.caseId());
+        Path root = layout.evidenceRoot(checked.evidenceId());
+        try {
+            Files.createDirectory(root);
+            Path document = layout.evidenceBuildRequest(checked.evidenceId());
+            writer.writeNew(document, mapper.writeJson(checked));
+            return document;
+        } catch (FileAlreadyExistsException | WorkspaceException failure) {
+            throw archiveWriteFailure(failure);
+        } catch (IOException | SecurityException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /** 读取不可变 Evidence 构建请求。 */
+    public EvidenceBuildRequest requireEvidenceRequest(CaseId caseId, EvidenceId evidenceId) {
+        EvidenceBuildRequest value = requireDocument(
+                layout(caseId).evidenceBuildRequest(evidenceId),
+                EvidenceBuildRequest.class, "EVIDENCE_NOT_FOUND");
+        if (!caseId.equals(value.caseId()) || !evidenceId.equals(value.evidenceId())) {
+            throw identityMismatch("Evidence 请求身份与路径不一致");
+        }
+        return value;
+    }
+
+    /** 原子追加一次归一化清单。 */
+    public Path createNormalizationManifest(NormalizationManifest manifest) {
+        NormalizationManifest checked = requireNonNull(manifest, "manifest");
+        requireEvidenceCollectionIdentity(
+                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.runId(), checked.planId(), checked.collectionId(),
+                checked.evidenceId(), checked.collectorType());
+        return createP4Document(layout(checked.caseId()).normalizationManifest(
+                checked.collectionId(), checked.evidenceId()), checked,
+                BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 原子追加一次 CodePath 方法路径摘要。 */
+    public Path createMethodPathSummary(MethodPathSummary summary) {
+        MethodPathSummary checked = requireNonNull(summary, "summary");
+        requireEvidenceCollectionIdentity(
+                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.runId(), checked.planId(), checked.collectionId(),
+                checked.evidenceId(), "CODEPATH");
+        return createP4Document(layout(checked.caseId()).methodPathSummary(
+                checked.collectionId(), checked.evidenceId()), checked,
+                org.example.algorithmdebug.contracts.NormalizationBudget.MAX_SUMMARY_BYTES);
+    }
+
+    /** 原子追加一次 JDWP 快照摘要。 */
+    public Path createJdwpSnapshotSummary(JdwpSnapshotSummary summary) {
+        JdwpSnapshotSummary checked = requireNonNull(summary, "summary");
+        requireEvidenceCollectionIdentity(
+                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.runId(), checked.planId(), checked.collectionId(),
+                checked.evidenceId(), "JDWP");
+        return createP4Document(layout(checked.caseId()).jdwpSnapshotSummary(
+                checked.collectionId(), checked.evidenceId()), checked,
+                org.example.algorithmdebug.contracts.NormalizationBudget.MAX_SUMMARY_BYTES);
+    }
+
+    /** 原子追加一次 Collection Evidence 校验。 */
+    public Path createCollectionValidation(CollectionValidation validation) {
+        CollectionValidation checked = requireNonNull(validation, "validation");
+        requireEvidenceCollectionIdentity(
+                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.runId(), checked.planId(), checked.collectionId(),
+                checked.evidenceId(), checked.collectorType());
+        return createP4Document(layout(checked.caseId()).collectionValidation(
+                checked.collectionId(), checked.evidenceId()), checked,
+                BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 原子追加面向模型的 Evidence Bundle。 */
+    public Path createEvidenceBundle(EvidenceBundle bundle) {
+        EvidenceBundle checked = requireNonNull(bundle, "bundle");
+        requireEvidenceIdentity(checked.caseId(), checked.contextId(),
+                checked.analysisId(), checked.evidenceId());
+        return createP4Document(
+                layout(checked.caseId()).evidenceBundle(checked.evidenceId()), checked,
+                BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 读取指定 Evidence Bundle。 */
+    public EvidenceBundle requireEvidenceBundle(CaseId caseId, EvidenceId evidenceId) {
+        EvidenceBundle value = requireDocument(
+                layout(caseId).evidenceBundle(evidenceId),
+                EvidenceBundle.class, "EVIDENCE_BUNDLE_NOT_FOUND");
+        if (!caseId.equals(value.caseId()) || !evidenceId.equals(value.evidenceId())) {
+            throw identityMismatch("Evidence Bundle 身份与路径不一致");
+        }
+        return value;
+    }
+
+    /** 原子追加请求维度的充分性评估。 */
+    public Path createSufficiencyEvaluation(SufficiencyEvaluation evaluation) {
+        SufficiencyEvaluation checked = requireNonNull(evaluation, "evaluation");
+        requireEvidenceIdentity(checked.caseId(), checked.contextId(),
+                checked.analysisId(), checked.evidenceId());
+        return createP4Document(layout(checked.caseId()).sufficiencyEvaluation(
+                checked.evidenceId()), checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
     }
 
     /** 在启动外部 Maven 进程前创建 Run 目录、raw 目录和 RunRequest。 */
@@ -617,6 +738,72 @@ public final class CaseArchiveRepository {
             throw archiveWriteFailure(failure);
         } catch (IOException | SecurityException failure) {
             throw archiveWriteFailure(failure);
+        }
+    }
+
+    private Path createP4Document(Path document, Object value, long maximumBytes) {
+        try {
+            Files.createDirectories(document.getParent());
+            writer.writeNew(document, maximumBytes,
+                    output -> mapper.writeJsonArtifact(output, value));
+            return document;
+        } catch (WorkspaceException | SecurityException failure) {
+            throw archiveWriteFailure(failure);
+        } catch (IOException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    private void requireEvidenceCollectionIdentity(
+            CaseId caseId,
+            ContextId contextId,
+            AnalysisId analysisId,
+            RunId runId,
+            PlanId planId,
+            CollectionId collectionId,
+            EvidenceId evidenceId,
+            String collectorType) {
+        EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
+        boolean currentEvidence = request.collectionIds().contains(collectionId);
+        boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
+        if (!currentEvidence && !comparisonEvidence) {
+            throw identityMismatch("派生产物与 Evidence 请求身份或 Collection 角色不一致");
+        }
+        if (currentEvidence && !request.contextId().equals(contextId)) {
+            throw identityMismatch("当前 Evidence Collection 必须属于请求 Context");
+        }
+        if (comparisonEvidence && request.contextId().equals(contextId)) {
+            throw identityMismatch("同 Context 历史 Collection 应作为当前证据复用而非比较证据");
+        }
+        boolean matched;
+        if ("CODEPATH".equals(collectorType)) {
+            MethodPathCollectionRecord collection = requireMethodPathCollection(caseId, collectionId);
+            matched = collection.contextId().equals(contextId)
+                    && collection.analysisId().equals(analysisId)
+                    && collection.runId().equals(runId)
+                    && collection.planId().equals(planId);
+        } else if ("JDWP".equals(collectorType)) {
+            JdwpCollectionRecord collection = requireJdwpCollection(caseId, collectionId);
+            matched = collection.contextId().equals(contextId)
+                    && collection.analysisId().equals(analysisId)
+                    && collection.runId().equals(runId)
+                    && collection.planId().equals(planId);
+        } else {
+            throw identityMismatch("未知 Collector 类型不能归档派生产物");
+        }
+        if (!matched) {
+            throw identityMismatch("派生产物与原 Collection 的 Context/Analysis/Run/Plan 不一致");
+        }
+    }
+
+    private void requireEvidenceIdentity(
+            CaseId caseId,
+            ContextId contextId,
+            AnalysisId analysisId,
+            EvidenceId evidenceId) {
+        EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
+        if (!request.contextId().equals(contextId) || !request.analysisId().equals(analysisId)) {
+            throw identityMismatch("Evidence 产物与构建请求身份不一致");
         }
     }
 

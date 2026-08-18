@@ -6,6 +6,7 @@ import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.EvidenceId;
 
 import java.nio.file.Path;
 
@@ -121,6 +122,41 @@ public final class CaseArchiveLayout {
         return child(child(collectionRoot(collectionId), "validation"), "baseline-check.json");
     }
 
+    /** @return 指定 Collection 的追加式派生根目录 */
+    public Path collectionDerivedRoot(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "derived");
+    }
+
+    /** @return 指定 Evidence 版本的 Collection 派生目录 */
+    public Path collectionDerivedRoot(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId),
+                safeSegment(evidenceId.value(), "evidenceId"));
+    }
+
+    /** @return 一次派生的归一化清单 */
+    public Path normalizationManifest(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "normalization-manifest.json");
+    }
+
+    /** @return 一次 CodePath 派生的方法路径摘要 */
+    public Path methodPathSummary(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "method-path-summary.json");
+    }
+
+    /** @return 一次 JDWP 派生的快照摘要 */
+    public Path jdwpSnapshotSummary(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "jdwp-snapshot-summary.json");
+    }
+
+    /** @return 一次派生的 Collection 技术校验 */
+    public Path collectionValidation(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "collection-validation.json");
+    }
+
     /** @return Run 根目录 */
     public Path runsRoot() {
         return child(caseRoot, "runs");
@@ -154,6 +190,26 @@ public final class CaseArchiveLayout {
     /** @return 预留 Evidence 根目录 */
     public Path evidenceRoot() {
         return child(caseRoot, "evidence");
+    }
+
+    /** @return 指定 Evidence 的追加式目录 */
+    public Path evidenceRoot(EvidenceId evidenceId) {
+        return child(evidenceRoot(), safeSegment(evidenceId.value(), "evidenceId"));
+    }
+
+    /** @return Evidence 构建请求 */
+    public Path evidenceBuildRequest(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "evidence-build-request.json");
+    }
+
+    /** @return 面向模型的 Evidence Bundle */
+    public Path evidenceBundle(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "evidence-bundle.json");
+    }
+
+    /** @return 请求维度的证据充分性评估 */
+    public Path sufficiencyEvaluation(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "sufficiency-evaluation.json");
     }
 
     private static Path child(Path parent, String segment) {

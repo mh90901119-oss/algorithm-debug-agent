@@ -482,7 +482,7 @@ class CaseArchiveRepositoryTest {
         return new BuildSnapshot("c".repeat(64), "21", "wafer-demo", "0.2.0");
     }
 
-    private static MethodCatalog methodCatalog() {
+    static MethodCatalog methodCatalog() {
         MethodCatalogEntry entry = new MethodCatalogEntry(
                 "a.b.ScheduleTest#case1()V",
                 new SourceAnchor("a.b.ScheduleTest", "case1", "()V",
@@ -496,7 +496,7 @@ class CaseArchiveRepositoryTest {
                 1, 0, TIME.plusSeconds(3));
     }
 
-    private static CodePathCollectionPlan codePathPlan() {
+    static CodePathCollectionPlan codePathPlan() {
         SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"), CASE_ID,
