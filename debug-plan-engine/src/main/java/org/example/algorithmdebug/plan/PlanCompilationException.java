@@ -6,4 +6,9 @@ public final class PlanCompilationException extends RuntimeException {
     public PlanCompilationException(String message) {
         super(message);
     }
+
+    /** 创建保留底层文件或序列化失败 cause 的计划编译错误。 */
+    public PlanCompilationException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

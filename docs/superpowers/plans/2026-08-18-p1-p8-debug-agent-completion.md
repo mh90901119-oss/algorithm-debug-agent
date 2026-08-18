@@ -283,17 +283,17 @@ Collector MVP；变量 allowlist、字段投影、采样和 Collector 内部 Raw
 
 **Files:** contracts `TracepointSpec`, `CaptureSpec`, `JdwpCollectionPlan`, `JdwpManifest`; Schemas `jdwp-plan-v1`, `jdwp-manifest-v1`; tests.
 
-- [ ] RED tests for loopback-only target, 20 tracepoints, method/source hash identity, all-or-nothing locals, supported limits and strict unsupported-capability rejection.
-- [ ] Implement immutable contracts matching the locked Collector's supported fields.
-- [ ] Contract/Schema audit and commit `feat: define jdwp collection contracts`.
+- [x] RED tests for loopback-only target, 20 tracepoints, method/source hash identity, all-or-nothing locals, supported limits and strict unsupported-capability rejection.
+- [x] Implement immutable contracts matching the locked Collector's supported fields.
+- [x] Contract/Schema audit and commit `8a46f93 feat: define bounded jdwp collection contracts`.
 
 ### Task 10: Source Anchor to Collector Plan Compiler
 
 **Files:** `debug-plan-engine/JdwpPlanRequest`, `JdwpPlanCompiler`, `CollectorDebugPlanWriter`; tests.
 
-- [ ] RED tests for changed source Hash, missing line, unknown method, duplicate point, unsupported field projection and deterministic Collector JSON.
-- [ ] Implement compiler using current MethodCatalog and source file re-hash.
-- [ ] Run GREEN, inspect generated JSON against external `DebugPlan.validate()`, commit `feat: compile jdwp collector plans`.
+- [x] RED tests for changed source Hash, missing line, unknown method, duplicate point, unsupported field projection and deterministic Collector JSON.
+- [x] Implement compiler using current MethodCatalog and streaming source file re-hash.
+- [x] Run GREEN and validate generated JSON against the locked external `DebugPlan.validate()`; commit recorded with Task 2.
 
 ### Task 11: JDWP Target and Collector Coordination
 
