@@ -12,6 +12,7 @@ public record EvidenceBuildRequest(
         CaseId caseId,
         ContextId contextId,
         AnalysisId analysisId,
+        RunId runId,
         List<CollectionId> collectionIds,
         List<CollectionId> comparisonCollectionIds,
         Set<EvidenceDimension> requiredDimensions,
@@ -28,6 +29,7 @@ public record EvidenceBuildRequest(
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
+        runId = ContractChecks.requireNonNull(runId, "runId");
         collectionIds = boundedIds(collectionIds, "collectionIds");
         comparisonCollectionIds = boundedIds(comparisonCollectionIds, "comparisonCollectionIds");
         HashSet<CollectionId> overlap = new HashSet<>(collectionIds);

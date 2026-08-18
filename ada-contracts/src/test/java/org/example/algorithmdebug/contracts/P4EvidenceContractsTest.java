@@ -37,6 +37,7 @@ class P4EvidenceContractsTest {
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
                 new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new RunId("run-1"),
                 List.of(duplicate), List.of(duplicate),
                 Set.of(EvidenceDimension.TARGET_OUTCOME),
                 512L * 1024, 1024L * 1024, NOW));
@@ -48,6 +49,7 @@ class P4EvidenceContractsTest {
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
                 new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new RunId("run-1"),
                 List.of(), List.of(), Set.of(),
                 512L * 1024, 1024L * 1024, NOW));
     }

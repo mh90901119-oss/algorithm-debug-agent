@@ -188,7 +188,8 @@ P4 确定性构建器只能生成 `CONFIRMED_FACT`、`VALIDATOR_CONCLUSION` 和 
 
 应用服务先分配 `evidenceId`，再以 create-new 方式保存请求。请求固定包含：
 
-- `schemaVersion/evidenceId/caseId/contextId/analysisId/createdAt`；
+- `schemaVersion/evidenceId/caseId/contextId/analysisId/runId/createdAt`；`runId` 明确选择本轮要解释的
+  已完成目标 UT 运行，同 Context 的新 Analysis 可以继续引用旧 Analysis 产生的 Run；
 - `collectionIds`：0～16 个用于当前 Context 证据的显式 Collection；
 - `comparisonCollectionIds`：0～16 个仅用于历史比较、不能满足当前动态维度的 Collection；
 - `requiredDimensions`：1～7 个允许的证据维度；应用服务自动加入 `VALIDATION`；

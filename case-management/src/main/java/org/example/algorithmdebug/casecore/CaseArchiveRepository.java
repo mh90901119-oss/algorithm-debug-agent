@@ -417,6 +417,13 @@ public final class CaseArchiveRepository {
         if (!analysis.contextId().equals(checked.contextId())) {
             throw identityMismatch("Evidence 请求 Context 与 Analysis 不一致");
         }
+        RunRequest run = requireRunRequest(checked.caseId(), checked.runId());
+        if (!run.contextId().equals(checked.contextId())) {
+            throw identityMismatch("Evidence 请求 Run 与 Context 不一致");
+        }
+        if (findRunOutcome(checked.caseId(), checked.runId()).isEmpty()) {
+            throw identityMismatch("Evidence 请求只能引用已完成的 Run");
+        }
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.evidenceRoot(checked.evidenceId());
         try {

@@ -64,7 +64,8 @@ class EvidenceSufficiencyEvaluatorTest {
     private static EvidenceBuildRequest request(Set<EvidenceDimension> required) {
         return new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, List.of(), List.of(), required, 64 * 1024, 256 * 1024, NOW);
+                ANALYSIS_ID, new org.example.algorithmdebug.contracts.RunId("run-1"),
+                List.of(), List.of(), required, 64 * 1024, 256 * 1024, NOW);
     }
 
     private static EvidenceBundle bundle(

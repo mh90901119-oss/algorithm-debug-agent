@@ -30,7 +30,14 @@ import org.example.algorithmdebug.contracts.NormalizationBudget;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
 import org.example.algorithmdebug.contracts.NormalizationStatus;
 import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.ProcessOutcome;
 import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.RunOutcomeSummary;
+import org.example.algorithmdebug.contracts.TestOutcome;
+import org.example.algorithmdebug.contracts.GanttOutcome;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
+import org.example.algorithmdebug.contracts.FailureCategory;
+import org.example.algorithmdebug.contracts.TargetFailureDiagnostic;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SufficiencyStatus;
@@ -65,6 +72,15 @@ class CaseEvidenceArchiveTest {
         repository.createCase(CaseArchiveRepositoryTest.manifest());
         repository.createContext(CaseArchiveRepositoryTest.context());
         repository.createAnalysis(CaseArchiveRepositoryTest.analysis());
+        repository.startRun(CaseArchiveRepositoryTest.run(RUN_ID, NOW));
+        repository.completeRun(new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ProcessOutcome.FAILED, TestOutcome.ERROR, GanttOutcome.ABSENT,
+                Optional.of(new TargetFailureDiagnostic(
+                        FailureCategory.TEST_ERROR, "java.lang.IllegalStateException",
+                        "no feasible result", "", "fixture.Algorithm.solve")),
+                Optional.empty(), ComparisonOutcome.NOT_COMPARED, "not compared", List.of()));
         repository.createMethodCatalog(CaseArchiveRepositoryTest.methodCatalog());
         repository.createCodePathPlan(CaseArchiveRepositoryTest.codePathPlan());
         repository.startMethodPathCollection(new MethodPathCollectionRecord(
@@ -179,6 +195,7 @@ class CaseEvidenceArchiveTest {
         repository.createEvidenceRequest(new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, currentEvidence, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), currentAnalysis,
+                RUN_ID,
                 List.of(COLLECTION_ID), List.of(), Set.of(EvidenceDimension.METHOD_PATH),
                 512 * 1024, 1024 * 1024, NOW.plusSeconds(2)));
         MethodPathSummary reused = new MethodPathSummary(
@@ -196,6 +213,7 @@ class CaseEvidenceArchiveTest {
         return new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                RUN_ID,
                 List.of(COLLECTION_ID), List.of(), Set.of(EvidenceDimension.METHOD_PATH),
                 512 * 1024, 1024 * 1024, NOW);
     }

@@ -222,7 +222,8 @@ class EvidenceBundleBuilderTest {
             long maxBundleBytes) {
         return new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, current, comparison, dimensions, 64 * 1024, maxBundleBytes, NOW);
+                ANALYSIS_ID, RUN_ID, current, comparison, dimensions,
+                64 * 1024, maxBundleBytes, NOW);
     }
 
     private static EvidenceBuildSources sources(List<ValidatedCollectionSource> collections) {

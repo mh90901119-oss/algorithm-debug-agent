@@ -111,7 +111,7 @@ public final class EvidenceBundleBuilder {
         var context = sources.contextSnapshot();
         if (!request.caseId().equals(outcome.caseId())
                 || !request.contextId().equals(outcome.contextId())
-                || !request.analysisId().equals(outcome.analysisId())
+                || !request.runId().equals(outcome.runId())
                 || !request.caseId().equals(context.caseId())
                 || !request.contextId().equals(context.contextId())) {
             throw new IllegalArgumentException("RunOutcome 或 Context 身份与请求不一致");

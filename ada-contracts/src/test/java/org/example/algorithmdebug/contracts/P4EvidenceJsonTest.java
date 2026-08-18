@@ -26,11 +26,13 @@ class P4EvidenceJsonTest {
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
                 new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new RunId("run-1"),
                 List.of(new CollectionId("collection-1")), List.of(),
                 Set.of(EvidenceDimension.RUNTIME_STATE), 512 * 1024, 1024 * 1024,
                 Instant.parse("2026-08-18T00:00:00Z"));
 
         byte[] json = MAPPER.writeValueAsBytes(request);
+        assertEquals("run-1", MAPPER.readTree(json).path("runId").asText());
         assertEquals(request, MAPPER.readValue(json, EvidenceBuildRequest.class));
     }
 
@@ -40,6 +42,7 @@ class P4EvidenceJsonTest {
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
                 new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new RunId("run-1"),
                 List.of(), List.of(), Set.of(EvidenceDimension.TARGET_OUTCOME),
                 512 * 1024, 1024 * 1024, Instant.parse("2026-08-18T00:00:00Z"))));
         ((com.fasterxml.jackson.databind.node.ObjectNode) root).put("unexpectedField", true);
