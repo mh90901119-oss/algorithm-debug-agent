@@ -7,7 +7,9 @@ import org.example.algorithmdebug.core.RunApplicationService;
 import org.example.algorithmdebug.core.WorkspaceApplicationService;
 import org.example.algorithmdebug.core.StaticAnalysisApplicationService;
 import org.example.algorithmdebug.core.CollectionApplicationService;
+import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
+import org.example.algorithmdebug.plan.JdwpPlanRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -31,6 +33,7 @@ public final class CliCommandExecutor {
     private final RunApplicationService runService;
     private final StaticAnalysisApplicationService staticAnalysisService;
     private final CollectionApplicationService collectionService;
+    private final JdwpCollectionApplicationService jdwpCollectionService;
 
     private static final int MAX_QUESTION_BYTES = 65_536;
 
@@ -51,6 +54,20 @@ public final class CliCommandExecutor {
             RunApplicationService runService,
             StaticAnalysisApplicationService staticAnalysisService,
             CollectionApplicationService collectionService) {
+        this(workspaceService, projectService, doctorService, caseService, runService,
+                staticAnalysisService, collectionService, null);
+    }
+
+    /** 创建同时支持 CodePath 和 JDWP 的 CLI 命令执行器。 */
+    public CliCommandExecutor(
+            WorkspaceApplicationService workspaceService,
+            ProjectApplicationService projectService,
+            DoctorApplicationService doctorService,
+            CaseApplicationService caseService,
+            RunApplicationService runService,
+            StaticAnalysisApplicationService staticAnalysisService,
+            CollectionApplicationService collectionService,
+            JdwpCollectionApplicationService jdwpCollectionService) {
         if (workspaceService == null || projectService == null || doctorService == null
                 || caseService == null || runService == null || staticAnalysisService == null
                 || collectionService == null) {
@@ -63,6 +80,7 @@ public final class CliCommandExecutor {
         this.runService = runService;
         this.staticAnalysisService = staticAnalysisService;
         this.collectionService = collectionService;
+        this.jdwpCollectionService = jdwpCollectionService;
     }
 
     /**
@@ -106,6 +124,19 @@ public final class CliCommandExecutor {
         }
         if (command instanceof CliCommand.CodePathCollectionExecute collect) {
             return collectionService.executeCodePath(
+                    collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
+        }
+        if (command instanceof CliCommand.JdwpPlanCreate create) {
+            return staticAnalysisService.createJdwpPlan(
+                    create.workspace(), create.projectId(), create.caseId(), create.analysisId(),
+                    readJdwpPlanRequest(create.requestFile()));
+        }
+        if (command instanceof CliCommand.JdwpCollectionExecute collect) {
+            if (jdwpCollectionService == null) {
+                throw new org.example.algorithmdebug.core.CaseRunException(
+                        "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector 未配置");
+            }
+            return jdwpCollectionService.execute(
                     collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
         }
         throw new IllegalArgumentException("不支持的 CLI 命令类型");
@@ -156,6 +187,18 @@ public final class CliCommandExecutor {
                     .readValue(json, CodePathPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("request-file 不是有效的 CodePathPlanRequest JSON", failure);
+        }
+    }
+
+    /** 严格读取 64 KiB 内且不允许未知字段的 JDWP 计划请求 JSON。 */
+    static JdwpPlanRequest readJdwpPlanRequest(Path path) {
+        byte[] bytes = readBoundedFile(path, "request-file");
+        String json = decodeUtf8(bytes, "request-file");
+        try {
+            return new ObjectMapper().registerModule(new JavaTimeModule())
+                    .readValue(json, JdwpPlanRequest.class);
+        } catch (IOException | RuntimeException failure) {
+            throw new CliInputException("request-file 不是有效的 JdwpPlanRequest JSON", failure);
         }
     }
 

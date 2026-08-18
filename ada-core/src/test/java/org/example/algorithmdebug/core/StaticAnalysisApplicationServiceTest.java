@@ -32,6 +32,8 @@ import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
+import org.example.algorithmdebug.plan.JdwpPlanRequest;
+import org.example.algorithmdebug.plan.JdwpTracepointRequest;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -135,6 +137,29 @@ class StaticAnalysisApplicationServiceTest {
                         workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
 
         assertEquals("PLAN_COMPILATION_FAILED", failure.code());
+    }
+
+    @Test
+    void jdwpPlanReturnsBoundedSummaryAndCaseRelativeArtifact() {
+        service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        String methodKey = archive().requireMethodCatalog(CASE_ID, ANALYSIS_ID)
+                .entries().getFirst().methodKey();
+
+        ArtifactBackedResult<JdwpPlanSummary> result = service().createJdwpPlan(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
+                new JdwpPlanRequest(
+                        new PlanId("jdwp-plan-1"),
+                        List.of(new JdwpTracepointRequest(
+                                "target-entry", methodKey, 2, 3,
+                                org.example.algorithmdebug.contracts.JdwpCaptureSpec.stackOnly())),
+                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(),
+                        "查看目标方法调用栈", NOW));
+
+        assertEquals(1, result.summary().tracepointCount());
+        assertEquals("analyses/analysis-1/plans/jdwp-plan-1.json",
+                result.artifact().relativePath());
+        assertEquals(result.summary().planId(), archive().requireJdwpPlan(
+                CASE_ID, ANALYSIS_ID, result.summary().planId()).planId());
     }
 
     @Test

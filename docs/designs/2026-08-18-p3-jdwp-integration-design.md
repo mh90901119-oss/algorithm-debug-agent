@@ -328,16 +328,23 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 
 ## 17. 实现完成记录
 
-- 实际变更：P3 Task 1～4 已实施，包括版本化契约/Schema、SourceAnchor 计划编译、异步受管进程、loopback
-  端口、目标/Collector 双进程协调、工具 Hash/Plan 端口预检和 Raw 字节监控；Case/Core/CLI 归档流仍待 Task 5。
+- 实际变更：P3 Task 1～5 已实施，包括版本化契约/Schema、SourceAnchor 计划编译、异步受管进程、loopback
+  端口、目标/Collector 双进程协调、工具 Hash/Plan 端口预检、Raw 字节监控，以及 Case/Core/CLI
+  的追加式 Plan/Collection 归档流。Task 6 的 Wafer 真实 Smoke、最终文档/Eval 和发布审计仍待完成。
 - 相对设计的偏差：实现中发现 Collector Plan 在端口分配前归档会造成计划与实际 argv 不一致，已按 1.1 版改为
   应用服务先分配端口、再生成/归档 Plan，并由 Coordinator 校验同一端口后立即执行。
 - 测试与命令：`mvn test` 全部 21 个模块通过（原有条件式 Wafer Smoke 跳过）；显式指定锁定 Collector JAR 的
   `mvn -pl jdwp-collector-adapter -am -Djdwp.collector.jar=... test` 通过 17 个 Adapter 测试和全部上游测试。
 - 性能结果：最小真实 Smoke 命中 1 个 tracepoint，写出 3 个生命周期/命中事件、Raw 963 字节；仅作为功能基线，
   不代表大型算法性能结论。
-- 已知限制：无变量白名单、字段投影、采样和 Collector 内部字节硬限制。
-- 提交/版本：Task 1 `8a46f93`、Task 2 `7b36b40`、Task 3 `5472d8f`；Task 4 本检查点提交待生成。
+- Task 5 行为：`plan jdwp create` 只接受严格、有限的 JSON 请求；`collection jdwp execute` 在任何进程
+  副作用前保存请求，再保存带本次 loopback 端口的 Collector Plan。成功、UT 断言/业务失败、attach
+  失败和源码漂移均保留结构化 Manifest/Baseline；Gantt 变化或源码漂移会令证据不可用于确认根因。
+- Task 5 产物：完整 Agent Plan、Collector Plan、Raw JDWP JSONL、外部/Agent Manifest、目标/Collector
+  四份日志、可选 Gantt 和 Baseline 检查均通过 Case 相对 Artifact 引用暴露，Raw 内容不内联到 ToolResponse。
+- 已知限制：无变量白名单、字段投影、采样和 Collector 内部字节硬限制；Wafer 真实一点评估尚未执行。
+- 提交/版本：Task 1 `8a46f93`、Task 2 `7b36b40`、Task 3 `5472d8f`、Task 4 `ce6b30c`；
+  Task 5 将在全量回归与最终自审通过后提交。
 
 ## 18. 变更记录
 
@@ -345,3 +352,4 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 |---|---|---|---|
 | 2026-08-18 | 1.0 | 明确以能力如实、保守预算方式集成当前 Collector MVP | Codex |
 | 2026-08-18 | 1.1 | 明确端口先于 Collector Plan 分配和归档，Plan、argv 与 Manifest 必须使用同一端口 | Codex |
+| 2026-08-18 | 1.2 | 记录 Case/Core/CLI 追加式执行流、外部 Manifest 校验和 Baseline 证据门禁实现 | Codex |

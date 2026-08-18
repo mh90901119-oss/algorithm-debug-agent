@@ -302,14 +302,14 @@ Collector MVP；变量 allowlist、字段投影、采样和 Collector 内部 Raw
 - [x] RED tests for loopback allocation, argv, attach ordering, collector failure before/after resume, timeout, process survivors and bounded logs.
 - [x] Implement application-assigned loopback port, injected process starters/supervisor and explicit lifecycle stages.
 - [x] Add conditional real Collector Smoke using the pinned JAR; minimal tracepoint hit/resume is verified. Wafer one-point Smoke remains in the P3 release audit.
-- [x] Audit resume safety, localhost binding, JAR hash, Raw byte cutoff and target/Collector fact preservation; checkpoint commit follows this task.
+- [x] Audit resume safety, localhost binding, JAR hash, Raw byte cutoff and target/Collector fact preservation; commit `ce6b30c`.
 
 ### Task 12: JDWP Collection Application Flow
 
 **Files:** extend collection repository/Core/CLI with `collection jdwp execute`; integration tests.
 
-- [ ] RED end-to-end fixture for successful trace, business exception, attach failure and baseline mismatch.
-- [ ] Implement archive and Artifact references using the common collection layout.
+- [x] RED Core/CLI fixture for successful trace, target assertion/business failure, attach failure, source drift and baseline mismatch.
+- [x] Implement append-only Plan/Collection archive and bounded Artifact references using the common collection layout.
 - [ ] P3 audit, regression fixes, affected/root tests and real Smoke.
 - [ ] Commit `feat: execute archived jdwp collections`.
 

@@ -18,9 +18,10 @@ failure now produces an immutable Run fingerprint and a write-once Context repro
 later Runs report `MATCHED` or `CHANGED` for the same or previous Context.
 
 Gantt comparison deliberately ignores JSON formatting whitespace but preserves object/array order and
-string content. It reports only changed dimensions, not a field-level Diff. Input Analysis,
-CodePathTracer/JDWP orchestration, Evidence construction, the OpenCode installer and end-to-end
-`/debug-case` model workflow remain planned.
+string content. It reports only changed dimensions, not a field-level Diff. Static method analysis,
+bounded CodePathTracer collection and the JDWP Plan/collection application flow are implemented.
+JDWP still requires the P3 release audit and real Wafer smoke; Input Analysis, Evidence construction,
+the OpenCode installer and end-to-end `/debug-case` model workflow remain planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
 `algorithm-debug` Skill, bounded OpenCode agent/command/custom-tool contract assets and the Java
@@ -54,7 +55,22 @@ java -jar $ada project register --workspace D:\agent-workspace --project D:\larg
 java -jar $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt
 java -jar $ada case inspect --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId>
 java -jar $ada run execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
+java -jar $ada static analyze --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
+java -jar $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
+java -jar $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
 ```
+
+JDWP execution uses the repository-pinned Collector `1.0.0` SHA-256. Before starting OpenCode/CLI,
+set only the local JAR location; callers cannot replace the locked Hash through CLI input:
+
+```powershell
+$env:ADA_JDWP_COLLECTOR_JAR = "D:\mcpcode\mcp-jdwp-java\jdwp-batch-collector\target\jdwp-batch-collector.jar"
+```
+
+`doctor` reports `JDWP_TOOL_OK`, missing JAR, or Hash mismatch without starting a target JVM.
+Every execution creates a new Collection and returns only a bounded summary plus relative Artifact
+references. Raw JDWP events, the external Collector Manifest, Agent Manifest, four process logs,
+optional Gantt and Baseline check remain in that Collection directory.
 
 The packaged CLI currently loads the Wafer Demo Adapter. Supporting an arbitrary algorithm module
 requires a compatible Adapter; the CLI does not guess Gantt locations.

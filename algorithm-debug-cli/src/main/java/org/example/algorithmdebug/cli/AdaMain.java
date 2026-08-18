@@ -11,6 +11,7 @@ import org.example.algorithmdebug.core.ArtifactBackedResult;
 import org.example.algorithmdebug.core.MavenExecutableLocator;
 import org.example.algorithmdebug.core.MultiArtifactBackedResult;
 import org.example.algorithmdebug.core.ToolDoctorProbe;
+import org.example.algorithmdebug.core.JdwpToolConfiguration;
 import org.example.algorithmdebug.plan.PlanCompilationException;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.example.algorithmdebug.codepath.CodePathProcessCollector;
@@ -18,6 +19,8 @@ import org.example.algorithmdebug.codepath.CodePathToolConfiguration;
 import org.example.algorithmdebug.codepath.CodePathAdapterException;
 import org.example.algorithmdebug.codepath.MavenTestClasspathResolver;
 import org.example.algorithmdebug.methodpath.MethodPathCollector;
+import org.example.algorithmdebug.jdwp.JdwpCollectionCoordinator;
+import org.example.algorithmdebug.jdwp.LoopbackPortAllocator;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -27,9 +30,15 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.stream.Collectors;
+import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
 public final class AdaMain {
+
+    private static final String LOCKED_JDWP_COLLECTOR_SHA256 =
+            "be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78";
 
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_INVALID_ARGUMENTS = 2;
@@ -146,6 +155,7 @@ public final class AdaMain {
                 System.getProperty("java.home"), "bin", windows ? "java.exe" : "java")
                 .toAbsolutePath().normalize();
         ConfiguredCodePath codePath = configuredCodePath(javaExecutable);
+        ConfiguredJdwp jdwp = configuredJdwp(javaExecutable);
         ControlPlaneServices services = ControlPlaneServices.create(
                 Clock.systemUTC(),
                 () -> Runtime.version().feature(),
@@ -156,10 +166,12 @@ public final class AdaMain {
                 mavenLocator.locate(Optional.empty()),
                 codePath.collector(),
                 new MavenTestClasspathResolver(),
-                codePath.doctorProbe());
+                jdwp.tool(), jdwp.executor(), jdwp.ports(),
+                codePath.doctorProbe(), jdwp.doctorProbe());
         return new CliCommandExecutor(
                 services.workspace(), services.project(), services.doctor(),
-                services.cases(), services.runs(), services.staticAnalysis(), services.collections());
+                services.cases(), services.runs(), services.staticAnalysis(), services.collections(),
+                services.jdwpCollections());
     }
 
     private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
@@ -202,6 +214,71 @@ public final class AdaMain {
             ToolDoctorProbe doctorProbe) {
     }
 
+    private static ConfiguredJdwp configuredJdwp(java.nio.file.Path javaExecutable) {
+        String jar = System.getenv("ADA_JDWP_COLLECTOR_JAR");
+        if (jar == null || jar.isBlank()) {
+            JdwpToolConfiguration unavailable = new JdwpToolConfiguration(
+                    javaExecutable, "0".repeat(64), "unavailable");
+            return new ConfiguredJdwp(
+                    unavailable,
+                    request -> { throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                            "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector 未配置", null); },
+                    () -> 51234,
+                    () -> new DoctorCheck(
+                            "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_NOT_CONFIGURED",
+                            "JDWP Collector 未配置"));
+        }
+        JdwpToolConfiguration tool = new JdwpToolConfiguration(
+                java.nio.file.Path.of(jar), LOCKED_JDWP_COLLECTOR_SHA256, "1.0.0");
+        ToolDoctorProbe probe = () -> {
+            if (!Files.isRegularFile(tool.collectorJar())) {
+                return new DoctorCheck(
+                        "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_MISSING",
+                        "JDWP Collector JAR 不可用");
+            }
+            try {
+                if (!sha256(tool.collectorJar()).equals(tool.sha256())) {
+                    return new DoctorCheck(
+                            "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_HASH_MISMATCH",
+                            "JDWP Collector JAR SHA-256 不匹配");
+                }
+                return new DoctorCheck(
+                        "jdwp", DoctorStatus.PASS, "JDWP_TOOL_OK",
+                        "JDWP Collector 配置和 SHA-256 校验通过");
+            } catch (java.io.IOException failure) {
+                return new DoctorCheck(
+                        "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_VERIFICATION_FAILED",
+                        "JDWP Collector JAR 无法读取");
+            }
+        };
+        JdwpCollectionCoordinator coordinator = new JdwpCollectionCoordinator();
+        LoopbackPortAllocator ports = new LoopbackPortAllocator();
+        return new ConfiguredJdwp(tool, coordinator::execute, ports::allocate, probe);
+    }
+
+    private static String sha256(java.nio.file.Path path) throws java.io.IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (var input = Files.newInputStream(path)) {
+                byte[] buffer = new byte[16 * 1024];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (java.security.NoSuchAlgorithmException failure) {
+            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
+        }
+    }
+
+    private record ConfiguredJdwp(
+            JdwpToolConfiguration tool,
+            org.example.algorithmdebug.core.JdwpCollectionExecutor executor,
+            org.example.algorithmdebug.core.JdwpPortProvider ports,
+            ToolDoctorProbe doctorProbe) {
+    }
+
     private static String safeDomainMessage(String code) {
         return switch (code) {
             case "WORKSPACE_PATH_INVALID" -> "Workspace path is invalid";
@@ -228,6 +305,13 @@ public final class AdaMain {
             case "STATIC_ARCHIVE_FAILED" -> "Static analysis artifact could not be archived";
             case "PLAN_COMPILATION_FAILED" -> "Collection plan could not be compiled";
             case "PLAN_ARCHIVE_FAILED" -> "Collection plan could not be archived";
+            case "JDWP_PLAN_COMPILATION_FAILED" -> "JDWP collection plan could not be compiled";
+            case "JDWP_PLAN_ARCHIVE_FAILED" -> "JDWP collection plan could not be archived";
+            case "JDWP_TOOL_NOT_CONFIGURED" -> "JDWP Collector is not configured";
+            case "JDWP_TOOL_HASH_MISMATCH" -> "JDWP Collector verification failed";
+            case "JDWP_ATTACH_FAILED" -> "JDWP Collector could not attach to the target test";
+            case "JDWP_MANIFEST_INVALID" -> "JDWP Collector output is invalid";
+            case "JDWP_ARCHIVE_FAILED" -> "JDWP collection artifacts could not be archived";
             default -> "Workspace operation failed";
         };
     }

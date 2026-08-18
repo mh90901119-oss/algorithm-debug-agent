@@ -98,6 +98,21 @@ class CliArgumentsTest {
                 CliArguments.parse(new String[]{
                         "collection", "codepath", "execute", "--workspace", "workspace",
                         "--project-id", "demo", "--case-id", "case-1", "--plan-id", "plan-1"}));
+        assertEquals(
+                new CliCommand.JdwpPlanCreate(Path.of("workspace"), new ProjectId("demo"),
+                        new CaseId("case-1"), new AnalysisId("analysis-1"), Path.of("jdwp.json")),
+                CliArguments.parse(new String[]{
+                        "plan", "jdwp", "create", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--analysis-id", "analysis-1", "--request-file", "jdwp.json"}));
+        assertEquals(
+                new CliCommand.JdwpCollectionExecute(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        new PlanId("jdwp-plan-1")),
+                CliArguments.parse(new String[]{
+                        "collection", "jdwp", "execute", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--plan-id", "jdwp-plan-1"}));
     }
 
     @Test

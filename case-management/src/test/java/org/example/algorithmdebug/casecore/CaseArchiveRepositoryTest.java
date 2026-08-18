@@ -17,6 +17,11 @@ import org.example.algorithmdebug.contracts.MethodCallEdge;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PackageCensusEntry;
 import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
+import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
+import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
+import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
+import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
+import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -190,6 +195,55 @@ class CaseArchiveRepositoryTest {
                 CASE_ID, new CollectionId("collection-1")));
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(WorkspaceException.class,
                 () -> repository.startMethodPathCollection(record)).code());
+    }
+
+    @Test
+    void shouldArchiveJdwpPlanAndCollectionUnderOwningAnalysis() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID, CONTEXT_ID);
+
+        Path planPath = repository.createJdwpPlan(plan);
+        JdwpCollectionRecord record = new JdwpCollectionRecord(
+                SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                new RunId("run-jdwp-1"), plan.planId(), new CollectionId("jdwp-1"),
+                TARGET, "JDWP", TIME.plusSeconds(5));
+        Path collection = repository.startJdwpCollection(record);
+
+        assertEquals(plan, repository.requireJdwpPlan(CASE_ID, ANALYSIS_ID, plan.planId()));
+        assertEquals(record, repository.requireJdwpCollection(CASE_ID, record.collectionId()));
+        assertTrue(planPath.endsWith("analyses/analysis-1/plans/jdwp-plan-1.json"));
+        assertTrue(Files.isDirectory(collection.resolve("raw")));
+        assertTrue(Files.isDirectory(collection.resolve("logs")));
+        assertTrue(Files.isDirectory(collection.resolve("validation")));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.createJdwpPlan(plan)).code());
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.startJdwpCollection(record)).code());
+    }
+
+    @Test
+    void shouldRejectJdwpPlanAndCollectionWithCrossAnalysisIdentity() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        AnalysisId otherAnalysis = new AnalysisId("analysis-2");
+        JdwpCollectionPlan wrongPlan = jdwpPlan(otherAnalysis, CONTEXT_ID);
+
+        assertEquals("METHOD_CATALOG_NOT_FOUND", assertThrows(
+                WorkspaceException.class, () -> repository.createJdwpPlan(wrongPlan)).code());
+
+        JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID, CONTEXT_ID);
+        repository.createJdwpPlan(plan);
+        JdwpCollectionRecord wrongRecord = new JdwpCollectionRecord(
+                SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, CONTEXT_ID, otherAnalysis,
+                new RunId("run-jdwp-2"), plan.planId(), new CollectionId("jdwp-2"),
+                TARGET, "JDWP", TIME.plusSeconds(6));
+        assertEquals("JDWP_PLAN_NOT_FOUND", assertThrows(
+                WorkspaceException.class, () -> repository.startJdwpCollection(wrongRecord)).code());
     }
 
     @Test
@@ -460,5 +514,17 @@ class CaseArchiveRepositoryTest {
                 CONTEXT_ID, ANALYSIS_ID, TARGET, context().sourceSnapshot().sha256(), selectors,
                 List.of("a.b"), "PACKAGE_SUPERSET", CollectionBudget.defaults(),
                 100, "定位", TIME.plusSeconds(4));
+    }
+
+    private static JdwpCollectionPlan jdwpPlan(
+            AnalysisId analysisId, ContextId contextId) {
+        SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
+        return new JdwpCollectionPlan(
+                SchemaVersions.JDWP_COLLECTION_PLAN, new PlanId("jdwp-plan-1"), CASE_ID,
+                contextId, analysisId, TARGET, context().sourceSnapshot().sha256(),
+                List.of(new JdwpTracepointSpec(
+                        "schedule-entry", methodCatalog().entries().getFirst().methodKey(),
+                        anchor, 1, 3, JdwpCaptureSpec.stackOnly())),
+                JdwpCollectionBudget.defaults(), "检查调度方法", TIME.plusSeconds(4));
     }
 }

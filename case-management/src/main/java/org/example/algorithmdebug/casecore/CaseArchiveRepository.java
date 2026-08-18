@@ -12,6 +12,8 @@ import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
 import org.example.algorithmdebug.contracts.CollectionBaselineCheck;
+import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
+import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
@@ -220,6 +222,65 @@ public final class CaseArchiveRepository {
         return requireCodePathPlan(caseId, analysisId, planId);
     }
 
+    /** 为已有 MethodCatalog 原子创建 JDWP 计划；计划 ID 不得覆盖。 */
+    public Path createJdwpPlan(JdwpCollectionPlan plan) {
+        JdwpCollectionPlan checked = requireNonNull(plan, "plan");
+        MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
+        if (!catalog.contextId().equals(checked.contextId())
+                || !catalog.targetTest().equals(checked.targetTest())
+                || !catalog.sourceFingerprintSha256().equals(checked.sourceFingerprintSha256())) {
+            throw identityMismatch("JDWP 计划与 MethodCatalog 身份不一致");
+        }
+        var entries = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
+        catalog.entries().forEach(entry -> entries.put(entry.methodKey(), entry));
+        for (var point : checked.tracepoints()) {
+            var entry = entries.get(point.methodKey());
+            if (entry == null || !entry.sourceAnchor().equals(point.sourceAnchor())) {
+                throw identityMismatch("JDWP tracepoint 不属于 MethodCatalog 或源码锚点不一致");
+            }
+        }
+        Path document = layout(checked.caseId()).planDocument(
+                checked.analysisId(), checked.planId());
+        try {
+            writer.writeNew(document, mapper.writeJson(checked));
+            return document;
+        } catch (WorkspaceException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /** 从指定 Analysis 读取 JDWP 计划。 */
+    public JdwpCollectionPlan requireJdwpPlan(
+            CaseId caseId, AnalysisId analysisId, PlanId planId) {
+        JdwpCollectionPlan value = requireDocument(
+                layout(caseId).planDocument(analysisId, planId), JdwpCollectionPlan.class,
+                "JDWP_PLAN_NOT_FOUND");
+        if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())
+                || !planId.equals(value.planId())) {
+            throw identityMismatch("JDWP 计划文档身份与路径不一致");
+        }
+        return value;
+    }
+
+    /** 在 Case 内按唯一 PlanId 查找 JDWP 计划；跨 Analysis 重名时拒绝歧义。 */
+    public JdwpCollectionPlan requireJdwpPlan(CaseId caseId, PlanId planId) {
+        CaseArchiveLayout layout = layout(caseId);
+        List<Path> matches = childDirectories(layout.analysesRoot()).stream()
+                .map(path -> path.resolve("plans").resolve(planId.value() + ".json"))
+                .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                .toList();
+        if (matches.size() != 1) {
+            throw new WorkspaceException(
+                    "JDWP_PLAN_NOT_FOUND", "JDWP 计划不存在或 PlanId 在 Analysis 间不唯一");
+        }
+        String analysisSegment = matches.getFirst().getParent().getParent().getFileName().toString();
+        try {
+            return requireJdwpPlan(caseId, new AnalysisId(analysisSegment), planId);
+        } catch (IllegalArgumentException failure) {
+            throw new WorkspaceException("CASE_DOCUMENT_INVALID", "JDWP 计划路径身份无效", failure);
+        }
+    }
+
     /**
      * 在外部 Collector 启动前创建 Collection 目录、raw/derived/logs 子目录和请求文档。
      *
@@ -251,6 +312,43 @@ public final class CaseArchiveRepository {
         }
     }
 
+    /** 在外部双进程启动前追加 JDWP Collection 请求和固定目录。 */
+    public Path startJdwpCollection(JdwpCollectionRecord record) {
+        JdwpCollectionRecord checked = requireNonNull(record, "record");
+        JdwpCollectionPlan plan = requireJdwpPlan(
+                checked.caseId(), checked.analysisId(), checked.planId());
+        if (!plan.contextId().equals(checked.contextId())
+                || !plan.targetTest().equals(checked.targetTest())) {
+            throw identityMismatch("JDWP Collection 请求与计划身份不一致");
+        }
+        CaseArchiveLayout layout = layout(checked.caseId());
+        Path root = layout.collectionRoot(checked.collectionId());
+        try {
+            Files.createDirectory(root);
+            Files.createDirectory(root.resolve("raw"));
+            Files.createDirectory(root.resolve("logs"));
+            Files.createDirectory(root.resolve("validation"));
+            writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
+            return root;
+        } catch (FileAlreadyExistsException | WorkspaceException failure) {
+            throw archiveWriteFailure(failure);
+        } catch (IOException | SecurityException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /** 读取指定 JDWP Collection 的启动请求。 */
+    public JdwpCollectionRecord requireJdwpCollection(
+            CaseId caseId, CollectionId collectionId) {
+        JdwpCollectionRecord value = requireDocument(
+                layout(caseId).collectionRequest(collectionId), JdwpCollectionRecord.class,
+                "COLLECTION_NOT_FOUND");
+        if (!caseId.equals(value.caseId()) || !collectionId.equals(value.collectionId())) {
+            throw identityMismatch("JDWP Collection 请求文档身份与路径不一致");
+        }
+        return value;
+    }
+
     /** 读取指定 Collection 的启动请求。 */
     public MethodPathCollectionRecord requireMethodPathCollection(
             CaseId caseId, CollectionId collectionId) {
@@ -272,6 +370,25 @@ public final class CaseArchiveRepository {
                 || !request.analysisId().equals(checked.analysisId())
                 || !request.runId().equals(checked.runId())) {
             throw identityMismatch("Baseline check 与 Collection 请求身份不一致");
+        }
+        Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
+        try {
+            writer.writeNew(document, mapper.writeJson(checked));
+            return document;
+        } catch (WorkspaceException failure) {
+            throw archiveWriteFailure(failure);
+        }
+    }
+
+    /** 为已启动 JDWP Collection 原子追加 Baseline 检查。 */
+    public Path createJdwpCollectionBaselineCheck(CollectionBaselineCheck check) {
+        CollectionBaselineCheck checked = requireNonNull(check, "check");
+        JdwpCollectionRecord request = requireJdwpCollection(
+                checked.caseId(), checked.collectionId());
+        if (!request.contextId().equals(checked.contextId())
+                || !request.analysisId().equals(checked.analysisId())
+                || !request.runId().equals(checked.runId())) {
+            throw identityMismatch("Baseline check 与 JDWP Collection 请求身份不一致");
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {

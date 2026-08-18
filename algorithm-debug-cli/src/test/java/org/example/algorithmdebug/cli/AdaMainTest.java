@@ -52,9 +52,11 @@ class AdaMainTest {
         assertSuccess(diagnosed);
         assertTrue(initialized.response().path("data").path("created").booleanValue());
         assertEquals(portable(module), registered.response().path("data").path("registration").path("moduleRoot").textValue());
-        assertEquals(6, diagnosed.response().path("data").path("checks").size());
+        assertEquals(7, diagnosed.response().path("data").path("checks").size());
         assertTrue(diagnosed.response().path("data").path("checks").toString()
                 .contains("CODEPATH_TOOL_NOT_CONFIGURED"));
+        assertTrue(diagnosed.response().path("data").path("checks").toString()
+                .contains("JDWP_TOOL_NOT_CONFIGURED"));
         assertTrue(Files.isRegularFile(workspace.resolve("workspace.yaml")));
         assertEquals("", initialized.stderr());
     }

@@ -40,6 +40,7 @@ public final class ControlPlaneServices {
     private final RunApplicationService runs;
     private final StaticAnalysisApplicationService staticAnalysis;
     private final CollectionApplicationService collections;
+    private final JdwpCollectionApplicationService jdwpCollections;
 
     private ControlPlaneServices(
             WorkspaceApplicationService workspace,
@@ -48,7 +49,8 @@ public final class ControlPlaneServices {
             CaseApplicationService cases,
             RunApplicationService runs,
             StaticAnalysisApplicationService staticAnalysis,
-            CollectionApplicationService collections) {
+            CollectionApplicationService collections,
+            JdwpCollectionApplicationService jdwpCollections) {
         this.workspace = workspace;
         this.project = project;
         this.doctor = doctor;
@@ -56,6 +58,7 @@ public final class ControlPlaneServices {
         this.runs = runs;
         this.staticAnalysis = staticAnalysis;
         this.collections = collections;
+        this.jdwpCollections = jdwpCollections;
     }
 
     /**
@@ -76,7 +79,7 @@ public final class ControlPlaneServices {
             boolean windows) {
         return createInternal(
                 clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                null, null, null, null, List.of());
+                null, null, null, null, null, null, null, List.of());
     }
 
     /**
@@ -158,7 +161,32 @@ public final class ControlPlaneServices {
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
                 List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
-                List.of(toolProbe));
+                null, null, null, List.of(toolProbe));
+    }
+
+    /** CLI 组合根同时注入 CodePath 与 JDWP 工具边界及其 Doctor 探针。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter<?>> adapters,
+            Optional<Path> mavenExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
+            ToolDoctorProbe codePathProbe,
+            ToolDoctorProbe jdwpProbe) {
+        if (jdwpTool == null || jdwpExecutor == null || jdwpPorts == null
+                || codePathProbe == null || jdwpProbe == null) {
+            throw new IllegalArgumentException("JDWP 控制面组合根依赖不能为空");
+        }
+        return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                jdwpTool, jdwpExecutor, jdwpPorts, List.of(codePathProbe, jdwpProbe));
     }
 
     private static ControlPlaneServices createInternal(
@@ -171,6 +199,9 @@ public final class ControlPlaneServices {
             Optional<Path> mavenExecutable,
             MethodPathCollector methodPathCollector,
             TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
             List<ToolDoctorProbe> toolProbes) {
         if (clock == null || javaFeatureSupplier == null || environment == null
                 || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null) {
@@ -196,6 +227,7 @@ public final class ControlPlaneServices {
         RunApplicationService runs = null;
         StaticAnalysisApplicationService staticAnalysis = null;
         CollectionApplicationService collections = null;
+        JdwpCollectionApplicationService jdwpCollections = null;
         if (adapters != null) {
             AdapterCatalog catalog = new AdapterCatalog(adapters);
             OpaqueIdGenerator ids = new OpaqueIdGenerator();
@@ -215,6 +247,13 @@ public final class ControlPlaneServices {
                     ids, clock, mavenExecutable, currentJavaExecutable(windows),
                     methodPathCollector, classpathResolver,
                     new ContextSnapshotBuilder()::captureSourceSnapshot);
+            if (jdwpTool != null) {
+                jdwpCollections = new JdwpCollectionApplicationService(
+                        new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
+                        ids, clock, mavenExecutable, currentJavaExecutable(windows), jdwpTool,
+                        jdwpExecutor, jdwpPorts,
+                        new ContextSnapshotBuilder()::captureSourceSnapshot);
+            }
         }
         return new ControlPlaneServices(
                 new WorkspaceApplicationService(initializer),
@@ -224,7 +263,8 @@ public final class ControlPlaneServices {
                 cases,
                 runs,
                 staticAnalysis,
-                collections);
+                collections,
+                jdwpCollections);
     }
 
     /** @return Workspace 初始化服务 */
@@ -272,6 +312,14 @@ public final class ControlPlaneServices {
             throw new IllegalStateException("当前 ControlPlaneServices 未装配 Adapter");
         }
         return collections;
+    }
+
+    /** @return JDWP 动态采集用例；未在组合根配置时拒绝访问。 */
+    public JdwpCollectionApplicationService jdwpCollections() {
+        if (jdwpCollections == null) {
+            throw new IllegalStateException("当前 ControlPlaneServices 未装配 JDWP Collector");
+        }
+        return jdwpCollections;
     }
 
     private static Path currentJavaExecutable(boolean windows) {

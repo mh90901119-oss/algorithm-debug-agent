@@ -56,4 +56,27 @@ class CliCommandExecutorTest {
 
         assertThrows(CliInputException.class, () -> CliCommandExecutor.readPlanRequest(utf16));
     }
+
+    @Test
+    void jdwpRequestUsesStrictUtf8AndRejectsUnknownCapabilities() throws Exception {
+        Path valid = Files.writeString(temporaryDirectory.resolve("jdwp.json"), """
+                {"planId":"jdwp-plan-1","tracepoints":[{
+                 "tracepointId":"entry","methodKey":"fixture.Test#case1()V",
+                 "line":12,"maxHits":3,"capture":{"locals":false,"stack":true,
+                 "maxFrames":8,"maxDepth":1,"maxItems":20,"maxStringLength":256}}],
+                 "budget":{"maxEvents":100,"maxBytes":16777216,
+                 "timeoutMillis":300000,"idleTimeoutMillis":120000},
+                 "rationale":"查看调用栈","requestedAt":"2026-08-18T00:00:00Z"}
+                """);
+        Path unsupported = Files.writeString(temporaryDirectory.resolve("unsupported.json"), """
+                {"planId":"jdwp-plan-1","tracepoints":[],"projection":["x"],
+                 "budget":{"maxEvents":100,"maxBytes":16777216,
+                 "timeoutMillis":300000,"idleTimeoutMillis":120000},
+                 "rationale":"查看调用栈","requestedAt":"2026-08-18T00:00:00Z"}
+                """);
+
+        assertEquals("jdwp-plan-1", CliCommandExecutor.readJdwpPlanRequest(valid).planId().value());
+        assertThrows(CliInputException.class,
+                () -> CliCommandExecutor.readJdwpPlanRequest(unsupported));
+    }
 }

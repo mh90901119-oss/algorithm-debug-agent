@@ -27,6 +27,8 @@ import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.PlanCompilationException;
+import org.example.algorithmdebug.plan.JdwpPlanCompiler;
+import org.example.algorithmdebug.plan.JdwpPlanRequest;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisBudget;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisRequest;
@@ -40,6 +42,7 @@ public final class StaticAnalysisApplicationService {
     private final AtomicDocumentWriter writer;
     private final JavaSourceCallGraphAnalyzer analyzer;
     private final CodePathPlanCompiler compiler;
+    private final JdwpPlanCompiler jdwpCompiler;
     private final SourceSnapshotReader sourceSnapshots;
     private final Clock clock;
 
@@ -73,6 +76,7 @@ public final class StaticAnalysisApplicationService {
         this.writer = writer;
         this.analyzer = analyzer;
         this.compiler = compiler;
+        this.jdwpCompiler = new JdwpPlanCompiler();
         this.clock = clock;
         this.sourceSnapshots = sourceSnapshots;
     }
@@ -155,6 +159,37 @@ public final class StaticAnalysisApplicationService {
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
                     "PLAN_ARCHIVE_FAILED", "CodePath 计划归档或目录读取失败", failure);
+        }
+    }
+
+    /** 基于同一 Analysis 的 MethodCatalog 编译并追加归档 JDWP 采集计划。 */
+    public ArtifactBackedResult<JdwpPlanSummary> createJdwpPlan(
+            Path workspaceRoot,
+            ProjectId projectId,
+            CaseId caseId,
+            AnalysisId analysisId,
+            JdwpPlanRequest request) {
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            ProjectRegistration registration = requireRegistration(layout, projectId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            MethodCatalog catalog = archive.requireMethodCatalog(caseId, analysisId);
+            var plan = jdwpCompiler.compile(
+                    catalog, request, Path.of(registration.moduleRoot()));
+            Path document = archive.createJdwpPlan(plan);
+            ArtifactReference artifact = describeArtifact(
+                    layout.projectCases(projectId).resolve(caseId.value()), document,
+                    plan.planId().value(), "JDWP_PLAN", "JDWP_PLAN_");
+            return new ArtifactBackedResult<>(new JdwpPlanSummary(
+                    plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
+                    plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),
+                    artifact);
+        } catch (PlanCompilationException failure) {
+            throw new CaseRunException(
+                    "JDWP_PLAN_COMPILATION_FAILED", "JDWP 计划编译失败", failure);
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(
+                    "JDWP_PLAN_ARCHIVE_FAILED", "JDWP 计划归档或目录读取失败", failure);
         }
     }
 
