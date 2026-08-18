@@ -8,7 +8,9 @@
 - `case/case-manifest-v2.schema.json`：Case 的 Project、目标 UT、冻结 Adapter 和初始问题身份。
 - `case/context-record-v2.schema.json`：显式分析版本身份；不包含源码、输入、POM 或环境快照。
 - `case/analysis-request-v1.schema.json`：一次用户问题对应的追加式 Analysis 请求。
-- `case/case-digest-v1.schema.json`：查询时重建的有界 Case 历史摘要。
+- `case/analysis-result-v1.schema.json`：一轮 Analysis 的最终用户回答、分级结论和显式证据引用；不包含模型思维链。
+- `case/case-digest-v1.schema.json`：历史 Case Digest v1 格式，仅保留用于版本审计。
+- `case/case-digest-v2.schema.json`：当前查询时重建的有界 Case 历史摘要，包含最近 Run、Collection、Evidence 和 Analysis Result。
 - `analysis/method-catalog-v2.schema.json`：从目标 UT 出发生成的有界方法目录、静态调用边、方法源码锚点与截断信息。
 - `collection/codepath-plan-v2.schema.json`：大模型选择关键方法后，由确定性编译器生成的精确 class/method/descriptor 采集计划。
 - `collection/method-path-manifest-v2.schema.json`：外部方法路径工具的版本、计划 Hash、退出状态、单一 Raw 流计数与截断事实；
@@ -28,4 +30,5 @@ Versioned JSON Schemas for Case, execution, Gantt, collection, trace, evidence a
 - `case/baseline-verification-v1.schema.json`：多次 Run 的 Baseline 稳定性状态。
 
 新增可选字段保持主版本；破坏性结构变化必须增加新的主版本文件，历史 Schema 不覆盖。
+Case Digest v2 是当前开发版本唯一写出格式；v1 Schema 仅作为历史格式保留，不增加运行期双写或兼容字段。
 所有契约时间按 ISO-8601 字符串输出；v2 关键 Schema 使用 Draft 2020-12 测试校验器验证真实序列化实例。

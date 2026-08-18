@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/analysis-result-v1.schema.json",
+  "title": "AnalysisResult v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "contextId", "analysisId", "finalAnswer", "conclusions", "referencedRunIds", "referencedCollectionIds", "referencedEvidenceIds", "referencedArtifactIds", "missingEvidence", "completedAt"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "caseId": {"$ref": "#/$defs/id"},
+    "contextId": {"$ref": "#/$defs/id"},
+    "analysisId": {"$ref": "#/$defs/id"},
+    "finalAnswer": {"type": "string", "minLength": 1, "maxLength": 65536},
+    "conclusions": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/conclusion"}},
+    "referencedRunIds": {"$ref": "#/$defs/idList"},
+    "referencedCollectionIds": {"$ref": "#/$defs/idList"},
+    "referencedEvidenceIds": {"$ref": "#/$defs/idList"},
+    "referencedArtifactIds": {"$ref": "#/$defs/idList"},
+    "missingEvidence": {"type": "array", "maxItems": 32, "items": {"type": "string", "minLength": 1, "maxLength": 2048}},
+    "completedAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "idList": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/id"}},
+    "conclusion": {
+      "type": "object", "additionalProperties": false,
+      "required": ["classification", "statement", "evidenceReferenceIds"],
+      "properties": {
+        "classification": {"enum": ["CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE", "LLM_HYPOTHESIS", "MISSING_EVIDENCE"]},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 8192},
+        "evidenceReferenceIds": {"type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/id"}}
+      }
+    }
+  }
+}

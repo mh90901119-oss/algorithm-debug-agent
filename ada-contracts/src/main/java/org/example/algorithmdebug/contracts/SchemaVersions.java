@@ -28,6 +28,9 @@ public final class SchemaVersions {
     /** Analysis 请求 Schema 版本。 */
     public static final String ANALYSIS_REQUEST = "1.0";
 
+    /** Analysis 面向用户的完成结果 Schema 版本。 */
+    public static final String ANALYSIS_RESULT = "1.0";
+
     /** Run 启动请求 Schema 版本。 */
     public static final String RUN_REQUEST = "1.0";
 
@@ -35,7 +38,7 @@ public final class SchemaVersions {
     public static final String RUN_RESULT_FINGERPRINT = "1.0";
 
     /** 面向模型的有界 Case 摘要 Schema 版本。 */
-    public static final String CASE_DIGEST = "1.0";
+    public static final String CASE_DIGEST = "2.0";
 
     /** Agent Workspace 清单 Schema 版本。 */
     public static final String WORKSPACE_MANIFEST = "1.0";

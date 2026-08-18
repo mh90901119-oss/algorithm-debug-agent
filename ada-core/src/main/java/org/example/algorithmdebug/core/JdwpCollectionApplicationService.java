@@ -220,6 +220,7 @@ public final class JdwpCollectionApplicationService {
                 caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
                 manifest.completion().name(), baseline.outcome(), usable,
                 artifacts.stream().map(ArtifactReference::relativePath).toList());
+        archive.createCollectionExecutionSummary(summary);
         return new MultiArtifactBackedResult<>(summary, artifacts);
     }
 

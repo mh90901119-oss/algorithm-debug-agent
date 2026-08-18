@@ -1,7 +1,9 @@
 package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.AnalysisConclusion;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.ContextId;
@@ -19,6 +21,7 @@ import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
 import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
 import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.ClaimClassification;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -82,6 +85,34 @@ class CaseArchiveRepositoryTest {
         assertEquals(analysis, repository.requireAnalysis(CASE_ID, ANALYSIS_ID));
         assertEquals(run, repository.requireRunRequest(CASE_ID, run.runId()));
         assertTrue(Files.isDirectory(repository.runRawDirectory(CASE_ID, run.runId())));
+    }
+
+    @Test
+    void shouldCompleteAnalysisOnceWithMatchingRequestIdentity() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        AnalysisResult result = analysisResult();
+
+        Path document = repository.completeAnalysis(result);
+
+        assertTrue(document.endsWith("analyses/analysis-1/analysis-result.json"));
+        assertEquals(result, repository.requireAnalysisResult(CASE_ID, ANALYSIS_ID));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.completeAnalysis(result)).code());
+    }
+
+    @Test
+    void shouldRejectAnalysisResultForDifferentContext() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        AnalysisResult mismatched = new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, CASE_ID, new ContextId("context-2"), ANALYSIS_ID,
+                "结论", List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), TIME);
+
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", assertThrows(
+                WorkspaceException.class, () -> repository.completeAnalysis(mismatched)).code());
     }
 
     @Test
@@ -398,6 +429,17 @@ class CaseArchiveRepositoryTest {
         return new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 "继续分析空闲", TIME.plusSeconds(2));
+    }
+
+    static AnalysisResult analysisResult() {
+        return new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                "设备空闲来自等待前序操作。",
+                List.of(new AnalysisConclusion(
+                        ClaimClassification.LLM_HYPOTHESIS, "可能在等待前序操作",
+                        List.of())),
+                List.of(), List.of(), List.of(),
+                List.of(), List.of("缺少候选集合"), TIME.plusSeconds(10));
     }
 
     static RunRequest run(RunId runId, Instant createdAt) {

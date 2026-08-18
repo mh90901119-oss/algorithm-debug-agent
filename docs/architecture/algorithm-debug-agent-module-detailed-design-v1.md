@@ -24,10 +24,11 @@
 
 本文档现在作为新Agent仓库的模块实施基线。工具实际能力与验证证据统一见 [工具单点验证基线](tool-validation-baseline.md)；各阶段只能声明已经通过验证的能力。目标调度算法和原始UT仍保持零采集源码侵入。
 
-截至 2026-08-16，已实现外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
-Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实 UT RunOutcome/Artifact
-归档，以及输出单个有界 ToolResponse JSON 的可执行 CLI。Input Analysis、JSON 内容指纹 Baseline 比较、
-OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端 `/debug-case` 模型流程仍未实现。
+截至 2026-08-19，已实现外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
+Case/Context/Analysis/Run 追加式 Repository、真实 UT RunOutcome/Artifact 归档、CodePath/JDWP 采集编排，
+以及采集后的规范化、校验、Evidence Bundle 和充分性评估。Case Digest v2 能有界恢复最近 Run、Collection、
+Evidence 和 Analysis 最终结果；Analysis 结果只保存用户回答、分级结论和引用，不保存模型思维链。
+OpenCode 一次性安装适配、完整命令映射和 `hellomvn` 端到端验证仍待实施。
 
 2026-08-12 进一步确认当前 OpenCode 集成不使用 Algorithm Debug MCP：Agent 产品资产全部保存在本仓库，
 一次性登记外部 Skill 与 OpenCode 适配器后，用户进入目标算法仓库直接运行 `opencode`。OpenCode

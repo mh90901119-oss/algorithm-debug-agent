@@ -93,8 +93,14 @@ flowchart LR
 ## 7. 数据与契约设计
 
 - JDWP Manifest 升级为当前开发期新版本，直接删除 `toolSha256`，不保留兼容字段；
-- `AnalysisResult` 保存最终回答、分级结论、引用 ID 和缺失证据，不保存模型思维过程；
-- `CaseDigest` 最多返回最近 20 个 Run、Collection、Evidence 和 Analysis Result 摘要；
+- `AnalysisResult` 保存最终回答、分级结论、引用 Run/Collection/Evidence/Artifact ID 和缺失证据，
+  不提供、也不保存模型思维过程字段；同一 `analysisId` 只能 create-new 完成一次；
+- `AnalysisConclusion` 只包含结论分类、面向用户的陈述和证据引用 ID，不包含隐藏推理；
+- 每次 Collection 完成时追加 `collection-summary.json`，作为本次 ToolResponse 的可恢复副本；
+- `CaseDigest` v2 最多返回最近 20 个 Run、Collection、Evidence 和 Analysis Result 摘要；Analysis Result
+  摘要只保留回答摘录、最多 5 条分级结论和最多 10 条证据缺口，完整内容由 Artifact 读取；
+- Digest 通过请求时间和完成时间排序；损坏或缺失的 Collection、Evidence、Analysis Result 子文档只产生
+  有界告警，不导致整个 Case 无法恢复；
 - `artifact read` 只接受 Case 内已登记 Artifact ID，并返回有界文本片段和截断状态；
 - Raw Trace、Plan、Gantt 与 Artifact 内容 Hash 继续作为证据 provenance。
 

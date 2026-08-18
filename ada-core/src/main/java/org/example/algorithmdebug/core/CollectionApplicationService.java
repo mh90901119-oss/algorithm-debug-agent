@@ -164,6 +164,7 @@ public final class CollectionApplicationService {
                         result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
                         && postProcessing.confirmationUsable(),
                 artifacts.stream().map(ArtifactReference::relativePath).toList());
+        archive.createCollectionExecutionSummary(summary);
         return new MultiArtifactBackedResult<>(summary, artifacts);
     }
 

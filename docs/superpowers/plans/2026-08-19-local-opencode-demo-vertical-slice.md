@@ -51,11 +51,11 @@
 
 **Produces:** immutable `AnalysisResult` and a bounded Case Digest containing recent Collection/Evidence/result summaries.
 
-- [ ] Add failing contract/repository tests for append-only Analysis Result and recent evidence visibility.
-- [ ] Verify RED with `mvn -pl ada-contracts,case-management,ada-core -am test`.
-- [ ] Implement Analysis Result persistence without model chain-of-thought and extend Digest with maximum 20 recent entries.
-- [ ] Preserve explicit Context rules and tolerate damaged child documents with warnings.
-- [ ] Run contract, repository and Core tests; audit write-once behavior and commit.
+- [x] Add failing contract/repository tests for append-only Analysis Result and recent evidence visibility.
+- [x] Verify RED with `mvn -pl ada-contracts,case-management,ada-core -am test`.
+- [x] Implement Analysis Result persistence without model chain-of-thought and extend Digest with maximum 20 recent entries.
+- [x] Preserve explicit Context rules and tolerate damaged child documents with warnings.
+- [x] Run contract, repository and Core tests; audit write-once behavior and commit.
 
 ### Task 4: Add bounded Artifact reading and Analysis completion CLI commands
 

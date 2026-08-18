@@ -55,8 +55,8 @@ class CaseArchiveContractsTest {
         CaseDigest digest = new CaseDigest(
                 SchemaVersions.CASE_DIGEST, CASE_ID, PROJECT_ID, TARGET_TEST,
                 Optional.of(CONTEXT_ID), Optional.of(ANALYSIS_ID), "继续分析设备空闲区间",
-                Optional.of(new RunId("run-1")), runs, List.of(), List.of(),
-                1, 1, 1, false);
+                Optional.of(new RunId("run-1")), runs, List.of(), List.of(), List.of(),
+                List.of(), List.of(), 1, 1, 1, 0, 0, 0, false);
         runs.clear();
 
         assertEquals(1, digest.recentRuns().size());
@@ -70,7 +70,8 @@ class CaseArchiveContractsTest {
         CaseDigest digest = new CaseDigest(
                 SchemaVersions.CASE_DIGEST, CASE_ID, PROJECT_ID, TARGET_TEST,
                 Optional.empty(), Optional.empty(), "为什么有空闲？", Optional.empty(),
-                List.of(), List.of(), List.of(), 0, 0, 0, false);
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                0, 0, 0, 0, 0, 0, false);
 
         assertTrue(digest.latestContextId().isEmpty());
         assertTrue(digest.latestAnalysisId().isEmpty());

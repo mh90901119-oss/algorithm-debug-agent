@@ -37,6 +37,11 @@ class CaseArchiveJsonTest {
                 SchemaVersions.CONTEXT_RECORD, caseId, contextId, RECORDED_AT);
         AnalysisRequest analysis = new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, caseId, contextId, analysisId, "问题", RECORDED_AT);
+        AnalysisResult result = new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, caseId, contextId, analysisId, "回答",
+                List.of(new AnalysisConclusion(
+                        ClaimClassification.LLM_HYPOTHESIS, "仍需验证", List.of())),
+                List.of(), List.of(), List.of(), List.of(), List.of("缺少运行时状态"), RECORDED_AT);
         RunRequest run = new RunRequest(
                 SchemaVersions.RUN_REQUEST, caseId, contextId, analysisId, new RunId("run-1"),
                 targetTest, "UNINSTRUMENTED", RECORDED_AT);
@@ -47,6 +52,7 @@ class CaseArchiveJsonTest {
         assertRoundTrip(manifest, CaseManifest.class);
         assertRoundTrip(context, ContextRecord.class);
         assertRoundTrip(analysis, AnalysisRequest.class);
+        assertRoundTrip(result, AnalysisResult.class);
         assertRoundTrip(run, RunRequest.class);
         assertRoundTrip(fingerprint, RunResultFingerprint.class);
     }
@@ -70,6 +76,18 @@ class CaseArchiveJsonTest {
                 Set.of("schemaVersion", "caseId", "contextId", "createdAt"));
         assertSchema("case", "analysis-request-v1.schema.json", SchemaVersions.ANALYSIS_REQUEST,
                 Set.of("schemaVersion", "caseId", "contextId", "analysisId", "question", "createdAt"));
+        assertSchema("case", "analysis-result-v1.schema.json", SchemaVersions.ANALYSIS_RESULT,
+                Set.of("schemaVersion", "caseId", "contextId", "analysisId", "finalAnswer",
+                        "conclusions", "referencedRunIds", "referencedCollectionIds",
+                        "referencedEvidenceIds", "referencedArtifactIds", "missingEvidence",
+                        "completedAt"));
+        assertSchema("case", "case-digest-v2.schema.json", SchemaVersions.CASE_DIGEST,
+                Set.of("schemaVersion", "caseId", "projectId", "targetTest", "latestContextId",
+                        "latestAnalysisId", "latestQuestionExcerpt", "latestRunId", "recentRuns",
+                        "incompleteRuns", "recentCollections", "recentEvidence",
+                        "recentAnalysisResults", "archiveWarnings", "contextCount", "analysisCount",
+                        "runCount", "collectionCount", "evidenceCount", "completedAnalysisCount",
+                        "truncated"));
         assertSchema("execution", "run-request-v1.schema.json", SchemaVersions.RUN_REQUEST,
                 Set.of("schemaVersion", "caseId", "contextId", "analysisId", "runId", "targetTest",
                         "executionMode", "createdAt"));

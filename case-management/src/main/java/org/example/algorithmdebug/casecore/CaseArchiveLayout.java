@@ -82,6 +82,11 @@ public final class CaseArchiveLayout {
         return child(analysisRoot(analysisId), "analysis-request.json");
     }
 
+    /** @return 指定 Analysis 的一次性完成结果 */
+    public Path analysisResult(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "analysis-result.json");
+    }
+
     /** @return 指定 Analysis 目录 */
     public Path analysisRoot(AnalysisId analysisId) {
         return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
@@ -115,6 +120,11 @@ public final class CaseArchiveLayout {
     /** @return Collector 启动前的不可变请求文档 */
     public Path collectionRequest(CollectionId collectionId) {
         return child(collectionRoot(collectionId), "collection-request.json");
+    }
+
+    /** @return 动态采集完成后面向模型的有界摘要 */
+    public Path collectionSummary(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "collection-summary.json");
     }
 
     /** @return 动态采集的 Baseline 一致性检查文档 */

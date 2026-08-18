@@ -32,6 +32,7 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
+import org.example.algorithmdebug.casecore.CaseDigestReader;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -195,6 +196,10 @@ class CollectionApplicationServiceTest {
                 caseRoot.resolve("evidence/evidence-fixed/sufficiency-evaluation.json"),
                 SufficiencyEvaluation.class);
         assertEquals(SufficiencyStatus.SUFFICIENT, sufficiency.status());
+        var digest = new CaseDigestReader(new CaseArchiveRepository(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer)).read(CASE_ID);
+        assertEquals(List.of(result.summary()), digest.recentCollections());
+        assertEquals(List.of(sufficiency), digest.recentEvidence());
     }
 
     @Test
