@@ -75,7 +75,7 @@ Raw Trace、派生 Trace、Evidence 和报告必须追加归档到同一 Case。
 | 工具 | 已验证版本 | 许可证 | Agent 接入策略 |
 |---|---|---|---|
 | CodePathTracer | commit `f8be120694a5d5bb1405c0f3e1a4396e89b6dfa1` | Apache-2.0 | Agent 自有 Launcher Bundle + 锁定的上游 API；执行期流式硬预算，先 package 超集采集，再按计划方法过滤 |
-| JDWP Batch Collector | commit `1ef7d22`，JAR SHA-256 `E75C...7B` | MIT | 外部 JAR；Agent 编译受限 Plan、动态 localhost 端口并监管进程 |
+| JDWP Batch Collector | `1.0.0`，commit `1ef7d2248420189f45321bbbcf113e019fd30ab7`，JAR SHA-256 `be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78` | MIT | 外部 JAR；Agent 编译受限 Plan、动态 localhost 端口并监管进程 |
 
 工具路径来自 Workspace 配置或环境变量，不进入 Case 身份，不写死开发机路径。`toolchain-lock.json` 保存版本、
 commit、SHA、许可证和兼容的计划 Schema。
@@ -253,17 +253,22 @@ JAR 再次 Shade；连续两次不清理构建必须得到相同字节数和 SHA
 
 ### 6.3 P3 JDWP 正式接入
 
+P3 的可实施细节以 `docs/designs/2026-08-18-p3-jdwp-integration-design.md` 为准。首版采用“能力如实、
+保守预算、失败保留、Baseline 门禁”的方式接入锁定 Collector MVP，不等待外部 Collector P0 改造。
+
 | 模块/类 | 职责 |
 |---|---|
-| `ada-contracts/JdwpCollectionPlan` | Source Anchor、变量 allowlist、字段投影、采样和预算 |
+| `ada-contracts/JdwpCollectionPlan` | Source Anchor、断点、当前支持的 locals/stack 参数和保守预算 |
 | `debug-plan-engine/JdwpPlanCompiler` | 校验源码 Hash/行号并生成 Collector debug-plan JSON |
+| `debug-harness/ManagedProcessRunner` | 为目标 UT 与 Collector 提供异步日志、等待、超时和进程树清理 |
 | `jdwp-collector-adapter/LoopbackPortAllocator` | 只分配 localhost 临时端口，不暴露远程调试 |
 | `jdwp-collector-adapter/JdwpTargetLauncher` | 用 `suspend=y,server=y` 启动目标测试 JVM |
 | `jdwp-collector-adapter/JdwpCollectorProcess` | 启动 Collector、监管 attach/退出/日志/Manifest |
 | `jdwp-collector-adapter/JdwpCollectionCoordinator` | 确保 Collector attach 后 resume，失败时有界终止整个进程树 |
 
-首版只使用 Collector 已支持的 locals/stack/对象限制。尚未被底层支持的字段路径 projection 和采样在计划
-编译阶段拒绝，而不是静默忽略。
+首版 `locals=true` 的准确含义是采集断点栈帧内“全部可见局部变量”，并不支持变量 allowlist。尚未被底层支持的
+local allowlist、字段路径 projection 和采样不得作为 v1 可执行字段；严格 JSON/计划编译必须拒绝未知能力，不能
+静默忽略。默认采用 stack-only；启用 locals 时进一步限制 tracepoint、maxHits 和对象展开预算。
 
 ### 6.4 P4 Normalizer、Validator 与 Evidence
 

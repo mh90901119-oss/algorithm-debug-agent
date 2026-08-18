@@ -50,6 +50,15 @@ public final class SchemaVersions {
     public static final String METHOD_CATALOG = "1.0";
     public static final String CODEPATH_COLLECTION_PLAN = "1.0";
 
+    /** JDWP 采集计划 Schema 版本。 */
+    public static final String JDWP_COLLECTION_PLAN = "1.0";
+
+    /** JDWP 采集请求 Schema 版本。 */
+    public static final String JDWP_COLLECTION_REQUEST = "1.0";
+
+    /** JDWP Agent Manifest Schema 版本。 */
+    public static final String JDWP_COLLECTION_MANIFEST = "1.0";
+
     private SchemaVersions() {
     }
 }

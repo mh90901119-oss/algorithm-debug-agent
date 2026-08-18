@@ -119,6 +119,8 @@ class WorkspaceInitializerTest {
         assertTrue(limits.contains("maxTotalRuns: 8\n"));
         assertTrue(limits.contains("maxCodePathRuns: 3\n"));
         assertTrue(limits.contains("maxJdwpRuns: 4\n"));
+        assertTrue(limits.contains("hardMaxTracepoints: 20\n"));
+        assertTrue(limits.contains("localCaptureMaxHitsPerTracepoint: 5\n"));
         assertThrows(UnsupportedOperationException.class,
                 () -> templates.put(Path.of("extra.yaml"), new byte[0]));
     }

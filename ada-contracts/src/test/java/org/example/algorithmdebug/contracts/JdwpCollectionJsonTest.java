@@ -1,0 +1,92 @@
+package org.example.algorithmdebug.contracts;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.Test;
+
+class JdwpCollectionJsonTest {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .registerModule(new Jdk8Module());
+    private static final String HASH = "a".repeat(64);
+
+    @Test
+    void roundTripsPlanAndKeepsSchemaFieldsAligned() throws Exception {
+        JdwpCollectionPlan plan = plan();
+
+        byte[] json = MAPPER.writeValueAsBytes(plan);
+        assertEquals(plan, MAPPER.readValue(json, JdwpCollectionPlan.class));
+
+        JsonNode schema = schema("jdwp-plan-v1.schema.json");
+        assertFalse(schema.path("additionalProperties").asBoolean(true));
+        Set<String> required = new HashSet<>();
+        schema.path("required").forEach(node -> required.add(node.asText()));
+        assertEquals(Set.of(
+                "schemaVersion", "planId", "caseId", "contextId", "analysisId",
+                "targetTest", "sourceFingerprintSha256", "tracepoints", "budget",
+                "rationale", "createdAt"), required);
+    }
+
+    @Test
+    void rejectsUnsupportedCollectorCapabilitiesInsteadOfIgnoringThem() throws Exception {
+        JsonNode root = MAPPER.valueToTree(plan());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) root.path("tracepoints").path(0)
+                .path("capture")).putArray("localVariables").add("decision");
+
+        assertThrows(UnrecognizedPropertyException.class, () ->
+                MAPPER.treeToValue(root, JdwpCollectionPlan.class));
+        assertFalse(schema("jdwp-plan-v1.schema.json")
+                .path("$defs").path("capture").path("additionalProperties").asBoolean(true));
+    }
+
+    @Test
+    void schemasExposeP3HardLimitsAndRejectRemoteHostFields() throws Exception {
+        JsonNode plan = schema("jdwp-plan-v1.schema.json");
+        JsonNode tracepoints = plan.path("properties").path("tracepoints");
+        JsonNode budget = plan.path("$defs").path("budget").path("properties");
+
+        assertEquals(20, tracepoints.path("maxItems").asInt());
+        assertEquals(1_000, budget.path("maxEvents").path("maximum").asInt());
+        assertEquals(50L * 1024 * 1024,
+                budget.path("maxBytes").path("maximum").asLong());
+        assertFalse(plan.path("properties").has("host"));
+        assertFalse(plan.toString().contains("projection"));
+        assertFalse(plan.toString().contains("sampling"));
+        assertTrue(schema("jdwp-manifest-v1.schema.json")
+                .path("properties").has("rawTraceRelativePath"));
+    }
+
+    private static JdwpCollectionPlan plan() {
+        SourceAnchor anchor = new SourceAnchor(
+                "fixture.Algorithm", "schedule", "()V",
+                "src/main/java/fixture/Algorithm.java", 10, 20, HASH);
+        return new JdwpCollectionPlan(
+                SchemaVersions.JDWP_COLLECTION_PLAN,
+                new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
+                new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                HASH, List.of(new JdwpTracepointSpec(
+                        "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
+                        JdwpCaptureSpec.stackOnly())),
+                JdwpCollectionBudget.defaults(), "采集关键决策位置",
+                Instant.parse("2026-08-18T00:00:00Z"));
+    }
+
+    private static JsonNode schema(String fileName) throws Exception {
+        String root = System.getProperty("maven.multiModuleProjectDirectory", "..");
+        return MAPPER.readTree(Path.of(root, "schemas", "collection", fileName).toFile());
+    }
+}

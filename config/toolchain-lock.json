@@ -7,5 +7,13 @@
     "launcherSha256": "669a2cc634e5238db8abd35f924f9ad1cc4e9403fb84d7dcb650b612641c6590",
     "license": "Apache-2.0"
   },
-  "jdwpCollector": { "status": "TO_BE_LOCKED" }
+  "jdwpCollector": {
+    "version": "1.0.0",
+    "gitCommit": "1ef7d2248420189f45321bbbcf113e019fd30ab7",
+    "jarName": "jdwp-batch-collector.jar",
+    "jarSha256": "be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78",
+    "minimumJava": 21,
+    "license": "MIT",
+    "capabilityProfile": "MVP_ALL_VISIBLE_LOCALS_V1"
+  }
 }

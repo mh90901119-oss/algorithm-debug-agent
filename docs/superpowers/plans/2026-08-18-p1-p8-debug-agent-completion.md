@@ -276,11 +276,14 @@ reactor, all Schema parsing, dependency-boundary scan and `git diff --check` are
 
 ## P3 — JDWP Integration
 
+详细执行计划：`docs/superpowers/plans/2026-08-18-p3-jdwp-integration.md`。P3 先以保守预算接入当前已验证
+Collector MVP；变量 allowlist、字段投影、采样和 Collector 内部 Raw 字节硬限制属于后续 P0，不得在本阶段伪装支持。
+
 ### Task 9: JDWP Plan and Manifest Contracts
 
 **Files:** contracts `TracepointSpec`, `CaptureSpec`, `JdwpCollectionPlan`, `JdwpManifest`; Schemas `jdwp-plan-v1`, `jdwp-manifest-v1`; tests.
 
-- [ ] RED tests for loopback-only target, 20 tracepoints, method/source hash identity, locals allowlist, supported limits and invalid projection/sampling rejection.
+- [ ] RED tests for loopback-only target, 20 tracepoints, method/source hash identity, all-or-nothing locals, supported limits and strict unsupported-capability rejection.
 - [ ] Implement immutable contracts matching the locked Collector's supported fields.
 - [ ] Contract/Schema audit and commit `feat: define jdwp collection contracts`.
 
