@@ -88,7 +88,7 @@ export const jdwp_collect = tool({
 })
 
 export const artifact_read = tool({
-  description: "Read a verified UTF-8 excerpt from a Case artifact by id; arbitrary filesystem paths are not accepted.",
+  description: "Read a verified UTF-8 excerpt using an artifactIds entry from a Run or Collection summary; relative paths are not artifact ids.",
   args: {
     caseId: tool.schema.string(),
     artifactId: tool.schema.string(),
@@ -99,11 +99,30 @@ export const artifact_read = tool({
 })
 
 export const analysis_complete = tool({
-  description: "Append the final answer, graded claims, and explicit evidence references for this analysis round.",
+  description: "Append the final answer, graded claims, and explicit evidence references; schema identity and completion time are added deterministically.",
   args: {
     caseId: tool.schema.string(),
+    contextId: tool.schema.string(),
     analysisId: tool.schema.string(),
-    resultJson: tool.schema.string().describe("Strict AnalysisResult JSON; do not include hidden reasoning"),
+    finalAnswer: tool.schema.string().describe("Final user-facing answer; do not include hidden reasoning"),
+    conclusions: tool.schema.array(tool.schema.object({
+      classification: tool.schema.enum([
+        "CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE",
+        "LLM_HYPOTHESIS", "MISSING_EVIDENCE",
+      ]),
+      statement: tool.schema.string(),
+      evidenceReferenceIds: tool.schema.array(tool.schema.string()).default([])
+        .describe("Evidence IDs supporting the conclusion; do not put artifact paths here"),
+    })).default([]),
+    referencedRunIds: tool.schema.array(tool.schema.string()).default([])
+      .describe("Archived target Run IDs from recentRuns, not collector execution run IDs"),
+    referencedCollectionIds: tool.schema.array(tool.schema.string()).default([])
+      .describe("Collection IDs cited by the answer"),
+    referencedEvidenceIds: tool.schema.array(tool.schema.string()).default([])
+      .describe("Evidence IDs from recentEvidence; do not put Artifact IDs here"),
+    referencedArtifactIds: tool.schema.array(tool.schema.string()).default([])
+      .describe("Registered Artifact IDs from artifactIds; do not put relative paths here"),
+    missingEvidence: tool.schema.array(tool.schema.string()).default([]),
   },
   execute: (args, context) => runtime.analysisComplete(args, context),
 })

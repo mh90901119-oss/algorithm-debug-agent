@@ -13,7 +13,8 @@ public record CollectionExecutionSummary(
         String completion,
         ComparisonOutcome baselineOutcome,
         boolean evidenceUsable,
-        List<String> artifactRelativePaths) {
+        List<String> artifactRelativePaths,
+        List<String> artifactIds) {
 
     /** 校验身份、状态和有界相对产物路径。 */
     public CollectionExecutionSummary {
@@ -35,5 +36,11 @@ public record CollectionExecutionSummary(
         }
         artifactRelativePaths.forEach(path ->
                 ContractChecks.requirePortableRelativePath(path, "artifactRelativePath"));
+        artifactIds = artifactIds == null ? List.of()
+                : ContractChecks.immutableNonBlankStrings(artifactIds, "artifactIds");
+        if (artifactIds.size() > 32) {
+            throw new IllegalArgumentException("artifactIds 不能超过 32 项");
+        }
+        artifactIds.forEach(id -> ContractChecks.requireOpaqueId(id, "artifactId"));
     }
 }

@@ -219,7 +219,8 @@ public final class JdwpCollectionApplicationService {
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
                 manifest.completion().name(), baseline.outcome(), usable,
-                artifacts.stream().map(ArtifactReference::relativePath).toList());
+                artifacts.stream().map(ArtifactReference::relativePath).toList(),
+                artifacts.stream().map(ArtifactReference::artifactId).toList());
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
         return new MultiArtifactBackedResult<>(summary, artifacts);

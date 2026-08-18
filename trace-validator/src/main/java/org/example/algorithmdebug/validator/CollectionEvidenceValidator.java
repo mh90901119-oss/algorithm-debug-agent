@@ -53,7 +53,7 @@ public final class CollectionEvidenceValidator {
                 input.summaryReference(), findings);
         validateCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
-                input.summaryReference(), findings);
+                false, input.summaryReference(), findings);
         validateBaseline(input.baselineCheck(), input.summaryReference(), findings);
         if (input.summary().methods().isEmpty()) {
             add(findings, finding("NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
@@ -88,7 +88,7 @@ public final class CollectionEvidenceValidator {
                 input.summaryReference(), findings);
         validateJdwpCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
-                input.summaryReference(), findings);
+                !input.summary().hits().isEmpty(), input.summaryReference(), findings);
         validateBaseline(input.baselineCheck(), input.summaryReference(), findings);
         if (input.summary().hits().isEmpty()) {
             add(findings, finding("NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
@@ -269,10 +269,13 @@ public final class CollectionEvidenceValidator {
 
     private static void validateNormalization(
             NormalizationManifest manifest, boolean summaryTruncated,
+            boolean boundedPartialUsable,
             ArtifactReference summaryReference, List<ValidationFinding> findings) {
         if (manifest.status() == NormalizationStatus.PARTIAL || summaryTruncated) {
             add(findings, finding("NORMALIZATION_PARTIAL",
-                    EvidenceValidationStatus.INCONCLUSIVE,
+                    boundedPartialUsable
+                            ? EvidenceValidationStatus.VALID
+                            : EvidenceValidationStatus.INCONCLUSIVE,
                     "归一化摘要因预算或上游截断而不完整",
                     summaryReference));
         } else if (manifest.status() == NormalizationStatus.FAILED) {

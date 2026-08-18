@@ -24,6 +24,7 @@ export function createAlgorithmDebugRuntime({
   environment = process.env,
   platform = process.platform,
   temporaryRoot = tmpdir(),
+  now = () => new Date(),
 }) {
   if (typeof execute !== "function") throw new TypeError("execute 必须是函数")
   const workspace = workspacePath(environment, platform)
@@ -153,13 +154,14 @@ export function createAlgorithmDebugRuntime({
       }, context)
     },
     analysisComplete(input, context) {
+      const resultJson = JSON.stringify(analysisResult(input, now))
       return invokeWithTextFile({
         command: ["analysis", "complete"],
         options: [
           "--case-id", requiredText(input.caseId, "caseId"),
           "--analysis-id", requiredText(input.analysisId, "analysisId"),
         ],
-      }, context, "--result-file", "result.json", input.resultJson, RESULT_LIMIT_BYTES)
+      }, context, "--result-file", "result.json", resultJson, RESULT_LIMIT_BYTES)
     },
   })
 
@@ -172,6 +174,50 @@ export function createAlgorithmDebugRuntime({
       ],
     }, context, "--request-file", "request.json", input.requestJson, REQUEST_LIMIT_BYTES)
   }
+}
+
+function analysisResult(input, now) {
+  const completedAt = now()
+  if (!(completedAt instanceof Date) || Number.isNaN(completedAt.getTime())) {
+    throw new TypeError("now 必须返回有效 Date")
+  }
+  return {
+    schemaVersion: "1.0",
+    caseId: requiredText(input.caseId, "caseId"),
+    contextId: requiredText(input.contextId, "contextId"),
+    analysisId: requiredText(input.analysisId, "analysisId"),
+    finalAnswer: requiredText(input.finalAnswer, "finalAnswer"),
+    conclusions: conclusionArray(input.conclusions),
+    referencedRunIds: textArray(input.referencedRunIds, "referencedRunIds"),
+    referencedCollectionIds: textArray(
+      input.referencedCollectionIds, "referencedCollectionIds"),
+    referencedEvidenceIds: textArray(input.referencedEvidenceIds, "referencedEvidenceIds"),
+    referencedArtifactIds: textArray(input.referencedArtifactIds, "referencedArtifactIds"),
+    missingEvidence: textArray(input.missingEvidence, "missingEvidence"),
+    completedAt: completedAt.toISOString(),
+  }
+}
+
+function conclusionArray(value) {
+  const values = value ?? []
+  if (!Array.isArray(values)) throw new TypeError("conclusions 必须为数组")
+  return values.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new TypeError(`conclusions[${index}] 必须为对象`)
+    }
+    return {
+      classification: requiredText(item.classification, `conclusions[${index}].classification`),
+      statement: requiredText(item.statement, `conclusions[${index}].statement`),
+      evidenceReferenceIds: textArray(
+        item.evidenceReferenceIds, `conclusions[${index}].evidenceReferenceIds`),
+    }
+  })
+}
+
+function textArray(value, name) {
+  const values = value ?? []
+  if (!Array.isArray(values)) throw new TypeError(`${name} 必须为数组`)
+  return values.map((item, index) => requiredText(item, `${name}[${index}]`))
 }
 
 function command(name, option, value) {

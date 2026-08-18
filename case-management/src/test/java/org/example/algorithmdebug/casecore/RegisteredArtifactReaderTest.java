@@ -75,6 +75,36 @@ class RegisteredArtifactReaderTest {
     }
 
     @Test
+    void identicalRegistrationIsIdempotentButConflictingIdentityIsRejected() throws Exception {
+        Path caseRoot = repository.layout(CaseArchiveRepositoryTest.manifest().caseId()).caseRoot();
+        Path first = Files.writeString(caseRoot.resolve("plan.json"), "{\"plan\":1}");
+        var reference = new CaseArtifactAccess(casesRoot).describe(
+                CaseArchiveRepositoryTest.manifest().caseId(), "plan-1", "JDWP_PLAN",
+                "application/json", first);
+
+        Path created = repository.registerArtifact(
+                CaseArchiveRepositoryTest.manifest().caseId(), reference,
+                Instant.parse("2026-08-19T00:00:00Z"));
+        Path reused = repository.registerArtifact(
+                CaseArchiveRepositoryTest.manifest().caseId(), reference,
+                Instant.parse("2026-08-19T00:01:00Z"));
+
+        assertEquals(created, reused);
+        assertEquals(Instant.parse("2026-08-19T00:00:00Z"),
+                repository.requireArtifactRegistration(
+                        CaseArchiveRepositoryTest.manifest().caseId(), "plan-1").registeredAt());
+
+        Path second = Files.writeString(caseRoot.resolve("other-plan.json"), "{\"plan\":2}");
+        var conflict = new CaseArtifactAccess(casesRoot).describe(
+                CaseArchiveRepositoryTest.manifest().caseId(), "plan-1", "JDWP_PLAN",
+                "application/json", second);
+        assertEquals("CASE_ARTIFACT_INTEGRITY_MISMATCH", assertThrows(
+                WorkspaceException.class, () -> repository.registerArtifact(
+                        CaseArchiveRepositoryTest.manifest().caseId(), conflict,
+                        Instant.parse("2026-08-19T00:02:00Z"))).code());
+    }
+
+    @Test
     void rejectsSymlinkEscapeWhenPlatformAllowsCreatingOne() throws Exception {
         Path caseRoot = repository.layout(CaseArchiveRepositoryTest.manifest().caseId()).caseRoot();
         Path outside = Files.writeString(temporaryDirectory.resolve("outside.txt"), "outside");

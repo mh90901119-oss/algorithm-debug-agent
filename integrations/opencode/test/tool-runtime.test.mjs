@@ -32,6 +32,7 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   }
   const runtime = createAlgorithmDebugRuntime({
     execute, environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot,
+    now: () => new Date("2026-08-19T00:00:00Z"),
   })
   const context = { directory: "D:/large-system/algorithm-module" }
 
@@ -53,7 +54,15 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     caseId: "case-1", artifactId: "run-1-stdout", offsetBytes: 7, maxBytes: 1024,
   }, context)
   await runtime.analysisComplete({
-    caseId: "case-1", analysisId: "analysis-1", resultJson: "{\"finalAnswer\":\"answer\"}",
+    caseId: "case-1", contextId: "context-1", analysisId: "analysis-1",
+    finalAnswer: "answer",
+    conclusions: [{
+      classification: "CONFIRMED_FACT", statement: "observed",
+      evidenceReferenceIds: ["evidence-1"],
+    }],
+    referencedRunIds: ["run-1"], referencedCollectionIds: ["collection-1"],
+    referencedEvidenceIds: ["evidence-1"], referencedArtifactIds: ["artifact-1"],
+    missingEvidence: [],
   }, context)
 
   const businessCalls = calls.filter(call => !["workspace", "project"].includes(call.args[0]))
@@ -82,7 +91,17 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   ])
   assert.deepEqual(temporaryFiles.map(value => value.content), [
     "why did it fail?", "{\"planId\":\"cp-1\"}", "{\"planId\":\"jdwp-1\"}",
-    "{\"finalAnswer\":\"answer\"}",
+    JSON.stringify({
+      schemaVersion: "1.0", caseId: "case-1", contextId: "context-1",
+      analysisId: "analysis-1", finalAnswer: "answer",
+      conclusions: [{
+        classification: "CONFIRMED_FACT", statement: "observed",
+        evidenceReferenceIds: ["evidence-1"],
+      }],
+      referencedRunIds: ["run-1"], referencedCollectionIds: ["collection-1"],
+      referencedEvidenceIds: ["evidence-1"], referencedArtifactIds: ["artifact-1"],
+      missingEvidence: [], completedAt: "2026-08-19T00:00:00.000Z",
+    }),
   ])
   for (const file of temporaryFiles) {
     await assert.rejects(stat(file.path))

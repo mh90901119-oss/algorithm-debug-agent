@@ -163,7 +163,8 @@ public final class CollectionApplicationService {
                 result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
                         result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
                         && postProcessing.confirmationUsable(),
-                artifacts.stream().map(ArtifactReference::relativePath).toList());
+                artifacts.stream().map(ArtifactReference::relativePath).toList(),
+                artifacts.stream().map(ArtifactReference::artifactId).toList());
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
         return new MultiArtifactBackedResult<>(summary, artifacts);

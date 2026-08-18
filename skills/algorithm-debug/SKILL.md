@@ -49,8 +49,9 @@ was not unusably truncated, and its baseline outcome is `MATCHED`. When the outc
 state that the Gantt content or target-failure fingerprint changed and inspect referenced artifacts
 only when the question needs the change location. Do not claim a field-level Gantt diff.
 
-Read summaries before raw artifacts. Request only the excerpt needed for the current evidence gap;
-never load all logs, traces, or historical artifacts.
+Read summaries before raw artifacts. For `artifact_read`, pass an `artifactIds` value returned by a
+Run or Collection summary; a Case-relative path is provenance, not an Artifact ID. Request only the
+excerpt needed for the current evidence gap; never load all logs, traces, or historical artifacts.
 
 ## Answer contract
 
@@ -58,6 +59,11 @@ Label material claims as `CONFIRMED_FACT`, `VALIDATOR_CONCLUSION`, `SOURCE_INFER
 `LLM_HYPOTHESIS`, or `MISSING_EVIDENCE`. Cite relevant Case, Context, Analysis, Run, Collection,
 Evidence, and Artifact IDs near each claim.
 
-Before replying, call `algorithm-debug_analysis_complete` with a strict `AnalysisResult` containing
-the final answer, graded conclusions, explicit evidence references, and remaining evidence gaps.
-Never store hidden reasoning in the result.
+Before replying, call `algorithm-debug_analysis_complete` with the current Case, Context and Analysis
+IDs plus the final answer, graded conclusions, explicit evidence references, and remaining evidence
+gaps. The Tool adds the strict `AnalysisResult` schema version and completion time. Never store hidden
+reasoning in the result.
+
+For completion fields, use only target Run IDs from `recentRuns`, Collection IDs from
+`recentCollections`, Evidence IDs from `recentEvidence`, and registered Artifact IDs from
+`artifactIds`. Collector execution `runId` values are provenance, not archived target Run IDs.

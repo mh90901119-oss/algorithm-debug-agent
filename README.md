@@ -24,10 +24,12 @@ new one only when `--context-mode new` is requested. Static method analysis, exa
 CodePathTracer Plan/collection and the JDWP Plan/collection application flow are implemented. Every
 successful Run, static Plan and Collection response now registers its Case-local Artifact references;
 the CLI can read a hash-verified UTF-8 excerpt by Artifact ID and append a final Analysis result.
-The P3 JDWP release audit and real Wafer one-point smoke are complete: the target UT produced three
-bounded hits, its normalized Gantt Hash matched the no-collection same-Context baseline, and no
-managed process survived. Dynamic collections now produce normalized, validated Evidence. Input
-Analysis and the full model-driven `/debug-case` acceptance remain planned.
+The real Wafer vertical-slice acceptance is complete: an uninstrumented target Run archived its
+Gantt; exact CodePath and bounded JDWP collections matched that same-Context baseline and produced
+usable Evidence; a later OpenCode model round reused the Case, read the registered JDWP summary in
+bounded excerpts, and completed a new Analysis without rerunning the UT or collecting again. Dynamic
+collections now expose both Case-relative provenance paths and registered `artifactIds` for model
+reads. Input Analysis remains planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
 `algorithm-debug` Skill, bounded OpenCode Agent/Command/Custom Tool assets and the Java CLI exist.
@@ -95,6 +97,12 @@ fingerprint; a malformed or incompatible JAR is retained as a structured tool ex
 Every execution creates a new Collection and returns only a bounded summary plus relative Artifact
 references. Raw JDWP events, the external Collector Manifest, Agent Manifest, four process logs,
 optional Gantt and Baseline check remain in that Collection directory.
+
+JDWP value-depth, item-count and summary budgets deliberately preserve limit markers. When the
+Collector completed, at least one tracepoint hit exists, artifact/plan/provenance checks pass, and the
+Gantt baseline is `MATCHED`, those bounded observed values remain usable runtime evidence; the model
+must not infer that omitted values do not exist. A partial CodePath trace remains inconclusive because
+missing call events can change the path itself.
 
 CodePath collection follows the same Plan-then-execute rule. Its v2 Plan contains only exact
 class/method/descriptor selectors and event/byte/time budgets. The Launcher writes one Raw JSONL stream;

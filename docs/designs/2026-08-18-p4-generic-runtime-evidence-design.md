@@ -465,9 +465,29 @@ EVIDENCE_ARCHIVE_FAILED
 
 本节在 P4 实现、审计和验证完成后填写。设计评审阶段不声明任何生产能力已经实现。
 
+### 17.1 真实 JDWP 有界快照修订（2026-08-19）
+
+本地 Demo 验收发现：`locals=true` 面向大型方法时，即使 Collector 和 Agent 都严格遵守
+`maxDepth/maxItems/maxStringLength/maxSummaryBytes`，对象边界也会产生
+`COLLECTOR_VALUE_LIMIT`，摘要可能同时产生 `OUTPUT_BUDGET_EXCEEDED`。这些标记表示
+“已观察事实有明确边界”，不等同于采集失败或证据损坏。
+
+因此 JDWP 校验采用以下最小规则：
+
+- Raw、Plan、身份、Provenance、Collector 完成状态和 Gantt Baseline 仍必须全部通过；
+- 至少存在一个可验证 Tracepoint Hit；
+- `PARTIAL` 及截断原因必须保留为 `NORMALIZATION_PARTIAL` Finding，模型不得据此推断未采集值不存在；
+- 满足上述条件时，已观察的命中、栈和有界值事实可覆盖 `RUNTIME_STATE`，Collection 状态为 `VALID`；
+- 零命中、工具/Agent 失败、Hash/身份/Plan/Provenance 错误或 Baseline 不一致仍不可用；
+- CodePath 的 `PARTIAL` 规则不变，因为缺失调用事件可能改变路径关系本身。
+
+该修订不新增字段、Schema 或兼容层，只修正 Validator 对“正常有界 JDWP 快照”的解释，
+并增加真实形态回归测试。
+
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
 | 2026-08-18 | 0.2 | 按产品边界删除无真实需求的敏感值路径 allowlist/deny；P4 忠实、有界整理授权的目标 UT 运行时值 | Codex / mh90901119-oss |
 | 2026-08-18 | 0.1 | 首版：采用通用运行时摘要、确定性校验和有界 Evidence Bundle，排除 Wafer 领域硬编码 | Codex / mh90901119-oss |
+| 2026-08-19 | 0.3 | 真实验收明确：正常预算边界下的 JDWP PARTIAL 保留限制 Finding，但已校验命中仍可覆盖 RUNTIME_STATE；CodePath 规则不变 | Codex / mh90901119-oss |

@@ -166,10 +166,21 @@ public final class CaseArchiveRepository {
             throw new WorkspaceException(
                     "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 注册前内容校验失败");
         }
+        Path registrationPath = layout(caseId).artifactRegistration(checked.artifactId());
+        if (Files.isRegularFile(registrationPath, LinkOption.NOFOLLOW_LINKS)) {
+            CaseArtifactRegistration existing = requireArtifactRegistration(
+                    caseId, checked.artifactId());
+            if (existing.artifact().equals(checked)) {
+                return registrationPath;
+            }
+            throw new WorkspaceException(
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH",
+                    "相同 Artifact ID 已注册为不同内容");
+        }
         CaseArtifactRegistration registration = new CaseArtifactRegistration(
                 SchemaVersions.CASE_ARTIFACT_REGISTRATION, caseId, checked,
                 requireNonNull(registeredAt, "registeredAt"));
-        return createP4Document(layout(caseId).artifactRegistration(checked.artifactId()),
+        return createP4Document(registrationPath,
                 registration, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
     }
 

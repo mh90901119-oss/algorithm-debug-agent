@@ -118,7 +118,33 @@ class CollectionEvidenceValidatorTest {
 
     @Test
     void completeMatchingJdwpCollectionIsValid() throws Exception {
-        Path root = Files.createDirectory(temporaryDirectory.resolve("jdwp"));
+        var validation = new CollectionEvidenceValidator().validateJdwp(
+                jdwpInput(NormalizationStatus.COMPLETE, false, List.of()));
+
+        assertEquals(EvidenceValidationStatus.VALID, validation.status());
+        assertEquals(java.util.Set.of(EvidenceDimension.VALIDATION,
+                EvidenceDimension.RUNTIME_STATE), validation.coveredDimensions());
+    }
+
+    @Test
+    void boundedPartialJdwpCollectionWithHitsRemainsUsable() throws Exception {
+        var validation = new CollectionEvidenceValidator().validateJdwp(
+                jdwpInput(NormalizationStatus.PARTIAL, true,
+                        List.of("COLLECTOR_VALUE_LIMIT", "OUTPUT_BUDGET_EXCEEDED")));
+
+        assertEquals(EvidenceValidationStatus.VALID, validation.status());
+        assertEquals(java.util.Set.of(EvidenceDimension.VALIDATION,
+                EvidenceDimension.RUNTIME_STATE), validation.coveredDimensions());
+        assertTrue(validation.findings().stream().anyMatch(finding ->
+                "NORMALIZATION_PARTIAL".equals(finding.code())));
+    }
+
+    private JdwpValidationInput jdwpInput(
+            NormalizationStatus normalizationStatus,
+            boolean truncated,
+            List<String> truncationReasons) throws Exception {
+        Path root = Files.createDirectory(temporaryDirectory.resolve(
+                "jdwp-" + fixtureCounter++));
         Path raw = Files.writeString(root.resolve("raw-trace.jsonl"),
                 "{\"sequence\":1,\"eventType\":\"tracepoint_hit\"}\n");
         Path summaryPath = Files.writeString(root.resolve("summary.json"), "{}\n");
@@ -158,25 +184,20 @@ class CollectionEvidenceValidatorTest {
                         "point-1", 1, "main", "fixture.Algorithm#solve:12",
                         List.of(new JdwpSnapshotSummary.StackFrame(
                                 0, "fixture.Algorithm", "solve", 12)),
-                        List.of(), provenance)), List.of(), false, NOW);
+                        List.of(), provenance)), List.of(), truncated, NOW);
         NormalizationManifest normalization = new NormalizationManifest(
                 SchemaVersions.NORMALIZATION_MANIFEST, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
                 ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, "JDWP",
-                "jdwp-snapshot-normalizer", "1.0", NormalizationStatus.COMPLETE,
+                "jdwp-snapshot-normalizer", "1.0", normalizationStatus,
                 rawReference, Optional.of(summaryReference), NormalizationBudget.defaults(),
-                1, 1, List.of(), Optional.empty(), "", NOW);
+                1, 1, truncationReasons, Optional.empty(), "", NOW);
         CollectionBaselineCheck baseline = new CollectionBaselineCheck(
                 "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, COLLECTION_ID,
                 ComparisonOutcome.MATCHED, Optional.of(new RunId("baseline-run")),
                 Optional.empty(), true, "baseline MATCHED", NOW);
-        var validation = new CollectionEvidenceValidator().validateJdwp(
-                new JdwpValidationInput(collection, plan, manifest, normalization,
-                        summary, baseline, rawReference, raw, summaryReference, summaryPath,
-                        planPath, NOW));
-
-        assertEquals(EvidenceValidationStatus.VALID, validation.status());
-        assertEquals(java.util.Set.of(EvidenceDimension.VALIDATION,
-                EvidenceDimension.RUNTIME_STATE), validation.coveredDimensions());
+        return new JdwpValidationInput(collection, plan, manifest, normalization,
+                summary, baseline, rawReference, raw, summaryReference, summaryPath,
+                planPath, NOW);
     }
 
     private Fixture fixture(

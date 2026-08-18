@@ -106,9 +106,31 @@
 
 **Produces:** evidence that the existing reproduction UT supports Run → CodePath → JDWP → Evidence and same-Case follow-up.
 
-- [ ] Run the target UT baseline through ADA and archive Gantt.
-- [ ] Run exact CodePath plan/collection and verify baseline match plus usable Evidence.
-- [ ] Run one bounded JDWP plan/collection and verify baseline match plus usable Evidence.
-- [ ] Run a second Analysis that reuses history without a forced UT run.
-- [ ] Run failure Fixtures, full `mvn clean test`, Node tests, `git diff --check`, architecture scans and document the actual results.
-- [ ] Use `superpowers:verification-before-completion`, audit/fix, then commit the final completion record.
+- [x] Run the target UT baseline through ADA and archive Gantt.
+- [x] Run exact CodePath plan/collection and verify baseline match plus usable Evidence.
+- [x] Run one bounded JDWP plan/collection and verify baseline match plus usable Evidence.
+- [x] Run a second Analysis that reuses history without a forced UT run.
+- [x] Run failure Fixtures, full `mvn clean test`, Node tests, `git diff --check`, architecture scans and document the actual results.
+- [x] Use `superpowers:verification-before-completion`, audit/fix, then commit the final completion record.
+
+Acceptance facts recorded on 2026-08-19:
+
+- Case `case-a9786868-a6d5-4f81-b624-9d3e3c1874ec`, Context
+  `context-183f4b50-790e-46a1-8689-d27f2228aeea`;
+- baseline Run `run-32b8c9f5-6815-4b10-b87e-348407c31467`: process succeeded, test passed,
+  Gantt present (102,603 bytes);
+- exact CodePath Collection `collection-e997d016-c5ca-4cfd-9dc4-311774c4b91d`: 32 retained
+  events, baseline `MATCHED`, Evidence usable;
+- bounded JDWP Collection `collection-7fdb348d-0908-46a6-93e1-4dc86cbfae13`: one hit,
+  baseline `MATCHED`, Evidence `evidence-faf1e3e0-e2e6-4905-a62a-969e39a6c670` usable;
+- repeated execution of the same archived JDWP Plan succeeded as Collection
+  `collection-fcb247dc-b74d-48b2-8e6b-79571d1da3ea`: baseline `MATCHED`, Evidence
+  `evidence-6b816a8b-8a69-495c-81b8-f0a9276847ef` usable, proving identical Plan Artifact
+  registration is idempotent without overwriting history;
+- real OpenCode Analysis `analysis-a77ca258-70c1-4659-b86b-97035914c328` read the newest JDWP
+  summary by Artifact ID in two 16 KiB excerpts and completed successfully; target `runCount`
+  remained 1 and no collection was created by that model round;
+- failure integration fixtures covered assertion failure, algorithm exception, compile failure,
+  test-not-found and missing Maven; all nine scenarios passed;
+- root `mvn clean test`, 17 Node adapter tests, installer Check and real OpenCode 1.18.15 discovery
+  passed. Final post-fix verification is repeated before commit.

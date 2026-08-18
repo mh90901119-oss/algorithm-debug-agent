@@ -5,6 +5,7 @@
   "properties": {
     "caseId": {"type": "string"}, "contextId": {"type": "string"}, "analysisId": {"type": "string"}, "runId": {"type": "string"}, "planId": {"type": "string"}, "collectionId": {"type": "string"},
     "completion": {"type": "string", "maxLength": 64}, "baselineOutcome": {"enum": ["MATCHED", "CHANGED", "INCOMPARABLE", "NOT_COMPARED"]}, "evidenceUsable": {"type": "boolean"},
-    "artifactRelativePaths": {"type": "array", "maxItems": 32, "items": {"type": "string", "maxLength": 1024}}
+    "artifactRelativePaths": {"type": "array", "maxItems": 32, "items": {"type": "string", "maxLength": 1024}},
+    "artifactIds": {"type": "array", "maxItems": 32, "items": {"type": "string", "maxLength": 160}}
   }
 }

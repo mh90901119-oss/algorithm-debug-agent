@@ -191,17 +191,22 @@ sequenceDiagram
 
 ## 16. 文档同步清单
 
-- [ ] JDWP 设计与工具验证基线
-- [ ] Schema 与 CLI README
-- [ ] OpenCode README 与 Skill
-- [ ] 根 README 使用说明
+- [x] JDWP 设计与工具验证基线
+- [x] Schema 与 CLI README
+- [x] OpenCode README 与 Skill
+- [x] 根 README 使用说明
 
 ## 17. 实现完成记录
 
-- 实际变更：实施完成后填写
-- 相对设计的偏差：实施完成后填写
-- 测试与命令：实施完成后填写
-- 已知限制：实施完成后填写
+- 实际变更：已打通 Run、CodePath、JDWP、Evidence、Case 多轮复用、Artifact 有界读取、
+  Analysis 归档和 OpenCode 一次性适配的本地纵向链路；
+- 相对设计的偏差：未引入项目注册表、Collector 指纹或自动采集决策引擎；项目身份、采集计划和
+  是否继续采集分别由确定性 CLI 与模型显式决定，保持当前阶段最小实现；
+- 测试与命令：真实 `hellomvn` 基线、CodePath、JDWP 和同 Plan 重复采集通过；根项目
+  `mvn clean test` 的 21 个模块全部成功，OpenCode Node 测试 17/17 通过，Schema JSON、
+  `git diff --check` 和安装资产检查通过；
+- 已知限制：当前验证目标为单线程 Demo UT；大型公司算法的性能预算和 Adapter 映射需在接入
+  真实项目后按实际 Trace 规模校准，不在本阶段预设复杂规则。
 
 ### Task 6：OpenCode Tool 与真实 CLI 对齐
 
@@ -226,6 +231,48 @@ sequenceDiagram
   Check 前后仍重新校验所有 Agent 管理资产未变化；
 - 已知限制：尚未让真实模型执行完整 `/debug-case` 多轮链路，该项属于 Task 8。
 
+### Task 8：真实 Demo 验收中的 JDWP 边界修正
+
+- 真实 `hellomvn` JDWP 采集成功命中 3 次，Raw 18,096 bytes，未发生进程超时，Gantt Baseline 为 `MATCHED`；
+- 验收发现大型方法的局部对象在正常 `maxDepth/maxItems` 约束下会产生限制标记，旧 Validator
+  将任何 JDWP `PARTIAL` 一律降为不可用，导致已经校验的命中、栈和有界值无法供模型使用；
+- 按 P4 0.3 修订：保留限制 Finding 和 Provenance，仅在完整性、Plan、Baseline 等门禁通过且存在命中时，
+  允许已观察的 JDWP 事实覆盖 `RUNTIME_STATE`；不放宽 CodePath、零命中或损坏证据规则。
+
+### Task 8：真实 OpenCode 模型验收修订
+
+真实 `opencode run --agent algorithm-debug --command debug-case` 验收确认模型能续接同一 Case、
+读取 Case Digest，并遵守“不重跑 UT、不重新采集”。同时暴露两个薄适配缺口：
+
+1. `CollectionExecutionSummary` 只有 Artifact 相对路径，模型容易把路径误当成 `artifactId`；
+2. `analysis_complete` 要求模型手写 Schema 版本、Case/Context/Analysis 身份和完成时间，容易生成
+   Java 契约拒绝的文档。
+
+修订采用最小确定性适配：Collection 摘要同时返回有界 `artifactIds` 和相对路径；旧摘要缺少该
+可选字段时读为空列表。OpenCode `analysis_complete` 改为结构化参数，由 Tool Runtime 固定生成
+`AnalysisResult 1.0` 的身份、时间和数组字段，模型只提供最终回答、分级结论、引用和证据缺口。
+Java CLI/Schema 仍是最终校验边界，Tool 不生成或保存模型隐藏推理。
+
+最终真实模型复验中，OpenCode 使用 `artifactIds` 连续读取两个 16 KiB JDWP 摘要片段，
+并通过结构化 `analysis_complete` 完成 `analysis-a77ca258-70c1-4659-b86b-97035914c328`。
+该轮没有调用 `run_test`、CodePath/JDWP collect 或文件编辑；Case 的目标 `runCount` 保持 1。
+首次模型验收暴露的错误提交均以结构化失败返回，修复后模型可根据校验反馈收敛，不会导致 Agent 崩溃。
+
+### Task 8：同一 Plan 多次采集修订
+
+真实复验还确认：再次执行同一已归档 Plan 时，Collector、Baseline 和 Evidence 均成功，但重复
+注册完全相同的 Plan Artifact 被 create-new 写入拒绝，最终只返回 `INTERNAL_ERROR`。同一 Case
+按多轮需要重复执行既有 Plan 属于正常交互，不应失败。
+
+Artifact 注册因此改为严格幂等：同一 Case 中相同 `artifactId` 已存在且完整
+`ArtifactReference`（路径、类型、大小、SHA-256）一致时直接复用注册；任一字段不一致仍按
+完整性冲突拒绝。原始 Artifact 和注册文档均不覆盖，也不更改首次注册时间。
+
+修复后再次执行 `plan-jdwp-artifact-id-20260819`，得到 Collection
+`collection-fcb247dc-b74d-48b2-8e6b-79571d1da3ea` 与 Evidence
+`evidence-6b816a8b-8a69-495c-81b8-f0a9276847ef`；命中、基线 `MATCHED`、Evidence 可用和
+全部 Artifact ID 返回均成功，证明同一计划可按多轮分析重复采集。
+
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
@@ -235,3 +282,7 @@ sequenceDiagram
 | 2026-08-19 | 1.2 | Task 5 增加仓库内 `ada.cmd`、被 Git 忽略的本机配置入口和 `hellomvn doctor` 进程级验证 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.3 | Task 6 将 10 个 OpenCode Tool 对齐真实 CLI，并增加自动项目准备、有界临时文件和失败清理 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.4 | Task 7 增加备份保护的一次性 OpenCode 安装/检查，并完成 1.18.15 临时与用户目录真实发现验证 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.5 | Task 8 真实 Demo 验收修正正常预算边界下 JDWP 已观察事实的可用性语义 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.6 | 真实 OpenCode 模型验收增加可直接读取的 Artifact ID，并由薄 Tool 确定性组装 AnalysisResult 身份字段 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.7 | 同一已归档 Plan 可多次采集：完全相同的 Artifact 注册幂等复用，内容冲突仍拒绝 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.8 | 完成真实同 Plan 回归、全量门禁与本地 OpenCode Demo 纵向链路验收记录 | Codex / mh90901119-oss |
