@@ -1,7 +1,7 @@
 # P3 JDWP 动态采集集成可实施详细设计
 
-- 文档状态：Review（已完成自审，待进入实施）
-- 设计版本：1.0
+- 文档状态：Implemented（P3 release audit complete）
+- 设计版本：1.7
 - 创建日期：2026-08-18
 - 负责人：Codex / 项目维护者
 - 目标里程碑：P3 — JDWP Integration
@@ -173,6 +173,8 @@ cases/<caseId>/collections/<collectionId>/
 
 外部 Manifest 原样只读保存为 Raw Artifact；面向 Agent/LLM 的 `manifest.json` 不复制绝对路径，只保存 Case 相对路径、
 Hash、大小、工具身份、阶段、退出事实、完成原因、tracepoint 命中和截断/失败诊断。
+Agent 按 Collector 1.0 的完整 Manifest 契约严格读取 `target/plan/trace/startedAt/finishedAt` 等字段，并校验
+`schemaVersion/sessionId/loopback host/本次 port/tracepoint key/计数/时间顺序`；外部绝对路径只保留在隔离 Raw 中。
 
 ## 8. 核心流程
 
@@ -196,7 +198,7 @@ sequenceDiagram
     C->>C: create-new 归档 Collector Plan
     C->>H: 用同一端口立即执行
     H->>T: 启动 suspend=y 的目标测试
-    H->>H: 等待有界的 JDWP listening 日志标记
+    H->>H: 有界探测 loopback 端口是否已被目标占用
     H->>J: 启动锁定 Collector 并 attach
     J->>T: 安装 tracepoints，resume
     T-->>J: breakpoint events
@@ -207,8 +209,12 @@ sequenceDiagram
     C-->>L: 结构化摘要 + Artifact 引用
 ```
 
-目标就绪不使用主动 TCP 探测，避免探测连接干扰 JDWP 握手。Coordinator 监听目标 stdout/stderr 中 JDK 的 listening
-标记；就绪超时或目标提前退出时不启动 Collector。Collector 一旦启动失败或非零退出，Coordinator 立即清理目标
+目标就绪不使用主动 TCP 连接，避免探测连接干扰 JDWP 握手。真实 Surefire 验证表明：测试 JVM 在
+`suspend=y` 阶段已经监听 loopback 端口，但 JDK listening 提示不会稳定转发到 Maven stdout/stderr；Windows 的
+`ProcessHandle.Info` 也不保证提供后代命令行。因此 Coordinator 有界尝试把临时 `ServerSocket` 绑定到本次已分配的
+`127.0.0.1:<port>`：仍可绑定表示目标尚未监听；出现 `BindException` 表示端口已被占用，随后才启动 Collector。
+该探测不建立连接、不发送 JDWP 握手，也不扫描无关系统进程。目标存活但端口被其他进程抢占的极短竞态仍会由
+Collector attach 失败结构化暴露。就绪超时或目标提前退出时不启动 Collector。Collector 一旦启动失败或非零退出，Coordinator 立即清理目标
 Maven 进程及其完整子进程树，防止 suspended JVM 遗留。正常情况下同时等待 Collector 和目标完成，任何一侧超过
 独立预算都进入有界终止。
 
@@ -267,7 +273,8 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 - `CollectorDebugPlanWriterTest`：确定性 JSON、loopback、字段与外部示例等价。
 - `JdwpCommandFactoryTest`：无 shell、JDWP 参数、JAR/plan/output 参数。
 - `ManagedProcessRunnerTest`：异步日志、超时、中断、幂等关闭和后代清理。
-- `JdwpCollectionCoordinatorTest`：目标提前退出、就绪超时、Collector 失败和双成功。
+- `LoopbackPortReadinessProbeTest`：区分端口仍可绑定、已被占用、目标提前退出和等待超时。
+- `JdwpCollectionCoordinatorTest`：目标提前退出、真实 JDWP loopback 端口就绪、就绪超时、Collector 失败和双成功。
 
 ### 12.2 契约与兼容性测试
 
@@ -313,7 +320,7 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 | Collector 无字节硬截止 | Raw 可能超过预算 | 保守编译、文件监控、超限终止、证据不可用 | Open until P0 |
 | 临时端口关闭后存在竞争窗口 | 其他进程可能抢占 | loopback、短窗口、启动失败结构化报告 | Accepted |
 | Collector 失败时目标仍 suspended | UT/子进程残留 | Coordinator finally 清理完整目标进程树 | Must close in audit |
-| listening 日志格式随 JDK 变化 | 就绪检测失败 | Java 17/21 fixture；目标提前退出并行检测 | Open |
+| Surefire 不转发 suspended JVM 的 listening 日志 | 旧就绪检测必然超时 | 不连接目标；有界检查本次 loopback 端口是否仍可绑定 | Resolved in 1.4 |
 | 外部 Manifest 含绝对路径 | LLM 泄漏本机路径 | Raw 隔离；Agent Manifest 仅相对路径 | Resolved by design |
 
 ## 16. 文档同步清单
@@ -321,10 +328,10 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 - [x] P3 详细设计与 Mermaid 流程
 - [x] JDWP Schema 与示例
 - [x] `config/toolchain-lock.json` 和 `config/collection-limits.yaml`
-- [ ] 架构模块详细设计与工具验证基线
-- [ ] README/CLI 使用说明
-- [ ] OpenCode Skill 的 JDWP 采集决策指引
-- [ ] Eval Case
+- [x] 架构模块详细设计与工具验证基线
+- [x] README/CLI 使用说明
+- [x] OpenCode Skill 的 JDWP 采集决策指引
+- [x] Eval Case（P3 Golden fixture；P8 EvalRunner 尚未实现）
 
 ## 17. 实现完成记录
 
@@ -342,9 +349,16 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
   失败和源码漂移均保留结构化 Manifest/Baseline；Gantt 变化或源码漂移会令证据不可用于确认根因。
 - Task 5 产物：完整 Agent Plan、Collector Plan、Raw JDWP JSONL、外部/Agent Manifest、目标/Collector
   四份日志、可选 Gantt 和 Baseline 检查均通过 Case 相对 Artifact 引用暴露，Raw 内容不内联到 ToolResponse。
-- 已知限制：无变量白名单、字段投影、采样和 Collector 内部字节硬限制；Wafer 真实一点评估尚未执行。
-- 提交/版本：Task 1 `8a46f93`、Task 2 `7b36b40`、Task 3 `5472d8f`、Task 4 `ce6b30c`；
-  Task 5 将在全量回归与最终自审通过后提交。
+- 已知限制：无变量白名单、字段投影、采样和 Collector 内部字节硬限制；这些能力仍属于后续 Collector P0。
+- 真实 Wafer Smoke：无采集参考 Run `run-4e74e36c-4353-45dc-a352-1187b5040205`；JDWP Run
+  `run-63fde929-5006-48b0-a5bf-1c84e87b7d96`、Collection
+  `collection-1068791c-3cbc-49ff-a579-be63be5cc6dc`。单点 `scheduleWafer:81` 命中 3 次，5 个总事件，
+  Raw 4,610 bytes，目标/Collector 退出码均为 0，Baseline `MATCHED`，`evidenceUsable=true`，无遗留进程。
+- Task 6 门禁：根项目 21 模块 `mvn test` 成功；显式锁定 JAR 的 JDWP Adapter 测试 19 项通过且真实
+  Collector Smoke 零跳过；22 个 JSON Schema、5 个 P3 Golden Eval Case 和 11 个 OpenCode Adapter
+  测试通过。Golden fixture 只验证决策契约，不宣称当前已完成模型质量评测。
+- 提交/版本：Task 1 `8a46f93`、Task 2 `7b36b40`、Task 3 `5472d8f`、Task 4 `ce6b30c`、
+  Task 5 `6cb934a`；Task 6 审计修复与完成记录单独提交。
 
 ## 18. 变更记录
 
@@ -353,3 +367,8 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 | 2026-08-18 | 1.0 | 明确以能力如实、保守预算方式集成当前 Collector MVP | Codex |
 | 2026-08-18 | 1.1 | 明确端口先于 Collector Plan 分配和归档，Plan、argv 与 Manifest 必须使用同一端口 | Codex |
 | 2026-08-18 | 1.2 | 记录 Case/Core/CLI 追加式执行流、外部 Manifest 校验和 Baseline 证据门禁实现 | Codex |
+| 2026-08-18 | 1.3 | 真实 Wafer Smoke 发现 Surefire 不转发 suspended JVM listening 提示；就绪判定改为受管后代命令行精确匹配 | Codex |
+| 2026-08-18 | 1.4 | Windows 验证发现 ProcessHandle 不保证暴露后代参数；改用不建立连接的 loopback 端口绑定探测 | Codex |
+| 2026-08-18 | 1.5 | 真实 Collector Manifest 契约补齐 target、路径和时间字段，并增加本次 loopback endpoint 校验 | Codex |
+| 2026-08-18 | 1.6 | 后处理或外部 Manifest 校验失败时，失败归档继续保留已观察到的目标/Collector 启动与退出事实 | Codex |
+| 2026-08-18 | 1.7 | 外部 Manifest 即使无效，也先把 Raw Trace/Manifest 移入规范只读路径，再执行严格校验并报告 Agent 失败 | Codex |

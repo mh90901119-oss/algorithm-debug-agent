@@ -1,10 +1,10 @@
 ---
 name: algorithm-debug
-description: Analyze a specified Java/Maven algorithm UT using structured run summaries, immutable artifacts, CodePathTracer and bounded JDWP evidence.
+description: Use when a user asks about a specified Java/Maven algorithm UT, its exception, Gantt result, runtime path, internal state, or changes across analysis rounds.
 compatibility: opencode
 metadata:
   owner: algorithm-debug-agent
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Algorithm Debug workflow
@@ -38,6 +38,24 @@ After every user message:
 5. Read stdout, stderr, Surefire XML, or Gantt artifacts only by reference and only within the requested byte/line budget.
 6. Request CodePathTracer when a bounded runtime call path would close a stated gap. Request JDWP only for named methods/variables and bounded hits/depth/bytes.
 7. Before a confirmed root-cause claim, verify evidence coverage, contradictions, truncation, and semantic-baseline consistency.
+
+## JDWP refinement loop
+
+Use JDWP after static analysis or CodePath evidence has identified one or a few named methods and the
+remaining question concerns their stack or internal runtime state. A Case may contain multiple JDWP
+plans and collections; one collection is not a Case limit.
+
+1. Create the smallest plan from a current Method Catalog entry and its Source Anchor. State the
+   evidence gap and keep tracepoints, hits, frames, object depth, bytes and timeout bounded.
+2. Plan creation and collection execution are separate actions. Do not execute merely because a plan
+   exists; execute when the current user question still needs that runtime evidence.
+3. Read the collection summary first. `TARGET_FAILED` remains analyzable; `TOOL_FAILED`, `TIMED_OUT`,
+   `TRUNCATED`, source drift, or `baselineOutcome!=MATCHED` cannot support a confirmed root cause.
+4. Treat JDWP evidence as confirmation-capable only when `completion=SUCCESS`,
+   `baselineOutcome=MATCHED`, and `evidenceUsable=true`. Then read only the referenced Raw excerpt or
+   derived artifact needed for the question; do not inline the full JSONL.
+5. If a later collection differs, cite its new `runId/collectionId` and explain the observed change.
+   Preserve and distinguish earlier evidence rather than silently replacing it.
 
 ## Answer contract
 

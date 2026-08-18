@@ -10,20 +10,19 @@ final class CoordinatorFixtureMain {
         switch (args[0]) {
             case "exit" -> System.exit(Integer.parseInt(args[1]));
             case "ready-exit" -> {
-                System.err.println(args[1]);
-                System.err.flush();
+                Process child = readyChild(args[1]);
                 Thread.sleep(Long.parseLong(args[2]));
+                child.destroyForcibly();
+                child.waitFor();
                 System.exit(Integer.parseInt(args[3]));
             }
             case "ready-sleep" -> {
-                System.out.println(args[1]);
-                System.out.flush();
+                readyChild(args[1]);
                 Thread.sleep(60_000);
             }
             case "ready-sleep-pid" -> {
                 Files.writeString(Path.of(args[1]), Long.toString(ProcessHandle.current().pid()));
-                System.out.println(args[2]);
-                System.out.flush();
+                readyChild(args[2]);
                 Thread.sleep(60_000);
             }
             case "sleep" -> Thread.sleep(60_000);
@@ -39,5 +38,13 @@ final class CoordinatorFixtureMain {
             }
             default -> throw new IllegalArgumentException("unknown fixture mode");
         }
+    }
+
+    private static Process readyChild(String argument) throws Exception {
+        String executable = System.getProperty("os.name").toLowerCase().contains("win")
+                ? "java.exe" : "java";
+        return new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", executable).toString(),
+                argument, "-version").start();
     }
 }

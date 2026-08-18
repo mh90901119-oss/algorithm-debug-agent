@@ -246,7 +246,8 @@ class JdwpCollectionCoordinatorTest {
             JdwpProcessCommandFactory target,
             JdwpProcessCommandFactory collector) {
         return new JdwpCollectionCoordinator(
-                new ManagedProcessRunner(), target, collector, System::nanoTime);
+                new ManagedProcessRunner(), target, collector,
+                new LoopbackPortReadinessProbe(), System::nanoTime);
     }
 
     private JdwpExecutionRequest request(Duration readyTimeout) throws Exception {
@@ -294,7 +295,7 @@ class JdwpCollectionCoordinatorTest {
     }
 
     private static String marker(int port) {
-        return "Listening for transport dt_socket at address: " + port;
+        return "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:" + port;
     }
 
     private static List<String> fixture(String... args) {

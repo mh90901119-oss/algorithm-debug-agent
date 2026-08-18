@@ -95,7 +95,7 @@
 - Add unit/integration fixtures and tests
 
 1. RED: only loopback port allocation and exact non-shell argv.
-2. RED: target starts first; Collector starts only after bounded JDWP listening output appears.
+2. RED: target starts first; Collector starts only after a bounded, non-connecting loopback bind probe observes the JDWP port occupied.
 3. RED: target compilation/start failure, readiness timeout, Collector start/attach failure, Collector nonzero exit, target timeout and both-success paths.
 4. RED: Collector failure after target suspension always cleans the Maven/Surefire tree.
 5. GREEN: application flow allocates loopback port before writing the Collector Plan; pass that exact port into the execution request, and inject clock/process runner and tool paths for deterministic tests.
@@ -104,6 +104,10 @@
 8. Run `mvn -pl jdwp-collector-adapter -am test`.
 9. Audit resume/cleanup safety, port race behavior, bounded logs and locked JAR SHA verification.
 10. Commit: `feat: coordinate jdwp target and collector`.
+
+Implementation note: real Surefire does not reliably forward the suspended JVM's listening banner.
+The final readiness gate therefore checks whether the already allocated loopback port remains
+bindable; it never opens a JDWP connection and never scans unrelated process command lines.
 
 ## Task 5: Archive and expose the JDWP application flow
 

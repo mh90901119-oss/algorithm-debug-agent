@@ -32,6 +32,7 @@ public final class JdwpCollectionCoordinator {
     private final ManagedProcessRunner processes;
     private final JdwpProcessCommandFactory targetCommands;
     private final JdwpProcessCommandFactory collectorCommands;
+    private final LoopbackPortReadinessProbe readiness;
     private final LongSupplier nanoTime;
 
     /** 使用 loopback 临时端口、标准 Maven/JDWP 命令和系统单调时钟。 */
@@ -42,6 +43,7 @@ public final class JdwpCollectionCoordinator {
                 (request, port) -> new JdwpCollectorCommandFactory().create(
                         request.javaExecutable(), request.collectorJar(), request.collectorPlan(),
                         request.collectorOutputDirectory(), port),
+                new LoopbackPortReadinessProbe(),
                 System::nanoTime);
     }
 
@@ -49,10 +51,12 @@ public final class JdwpCollectionCoordinator {
             ManagedProcessRunner processes,
             JdwpProcessCommandFactory targetCommands,
             JdwpProcessCommandFactory collectorCommands,
+            LoopbackPortReadinessProbe readiness,
             LongSupplier nanoTime) {
         this.processes = processes;
         this.targetCommands = targetCommands;
         this.collectorCommands = collectorCommands;
+        this.readiness = readiness;
         this.nanoTime = nanoTime;
     }
 
@@ -78,12 +82,13 @@ public final class JdwpCollectionCoordinator {
             try (ManagedProcess target = startTarget(request, port)) {
                 targetStarted = true;
                 phase = ExecutionPhase.TARGET_READY;
-                ProcessOutputWaitResult readiness = target.awaitOutput(
-                        listeningMarker(port), min(request.targetReadyTimeout(), remaining(deadline)));
-                if (readiness != ProcessOutputWaitResult.OBSERVED) {
-                    RunResult targetResult = readiness == ProcessOutputWaitResult.PROCESS_EXITED
+                ProcessOutputWaitResult readinessResult = readiness.await(
+                        target, port,
+                        min(request.targetReadyTimeout(), remaining(deadline)));
+                if (readinessResult != ProcessOutputWaitResult.OBSERVED) {
+                    RunResult targetResult = readinessResult == ProcessOutputWaitResult.PROCESS_EXITED
                             ? target.await(remaining(deadline)) : terminateAndCapture(target);
-                    JdwpCollectionCompletion completion = readiness == ProcessOutputWaitResult.TIMED_OUT
+                    JdwpCollectionCompletion completion = readinessResult == ProcessOutputWaitResult.TIMED_OUT
                             ? JdwpCollectionCompletion.TIMED_OUT : JdwpCollectionCompletion.TARGET_FAILED;
                     return result(port, completion, targetResult, null);
                 }
@@ -132,7 +137,7 @@ public final class JdwpCollectionCoordinator {
         return processes.start(
                 targetCommands.create(request, port), request.targetLaunch().project().projectRoot(),
                 request.targetOptions().stdoutLog(), request.targetOptions().stderrLog(),
-                request.targetOptions().processLimits(), List.of(listeningMarker(port)));
+                request.targetOptions().processLimits(), List.of());
     }
 
     private ManagedProcess startCollector(JdwpExecutionRequest request, int port) throws HarnessException {
@@ -242,10 +247,6 @@ public final class JdwpCollectionCoordinator {
 
     private static Duration min(Duration first, Duration second) {
         return first.compareTo(second) <= 0 ? first : second;
-    }
-
-    private static String listeningMarker(int port) {
-        return "Listening for transport dt_socket at address: " + port;
     }
 
     private static String errorCode(ExecutionPhase phase, Exception failure) {

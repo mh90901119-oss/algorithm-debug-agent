@@ -20,8 +20,10 @@ later Runs report `MATCHED` or `CHANGED` for the same or previous Context.
 Gantt comparison deliberately ignores JSON formatting whitespace but preserves object/array order and
 string content. It reports only changed dimensions, not a field-level Diff. Static method analysis,
 bounded CodePathTracer collection and the JDWP Plan/collection application flow are implemented.
-JDWP still requires the P3 release audit and real Wafer smoke; Input Analysis, Evidence construction,
-the OpenCode installer and end-to-end `/debug-case` model workflow remain planned.
+The P3 JDWP release audit and real Wafer one-point smoke are complete: the target UT produced three
+bounded hits, its normalized Gantt Hash matched the no-collection same-Context baseline, and no
+managed process survived. Input Analysis, Evidence construction, the OpenCode installer and
+end-to-end `/debug-case` model workflow remain planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
 `algorithm-debug` Skill, bounded OpenCode agent/command/custom-tool contract assets and the Java

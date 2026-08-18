@@ -51,6 +51,7 @@ class RealJdwpCollectorSmokeTest {
                 (actual, actualPort) -> new JdwpCollectorCommandFactory().create(
                         actual.javaExecutable(), actual.collectorJar(), actual.collectorPlan(),
                         actual.collectorOutputDirectory(), actualPort),
+                new LoopbackPortReadinessProbe(),
                 System::nanoTime);
 
         JdwpExecutionResult result = coordinator.execute(request);

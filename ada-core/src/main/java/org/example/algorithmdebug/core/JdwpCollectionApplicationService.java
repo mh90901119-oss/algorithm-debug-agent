@@ -133,6 +133,10 @@ public final class JdwpCollectionApplicationService {
         Instant startedAt = clock.instant();
         CollectionBaselineCheck baseline;
         JdwpCollectionManifest manifest;
+        boolean observedTargetStarted = false;
+        boolean observedCollectorStarted = false;
+        int observedTargetExitCode = -1;
+        int observedCollectorExitCode = -1;
         try {
             SourceSnapshot before = sourceSnapshots.capture(moduleRoot);
             CollectionApplicationService.requireSourceReady(
@@ -158,6 +162,10 @@ public final class JdwpCollectionApplicationService {
                     plan.budget().maxBytes(), Duration.ofSeconds(30),
                     Duration.ofMillis(plan.budget().timeoutMillis()));
             JdwpExecutionResult result = executor.execute(request);
+            observedTargetStarted = result.targetStarted();
+            observedCollectorStarted = result.collectorStarted();
+            observedTargetExitCode = exitCode(result.target());
+            observedCollectorExitCode = exitCode(result.collector());
             ExternalCollectorManifest external = archiveExternalOutputs(
                     collectionRoot, request, result.completion(), plan);
             baseline = checkBaseline(archive, record, result.completion(), capture, collectionRoot);
@@ -174,25 +182,30 @@ public final class JdwpCollectionApplicationService {
             writer.writeNew(collectionRoot.resolve("manifest.json"), mapper.writeJson(manifest));
         } catch (JdwpAdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.TOOL_FAILED,
-                    failure.code(), failure, failure.targetStarted(), failure.collectorStarted(), startedAt);
+                    failure.code(), failure, failure.targetStarted(), failure.collectorStarted(),
+                    -1, -1, startedAt);
             baseline = incomparable(record, "JDWP tool failed before baseline check: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
             throw new CaseRunException(failure.code(), "JDWP 采集失败", failure);
         } catch (AdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
-                    "JDWP_LAUNCH_SPEC_FAILED", failure, false, false, startedAt);
+                    "JDWP_LAUNCH_SPEC_FAILED", failure, false, false, -1, -1, startedAt);
             baseline = incomparable(record, "JDWP launch specification failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
             throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "无法创建 JDWP 启动规格", failure);
         } catch (CaseRunException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
-                    failure.code(), failure, false, false, startedAt);
-            baseline = incomparable(record, "JDWP collection did not start: " + failure.code());
+                    failure.code(), failure, observedTargetStarted, observedCollectorStarted,
+                    observedTargetExitCode, observedCollectorExitCode, startedAt);
+            baseline = incomparable(record, observedTargetStarted
+                    ? "JDWP post-processing failed after target execution: " + failure.code()
+                    : "JDWP collection did not start: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
             throw failure;
         } catch (IOException | WorkspaceException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
-                    "JDWP_ARCHIVE_FAILED", failure, false, false, startedAt);
+                    "JDWP_ARCHIVE_FAILED", failure, observedTargetStarted, observedCollectorStarted,
+                    observedTargetExitCode, observedCollectorExitCode, startedAt);
             baseline = incomparable(record, "JDWP artifact validation or archive failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
             throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP 产物归档失败", failure);
@@ -246,9 +259,6 @@ public final class JdwpCollectionApplicationService {
             throw new CaseRunException(
                     "JDWP_MANIFEST_INVALID", "JDWP Collector 未生成完整 Raw Trace 和 Manifest");
         }
-        ExternalCollectorManifest parsed = manifestPresent
-                ? readAndValidateExternalManifest(externalManifest, plan)
-                : ExternalCollectorManifest.empty(plan.planId().value());
         Path archivedRaw = collectionRoot.resolve("raw/jdwp.jsonl");
         Path archivedManifest = collectionRoot.resolve("raw/collector-manifest.json");
         if (rawPresent) {
@@ -257,17 +267,21 @@ public final class JdwpCollectionApplicationService {
         if (manifestPresent) {
             Files.move(externalManifest, archivedManifest);
         }
-        return parsed;
+        return manifestPresent
+                ? readAndValidateExternalManifest(archivedManifest, plan, request.port())
+                : ExternalCollectorManifest.empty(plan.planId().value());
     }
 
     private ExternalCollectorManifest readAndValidateExternalManifest(
-            Path document, JdwpCollectionPlan plan) {
+            Path document, JdwpCollectionPlan plan, int expectedPort) {
         try {
             ExternalCollectorManifest external = mapper.readJson(
                     document, ExternalCollectorManifest.class);
             if (!"1.0".equals(external.schemaVersion())
-                    || !plan.planId().value().equals(external.sessionId())) {
-                throw new IllegalArgumentException("schemaVersion 或 sessionId 与计划不一致");
+                    || !plan.planId().value().equals(external.sessionId())
+                    || !"127.0.0.1".equals(external.target().host())
+                    || external.target().port() != expectedPort) {
+                throw new IllegalArgumentException("schemaVersion、sessionId 或 target endpoint 与本次执行不一致");
             }
             var allowed = plan.tracepoints().stream()
                     .map(point -> point.tracepointId()).collect(java.util.stream.Collectors.toSet());
@@ -327,6 +341,8 @@ public final class JdwpCollectionApplicationService {
             Throwable failure,
             boolean targetStarted,
             boolean collectorStarted,
+            int targetExitCode,
+            int collectorExitCode,
             Instant startedAt) {
         Path raw = Path.of("raw/jdwp.jsonl");
         return new JdwpCollectionManifest(
@@ -336,7 +352,7 @@ public final class JdwpCollectionApplicationService {
                 existingSha(collectionRoot.resolve("collector-plan.json"))
                         .orElseGet(() -> sha(mapper.writeJson(plan))),
                 completion, JdwpCollectionStage.FAILED, targetStarted, collectorStarted,
-                -1, -1, completion == JdwpCollectionCompletion.TIMED_OUT,
+                targetExitCode, collectorExitCode, completion == JdwpCollectionCompletion.TIMED_OUT,
                 completion == JdwpCollectionCompletion.TRUNCATED, 0, 0, Map.of(), Map.of(),
                 Optional.empty(), Optional.of(new AgentFailureDiagnostic(
                         code, "JDWP collection failed", failure.getClass().getName())),
@@ -493,6 +509,11 @@ public final class JdwpCollectionApplicationService {
         catch (IOException failure) { return 0; }
     }
 
+    private static int exitCode(Optional<org.example.algorithmdebug.harness.RunResult> result) {
+        return result.flatMap(run -> run.exitCode().isPresent()
+                ? Optional.of(run.exitCode().getAsInt()) : Optional.empty()).orElse(-1);
+    }
+
     private static Optional<String> existingSha(Path path) {
         if (!Files.isRegularFile(path)) {
             return Optional.empty();
@@ -521,6 +542,11 @@ public final class JdwpCollectionApplicationService {
     private record ExternalCollectorManifest(
             String schemaVersion,
             String sessionId,
+            ExternalCollectorTarget target,
+            String plan,
+            String trace,
+            Instant startedAt,
+            Instant finishedAt,
             String completionReason,
             int eventCount,
             Map<String, Integer> hitCounts,
@@ -528,7 +554,10 @@ public final class JdwpCollectionApplicationService {
         private ExternalCollectorManifest {
             hitCounts = hitCounts == null ? Map.of() : Map.copyOf(hitCounts);
             installedLocations = installedLocations == null ? Map.of() : Map.copyOf(installedLocations);
-            if (eventCount < 0 || hitCounts.size() > 20 || installedLocations.size() > 20) {
+            if (target == null || plan == null || plan.isBlank() || trace == null || trace.isBlank()
+                    || startedAt == null || finishedAt == null || finishedAt.isBefore(startedAt)
+                    || completionReason == null || completionReason.isBlank()
+                    || eventCount < 0 || hitCounts.size() > 20 || installedLocations.size() > 20) {
                 throw new IllegalArgumentException("External JDWP Manifest 超出有界契约");
             }
             if (hitCounts.values().stream().anyMatch(value -> value == null || value < 0)
@@ -540,7 +569,17 @@ public final class JdwpCollectionApplicationService {
 
         static ExternalCollectorManifest empty(String sessionId) {
             return new ExternalCollectorManifest(
-                    "1.0", sessionId, "unavailable", 0, Map.of(), Map.of());
+                    "1.0", sessionId, new ExternalCollectorTarget("127.0.0.1", 1),
+                    "unavailable", "unavailable", Instant.EPOCH, Instant.EPOCH,
+                    "unavailable", 0, Map.of(), Map.of());
+        }
+    }
+
+    private record ExternalCollectorTarget(String host, int port) {
+        private ExternalCollectorTarget {
+            if (host == null || host.isBlank() || port < 1 || port > 65_535) {
+                throw new IllegalArgumentException("External JDWP Manifest target invalid");
+            }
         }
     }
 }

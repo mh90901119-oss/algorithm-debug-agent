@@ -291,6 +291,42 @@ class JdwpCollectionApplicationServiceTest {
                 "JDWP_RAW".equals(reference.artifactType())));
     }
 
+    @Test
+    void invalidExternalManifestPreservesObservedProcessFacts() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"port\":51234", "\"port\":60000"));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 109)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 110)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "fixture write failed", failure);
+            }
+        }, ignored -> context.sourceSnapshot());
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
+
+        assertEquals("JDWP_MANIFEST_INVALID", failure.code());
+        Path root = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                .resolve("case-1/collections/collection-fixed");
+        JdwpCollectionManifest manifest = mapper.readJson(
+                root.resolve("manifest.json"), JdwpCollectionManifest.class);
+        assertTrue(manifest.targetStarted());
+        assertTrue(manifest.collectorStarted());
+        assertEquals(0, manifest.targetExitCode());
+        assertEquals(0, manifest.collectorExitCode());
+        assertTrue(Files.isRegularFile(root.resolve("raw/jdwp.jsonl")));
+        assertTrue(Files.isRegularFile(root.resolve("raw/collector-manifest.json")));
+    }
+
     private JdwpCollectionApplicationService service(
             JdwpCollectionExecutor executor, SourceSnapshotReader snapshots) {
         return new JdwpCollectionApplicationService(
@@ -309,6 +345,9 @@ class JdwpCollectionApplicationServiceTest {
                 "{\"eventType\":\"tracepoint_hit\",\"tracepointId\":\"target-entry\"}\n");
         Files.writeString(request.collectorOutputDirectory().resolve("collection-manifest.json"), """
                 {"schemaVersion":"1.0","sessionId":"jdwp-plan-1",
+                 "target":{"host":"127.0.0.1","port":51234},
+                 "plan":"C:/raw/collector-plan.json","trace":"C:/raw/raw-trace.jsonl",
+                 "startedAt":"2026-08-18T00:00:00Z","finishedAt":"2026-08-18T00:00:01Z",
                  "completionReason":"vm_death","eventCount":1,
                  "hitCounts":{"target-entry":1},
                  "installedLocations":{"target-entry":1}}

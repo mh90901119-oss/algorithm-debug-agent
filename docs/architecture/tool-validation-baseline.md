@@ -163,6 +163,24 @@ Maven Surefire fork
 
 因此JDWP Core/Collector MVP状态为`VERIFIED`，P0性能加固为`DESIGNED`，Agent Adapter为`NOT_STARTED`。
 
+### 4.5 Agent P3 集成验证（2026-08-18）
+
+上面的 `Agent Adapter=NOT_STARTED` 是外部 Collector 原型验证时的历史结论；当前状态已更新为
+`P3 VERIFIED`。Agent 使用锁定的 Collector `1.0.0`，JAR SHA-256 为
+`be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78`。
+
+真实 Wafer 指定 UT 的无采集 Baseline 与单点 JDWP Collection 均成功。采集点为
+`SimpleWaferScheduler.scheduleWafer:81`，最大命中 3；实际得到 3 个 `tracepoint_hit`、5 个总事件、
+4,610 bytes Raw JSONL，目标 Maven/UT 与 Collector 退出码均为 0。采集运行的规范化 Gantt Hash 与
+同一 Context 无采集参考一致，Baseline 为 `MATCHED`，`evidenceUsable=true`，结束后无 Java/Maven
+遗留进程。归档同时包含 Agent Plan、运行时 Collector Plan、Raw Trace、外部/Agent Manifest、
+四份日志、Gantt 和 Baseline Check。
+
+审计中修复了两项只在真实 Surefire/Collector 组合下出现的问题：Surefire 在 suspended 阶段不稳定
+转发 listening banner，因此就绪检测改为不建立连接的 loopback 端口绑定探测；Agent 严格读取器按
+Collector 1.0 完整 Manifest 字段校验 endpoint、时间和计数。失败路径仍追加保存，且后处理失败不会
+丢失已经观察到的目标/Collector 进程事实。
+
 ## 5. 两工具的职责边界
 
 | 问题 | CodePathTracer | JDWP Collector |
@@ -195,4 +213,3 @@ ada analyze --project <root> --test <class#method> --question <text>
 ```
 
 Harness内部自动完成doctor、构建、Baseline、计划编译、子JVM、Collector、Hash校验和Artifact索引。当前手工命令只用于开发验证，不是产品交互契约。
-

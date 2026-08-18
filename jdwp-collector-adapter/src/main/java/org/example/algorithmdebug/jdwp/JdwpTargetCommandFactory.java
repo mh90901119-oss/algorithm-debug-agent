@@ -33,7 +33,7 @@ public final class JdwpTargetCommandFactory {
             throw new IllegalArgumentException("目标启动规格不得预先声明 JDWP Agent");
         }
         List<String> arguments = new ArrayList<>(launch.jvmArguments());
-        arguments.add("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:" + port);
+        arguments.add(jdwpArgument(port));
         TestLaunchSpec injected = new TestLaunchSpec(
                 launch.project(), launch.targetTest(), launch.runMode(), launch.mavenGoals(),
                 launch.mavenProperties(), arguments, launch.timeout());
@@ -48,5 +48,10 @@ public final class JdwpTargetCommandFactory {
         if (port < 1 || port > 65_535) {
             throw new IllegalArgumentException("JDWP port 必须在 1 到 65535 之间");
         }
+    }
+
+    static String jdwpArgument(int port) {
+        requirePort(port);
+        return "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=127.0.0.1:" + port;
     }
 }

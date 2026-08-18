@@ -310,8 +310,8 @@ Collector MVP；变量 allowlist、字段投影、采样和 Collector 内部 Raw
 
 - [x] RED Core/CLI fixture for successful trace, target assertion/business failure, attach failure, source drift and baseline mismatch.
 - [x] Implement append-only Plan/Collection archive and bounded Artifact references using the common collection layout.
-- [ ] P3 audit, regression fixes, affected/root tests and real Smoke.
-- [ ] Commit `feat: execute archived jdwp collections`.
+- [x] P3 audit, regression fixes, affected/root tests and real Smoke.
+- [x] Commit `6cb934a feat: execute archived jdwp collections`; release-audit fixes are recorded separately.
 
 ---
 
