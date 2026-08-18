@@ -59,6 +59,21 @@ public final class SchemaVersions {
     /** JDWP Agent Manifest Schema 版本。 */
     public static final String JDWP_COLLECTION_MANIFEST = "1.0";
 
+    /** 通用 Trace 归一化清单 Schema 版本。 */
+    public static final String NORMALIZATION_MANIFEST = "1.0";
+    /** 通用方法路径摘要 Schema 版本。 */
+    public static final String METHOD_PATH_SUMMARY = "1.0";
+    /** 通用 JDWP 快照摘要 Schema 版本。 */
+    public static final String JDWP_SNAPSHOT_SUMMARY = "1.0";
+    /** Collection 证据校验 Schema 版本。 */
+    public static final String COLLECTION_VALIDATION = "1.0";
+    /** Evidence 构建请求 Schema 版本。 */
+    public static final String EVIDENCE_BUILD_REQUEST = "1.0";
+    /** Evidence Bundle Schema 版本。 */
+    public static final String EVIDENCE_BUNDLE = "1.0";
+    /** 证据充分性评估 Schema 版本。 */
+    public static final String SUFFICIENCY_EVALUATION = "1.0";
+
     private SchemaVersions() {
     }
 }
