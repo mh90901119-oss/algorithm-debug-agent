@@ -40,3 +40,5 @@ YYYY-MM-DD-<module-or-feature>-design.md
   OpenCode Skill/CLI 薄适配，状态为 Review。
 - `2026-08-17-json-content-fingerprint-baseline-design.md`：时间戳文件名 JSON 的通用内容指纹、失败指纹
   与 Context 首次复现参考；字段级 Gantt Diff 明确后置，状态为 Review。
+- `2026-08-18-p4-generic-runtime-evidence-design.md`：CodePath/JDWP 通用流式摘要、确定性证据校验、
+  Evidence Bundle 与大型算法预算，状态为 Review。
