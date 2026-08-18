@@ -1,6 +1,6 @@
 # ADR-009：先生成通用运行时证据，再按需增加领域映射
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-08-18
 
 ## 背景
@@ -34,6 +34,8 @@ CodePathTracer 和 JDWP Collector 已经能够在不修改目标算法源码的�
 7. P4 v1 不新增 `DomainMappingProvider` 或任意 Mapping DSL，避免在缺少第二个真实算法验证时提前冻结接口。
 8. 大型算法的运行时安全仍由采集计划、Collector 预算和进程监管保证；P4 后处理不能替代 CodePath 源头
    过滤或 JDWP local allowlist/字段投影。
+9. 目标 UT、输入和本轮采集的运行时值属于用户明确授权的算法分析数据。P4 不新增敏感值路径 allowlist、deny、
+   自动字段分类或脱敏规则；值路径只用于结构化定位和 Raw Provenance。若未来部署边界改变，另行设计数据披露策略。
 
 ## 影响
 
@@ -43,6 +45,7 @@ CodePathTracer 和 JDWP Collector 已经能够在不修改目标算法源码的�
 - 新算法接入主要提供构建/UT/输入/结果 Adapter 和项目知识，不需要重写 P4；
 - 业务语义自动化程度低于固定 Wafer Mapping，但不会把未经证明的映射作为确定性事实；
 - 未来领域投影可以从不可变 Raw 和通用 Summary 重放，不需要重新运行目标 UT。
+- P4 v1 不提供自动脱敏保证，也不因为字段名称包含特定单词而隐藏可能影响算法分析的数据。
 
 ## 被否决方案
 

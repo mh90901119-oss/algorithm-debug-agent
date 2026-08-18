@@ -1,7 +1,7 @@
 # P4 通用运行时证据管线可实施详细设计
 
-- 文档状态：Review
-- 设计版本：0.1
+- 文档状态：Approved for Implementation
+- 设计版本：0.2
 - 创建日期：2026-08-18
 - 负责人：Codex / mh90901119-oss
 - 目标里程碑：P4 — Normalize, Validate and Build Evidence
@@ -39,7 +39,7 @@ P4 必须把 Raw Trace 确定性整理成通用运行时事实，同时保留原
 - 根据调用方声明的证据维度输出 `SUFFICIENT/INSUFFICIENT/CONTRADICTED`，并列出缺口；
 - 支持同一 Case、同一 Context 下跨 Analysis 显式复用历史 Collection；
 - 支持 Normalizer/Validator 版本升级后从不可变 Raw Trace 重新派生，不覆盖旧结果；
-- 为大型算法提供记录数、单记录字节、摘要条目、输出字节和敏感值披露预算；
+- 为大型算法提供记录数、单记录字节、摘要条目和输出字节预算；
 - 通过稳定 CLI 返回小型结构化摘要和 Case 相对 Artifact 引用，不内联 Raw Trace。
 
 ### 2.2 非目标
@@ -191,15 +191,14 @@ P4 确定性构建器只能生成 `CONFIRMED_FACT`、`VALIDATOR_CONCLUSION` 和 
 - `collectionIds`：0～16 个用于当前 Context 证据的显式 Collection；
 - `comparisonCollectionIds`：0～16 个仅用于历史比较、不能满足当前动态维度的 Collection；
 - `requiredDimensions`：1～7 个允许的证据维度；应用服务自动加入 `VALIDATION`；
-- `valuePathAllowlist`：0～200 个 JDWP 值路径；只控制派生摘要披露，不改变 Raw Trace；
 - `maxSummaryBytes/maxEvidenceBundleBytes`：不得超过本设计第 10 节硬上限。
 
 `collectionIds` 可以引用同 Context 的旧 Analysis，以支持多轮复用；不同 Context 只能进入
 `comparisonCollectionIds`。调用方不能通过把动态 Collection 放入 comparison 列表来绕过当前 Context 校验。
 
-值披露规则为：Workspace deny 规则优先；顶层局部变量的 scalar 值可在预算内输出；对象的嵌套字段默认只输出
-路径、类型和结构限制，只有同时命中 allowlist 且未命中 deny 时才输出 scalar preview。ToolResponse 仍不内联
-这些值，只返回 Summary Artifact 引用。
+目标 UT、输入和本轮 JDWP 已采集运行时值属于用户明确授权的分析范围。P4 不建立敏感字段分类、路径 allowlist、
+deny 或自动脱敏规则；它在结构和输出预算内忠实生成 scalar preview、对象字段路径、类型及 Collector 限制标记。
+ToolResponse 不内联这些值，只返回 Summary Artifact 引用。
 
 ### 7.4 Provenance
 
@@ -357,11 +356,11 @@ EVIDENCE_ARCHIVE_FAILED
 
 - P4 不启动目标进程、不 attach JVM、不修改目标仓库；只读取 Case 内不可变 Artifact；
 - Raw locals 默认只保存在本地 Case，不进入 ToolResponse；
-- Evidence Build 支持值路径 allowlist，Workspace 安全策略 deny 规则优先于调用方 allowlist；
-- 未显式允许的深层对象字段只输出类型、结构和截断元数据，不输出完整值；
-- 密码、token、secret、credential 等通用敏感名称由安全策略屏蔽，但公司项目仍必须提供专属 deny 规则；
+- 目标算法 UT、输入和运行时值按产品边界视为本次授权分析数据；P4 不实现内容分类或自动脱敏；
+- 值路径只用于说明变量在 JDWP 对象结构中的位置和关联 Raw Provenance，不具有权限或敏感级别语义；
 - 所有 Artifact 路径必须是 Case 相对路径，拒绝符号链接逃逸和绝对路径；
-- 公司算法接入前必须评审 Raw Trace 权限、保留期限、本地加密与 OpenCode 模型数据策略；
+- Raw 与派生 Summary 保存在本地 Case；是否允许 OpenCode 使用的模型读取这些已授权分析数据，属于部署环境策略，
+  不由 P4 猜测或实现；
 - P4 不新增外部运行依赖；Jackson/JUnit 使用父 POM 现有锁定版本和许可证。
 
 ## 12. 测试设计
@@ -436,7 +435,6 @@ EVIDENCE_ARCHIVE_FAILED
 | 通用摘要缺少直接业务语义 | 大模型需要结合源码/知识 | 保留精确 Source/Raw 引用；业务 Mapping 作为可选后续层 | Resolved by design |
 | 复杂值扁平化丢失关系 | 解释可能不充分 | 保存路径、类型、结构标记和 Raw 引用；不足时请求聚焦采集 | Accepted |
 | 摘要预算导致 PARTIAL | 不能确认完整事实 | 明确 INCONCLUSIVE 和缺口，不静默裁剪 | Resolved by design |
-| 公司安全规则未知 | 可能披露敏感字段 | Workspace deny + build allowlist；正式接入前安全审计 | Open per target |
 | 无 LocalVariableTable | JDWP locals 不可用 | 记录 `$error` 与 MISSING_EVIDENCE；不伪造值 | Accepted |
 
 ## 16. 文档同步清单
@@ -457,4 +455,5 @@ EVIDENCE_ARCHIVE_FAILED
 
 | 日期 | 版本 | 变更内容 | 作者 |
 |---|---|---|---|
+| 2026-08-18 | 0.2 | 按产品边界删除无真实需求的敏感值路径 allowlist/deny；P4 忠实、有界整理授权的目标 UT 运行时值 | Codex / mh90901119-oss |
 | 2026-08-18 | 0.1 | 首版：采用通用运行时摘要、确定性校验和有界 Evidence Bundle，排除 Wafer 领域硬编码 | Codex / mh90901119-oss |
