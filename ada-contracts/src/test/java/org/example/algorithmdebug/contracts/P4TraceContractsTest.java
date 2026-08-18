@@ -18,7 +18,7 @@ class P4TraceContractsTest {
     @Test
     void methodPathRelationCannotClaimDirectCall() {
         assertThrows(IllegalArgumentException.class, () -> new MethodPathSummary.ObservedPath(
-                "main", "a.A#one()V", "a.A#two()V", "DIRECT_CALL", 1, provenance()));
+                "a.A#one()V", "a.A#two()V", "DIRECT_CALL", 1, provenance()));
     }
 
     @Test

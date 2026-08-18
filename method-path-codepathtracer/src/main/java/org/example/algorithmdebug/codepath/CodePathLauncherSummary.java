@@ -18,6 +18,7 @@ public record CodePathLauncherSummary(
                 || "TOOL_FAILED".equals(outcome))
                 || !("NONE".equals(limit) || "OUTPUT_BYTES".equals(limit) || "EVENTS".equals(limit))
                 || testsFound < 0 || testsSucceeded < 0 || testsAborted < 0 || testsFailed < 0
+                || testsSucceeded + testsAborted + testsFailed > testsFound
                 || eventsWritten < 0 || bytesWritten < 0 || detail == null || detail.length() > 2_048) {
             throw new IllegalArgumentException("CodePath Launcher Summary 非法");
         }

@@ -36,7 +36,7 @@ public final class MethodPathNormalizer {
     }
 
     /**
-     * 归一化一条 CodePath filtered Trace；格式失败返回 FAILED，不伪造空摘要。
+     * 归一化一条 CodePath 精确方法 Raw Trace；格式失败返回 FAILED，不伪造空摘要。
      *
      * @param input 已校验身份和预算的归一化输入
      * @return 通用摘要或结构化失败
@@ -68,23 +68,20 @@ public final class MethodPathNormalizer {
 
         private final CodePathNormalizationInput input;
         private final Map<String, MethodSelector> exactMethods = new HashMap<>();
-        private final Set<String> classMethods = new java.util.HashSet<>();
         private final Map<String, MutableMethod> methods = new LinkedHashMap<>();
         private final Map<PathKey, MutablePath> paths = new LinkedHashMap<>();
-        private final Map<String, Deque<OpenCall>> stacks = new HashMap<>();
+        private final Deque<OpenCall> stack = new ArrayDeque<>();
         private final List<MethodPathSummary.PathAnomaly> anomalies = new ArrayList<>();
         private final LinkedHashSet<String> reasons = new LinkedHashSet<>();
         private final SummaryBudget summaryBudget;
         private long recordCount;
         private long previousEventId;
-        private boolean descriptorMissing;
 
         private Accumulator(CodePathNormalizationInput input) {
             this.input = input;
             this.summaryBudget = new SummaryBudget(input, reasons);
             for (MethodSelector selector : input.plan().selectors()) {
                 exactMethods.put(selector.methodKey(), selector);
-                classMethods.add(selector.className() + "#" + selector.methodName());
             }
             if (input.collectorTruncated()) reasons.add("COLLECTOR_TRUNCATED");
         }
@@ -114,30 +111,19 @@ public final class MethodPathNormalizer {
         }
 
         private String resolveMethod(Event event, long line) {
-            String classMethod = event.className + "#" + event.methodName;
-            if (event.descriptor != null) {
-                String exact = classMethod + event.descriptor;
-                if (!exactMethods.containsKey(exact)) {
-                    throw new NormalizationException(
-                            "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                            "CodePath 事件不属于计划方法", line, null);
-                }
-                return exact;
-            }
-            if (!classMethods.contains(classMethod)) {
+            String exact = event.className + "#" + event.methodName + event.descriptor;
+            if (!exactMethods.containsKey(exact)) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
                         "CodePath 事件不属于计划方法", line, null);
             }
-            descriptorMissing = true;
-            return classMethod;
+            return exact;
         }
 
         private void onEnter(Event event, String methodKey, TraceProvenance provenance) {
-            Deque<OpenCall> stack = stacks.computeIfAbsent(event.threadName, ignored -> new ArrayDeque<>());
             OpenCall ancestor = stack.peekLast();
             if (ancestor != null && ancestor.depth < event.depth) {
-                addPath(event.threadName, ancestor.methodKey, methodKey, provenance);
+                addPath(ancestor.methodKey, methodKey, provenance);
             } else if (ancestor != null) {
                 anomaly("NON_NESTED_ENTER",
                         "depth=" + event.depth + "; openDepth=" + ancestor.depth, provenance);
@@ -147,7 +133,6 @@ public final class MethodPathNormalizer {
         }
 
         private void onExit(Event event, String methodKey, TraceProvenance provenance) {
-            Deque<OpenCall> stack = stacks.computeIfAbsent(event.threadName, ignored -> new ArrayDeque<>());
             OpenCall open = stack.peekLast();
             if (open != null && open.methodKey.equals(methodKey) && open.depth == event.depth) {
                 stack.removeLast();
@@ -158,11 +143,10 @@ public final class MethodPathNormalizer {
         }
 
         private void addPath(
-                String threadName,
                 String ancestor,
                 String descendant,
                 TraceProvenance provenance) {
-            PathKey key = new PathKey(threadName, ancestor, descendant);
+            PathKey key = new PathKey(ancestor, descendant);
             MutablePath existing = paths.get(key);
             if (existing != null) {
                 existing.count++;
@@ -179,7 +163,7 @@ public final class MethodPathNormalizer {
                 return;
             }
             if (!summaryBudget.reserve(
-                    summaryBudget.pathBytes(threadName, ancestor, descendant))) {
+                    summaryBudget.pathBytes(ancestor, descendant))) {
                 return;
             }
             paths.put(key, new MutablePath(key, provenance));
@@ -195,13 +179,11 @@ public final class MethodPathNormalizer {
         }
 
         private NormalizationResult<MethodPathSummary> finish() {
-            stacks.values().stream().flatMap(Deque::stream).forEach(open -> {
+            stack.forEach(open -> {
                 anomaly("OPEN_ENTER_AT_EOF", "method=" + open.methodKey, open.provenance);
                 reasons.add(STRUCTURE_INCOMPLETE);
             });
             if (recordCount == 0) reasons.add("ZERO_RETAINED_EVENTS");
-            String precision = recordCount == 0 ? "NONE"
-                    : descriptorMissing ? "CLASS_METHOD_SUPERSET" : input.matchPrecision();
             List<MethodPathSummary.MethodStatistic> methodFacts = methods.values().stream()
                     .filter(value -> value.emitted)
                     .map(MutableMethod::toFact)
@@ -209,8 +191,7 @@ public final class MethodPathNormalizer {
                     .toList();
             List<MethodPathSummary.ObservedPath> pathFacts = paths.values().stream()
                     .map(MutablePath::toFact)
-                    .sorted(Comparator.comparing(MethodPathSummary.ObservedPath::threadName)
-                            .thenComparing(MethodPathSummary.ObservedPath::ancestorMethodKey)
+                    .sorted(Comparator.comparing(MethodPathSummary.ObservedPath::ancestorMethodKey)
                             .thenComparing(MethodPathSummary.ObservedPath::descendantMethodKey))
                     .toList();
             List<MethodPathSummary.PathAnomaly> anomalyFacts = anomalies.stream()
@@ -225,7 +206,7 @@ public final class MethodPathNormalizer {
                     input.collection().caseId(), input.collection().contextId(),
                     input.collection().analysisId(), input.collection().runId(),
                     input.collection().planId(), input.collection().collectionId(),
-                    input.rawTrace(), precision, methodFacts, pathFacts, anomalyFacts,
+                    input.rawTrace(), methodFacts, pathFacts, anomalyFacts,
                     summaryTruncated, input.createdAt());
             long emitted = (long) methodFacts.size() + pathFacts.size() + anomalyFacts.size();
             return new NormalizationResult<>(
@@ -272,7 +253,7 @@ public final class MethodPathNormalizer {
         }
     }
 
-    private record PathKey(String threadName, String ancestor, String descendant) {}
+    private record PathKey(String ancestor, String descendant) {}
 
     private static final class MutablePath {
         private final PathKey key;
@@ -286,8 +267,8 @@ public final class MethodPathNormalizer {
 
         private MethodPathSummary.ObservedPath toFact() {
             return new MethodPathSummary.ObservedPath(
-                    key.threadName, key.ancestor, key.descendant,
-                    "NEAREST_RETAINED_ANCESTOR", count, first);
+                    key.ancestor, key.descendant,
+                    "NEAREST_SELECTED_ANCESTOR", count, first);
         }
     }
 
@@ -322,7 +303,7 @@ public final class MethodPathNormalizer {
             this.reserved = SUMMARY_OVERHEAD
                     + identityBytes(input)
                     + artifactBytes(input.rawTrace())
-                    + jsonTextBytes(input.matchPrecision());
+                    ;
             if (reserved > maximum) {
                 throw new NormalizationException(
                         "NORMALIZE_OUTPUT_BUDGET_TOO_SMALL",
@@ -344,12 +325,11 @@ public final class MethodPathNormalizer {
             return METHOD_OVERHEAD + jsonTextBytes(methodKey) + provenanceBytes * 2;
         }
 
-        private long pathBytes(String threadName, String ancestor, String descendant) {
+        private long pathBytes(String ancestor, String descendant) {
             return PATH_OVERHEAD + provenanceBytes
-                    + jsonTextBytes(threadName)
                     + jsonTextBytes(ancestor)
                     + jsonTextBytes(descendant)
-                    + jsonTextBytes("NEAREST_RETAINED_ANCESTOR");
+                    + jsonTextBytes("NEAREST_SELECTED_ANCESTOR");
         }
 
         private long anomalyBytes(String code, String detail) {
@@ -393,24 +373,21 @@ public final class MethodPathNormalizer {
     }
 
     private record Event(
-            long eventId, String eventType, int depth, String threadName,
+            long eventId, String eventType, int depth,
             String className, String methodName, String descriptor) {
 
         private static Event parse(JsonNode json, long line) {
             long eventId = requiredLong(json, "eventId", line);
             int depth = requiredInt(json, "depth", line);
             String eventType = requiredText(json, "eventType", 64, line);
-            String threadName = requiredText(json, "threadName", 1_024, line);
             String className = requiredText(json, "className", 1_024, line);
             String methodName = requiredText(json, "methodName", 512, line);
-            JsonNode descriptorNode = json.get("descriptor");
-            String descriptor = descriptorNode == null || descriptorNode.isNull()
-                    ? null : requiredText(json, "descriptor", 512, line);
+            String descriptor = requiredText(json, "descriptor", 512, line);
             if (eventId < 1 || depth < 0 || depth > 1_000_000
                     || !("METHOD_ENTER".equals(eventType) || "METHOD_EXIT".equals(eventType))) {
                 throw invalid(line, "CodePath 事件字段非法");
             }
-            return new Event(eventId, eventType, depth, threadName,
+            return new Event(eventId, eventType, depth,
                     className, methodName, descriptor);
         }
 

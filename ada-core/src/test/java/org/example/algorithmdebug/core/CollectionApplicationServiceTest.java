@@ -32,9 +32,6 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
-import org.example.algorithmdebug.casecore.ContextInputProbe;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
-import org.example.algorithmdebug.casecore.ContextSnapshotRequest;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -45,7 +42,7 @@ import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
@@ -53,7 +50,6 @@ import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
@@ -84,7 +80,7 @@ class CollectionApplicationServiceTest {
     private Path workspace;
     private Path module;
     private Path scheduleOutput;
-    private ContextSnapshot context;
+    private ContextRecord context;
     private BoundedDocumentMapper mapper;
     private AtomicDocumentWriter writer;
 
@@ -105,17 +101,15 @@ class CollectionApplicationServiceTest {
         writer = new AtomicDocumentWriter();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Files.createDirectories(layout.projectCases(PROJECT_ID));
-        context = new ContextSnapshotBuilder().build(new ContextSnapshotRequest(
-                CASE_ID, CONTEXT_ID, PROJECT_ID, TARGET, module, temporaryDirectory,
-                "UNAVAILABLE", "21", "fixture", "1.0",
-                ContextInputProbe.missing("input/case.json", "not required"), NOW));
+        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
-                context.buildSnapshot().pomSha256(), NOW));
+                "a".repeat(64), NOW));
         CaseArchiveRepository archive = archive();
         archive.createCase(new CaseManifest(
-                SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET, "why", NOW));
+                SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
+                "fixture", "why", NOW));
         archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
@@ -128,7 +122,7 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new CodePathPlanRequest(
                         PLAN_ID, List.of("fixture.TargetTest#caseUnderTest()V"), "定位",
-                        org.example.algorithmdebug.contracts.CollectionBudget.defaults(), 0, NOW));
+                        org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
     @Test
@@ -143,7 +137,7 @@ class CollectionApplicationServiceTest {
                     throw new AssertionError("Collector must not start without Maven");
                 }, (maven, root, output) -> {
                     throw new AssertionError("Classpath resolution must not start without Maven");
-                }, ignored -> context.sourceSnapshot());
+                });
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
                 service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
@@ -164,44 +158,12 @@ class CollectionApplicationServiceTest {
     }
 
     @Test
-    void refusesSourceDriftBeforeClasspathOrCollectorAndArchivesTheReason() {
-        AtomicInteger downstreamCalls = new AtomicInteger();
-        SourceSnapshot changed = new SourceSnapshot(
-                "f".repeat(64), context.sourceSnapshot().fileCount(),
-                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
-        CollectionApplicationService service = new CollectionApplicationService(
-                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                new AdapterCatalog(List.of(new StubAdapter())),
-                new OpaqueIdGenerator(() -> "fixed"), fixedClock(), Optional.of(Path.of("mvn")),
-                Path.of("java"), request -> {
-                    downstreamCalls.incrementAndGet();
-                    throw new AssertionError("Collector must not start after source drift");
-                }, (maven, root, output) -> {
-                    downstreamCalls.incrementAndGet();
-                    throw new AssertionError("Classpath must not resolve after source drift");
-                }, ignored -> changed);
-
-        CaseRunException failure = assertThrows(CaseRunException.class, () ->
-                service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
-
-        assertEquals("COLLECTION_SOURCE_DRIFT_BEFORE", failure.code());
-        assertEquals(0, downstreamCalls.get());
-        Path manifestPath = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
-                .resolve("case-1/collections/collection-fixed/manifest.json");
-        MethodPathManifest manifest = mapper.readJson(manifestPath, MethodPathManifest.class);
-        assertEquals(CollectionCompletion.AGENT_FAILED, manifest.completion());
-        assertEquals("COLLECTION_SOURCE_DRIFT_BEFORE",
-                manifest.agentFailure().orElseThrow().code());
-    }
-
-    @Test
     void successfulCollectionWithMatchingBaselineReturnsOnlyExistingArtifactReferences()
             throws Exception {
         String gantt = "{\"schedule\":1}";
         establishBaseline(gantt);
         CollectionApplicationService service = service(
-                collector(CollectionCompletion.SUCCESS, Optional.of(gantt)),
-                ignored -> context.sourceSnapshot());
+                collector(CollectionCompletion.SUCCESS, Optional.of(gantt)));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -224,8 +186,7 @@ class CollectionApplicationServiceTest {
         String gantt = "{\"schedule\":1}";
         establishBaseline(gantt);
         CollectionApplicationService service = service(
-                collector(CollectionCompletion.TARGET_FAILED, Optional.of(gantt)),
-                ignored -> context.sourceSnapshot());
+                collector(CollectionCompletion.TARGET_FAILED, Optional.of(gantt)));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -243,8 +204,7 @@ class CollectionApplicationServiceTest {
         establishFailureBaseline("No solution after maximum iterations");
         writeFailureReport("No solution after maximum iterations");
         CollectionApplicationService service = service(
-                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()),
-                ignored -> context.sourceSnapshot());
+                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -263,43 +223,20 @@ class CollectionApplicationServiceTest {
         establishFailureBaseline("No solution after maximum iterations");
         writeFailureReport("Input file was not found");
         CollectionApplicationService service = service(
-                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()),
-                ignored -> context.sourceSnapshot());
+                collector(CollectionCompletion.TARGET_FAILED, Optional.empty()));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
         assertFalse(result.summary().evidenceUsable());
-    }
-
-    @Test
-    void sourceDriftAfterCollectionRetainsArtifactsButBlocksEvidence() throws Exception {
-        String gantt = "{\"schedule\":1}";
-        establishBaseline(gantt);
-        AtomicInteger snapshots = new AtomicInteger();
-        SourceSnapshot changed = new SourceSnapshot(
-                "f".repeat(64), context.sourceSnapshot().fileCount(),
-                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
-        CollectionApplicationService service = service(
-                collector(CollectionCompletion.SUCCESS, Optional.of(gantt)),
-                ignored -> snapshots.getAndIncrement() == 0 ? context.sourceSnapshot() : changed);
-
-        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
-                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
-
-        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
-        assertTrue(result.artifacts().stream().anyMatch(reference ->
-                "CODEPATH_RAW".equals(reference.artifactType())));
     }
 
     @Test
     void changedGanttIsArchivedButRejectedByBaselineGate() throws Exception {
         establishBaseline("{\"schedule\":1}");
         CollectionApplicationService service = service(
-                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":2}")),
-                ignored -> context.sourceSnapshot());
+                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":2}")));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -308,13 +245,12 @@ class CollectionApplicationServiceTest {
         assertFalse(result.summary().evidenceUsable());
     }
 
-    private CollectionApplicationService service(
-            MethodPathCollector collector, SourceSnapshotReader snapshots) {
+    private CollectionApplicationService service(MethodPathCollector collector) {
         return new CollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new AdapterCatalog(List.of(new StubAdapter())),
                 new OpaqueIdGenerator(() -> "fixed"), fixedClock(), Optional.of(Path.of("mvn")),
-                Path.of("java"), collector, (maven, root, output) -> List.of("classes"), snapshots);
+                Path.of("java"), collector, (maven, root, output) -> List.of("classes"));
     }
 
     private MethodPathCollector collector(
@@ -322,14 +258,11 @@ class CollectionApplicationServiceTest {
         return request -> {
             try {
                 Path raw = request.collectionDirectory().resolve("raw/codepath.jsonl");
-                Path filtered = request.collectionDirectory().resolve("derived/method-path.jsonl");
                 Path stdout = request.collectionDirectory().resolve("logs/stdout.log");
                 Path stderr = request.collectionDirectory().resolve("logs/stderr.log");
                 Files.createDirectories(raw.getParent());
-                Files.createDirectories(filtered.getParent());
                 Files.createDirectories(stdout.getParent());
                 Files.writeString(raw, "{\"eventId\":1}\n");
-                Files.writeString(filtered, "{\"eventId\":1}\n");
                 Files.writeString(stdout, "collector summary\n");
                 Files.writeString(stderr, completion == CollectionCompletion.TARGET_FAILED
                         ? "java.lang.AssertionError: expected schedule\n" : "");
@@ -337,19 +270,20 @@ class CollectionApplicationServiceTest {
                     Files.writeString(scheduleOutput.resolve("result.json"), ganttJson.orElseThrow());
                 }
                 MethodPathManifest manifest = new MethodPathManifest(
-                        "1.0", request.caseId(), request.contextId(), request.analysisId(),
+                        "2.0", request.caseId(), request.contextId(), request.analysisId(),
                         request.runId(), request.plan().planId(), request.collectionId(),
                         "code-path-tracer", "0.1.0", Optional.of("a".repeat(64)),
-                        sha(mapper.writeJson(request.plan())), "PACKAGE_SUPERSET",
-                        "METHOD_ALLOWLIST", "EXACT_DESCRIPTOR", request.plan().packagePrefixes(),
-                        completion, "COMPLETE", true,
+                        sha(mapper.writeJson(request.plan())), completion, "COMPLETE", true,
                         completion == CollectionCompletion.TARGET_FAILED ? 2 : 0, false,
-                        1, 1, 1, 0, Files.size(raw), Files.size(filtered),
+                        completion == CollectionCompletion.TARGET_FAILED ? "FAILED" : "PASSED",
+                        1, completion == CollectionCompletion.TARGET_FAILED ? 0 : 1, 0,
+                        completion == CollectionCompletion.TARGET_FAILED ? 1 : 0,
+                        1, Files.size(raw),
                         Optional.of(sha(Files.readAllBytes(raw))),
-                        Optional.of(sha(Files.readAllBytes(filtered))), List.of(), Optional.empty(),
+                        List.of(), Optional.empty(), "raw/codepath.jsonl",
                         "logs/stdout.log", "logs/stderr.log", NOW, NOW);
                 return new MethodPathCollectionResult(
-                        request, manifest, raw, filtered, stdout, stderr);
+                        request, manifest, raw, stdout, stderr);
             } catch (java.io.IOException failure) {
                 throw new MethodPathCollectionException(
                         "TEST_COLLECTOR_IO", "测试 Collector 无法写入产物", failure);

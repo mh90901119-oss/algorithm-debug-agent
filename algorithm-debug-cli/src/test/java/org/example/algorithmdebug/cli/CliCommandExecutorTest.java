@@ -47,7 +47,7 @@ class CliCommandExecutorTest {
         String json = """
                 {"planId":"plan-1","selectedMethodKeys":["fixture.Test#case1()V"],
                  "rationale":"定位","budget":{"maxEvents":100,"maxBytes":1024,
-                 "timeoutMillis":1000,"maxCallDepth":10},"estimatedPackageEvents":100,
+                 "timeoutMillis":1000},
                  "requestedAt":"2026-08-18T00:00:00Z"}
                 """;
         Path utf16 = Files.write(

@@ -4,7 +4,7 @@ description: Use when a user asks about a specified Java/Maven algorithm UT, its
 compatibility: opencode
 metadata:
   owner: algorithm-debug-agent
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Algorithm Debug workflow
@@ -16,7 +16,7 @@ Gantt output, scheduling behavior, or a change across analysis rounds.
 
 1. Treat one user problem about one target UT as a Case. A different target UT starts a different Case unless the user explicitly asks for a cross-UT comparison.
 2. Each follow-up within a Case creates a new `analysisId`. Preserve prior facts and artifact references; never overwrite history.
-3. A workspace change creates a new `contextId`, not automatically a new Case. Do not rerun merely because code changed.
+3. Context 由显式决策管理：新 Case 自动创建首个 Context；已有 Case 默认复用最近 Context。只有已知目标算法源码、UT 或输入被有意修改时，才使用 `--context-mode new`。不得扫描工作区或依据 Gantt 变化自动新建 Context。
 4. When a tool returns `eventType=TARGET_TEST_RUN_COMPLETED`, read the structured summary before raw logs.
 5. `latestRunForAnalysis=true` identifies the newest run for that analysis, not the only valid historical evidence.
 6. Keep `processOutcome`, `testOutcome`, `ganttOutcome`, `targetFailure`, and `agentFailure` independent. A failed UT can still contain a valid Gantt.
@@ -27,7 +27,7 @@ Gantt output, scheduling behavior, or a change across analysis rounds.
 
 After every user message:
 
-1. Determine whether the target UT belongs to an existing Case and whether the current workspace matches an existing Context.
+1. Determine whether the target UT belongs to an existing Case. Unless the user or model已明确知道目标源码、UT 或输入发生了有意修改，复用最近 Context；不要自行扫描工作区判断。
 2. Reuse prior immutable evidence when it already answers the question. A new chat turn does not require a new UT run.
 3. If execution facts are missing or stale for the question, call the test-run tool. Inspect the returned summary even when the command reports target failure.
 4. When `comparisonOutcome=MATCHED`, treat the current target observation as reproducible for the
@@ -36,7 +36,7 @@ After every user message:
    user's question requires the change location. Do not claim that the Agent produced a field-level
    Gantt diff.
 5. Read stdout, stderr, Surefire XML, or Gantt artifacts only by reference and only within the requested byte/line budget.
-6. Request CodePathTracer when a bounded runtime call path would close a stated gap. Request JDWP only for named methods/variables and bounded hits/depth/bytes.
+6. Request CodePathTracer when a bounded runtime call path would close a stated gap. First read the current Method Catalog, choose 1–50 exact `class + method + descriptor` selectors, archive a Plan, then collect. A Case may contain multiple Plans and Collections. Request JDWP only for named methods/variables and bounded hits/depth/bytes.
 7. Before a confirmed root-cause claim, verify evidence coverage, contradictions, truncation, and semantic-baseline consistency.
 
 ## JDWP refinement loop
@@ -50,7 +50,7 @@ plans and collections; one collection is not a Case limit.
 2. Plan creation and collection execution are separate actions. Do not execute merely because a plan
    exists; execute when the current user question still needs that runtime evidence.
 3. Read the collection summary first. `TARGET_FAILED` remains analyzable; `TOOL_FAILED`, `TIMED_OUT`,
-   `TRUNCATED`, source drift, or `baselineOutcome!=MATCHED` cannot support a confirmed root cause.
+   `TRUNCATED`, exact tracepoint SourceAnchor mismatch, or `baselineOutcome!=MATCHED` cannot support a confirmed root cause.
 4. Treat JDWP evidence as confirmation-capable only when `completion=SUCCESS`,
    `baselineOutcome=MATCHED`, and `evidenceUsable=true`. Then read only the referenced Raw excerpt or
    derived artifact needed for the question; do not inline the full JSONL.

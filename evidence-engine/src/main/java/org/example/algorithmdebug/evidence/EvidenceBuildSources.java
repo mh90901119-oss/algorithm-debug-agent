@@ -3,7 +3,7 @@ package org.example.algorithmdebug.evidence;
 import java.util.List;
 import java.util.Optional;
 import org.example.algorithmdebug.contracts.ArtifactReference;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 
@@ -12,8 +12,8 @@ import org.example.algorithmdebug.contracts.RunResultFingerprint;
  *
  * @param runOutcome 当前 Context 的目标 UT 结果摘要
  * @param runOutcomeArtifact 结果摘要的不可变引用
- * @param contextSnapshot 当前源码、输入和构建快照
- * @param contextArtifact Context 快照的不可变引用
+ * @param contextRecord 当前显式 Context 记录
+ * @param contextArtifact Context 记录的不可变引用
  * @param runFingerprint 可选的运行结果指纹
  * @param runFingerprintArtifact 指纹存在时对应的不可变引用
  * @param collections 当前请求显式引用的全部当前或比较 Collection
@@ -21,7 +21,7 @@ import org.example.algorithmdebug.contracts.RunResultFingerprint;
 public record EvidenceBuildSources(
         RunOutcomeSummary runOutcome,
         ArtifactReference runOutcomeArtifact,
-        ContextSnapshot contextSnapshot,
+        ContextRecord contextRecord,
         ArtifactReference contextArtifact,
         Optional<RunResultFingerprint> runFingerprint,
         Optional<ArtifactReference> runFingerprintArtifact,
@@ -30,7 +30,7 @@ public record EvidenceBuildSources(
     /** 校验可选项配对、集合上限和空值。 */
     public EvidenceBuildSources {
         if (runOutcome == null || runOutcomeArtifact == null
-                || contextSnapshot == null || contextArtifact == null
+                || contextRecord == null || contextArtifact == null
                 || runFingerprint == null || runFingerprintArtifact == null
                 || collections == null || collections.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("Evidence build sources 不能为空");

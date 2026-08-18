@@ -1,5 +1,8 @@
 # P1～P8 Algorithm Debug Agent 完整能力可实施设计
 
+> **修订说明（2026-08-18）：** 本文的阶段边界继续有效；CodePath 的 package 超集与
+> `MethodPathJsonlFilter` 已由 ADR-010 的精确方法级 Launcher 过滤方案取代。
+
 - 文档状态：Approved for Continuous Implementation
 - 设计版本：0.4
 - 创建日期：2026-08-18
@@ -191,7 +194,7 @@ entry 上界和一份 package census 上界，每条调用边计入完整 edge �
 | `method-path-spi/MethodPathCollector` | Collector 端口，执行计划并返回 Manifest/Artifact paths |
 | `method-path-spi/MethodPathManifest` | 工具版本、计划 Hash、事件、字节、截断、测试结果和退出事实 |
 | `method-path-codepathtracer/CodePathProcessCollector` | 组装无 shell argv、监管外部 Bundle、归档日志 |
-| `method-path-codepathtracer/MethodPathJsonlFilter` | 流式保留方法 allowlist，检查 event/byte/depth 预算 |
+| `code-path-tracer-junit-launcher/PlannedTraceEventGenerator` | 写盘前按精确方法 allowlist 筛选，检查 event/byte 预算和单线程约束 |
 | `ada-core/CollectionApplicationService` | 创建采集 Run、保存 Plan、调用 Collector、比较目标指纹 |
 | `tools/code-path-tracer-junit-launcher` | 受控 JUnit Launcher Bundle；流式 JSONL、硬预算和结构化完成摘要 |
 

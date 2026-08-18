@@ -21,7 +21,8 @@ Algorithm Debug Agent 的稳定基础契约模块。它定义跨模块、跨进�
 - `ProjectRegistration`、`ProjectRegistrationResult`；
 - `DoctorCheck`、`DoctorReport`；
 - `ToolResponse<T>`；
-- `CaseManifest`、`ContextSnapshot`、`AnalysisRequest`、`RunRequest`；
+- `CaseManifest`、`ContextRecord`、`AnalysisRequest`、`RunRequest`；
+- `MethodCatalog`、精确 `CodePathCollectionPlan`、`MethodPathSummary` 和 JDWP 计划/采集契约；
 - `CaseDigest`、`CaseOpenResult`；
 - `RunOutcomeSummary`、`TargetFailureDiagnostic`、`AgentFailureDiagnostic` 及正交结果枚举。
 

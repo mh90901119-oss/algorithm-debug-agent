@@ -14,12 +14,11 @@ import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
+import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
-import org.example.algorithmdebug.contracts.InputSnapshotStatus;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
@@ -72,24 +71,25 @@ class CaseApplicationServiceTest {
     }
 
     @Test
-    void missingInputBecomesContextFactAndDoesNotRunUt() {
+    void openingCaseCreatesMinimalContextWithoutLocatingInputOrRunningUt() {
         ArrayDeque<String> ids = new ArrayDeque<>(List.of("1", "1", "1"));
         CaseApplicationService service = new CaseApplicationService(
                 registrations, mapper, writer,
                 new AdapterCatalog(List.of(new MissingInputAdapter())),
-                new ContextSnapshotBuilder(), new OpaqueIdGenerator(ids::removeFirst),
-                Clock.fixed(TIME, ZoneOffset.UTC), () -> "21.0.4");
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
 
         CaseOpenResult result = service.open(
                 workspace, PROJECT_ID, TARGET, "输入为什么找不到？",
-                Optional.empty(), Optional.of("missing-input"));
+                Optional.empty(), Optional.of("missing-input"), ContextMode.REUSE_LATEST);
 
         assertTrue(result.caseCreated());
         assertEquals(0, result.digest().runCount());
         Path context = workspace.resolve(
                 "projects/project-1/cases/case-1/contexts/context-1/context.json");
-        assertEquals("MISSING", mapper.readJson(context, com.fasterxml.jackson.databind.JsonNode.class)
-                .path("inputSnapshot").path("status").textValue());
+        com.fasterxml.jackson.databind.JsonNode json = mapper.readJson(
+                context, com.fasterxml.jackson.databind.JsonNode.class);
+        assertEquals(4, json.size());
+        assertTrue(!json.has("inputSnapshot"));
     }
 
     @Test
@@ -98,10 +98,10 @@ class CaseApplicationServiceTest {
         CaseApplicationService service = new CaseApplicationService(
                 registrations, mapper, writer,
                 new AdapterCatalog(List.of(new MissingInputAdapter())),
-                new ContextSnapshotBuilder(), new OpaqueIdGenerator(ids::removeFirst),
-                Clock.fixed(TIME, ZoneOffset.UTC), () -> "21.0.4");
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
         CaseOpenResult opened = service.open(
-                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty());
+                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty(),
+                ContextMode.REUSE_LATEST);
 
         assertEquals(opened.digest(), service.inspect(workspace, PROJECT_ID, opened.caseId()));
     }
@@ -138,9 +138,7 @@ class CaseApplicationServiceTest {
 
         @Override
         public InputLocator inputLocator() {
-            return (project, targetTest) -> {
-                throw new AdapterException("ADAPTER_INPUT_NOT_FOUND", "missing absolute path");
-            };
+            throw new AssertionError("case open 不得定位输入");
         }
 
         @Override

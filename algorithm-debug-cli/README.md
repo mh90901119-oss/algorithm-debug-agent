@@ -16,11 +16,17 @@ mvn -pl algorithm-debug-cli -am package
 workspace init --root <workspace>
 project register --workspace <workspace> --project <maven-module> [--project-id <id>]
 doctor --workspace <workspace> [--project <maven-module>]
-case open --workspace <workspace> --project-id <id> --test <class#method> --question-file <utf8-file> [--case-id <id>] [--adapter <id>]
+case open --workspace <workspace> --project-id <id> --test <class#method> --question-file <utf8-file> [--case-id <id>] [--adapter <id>] [--context-mode reuse|new]
 case inspect --workspace <workspace> --project-id <id> --case-id <id>
 run execute --workspace <workspace> --project-id <id> --case-id <id> --analysis-id <id>
+static analyze --workspace <workspace> --project-id <id> --case-id <id> --analysis-id <id>
+plan codepath create --workspace <workspace> --project-id <id> --case-id <id> --analysis-id <id> --request-file <utf8-json>
+collection codepath execute --workspace <workspace> --project-id <id> --case-id <id> --plan-id <id>
+plan jdwp create --workspace <workspace> --project-id <id> --case-id <id> --analysis-id <id> --request-file <utf8-json>
+collection jdwp execute --workspace <workspace> --project-id <id> --case-id <id> --plan-id <id>
 ```
 
-`question-file` 必须是非符号链接的 UTF-8 普通文件，最大 64 KiB。`case open` 只创建 Analysis 和 Context，
-不会自动运行 UT；同一 Analysis 可以显式执行多次 Run。fat JAR 使用 `ServiceLoader` 发现 Adapter，当前发布包
+`question-file` 必须是非符号链接的 UTF-8 普通文件，最大 64 KiB。`case open` 只追加 Analysis，不会自动运行 UT；
+新 Case 自动创建首个 Context，已有 Case 默认 `reuse`，只有显式 `new` 才追加 Context。Agent 不扫描源码、输入或 POM
+推断 Context 变化。同一 Analysis 可以显式执行多次 Run。fat JAR 使用 `ServiceLoader` 发现 Adapter，当前发布包
 包含 Wafer Demo Adapter。OpenCode 一次性安装器尚未实现。

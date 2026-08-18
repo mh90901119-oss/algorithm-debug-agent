@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/context-record-v2.schema.json",
+  "title": "ContextRecord v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "contextId", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "caseId": { "$ref": "#/$defs/id" },
+    "contextId": { "$ref": "#/$defs/id" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 }
+  }
+}

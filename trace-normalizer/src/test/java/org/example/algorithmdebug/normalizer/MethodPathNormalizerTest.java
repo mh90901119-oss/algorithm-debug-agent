@@ -46,7 +46,7 @@ class MethodPathNormalizerTest {
     Path temporaryDirectory;
 
     @Test
-    void summarizesBalancedEventsAsNearestRetainedAncestor() throws Exception {
+    void summarizesBalancedEventsAsNearestSelectedAncestor() throws Exception {
         Path trace = write("""
                 {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
                 {"eventId":2,"eventType":"METHOD_ENTER","depth":3,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
@@ -63,7 +63,7 @@ class MethodPathNormalizerTest {
         assertEquals(2, summary.methods().size());
         assertEquals(1, summary.observedPaths().size());
         MethodPathSummary.ObservedPath path = summary.observedPaths().getFirst();
-        assertEquals("NEAREST_RETAINED_ANCESTOR", path.relationshipType());
+        assertEquals("NEAREST_SELECTED_ANCESTOR", path.relationshipType());
         assertEquals("fixture.Algorithm#solve()V", path.ancestorMethodKey());
         assertEquals("fixture.Decision#choose()V", path.descendantMethodKey());
         assertEquals(2, path.firstObservation().jsonlLine());
@@ -91,7 +91,7 @@ class MethodPathNormalizerTest {
     }
 
     @Test
-    void degradesPrecisionWhenDescriptorIsAbsent() throws Exception {
+    void rejectsEventWhenDescriptorIsAbsent() throws Exception {
         Path trace = write("""
                 {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve"}
                 {"eventId":2,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve"}
@@ -101,9 +101,8 @@ class MethodPathNormalizerTest {
                 trace, plan(selectors("solve")), NormalizationBudget.defaults(),
                 "CLASS_METHOD_SUPERSET", false));
 
-        MethodPathSummary summary = result.summary().orElseThrow();
-        assertEquals("CLASS_METHOD_SUPERSET", summary.matchPrecision());
-        assertEquals("fixture.Algorithm#solve", summary.methods().getFirst().methodKey());
+        assertEquals(NormalizationStatus.FAILED, result.status());
+        assertEquals("NORMALIZE_SCHEMA_UNSUPPORTED", result.failureCode().orElseThrow());
     }
 
     @Test
@@ -265,14 +264,14 @@ class MethodPathNormalizerTest {
                         "raw-1", "CODEPATH_FILTERED_TRACE",
                         "collections/collection-1/raw/filtered.jsonl",
                         "application/x-ndjson", HASH, bytes),
-                trace, EVIDENCE_ID, budget, precision, collectorTruncated, NOW);
+                trace, EVIDENCE_ID, budget, collectorTruncated, NOW);
     }
 
     private static CodePathCollectionPlan plan(List<MethodSelector> selectors) {
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, HASH, selectors, List.of("fixture"),
-                "PACKAGE_SUPERSET", CollectionBudget.defaults(), 100, "定位关键路径", NOW);
+                ANALYSIS_ID, TARGET, selectors,
+                CollectionBudget.defaults(), "定位关键路径", NOW);
     }
 
     private static List<MethodSelector> selectors(String... methods) {
@@ -283,7 +282,7 @@ class MethodPathNormalizerTest {
                 default -> "fixture.Algorithm";
             };
             return new MethodSelector(
-                    className + "#" + method + "()V", className, method, "()V", HASH);
+                    className + "#" + method + "()V", className, method, "()V");
         }).toList();
     }
 

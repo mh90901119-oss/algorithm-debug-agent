@@ -4,6 +4,7 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.casecore.ContextMode;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -66,7 +67,8 @@ public sealed interface CliCommand
             TargetTest targetTest,
             Path questionFile,
             Optional<CaseId> caseId,
-            Optional<String> adapterId) implements CliCommand {
+            Optional<String> adapterId,
+            ContextMode contextMode) implements CliCommand {
         /** 校验解析后的 Case open 参数容器。 */
         public CaseOpen {
             require(workspace, "workspace");
@@ -75,6 +77,7 @@ public sealed interface CliCommand
             require(questionFile, "questionFile");
             require(caseId, "caseId");
             require(adapterId, "adapterId");
+            require(contextMode, "contextMode");
         }
     }
 

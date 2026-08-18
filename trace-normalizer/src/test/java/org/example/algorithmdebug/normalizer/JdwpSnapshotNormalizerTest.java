@@ -301,7 +301,7 @@ class JdwpSnapshotNormalizerTest {
                 12, capture.locals() ? 5 : 20, capture)).toList();
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, HASH, points, JdwpCollectionBudget.defaults(),
+                ANALYSIS_ID, TARGET, points, JdwpCollectionBudget.defaults(),
                 "定位方法内部状态", NOW);
     }
 

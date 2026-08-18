@@ -9,6 +9,7 @@ import java.time.Instant;
  * @param caseId Case ID
  * @param projectId 已登记算法项目 ID
  * @param targetTest Case 冻结的目标 UT
+ * @param adapterId Case 冻结的目标算法 Adapter
  * @param initialQuestion 创建 Case 的问题
  * @param createdAt 创建时间
  */
@@ -17,6 +18,7 @@ public record CaseManifest(
         CaseId caseId,
         ProjectId projectId,
         TargetTest targetTest,
+        String adapterId,
         String initialQuestion,
         Instant createdAt) {
 
@@ -26,6 +28,7 @@ public record CaseManifest(
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         projectId = ContractChecks.requireNonNull(projectId, "projectId");
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
+        adapterId = ContractChecks.requireBoundedText(adapterId, "adapterId", 512, false);
         initialQuestion = ContractChecks.requireBoundedText(
                 initialQuestion, "initialQuestion", 65_536, false);
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");

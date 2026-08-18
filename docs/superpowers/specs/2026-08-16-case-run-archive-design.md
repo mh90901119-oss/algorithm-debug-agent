@@ -1,5 +1,9 @@
 # Case 持久化、真实 UT 执行与 RunOutcome 归档可实施设计
 
+> **历史设计说明（2026-08-18）：** 本文的 RunOutcome 归档仍有效；其中 `ContextSnapshot`、
+> 自动源码/输入/构建扫描已由 ADR-010 和 `docs/designs/2026-08-18-context-codepath-simplification-design.md`
+> 的显式最小 Context 取代，不代表当前契约。
+
 - 文档状态：Implemented
 - 设计版本：1.0
 - 创建日期：2026-08-16

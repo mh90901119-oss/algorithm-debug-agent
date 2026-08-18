@@ -19,8 +19,6 @@ import org.example.algorithmdebug.contracts.JdwpSnapshotSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
 import org.example.algorithmdebug.contracts.NormalizationStatus;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SnapshotCompleteness;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TraceProvenance;
 import org.example.algorithmdebug.contracts.ValidationFinding;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
@@ -53,8 +51,6 @@ public final class CollectionEvidenceValidator {
         add(findings, integrityVerifier.verify(input.summaryReference(), input.summaryPath()));
         validatePlan(input.planPath(), input.collectorManifest().planSha256(),
                 input.summaryReference(), findings);
-        validateSource(input.expectedSource(), input.observedSource(),
-                input.plan().sourceFingerprintSha256(), input.summaryReference(), findings);
         validateCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
                 input.summaryReference(), findings);
@@ -90,8 +86,6 @@ public final class CollectionEvidenceValidator {
         add(findings, integrityVerifier.verify(input.summaryReference(), input.summaryPath()));
         validatePlan(input.planPath(), input.collectorManifest().planSha256(),
                 input.summaryReference(), findings);
-        validateSource(input.expectedSource(), input.observedSource(),
-                input.plan().sourceFingerprintSha256(), input.summaryReference(), findings);
         validateJdwpCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
                 input.summaryReference(), findings);
@@ -165,9 +159,9 @@ public final class CollectionEvidenceValidator {
     private static void validateCollectorRawIdentity(
             MethodPathValidationInput input, List<ValidationFinding> findings) {
         var manifest = input.collectorManifest();
-        if (manifest.filteredBytes() != input.rawReference().sizeBytes()
-                || manifest.filteredSha256().isEmpty()
-                || !manifest.filteredSha256().orElseThrow().equals(input.rawReference().sha256())) {
+        if (manifest.capturedBytes() != input.rawReference().sizeBytes()
+                || manifest.rawSha256().isEmpty()
+                || !manifest.rawSha256().orElseThrow().equals(input.rawReference().sha256())) {
             add(findings, finding("COLLECTOR_RAW_IDENTITY_MISMATCH",
                     EvidenceValidationStatus.INVALID,
                     "Collector Manifest 中的过滤后 Raw 身份与归档引用不一致",
@@ -258,19 +252,6 @@ public final class CollectionEvidenceValidator {
                     EvidenceValidationStatus.INVALID, "无法读取归档采集计划",
                     summaryReference));
         }
-    }
-
-    private static void validateSource(
-            SourceSnapshot expected, SourceSnapshot observed, String planSourceSha256,
-            ArtifactReference summaryReference, List<ValidationFinding> findings) {
-        boolean drift = expected.completeness() != SnapshotCompleteness.COMPLETE
-                || observed.completeness() != SnapshotCompleteness.COMPLETE
-                || !expected.equals(observed)
-                || !planSourceSha256.equals(expected.sha256());
-        if (drift) add(findings, finding("SOURCE_DRIFT",
-                EvidenceValidationStatus.CONTRADICTED,
-                "采集前后源码快照或计划源码指纹不一致",
-                summaryReference));
     }
 
     private static void validateCompletion(

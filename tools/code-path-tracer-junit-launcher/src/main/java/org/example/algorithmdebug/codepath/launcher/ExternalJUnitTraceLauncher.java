@@ -7,9 +7,10 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import kotlin.Unit;
-import org.example.algorithmdebug.contracts.JavaPackageScope;
+import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.launcher.Launcher;
 import org.junit.platform.launcher.LauncherDiscoveryRequest;
@@ -18,63 +19,55 @@ import org.junit.platform.launcher.core.LauncherFactory;
 import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
 import org.junit.platform.launcher.listeners.TestExecutionSummary;
 
-/**
- * Agent 自有的受控 CodePath JUnit Launcher。
- *
- * <p>它在 JUnit 加载目标类前安装上游 Agent，以 package 边界捕获事件，并直接流式写盘。达到预算只停止
- * 记录，目标 UT 始终继续；最终 stdout 只追加一条带稳定前缀的结构化 Summary。</p>
- */
+/** 读取归档精确计划并受控运行一个 JUnit 方法的 CodePath Launcher。 */
 public final class ExternalJUnitTraceLauncher {
-    private ExternalJUnitTraceLauncher() {
-    }
+    private ExternalJUnitTraceLauncher() {}
 
-    /** 进程入口。退出码只用于进程管理，父进程必须读取结构化 Summary 判断目标状态。 */
+    /** 进程入口；目标失败和工具失败通过结构化 Summary 分开报告。 */
     public static void main(String[] args) {
         LauncherSummary summary;
         try {
-            summary = execute(LauncherArguments.parse(args));
+            LauncherArguments arguments = LauncherArguments.parse(args);
+            summary = execute(arguments, new CodePathPlanReader().read(arguments.planFile()));
         } catch (Exception failure) {
             summary = new LauncherSummary(
                     LauncherOutcome.TOOL_FAILED, 0, 0, 0, 0, 0, 0,
                     TraceJsonlSink.Limit.NONE, bounded(failure));
         }
         System.out.println(summary.toStructuredLine());
-        if (summary.outcome() == LauncherOutcome.TOOL_FAILED) {
-            System.exit(1);
-        }
-        if (summary.outcome() == LauncherOutcome.TARGET_FAILED) {
-            System.exit(2);
-        }
+        if (summary.outcome() == LauncherOutcome.TOOL_FAILED) System.exit(1);
+        if (summary.outcome() == LauncherOutcome.TARGET_FAILED) System.exit(2);
     }
 
-    private static LauncherSummary execute(LauncherArguments arguments) throws Exception {
+    private static LauncherSummary execute(
+            LauncherArguments arguments, CodePathCollectionPlan plan) throws Exception {
         AtomicLong sequence = new AtomicLong();
         AtomicReference<IOException> writeFailure = new AtomicReference<>();
+        AtomicBoolean captureStopped = new AtomicBoolean();
         SummaryGeneratingListener listener = new SummaryGeneratingListener();
+        PlannedTraceEventGenerator generator = new PlannedTraceEventGenerator(plan);
         TraceJsonlSink.Result sinkResult;
 
         try (TraceJsonlSink sink = new TraceJsonlSink(
-                arguments.traceFile(), arguments.maxOutputBytes(), arguments.maxEvents())) {
-            // 必须早于 JUnit discovery；否则目标类可能先被 JVM 加载而无法追踪。
+                arguments.traceFile(), plan.budget().maxBytes(), plan.budget().maxEvents())) {
             CodePathTracerAgent.INSTANCE.ensureInstalled();
             CodePathTracer tracer = new CodePathTracer.Builder()
-                    .filter(event -> includes(arguments.includePackage(), event.getClassName()))
-                    .formatter(event -> jsonEvent(sequence.incrementAndGet(), event))
+                    .traceEventGenerator(advice -> captureStopped.get() ? null : generator.generate(advice))
+                    .filter(event -> !captureStopped.get() && generator.matches(event))
+                    .formatter(event -> jsonEvent(sequence.incrementAndGet(), event, generator))
                     .logger(line -> {
                         try {
-                            sink.append(line);
-                        } catch (IOException failure) {
-                            writeFailure.compareAndSet(null, failure);
+                            if (!sink.append(line) || sink.limitReached()) captureStopped.set(true);
                         }
+                        catch (IOException failure) { writeFailure.compareAndSet(null, failure); }
                         return Unit.INSTANCE;
                     })
-                    .maxToStringLength(80)
-                    .maxIndentDepth(100)
+                    .maxToStringLength(0)
+                    .maxIndentDepth(1)
                     .build();
-
             tracer.trace(() -> {
                 LauncherDiscoveryRequest request = LauncherDiscoveryRequestBuilder.request()
-                        .selectors(DiscoverySelectors.selectMethod(arguments.testSelector()))
+                        .selectors(DiscoverySelectors.selectMethod(plan.targetTest().selector()))
                         .build();
                 Launcher launcher = LauncherFactory.create();
                 launcher.registerTestExecutionListeners(listener);
@@ -85,41 +78,34 @@ public final class ExternalJUnitTraceLauncher {
         }
 
         TestExecutionSummary junit = listener.getSummary();
-        if (!junit.getFailures().isEmpty()) {
-            junit.printFailuresTo(new PrintWriter(System.err, true));
-        }
-        LauncherOutcome outcome = LauncherResultClassifier.classify(
-                junit.getTestsFoundCount(), junit.getTestsFailedCount(),
-                junit.getTestsAbortedCount(), Optional.ofNullable(writeFailure.get()));
+        if (!junit.getFailures().isEmpty()) junit.printFailuresTo(new PrintWriter(System.err, true));
+        String generatorFailure = generator.failureCode();
+        LauncherOutcome outcome = generatorFailure == null
+                ? LauncherResultClassifier.classify(
+                        junit.getTestsFoundCount(), junit.getTestsFailedCount(),
+                        junit.getTestsAbortedCount(), Optional.ofNullable(writeFailure.get()))
+                : LauncherOutcome.TOOL_FAILED;
+        String detail = generatorFailure != null ? generatorFailure
+                : writeFailure.get() == null ? "" : bounded(writeFailure.get());
         return new LauncherSummary(
                 outcome, junit.getTestsFoundCount(), junit.getTestsSucceededCount(),
                 junit.getTestsAbortedCount(), junit.getTestsFailedCount(),
-                sinkResult.eventsWritten(), sinkResult.bytesWritten(), sinkResult.limit(),
-                writeFailure.get() == null ? "" : bounded(writeFailure.get()));
+                sinkResult.eventsWritten(), sinkResult.bytesWritten(), sinkResult.limit(), detail);
     }
 
-    private static boolean includes(String rootPackage, String className) {
-        int separator = className.lastIndexOf('.');
-        return separator > 0
-                && JavaPackageScope.contains(rootPackage, className.substring(0, separator));
-    }
-
-    private static String jsonEvent(long eventId, TraceEvent event) {
-        String eventType = event instanceof TraceEvent.Enter ? "METHOD_ENTER" : "METHOD_EXIT";
+    private static String jsonEvent(
+            long eventId, TraceEvent event, PlannedTraceEventGenerator generator) {
         return "{\"eventId\":" + eventId
-                + ",\"eventType\":\"" + eventType
+                + ",\"eventType\":\"" + generator.eventType(event)
                 + "\",\"depth\":" + event.getDepth()
-                + ",\"threadName\":\"" + escape(Thread.currentThread().getName())
-                + "\",\"className\":\"" + escape(event.getClassName())
-                + "\",\"methodName\":\"" + escape(event.getMethodName()) + "\"}";
+                + ",\"className\":\"" + escape(event.getClassName())
+                + "\",\"methodName\":\"" + escape(generator.methodName(event))
+                + "\",\"descriptor\":\"" + escape(generator.descriptor(event)) + "\"}";
     }
 
     private static String escape(String value) {
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\r", "\\r")
-                .replace("\n", "\\n")
-                .replace("\t", "\\t");
+        return value.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t");
     }
 
     private static String bounded(Throwable failure) {

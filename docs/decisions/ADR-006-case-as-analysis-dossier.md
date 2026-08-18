@@ -1,6 +1,6 @@
 # ADR-006：Case 采用分析档案而非工作流状态机
 
-- 状态：Accepted
+- 状态：Accepted（Context 转换规则由 ADR-010 修订）
 - 日期：2026-08-12
 
 ## 背景
@@ -28,10 +28,11 @@ Algorithm Debug Agent 的实际入口是用户在目标算法仓库中通过 Ope
 9. 首次无采集 Run 作为复现参考；默认不重复运行两次，只有检测到漂移或用户要求时才验证非确定性；
 10. 动态采集后必须与参考 Run 比较：成功运行比较 Gantt 语义 Hash，异常运行比较稳定失败特征，
     断言失败且有 Gantt 时同时比较两者；
-11. 同一问题中的源码、输入或 UT 内容变化不创建新 Case，而是在 Case 内追加 `ContextSnapshot`；
+11. 同一问题中的源码、输入或 UT 内容变化不创建新 Case；根据 ADR-010，由用户或大模型显式追加最小
+    `ContextRecord`，不再自动扫描并比较 Workspace；
 12. 不同 Context 之间的 Gantt/异常差异是待分析的变更事实；只有同一 Context 内无采集与动态采集
     结果不一致时，才把采集 Evidence 降级为行为干扰；
-13. 大模型根据 Case Digest、Workspace Change、历史 Evidence 和用户问题自主决定是否运行 UT、读取
+13. 大模型根据 Case Digest、Run Comparison、历史 Evidence 和用户问题自主决定是否运行 UT、读取
     Diff 或继续采集，确定性代码不以固定状态机替代该决策；
 14. 每次 UT 执行采用“结构化 `RunOutcomeSummary` + 原始 Artifact 引用 + 版本化 Skill 指引”交给大模型；
     ToolResponse 必须自解释，不能只依赖 Prompt 或 Skill 补齐身份、结果和来源字段；
@@ -42,6 +43,9 @@ Algorithm Debug Agent 的实际入口是用户在目标算法仓库中通过 Ope
     适配安装登记外部路径后，用户在目标算法仓库直接运行 `opencode`，不复制 Skill 到全局 Skill 目录。
 
 ## 影响
+
+ADR-010 取代了本 ADR 中“用 Workspace 指纹自动决定 Context”的早期实现方式，但不改变 Case 作为分析档案、
+Run/Analysis/Evidence 追加保存和大模型自主规划的核心决定。
 
 - `CaseLifecycleState` 已删除；Baseline 兼容数据只使用专用 `BaselineStabilityState`，且保留原 JSON 枚举字面值；
 - `InquiryId` 和 `TurnId` 已删除，OpenCode 对话通过 `caseId`、`analysisId` 关联；

@@ -3,7 +3,7 @@ package org.example.algorithmdebug.contracts;
 import java.time.Instant;
 import java.util.List;
 
-/** CodePath filtered Trace 的通用方法统计和最近保留祖先摘要。 */
+/** CodePath 精确方法 Raw Trace 的通用方法统计和最近选中祖先摘要。 */
 public record MethodPathSummary(
         String schemaVersion,
         EvidenceId evidenceId,
@@ -14,7 +14,6 @@ public record MethodPathSummary(
         PlanId planId,
         CollectionId collectionId,
         ArtifactReference rawTrace,
-        String matchPrecision,
         List<MethodStatistic> methods,
         List<ObservedPath> observedPaths,
         List<PathAnomaly> anomalies,
@@ -34,12 +33,6 @@ public record MethodPathSummary(
         planId = ContractChecks.requireNonNull(planId, "planId");
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         rawTrace = ContractChecks.requireNonNull(rawTrace, "rawTrace");
-        matchPrecision = ContractChecks.requireBoundedText(
-                matchPrecision, "matchPrecision", 64, false);
-        if (!List.of("EXACT_DESCRIPTOR", "CLASS_METHOD_SUPERSET", "NONE")
-                .contains(matchPrecision)) {
-            throw new IllegalArgumentException("matchPrecision 非法");
-        }
         methods = ContractChecks.immutableList(methods, "methods");
         observedPaths = ContractChecks.immutableList(observedPaths, "observedPaths");
         anomalies = ContractChecks.immutableList(anomalies, "anomalies");
@@ -65,19 +58,18 @@ public record MethodPathSummary(
         }
     }
 
-    /** 过滤后事件能够确认的最近保留祖先关系。 */
+    /** 精确方法事件能够确认的最近选中祖先关系。 */
     public record ObservedPath(
-            String threadName, String ancestorMethodKey, String descendantMethodKey,
+            String ancestorMethodKey, String descendantMethodKey,
             String relationshipType, long count, TraceProvenance firstObservation) {
         public ObservedPath {
-            threadName = ContractChecks.requireBoundedText(threadName, "threadName", 512, false);
             ancestorMethodKey = ContractChecks.requireBoundedText(
                     ancestorMethodKey, "ancestorMethodKey", 2_048, false);
             descendantMethodKey = ContractChecks.requireBoundedText(
                     descendantMethodKey, "descendantMethodKey", 2_048, false);
-            if (!"NEAREST_RETAINED_ANCESTOR".equals(relationshipType)) {
+            if (!"NEAREST_SELECTED_ANCESTOR".equals(relationshipType)) {
                 throw new IllegalArgumentException(
-                        "CodePath filtered Trace 只能声明 NEAREST_RETAINED_ANCESTOR");
+                        "CodePath 精确方法 Trace 只能声明 NEAREST_SELECTED_ANCESTOR");
             }
             if (count < 1) throw new IllegalArgumentException("count 必须为正数");
             firstObservation = ContractChecks.requireNonNull(firstObservation, "firstObservation");

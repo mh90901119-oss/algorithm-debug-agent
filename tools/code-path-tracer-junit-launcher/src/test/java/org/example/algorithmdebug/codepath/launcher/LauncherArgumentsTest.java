@@ -3,41 +3,40 @@ package org.example.algorithmdebug.codepath.launcher;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LauncherArgumentsTest {
+    @TempDir Path directory;
+
     @Test
-    void parsesExplicitRuntimeBudgets() {
+    void acceptsOnlyArchivedPlanAndRawTraceInSameCollection() throws Exception {
+        Path plan = directory.resolve("request/plan.json");
+        Files.createDirectories(plan.getParent());
+        Files.writeString(plan, "{}");
+        Path trace = directory.resolve("raw/codepath.jsonl");
+
         LauncherArguments arguments = LauncherArguments.parse(new String[] {
-                "--test", "example.AlgorithmTest#runs",
-                "--include", "example",
-                "--trace", "trace.jsonl",
-                "--max-output-bytes", "2048",
-                "--max-events", "30"
+                "--plan", plan.toString(), "--trace", trace.toString()
         });
 
-        assertEquals("example.AlgorithmTest#runs", arguments.testSelector());
-        assertEquals("example", arguments.includePackage());
-        assertEquals(Path.of("trace.jsonl"), arguments.traceFile());
-        assertEquals(2048, arguments.maxOutputBytes());
-        assertEquals(30, arguments.maxEvents());
+        assertEquals(plan.toAbsolutePath(), arguments.planFile());
+        assertEquals(trace.toAbsolutePath(), arguments.traceFile());
     }
 
     @Test
-    void rejectsUnknownDuplicateAndOverHardLimitArguments() {
+    void rejectsLegacyPackageArgumentsAndPathsFromDifferentCollections() throws Exception {
+        Path plan = directory.resolve("request/plan.json");
+        Files.createDirectories(plan.getParent());
+        Files.writeString(plan, "{}");
+
         assertThrows(IllegalArgumentException.class, () -> LauncherArguments.parse(new String[] {
-                "--test", "T#m", "--include", "example", "--trace", "x",
-                "--max-output-bytes", "1", "--max-output-bytes", "2", "--max-events", "1"
+                "--plan", plan.toString(), "--include", "example"
         }));
         assertThrows(IllegalArgumentException.class, () -> LauncherArguments.parse(new String[] {
-                "--test", "T#m", "--include", "example", "--trace", "x",
-                "--max-output-bytes", Long.toString(TraceJsonlSink.HARD_MAX_OUTPUT_BYTES + 1),
-                "--max-events", "1"
-        }));
-        assertThrows(IllegalArgumentException.class, () -> LauncherArguments.parse(new String[] {
-                "--test", "T#m", "--include", "example", "--trace", "x",
-                "--max-output-bytes", "1", "--max-events", "1", "--unknown", "x"
+                "--plan", plan.toString(), "--trace", directory.resolve("other/raw/codepath.jsonl").toString()
         }));
     }
 }

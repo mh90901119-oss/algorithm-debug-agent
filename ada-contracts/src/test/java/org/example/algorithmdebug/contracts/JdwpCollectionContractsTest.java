@@ -131,7 +131,7 @@ class JdwpCollectionContractsTest {
                 SchemaVersions.JDWP_COLLECTION_PLAN,
                 new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                HASH, tracepoints, budget, "采集关键决策位置", NOW);
+                tracepoints, budget, "采集关键决策位置", NOW);
     }
 
     private static JdwpTracepointSpec tracepoint(

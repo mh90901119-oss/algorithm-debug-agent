@@ -18,8 +18,10 @@ failure now produces an immutable Run fingerprint and a write-once Context repro
 later Runs report `MATCHED` or `CHANGED` for the same or previous Context.
 
 Gantt comparison deliberately ignores JSON formatting whitespace but preserves object/array order and
-string content. It reports only changed dimensions, not a field-level Diff. Static method analysis,
-bounded CodePathTracer collection and the JDWP Plan/collection application flow are implemented.
+string content. It reports only changed dimensions, not a field-level Diff. Context is now an explicit,
+minimal analysis-version identity: an existing Case reuses the latest Context by default and appends a
+new one only when `--context-mode new` is requested. Static method analysis, exact method-level
+CodePathTracer Plan/collection and the JDWP Plan/collection application flow are implemented.
 The P3 JDWP release audit and real Wafer one-point smoke are complete: the target UT produced three
 bounded hits, its normalized Gantt Hash matched the no-collection same-Context baseline, and no
 managed process survived. Input Analysis, Evidence construction, the OpenCode installer and
@@ -54,10 +56,12 @@ mvn -pl algorithm-debug-cli -am package
 $ada = "D:\tools\algorithm-debug-agent\algorithm-debug-cli\target\algorithm-debug-cli-0.1.0-SNAPSHOT-all.jar"
 java -jar $ada workspace init --root D:\agent-workspace
 java -jar $ada project register --workspace D:\agent-workspace --project D:\large-system\algorithm-module
-java -jar $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt
+java -jar $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt [--context-mode reuse|new]
 java -jar $ada case inspect --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId>
 java -jar $ada run execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
 java -jar $ada static analyze --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
+java -jar $ada plan codepath create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file codepath-plan-request.json
+java -jar $ada collection codepath execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
 java -jar $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
 java -jar $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
 ```
@@ -73,6 +77,12 @@ $env:ADA_JDWP_COLLECTOR_JAR = "D:\mcpcode\mcp-jdwp-java\jdwp-batch-collector\tar
 Every execution creates a new Collection and returns only a bounded summary plus relative Artifact
 references. Raw JDWP events, the external Collector Manifest, Agent Manifest, four process logs,
 optional Gantt and Baseline check remain in that Collection directory.
+
+CodePath collection follows the same Plan-then-execute rule. Its v2 Plan contains only exact
+class/method/descriptor selectors and event/byte/time budgets. The Launcher writes one Raw JSONL stream;
+there is no package-superset collection or post-filter artifact. The current supported target is a
+single-thread UT. The unchanged upstream tracer can still incur Advice callbacks for unselected methods,
+so large-algorithm cost must be confirmed with the supplied real-project smoke and measurements.
 
 The packaged CLI currently loads the Wafer Demo Adapter. Supporting an arbitrary algorithm module
 requires a compatible Adapter; the CLI does not guess Gantt locations.

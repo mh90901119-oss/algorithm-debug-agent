@@ -17,7 +17,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodCatalog;
-import org.example.algorithmdebug.contracts.PackageCensusEntry;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.Test;
@@ -86,7 +85,6 @@ class JavaSourceCallGraphAnalyzerTest {
         assertEquals(SnapshotCompleteness.INCOMPLETE, first.completeness());
         assertEquals(1, first.entries().size());
         assertEquals(3, first.discoveredMethodCount());
-        assertEquals(SnapshotCompleteness.INCOMPLETE, first.packageCensusCompleteness());
         assertEquals(first.entries(), second.entries());
         assertTrue(first.warnings().stream().anyMatch(value -> value.contains("method budget")));
     }
@@ -152,7 +150,7 @@ class JavaSourceCallGraphAnalyzerTest {
     }
 
     @Test
-    void packageCensusCountsActuallyScannedUnreachablePackages() throws IOException {
+    void unrelatedPackagesDoNotPolluteReachableMethodEntries() throws IOException {
         write("src/test/java/fixture/TargetTest.java", """
                 package fixture;
                 class TargetTest { void caseUnderTest() { } }
@@ -164,10 +162,8 @@ class JavaSourceCallGraphAnalyzerTest {
 
         MethodCatalog catalog = analyzer().analyze(request(StaticAnalysisBudget.defaults()));
 
-        assertEquals(List.of(
-                new PackageCensusEntry("fixture", 2),
-                new PackageCensusEntry("unreachable", 3)), catalog.packageCensus());
-        assertEquals(SnapshotCompleteness.COMPLETE, catalog.packageCensusCompleteness());
+        assertTrue(catalog.entries().stream().noneMatch(entry ->
+                entry.sourceAnchor().className().startsWith("unreachable.")));
         assertEquals(5, catalog.discoveredMethodCount());
     }
 
@@ -204,7 +200,6 @@ class JavaSourceCallGraphAnalyzerTest {
                 budget(10, 100_000, 100, 5, 5_000)));
 
         assertEquals(6, methodLimited.discoveredMethodCount());
-        assertEquals(SnapshotCompleteness.INCOMPLETE, methodLimited.packageCensusCompleteness());
         assertTrue(methodLimited.warnings().stream().anyMatch(value -> value.contains("method budget")));
         assertEquals(6, edgeLimited.discoveredEdgeCount());
         assertTrue(edgeLimited.warnings().stream().anyMatch(value -> value.contains("edge budget")));
@@ -239,8 +234,6 @@ class JavaSourceCallGraphAnalyzerTest {
                 budget(10, targetBytes + 8, 100, 100, 5_000)));
 
         assertEquals(SnapshotCompleteness.INCOMPLETE, catalog.completeness());
-        assertEquals(SnapshotCompleteness.INCOMPLETE, catalog.packageCensusCompleteness());
-        assertEquals(List.of(new PackageCensusEntry("fixture", 2)), catalog.packageCensus());
         assertTrue(catalog.warnings().stream().anyMatch(value -> value.contains("source budget")));
     }
 
@@ -310,7 +303,6 @@ class JavaSourceCallGraphAnalyzerTest {
                 new CaseId("case-1"),
                 new ContextId("ctx-1"),
                 new AnalysisId("analysis-1"),
-                HASH,
                 budget,
                 Instant.parse("2026-08-18T00:00:00Z"));
     }

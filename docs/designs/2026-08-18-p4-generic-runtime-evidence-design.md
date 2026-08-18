@@ -1,5 +1,8 @@
 # P4 通用运行时证据管线可实施详细设计
 
+> **修订说明（2026-08-18）：** 本文的通用 Evidence、Provenance 和有界后处理继续有效；CodePath
+> package 超集/二次过滤、线程字段、匹配精度和 Context 源码事实由 ADR-010 与精简设计取代。
+
 - 文档状态：Approved for Implementation
 - 设计版本：0.2
 - 创建日期：2026-08-18

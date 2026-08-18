@@ -1,5 +1,12 @@
 # Algorithm Debug Agent 工具单点验证基线
 
+> 2026-08-19 更新：下方 2026-08-10 的包级 CodePath 数据保留为历史基线，不代表当前实现。
+> 当前 v2 Launcher 从归档 Plan 读取精确 `className + methodName + descriptor`，写出单一 Raw JSONL，
+> 并在事件数、字节数和时间预算内运行。对 `D:\javacode\hellomvn` 的
+> `SimpleWaferScheduler#schedule` 真实 smoke 连续三次均通过：测试体耗时 4.376 s、4.481 s、4.411 s，
+> 中位数 4.411 s；每次 2 个事件、509 bytes，逐行身份均与 Plan 相等。旧样本与当前选择器不同，
+> 因此不能据此计算性能提升百分比。上游仍可能对未选方法执行 Advice 回调，这是当前已知限制。
+
 - 状态：已验证事实基线
 - 版本：1.0
 - 日期：2026-08-10

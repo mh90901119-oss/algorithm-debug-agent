@@ -16,11 +16,15 @@ class LauncherSummaryTest {
                 LauncherOutcome.TOOL_FAILED, 0, 0, 0, 0, 0, 0,
                 TraceJsonlSink.Limit.NONE, "cannot start JUnit");
         LauncherSummary truncated = new LauncherSummary(
-                LauncherOutcome.TARGET_SUCCEEDED, 1, 1, 1, 0, 10, 1_024,
+                LauncherOutcome.TARGET_SUCCEEDED, 1, 1, 0, 0, 10, 1_024,
                 TraceJsonlSink.Limit.OUTPUT_BYTES, "");
+        LauncherSummary toolAndTarget = new LauncherSummary(
+                LauncherOutcome.TOOL_FAILED, 1, 0, 0, 1, 2, 128,
+                TraceJsonlSink.Limit.NONE, "CODEPATH_MULTIPLE_THREADS_UNSUPPORTED");
 
         assertTrue(target.targetFailed());
         assertFalse(tool.targetFailed());
+        assertTrue(toolAndTarget.targetFailed());
         assertTrue(truncated.truncated());
         assertEquals(LauncherOutcome.TOOL_FAILED, tool.outcome());
     }

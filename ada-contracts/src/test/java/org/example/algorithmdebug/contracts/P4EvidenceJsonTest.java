@@ -55,7 +55,7 @@ class P4EvidenceJsonTest {
     void allP4SchemasAreStrictObjects() throws Exception {
         for (String relative : List.of(
                 "trace/normalization-manifest-v1.schema.json",
-                "trace/method-path-summary-v1.schema.json",
+                "trace/method-path-summary-v2.schema.json",
                 "trace/jdwp-snapshot-summary-v1.schema.json",
                 "evidence/collection-validation-v1.schema.json",
                 "evidence/evidence-build-request-v1.schema.json",

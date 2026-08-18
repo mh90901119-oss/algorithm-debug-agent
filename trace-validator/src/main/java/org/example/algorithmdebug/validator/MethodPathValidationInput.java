@@ -8,7 +8,6 @@ import org.example.algorithmdebug.contracts.CollectionBaselineCheck;
 import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
 import org.example.algorithmdebug.contracts.MethodPathSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.methodpath.MethodPathManifest;
 
 /** CodePath 采集证据执行确定性校验所需的不可变输入。 */
@@ -24,8 +23,6 @@ public record MethodPathValidationInput(
         ArtifactReference summaryReference,
         Path summaryPath,
         Path planPath,
-        SourceSnapshot expectedSource,
-        SourceSnapshot observedSource,
         Instant validatedAt) {
 
     /** 校验所有必需对象，并把本地路径规范化为绝对路径。 */
@@ -41,8 +38,6 @@ public record MethodPathValidationInput(
         summaryReference = require(summaryReference, "summaryReference");
         summaryPath = normalize(summaryPath, "summaryPath");
         planPath = normalize(planPath, "planPath");
-        expectedSource = require(expectedSource, "expectedSource");
-        observedSource = require(observedSource, "observedSource");
         validatedAt = require(validatedAt, "validatedAt");
     }
 

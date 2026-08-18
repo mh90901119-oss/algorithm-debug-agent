@@ -20,10 +20,10 @@ public final class SchemaVersions {
     public static final String RUN_OUTCOME_SUMMARY = "1.0";
 
     /** Case 身份清单 Schema 版本。 */
-    public static final String CASE_MANIFEST = "1.0";
+    public static final String CASE_MANIFEST = "2.0";
 
-    /** Context 内容快照 Schema 版本。 */
-    public static final String CONTEXT_SNAPSHOT = "1.0";
+    /** 显式最小 Context 记录 Schema 版本。 */
+    public static final String CONTEXT_RECORD = "2.0";
 
     /** Analysis 请求 Schema 版本。 */
     public static final String ANALYSIS_REQUEST = "1.0";
@@ -47,11 +47,11 @@ public final class SchemaVersions {
     public static final String DOCTOR_REPORT = "1.0";
 
     /** 目标 UT 静态方法目录 Schema 版本。 */
-    public static final String METHOD_CATALOG = "1.0";
-    public static final String CODEPATH_COLLECTION_PLAN = "1.0";
+    public static final String METHOD_CATALOG = "2.0";
+    public static final String CODEPATH_COLLECTION_PLAN = "2.0";
 
     /** JDWP 采集计划 Schema 版本。 */
-    public static final String JDWP_COLLECTION_PLAN = "1.0";
+    public static final String JDWP_COLLECTION_PLAN = "2.0";
 
     /** JDWP 采集请求 Schema 版本。 */
     public static final String JDWP_COLLECTION_REQUEST = "1.0";
@@ -62,7 +62,7 @@ public final class SchemaVersions {
     /** 通用 Trace 归一化清单 Schema 版本。 */
     public static final String NORMALIZATION_MANIFEST = "1.0";
     /** 通用方法路径摘要 Schema 版本。 */
-    public static final String METHOD_PATH_SUMMARY = "1.0";
+    public static final String METHOD_PATH_SUMMARY = "2.0";
     /** 通用 JDWP 快照摘要 Schema 版本。 */
     public static final String JDWP_SNAPSHOT_SUMMARY = "1.0";
     /** Collection 证据校验 Schema 版本。 */

@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
@@ -34,9 +33,6 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
-import org.example.algorithmdebug.casecore.ContextInputProbe;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
-import org.example.algorithmdebug.casecore.ContextSnapshotRequest;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -47,7 +43,7 @@ import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionCompletion;
@@ -59,7 +55,6 @@ import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.harness.RunCompletion;
 import org.example.algorithmdebug.harness.RunLog;
@@ -90,7 +85,7 @@ class JdwpCollectionApplicationServiceTest {
     private Path maven;
     private Path java;
     private Path collectorJar;
-    private ContextSnapshot context;
+    private ContextRecord context;
     private BoundedDocumentMapper mapper;
     private AtomicDocumentWriter writer;
 
@@ -116,17 +111,15 @@ class JdwpCollectionApplicationServiceTest {
         writer = new AtomicDocumentWriter();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Files.createDirectories(layout.projectCases(PROJECT_ID));
-        context = new ContextSnapshotBuilder().build(new ContextSnapshotRequest(
-                CASE_ID, CONTEXT_ID, PROJECT_ID, TARGET, module, temporaryDirectory,
-                "UNAVAILABLE", "21", "fixture", "1.0",
-                ContextInputProbe.missing("input/case.json", "not required"), NOW));
+        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
-                context.buildSnapshot().pomSha256(), NOW));
+                "a".repeat(64), NOW));
         CaseArchiveRepository archive = archive();
         archive.createCase(new CaseManifest(
-                SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET, "why", NOW));
+                SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
+                "fixture", "why", NOW));
         archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
@@ -147,8 +140,7 @@ class JdwpCollectionApplicationServiceTest {
     void successfulCollectionArchivesAllPortableArtifactsAndMatchesBaseline() throws Exception {
         establishBaseline("{\"schedule\":1}");
         JdwpCollectionApplicationService service = service(
-                request -> successfulExecution(request, "{\"schedule\":1}", 101, 102),
-                ignored -> context.sourceSnapshot());
+                request -> successfulExecution(request, "{\"schedule\":1}", 101, 102));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -168,44 +160,16 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
-    void changedGanttAndPostRunSourceDriftBothBlockEvidence() throws Exception {
+    void changedGanttBlocksEvidence() throws Exception {
         establishBaseline("{\"schedule\":1}");
-        AtomicInteger snapshots = new AtomicInteger();
-        SourceSnapshot changed = new SourceSnapshot(
-                "f".repeat(64), context.sourceSnapshot().fileCount(),
-                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
         JdwpCollectionApplicationService service = service(
-                request -> successfulExecution(request, "{\"schedule\":2}", 103, 104),
-                ignored -> snapshots.getAndIncrement() == 0 ? context.sourceSnapshot() : changed);
+                request -> successfulExecution(request, "{\"schedule\":2}", 103, 104));
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
         assertFalse(result.summary().evidenceUsable());
-    }
-
-    @Test
-    void sourceDriftBeforeExecutionArchivesRequestManifestAndBaselineWithoutStartingTool() {
-        AtomicInteger executions = new AtomicInteger();
-        SourceSnapshot changed = new SourceSnapshot(
-                "f".repeat(64), context.sourceSnapshot().fileCount(),
-                context.sourceSnapshot().totalBytes(), context.sourceSnapshot().completeness());
-        JdwpCollectionApplicationService service = service(request -> {
-            executions.incrementAndGet();
-            throw new AssertionError("JDWP must not start after source drift");
-        }, ignored -> changed);
-
-        CaseRunException failure = assertThrows(CaseRunException.class, () ->
-                service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
-
-        assertEquals("COLLECTION_SOURCE_DRIFT_BEFORE", failure.code());
-        assertEquals(0, executions.get());
-        Path root = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
-                .resolve("case-1/collections/collection-fixed");
-        assertTrue(Files.isRegularFile(root.resolve("collection-request.json")));
-        assertTrue(Files.isRegularFile(root.resolve("manifest.json")));
-        assertTrue(Files.isRegularFile(root.resolve("validation/baseline-check.json")));
     }
 
     @Test
@@ -224,7 +188,7 @@ class JdwpCollectionApplicationServiceTest {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
                         "TEST_IO", "测试产物写入失败", failure);
             }
-        }, ignored -> context.sourceSnapshot());
+        });
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -255,7 +219,7 @@ class JdwpCollectionApplicationServiceTest {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
                         "TEST_IO", "测试产物写入失败", failure);
             }
-        }, ignored -> context.sourceSnapshot());
+        });
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -270,7 +234,7 @@ class JdwpCollectionApplicationServiceTest {
             throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
                     "JDWP_ATTACH_FAILED", "attach failed", new IllegalStateException("refused"),
                     true, true);
-        }, ignored -> context.sourceSnapshot());
+        });
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
                 service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
@@ -305,7 +269,7 @@ class JdwpCollectionApplicationServiceTest {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
                         "TEST_IO", "测试日志写入失败", failure);
             }
-        }, ignored -> context.sourceSnapshot());
+        });
 
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
@@ -337,7 +301,7 @@ class JdwpCollectionApplicationServiceTest {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
                         "TEST_IO", "fixture write failed", failure);
             }
-        }, ignored -> context.sourceSnapshot());
+        });
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
                 service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
@@ -355,14 +319,13 @@ class JdwpCollectionApplicationServiceTest {
         assertTrue(Files.isRegularFile(root.resolve("raw/collector-manifest.json")));
     }
 
-    private JdwpCollectionApplicationService service(
-            JdwpCollectionExecutor executor, SourceSnapshotReader snapshots) {
+    private JdwpCollectionApplicationService service(JdwpCollectionExecutor executor) {
         return new JdwpCollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new AdapterCatalog(List.of(new StubAdapter())), new OpaqueIdGenerator(() -> "fixed"),
                 fixedClock(), Optional.of(maven), java,
                 new JdwpToolConfiguration(collectorJar, sha(read(collectorJar)), "1.0.0"),
-                executor, () -> 51234, snapshots);
+                executor, () -> 51234);
     }
 
     private void writeExternalArtifacts(

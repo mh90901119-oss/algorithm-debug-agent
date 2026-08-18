@@ -201,9 +201,11 @@ class JdwpCollectionCoordinatorTest {
                 },
                 (request, port) -> fixture("exit", "0"));
         JdwpExecutionRequest request = request(Duration.ofSeconds(2));
+        int mismatchedPort = request.port() == 60_000 ? 60_001 : 60_000;
         Files.writeString(
                 request.collectorPlan(),
-                "{\"target\":{\"host\":\"127.0.0.1\",\"port\":60000},\"resumeOnAttach\":true}");
+                "{\"target\":{\"host\":\"127.0.0.1\",\"port\":"
+                        + mismatchedPort + "},\"resumeOnAttach\":true}");
 
         JdwpAdapterException failure = assertThrows(
                 JdwpAdapterException.class, () -> coordinator.execute(request));
@@ -266,9 +268,11 @@ class JdwpCollectionCoordinatorTest {
             String expectedCollectorSha256) throws Exception {
         Path java = Files.createFile(directory.resolve("java.exe"));
         Path jar = Files.createFile(directory.resolve("collector.jar"));
+        int port = new LoopbackPortAllocator().allocate();
         Path plan = Files.writeString(
                 directory.resolve("collector-plan.json"),
-                "{\"target\":{\"host\":\"127.0.0.1\",\"port\":51234},\"resumeOnAttach\":true}");
+                "{\"target\":{\"host\":\"127.0.0.1\",\"port\":"
+                        + port + "},\"resumeOnAttach\":true}");
         Path maven = Files.createFile(directory.resolve("mvn.cmd"));
         ProjectDescriptor project = new ProjectDescriptor(
                 new ProjectId("demo"), "Demo", directory.toAbsolutePath(), BuildTool.MAVEN,
@@ -280,7 +284,7 @@ class JdwpCollectionCoordinatorTest {
                 maven, directory.resolve("target-out.log"), directory.resolve("target-err.log"),
                 ProcessLimits.defaults());
         return new JdwpExecutionRequest(
-                launch, targetOptions, 51234, java, jar, expectedCollectorSha256,
+                launch, targetOptions, port, java, jar, expectedCollectorSha256,
                 plan, directory.resolve("raw"),
                 directory.resolve("collector-out.log"), directory.resolve("collector-err.log"),
                 ProcessLimits.defaults(), maximumRawBytes, readyTimeout, overallTimeout);

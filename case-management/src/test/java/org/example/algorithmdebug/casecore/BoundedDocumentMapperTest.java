@@ -7,6 +7,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -14,6 +17,15 @@ class BoundedDocumentMapperTest {
 
     @TempDir
     Path temporaryDirectory;
+
+    @Test
+    void writesContractTimesAsIso8601Strings() {
+        byte[] json = new BoundedDocumentMapper().writeJson(
+                new TimestampFixture(Instant.parse("2026-08-18T00:00:00Z")));
+
+        assertEquals("{\"createdAt\":\"2026-08-18T00:00:00Z\"}",
+                new String(json, StandardCharsets.UTF_8));
+    }
 
     @Test
     void rejectsJsonArtifactAboveOneHundredTwentyEightMebibytesBeforeParsing() throws Exception {
@@ -29,5 +41,8 @@ class BoundedDocumentMapperTest {
                 new BoundedDocumentMapper().readJsonArtifact(oversized, Object.class));
 
         assertTrue(failure.getMessage().contains("超过最大字节数 " + maximum));
+    }
+
+    private record TimestampFixture(Instant createdAt) {
     }
 }

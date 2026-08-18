@@ -26,6 +26,7 @@ public record LauncherSummary(
         Objects.requireNonNull(outcome, "outcome");
         Objects.requireNonNull(limit, "limit");
         if (testsFound < 0 || testsSucceeded < 0 || testsAborted < 0 || testsFailed < 0
+                || testsSucceeded + testsAborted + testsFailed > testsFound
                 || eventsWritten < 0 || bytesWritten < 0) {
             throw new IllegalArgumentException("Launcher Summary 计数不能为负数");
         }
@@ -37,7 +38,7 @@ public record LauncherSummary(
 
     /** @return 目标测试是否失败；不依赖进程退出码猜测。 */
     public boolean targetFailed() {
-        return outcome == LauncherOutcome.TARGET_FAILED;
+        return testsFailed > 0 || testsAborted > 0;
     }
 
     /** @return Raw 是否因为预算截断。 */

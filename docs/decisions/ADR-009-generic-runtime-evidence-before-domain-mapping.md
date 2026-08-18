@@ -21,10 +21,11 @@ CodePathTracer 和 JDWP Collector 已经能够在不修改目标算法源码的�
 ## 决策
 
 1. P4 通用核心只生成两类结构化事实：
-   - CodePath 方法统计、线程、最近保留祖先路径、精度和异常；
+   - CodePath 精确计划方法的统计、最近选中祖先路径和异常；当前只支持单线程目标 UT；
    - JDWP tracepoint 命中、线程、源码位置、调用栈和通用有界值路径。
 2. 每个派生事实必须引用不可变 Raw Artifact 的 SHA-256 与 JSONL 行号、`eventId` 或 `sequence`。
-3. P4 Validator 只校验 Artifact、Schema、身份、Hash、计划、源码、预算、截断、Provenance 和 Baseline；
+3. P4 Validator 只校验 Artifact、Schema、身份、Hash、计划、预算、截断、Provenance 和 Baseline；JDWP
+   另行校验每个 tracepoint 的精确 `SourceAnchor`，不校验全模块源码指纹；
    不调用 LLM，不判断算法业务正确性。
 4. Evidence Bundle 只组织事实、验证状态和覆盖维度。`SUFFICIENT` 只表示声明的证据维度已经覆盖，不表示
    根因已经确认。
@@ -33,7 +34,7 @@ CodePathTracer 和 JDWP Collector 已经能够在不修改目标算法源码的�
    通用 Summary，生成版本化业务投影；不得修改或伪造 Raw Trace。
 7. P4 v1 不新增 `DomainMappingProvider` 或任意 Mapping DSL，避免在缺少第二个真实算法验证时提前冻结接口。
 8. 大型算法的运行时安全仍由采集计划、Collector 预算和进程监管保证；P4 后处理不能替代 CodePath 源头
-   过滤或 JDWP local allowlist/字段投影。
+   精确 selector 或 JDWP 采集预算。
 9. 目标 UT、输入和本轮采集的运行时值属于用户明确授权的算法分析数据。P4 不新增敏感值路径 allowlist、deny、
    自动字段分类或脱敏规则；值路径只用于结构化定位和 Raw Provenance。若未来部署边界改变，另行设计数据披露策略。
 

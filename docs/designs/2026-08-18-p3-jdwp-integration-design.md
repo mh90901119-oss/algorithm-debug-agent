@@ -1,5 +1,8 @@
 # P3 JDWP 动态采集集成可实施详细设计
 
+> **修订说明（2026-08-18）：** JDWP 采集流程和每个 tracepoint 的 `SourceAnchor` 继续有效；全模块
+> `sourceFingerprintSha256` 与采集前后源码扫描由 ADR-010 删除，详见 Context/CodePath 精简设计。
+
 - 文档状态：Implemented（P3 release audit complete）
 - 设计版本：1.7
 - 创建日期：2026-08-18
@@ -124,9 +127,10 @@ flowchart LR
 
 ## 7. 数据与契约设计
 
-### 7.1 Agent JDWP Plan v1
+### 7.1 Agent JDWP Plan v2
 
-必填身份：`schemaVersion/planId/caseId/contextId/analysisId/targetTest/sourceFingerprintSha256/createdAt`。
+必填身份：`schemaVersion/planId/caseId/contextId/analysisId/targetTest/createdAt`。不再保存全模块源码指纹；
+每个 tracepoint 仍必须携带并校验精确 `SourceAnchor`。
 
 每个 tracepoint 必须包含：
 

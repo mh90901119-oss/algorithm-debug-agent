@@ -154,7 +154,7 @@ class CaseEvidenceArchiveTest {
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
                 new RunId("run-other"), PLAN_ID, COLLECTION_ID, rawArtifact(),
-                "EXACT_DESCRIPTOR", List.of(), List.of(), List.of(), false, NOW);
+                List.of(), List.of(), List.of(), false, NOW);
 
         WorkspaceException failure = assertThrows(
                 WorkspaceException.class,
@@ -177,7 +177,7 @@ class CaseEvidenceArchiveTest {
         MethodPathSummary oversized = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
-                PLAN_ID, COLLECTION_ID, rawArtifact(), "EXACT_DESCRIPTOR",
+                PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), anomalies, false, NOW);
 
         assertThrows(WorkspaceException.class,
@@ -201,7 +201,7 @@ class CaseEvidenceArchiveTest {
         MethodPathSummary reused = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, currentEvidence, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
-                PLAN_ID, COLLECTION_ID, rawArtifact(), "EXACT_DESCRIPTOR",
+                PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), List.of(), false, NOW.plusSeconds(3));
 
         Path persisted = repository.createMethodPathSummary(reused);
@@ -222,7 +222,7 @@ class CaseEvidenceArchiveTest {
         return new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
                 CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
-                PLAN_ID, COLLECTION_ID, rawArtifact(), "EXACT_DESCRIPTOR",
+                PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), List.of(), false, NOW);
     }
 

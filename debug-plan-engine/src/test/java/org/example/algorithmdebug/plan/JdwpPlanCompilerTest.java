@@ -19,7 +19,6 @@ import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
-import org.example.algorithmdebug.contracts.PackageCensusEntry;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
@@ -112,13 +111,10 @@ class JdwpPlanCompilerTest {
                 SchemaVersions.METHOD_CATALOG,
                 new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                "f".repeat(64),
                 List.of(
                         new MethodCatalogEntry("fixture.AlgorithmTest#runs()V", targetAnchor, 0, true),
                         new MethodCatalogEntry("fixture.Algorithm#schedule()V", serviceAnchor, 1, false)),
-                List.of(), List.of(), List.of(new PackageCensusEntry("fixture", 2)),
-                SnapshotCompleteness.COMPLETE, SnapshotCompleteness.COMPLETE,
-                2, 0, NOW);
+                List.of(), List.of(), SnapshotCompleteness.COMPLETE, 2, 0, NOW);
     }
 
     private SourceAnchor source(

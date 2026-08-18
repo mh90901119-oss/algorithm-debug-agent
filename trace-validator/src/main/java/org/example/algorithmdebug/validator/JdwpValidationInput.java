@@ -9,7 +9,6 @@ import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
 import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.JdwpSnapshotSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 
 /** JDWP 采集证据执行确定性校验所需的不可变输入。 */
 public record JdwpValidationInput(
@@ -24,8 +23,6 @@ public record JdwpValidationInput(
         ArtifactReference summaryReference,
         Path summaryPath,
         Path planPath,
-        SourceSnapshot expectedSource,
-        SourceSnapshot observedSource,
         Instant validatedAt) {
 
     /** 校验所有必需对象，并把本地路径规范化为绝对路径。 */
@@ -41,8 +38,6 @@ public record JdwpValidationInput(
         summaryReference = require(summaryReference, "summaryReference");
         summaryPath = normalize(summaryPath, "summaryPath");
         planPath = normalize(planPath, "planPath");
-        expectedSource = require(expectedSource, "expectedSource");
-        observedSource = require(observedSource, "observedSource");
         validatedAt = require(validatedAt, "validatedAt");
     }
 

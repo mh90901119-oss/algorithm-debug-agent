@@ -18,8 +18,7 @@ import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.CaseSessionRequest;
 import org.example.algorithmdebug.casecore.CaseSessionService;
 import org.example.algorithmdebug.casecore.CaseDigestReader;
-import org.example.algorithmdebug.casecore.ContextInputProbe;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
+import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -102,12 +101,11 @@ class RunApplicationServiceTest {
         CaseArchiveRepository archive = archive();
         ArrayDeque<String> ids = new ArrayDeque<>(List.of("1", "1", "1"));
         CaseSessionService sessions = new CaseSessionService(
-                archive, new CaseDigestReader(archive), new ContextSnapshotBuilder(),
+                archive, new CaseDigestReader(archive),
                 new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
         opened = sessions.open(new CaseSessionRequest(
-                Optional.empty(), PROJECT_ID, TARGET, "为什么调度结果不对？",
-                module, module, "UNAVAILABLE", "21.0.4", "stub", "1.0",
-                ContextInputProbe.present(input, "input/case.json")));
+                Optional.empty(), PROJECT_ID, TARGET, "stub",
+                "为什么调度结果不对？", ContextMode.REUSE_LATEST));
     }
 
     @Test

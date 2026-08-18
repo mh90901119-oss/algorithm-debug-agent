@@ -50,7 +50,7 @@ class CollectorDebugPlanCompatibilityTest {
                 SchemaVersions.JDWP_COLLECTION_PLAN,
                 new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                hash, List.of(new JdwpTracepointSpec(
+                List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
                         JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "检查调度决策变量",

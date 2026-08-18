@@ -10,30 +10,24 @@ import java.util.Set;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.ArtifactReference;
-import org.example.algorithmdebug.contracts.BuildSnapshot;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ClaimClassification;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.CollectionValidation;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.EvidenceValidationStatus;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.FailureCategory;
-import org.example.algorithmdebug.contracts.InputSnapshot;
-import org.example.algorithmdebug.contracts.InputSnapshotStatus;
 import org.example.algorithmdebug.contracts.ProcessOutcome;
-import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SnapshotCompleteness;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TargetFailureDiagnostic;
 import org.example.algorithmdebug.contracts.TestOutcome;
@@ -57,7 +51,7 @@ class EvidenceBundleBuilderTest {
         ArtifactReference outcomeArtifact = artifact(
                 "outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json");
         ArtifactReference contextArtifact = artifact(
-                "context", "CONTEXT_SNAPSHOT", "contexts/context-1/context.json");
+                "context", "CONTEXT_RECORD", "contexts/context-1/context.json");
         ArtifactReference fingerprintArtifact = artifact(
                 "fingerprint", "RUN_RESULT_FINGERPRINT", "runs/run-1/fingerprint.json");
         ArtifactReference summaryArtifact = artifact(
@@ -67,8 +61,7 @@ class EvidenceBundleBuilderTest {
                 "validation", "COLLECTION_VALIDATION",
                 "collections/collection-1/derived/evidence-1/validation.json");
         EvidenceBuildRequest request = request(List.of(COLLECTION_ID), List.of(), Set.of(
-                EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.INPUT,
-                EvidenceDimension.SOURCE, EvidenceDimension.SCHEDULE_RESULT,
+                EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.SCHEDULE_RESULT,
                 EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION));
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 outcome(gantt), outcomeArtifact, context(), contextArtifact,
@@ -147,7 +140,7 @@ class EvidenceBundleBuilderTest {
                 EvidenceDimension.VALIDATION));
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 failed, artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_SNAPSHOT", "contexts/context-1/context.json"),
+                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.of(new RunResultFingerprint(
                         SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
                         Optional.empty(), Optional.empty(), Optional.of(HASH))),
@@ -170,7 +163,7 @@ class EvidenceBundleBuilderTest {
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 agentFailed, artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_SNAPSHOT", "contexts/context-1/context.json"),
+                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.empty(), Optional.empty(), List.of());
 
         var bundle = new EvidenceBundleBuilder().build(
@@ -230,7 +223,7 @@ class EvidenceBundleBuilderTest {
         ArtifactReference gantt = artifact("gantt", "GANTT", "runs/run-1/gantt.json");
         return new EvidenceBuildSources(
                 outcome(gantt), artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_SNAPSHOT", "contexts/context-1/context.json"),
+                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.of(new RunResultFingerprint(
                         SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
                         Optional.of(gantt.sha256()), Optional.of(HASH), Optional.empty())),
@@ -246,14 +239,8 @@ class EvidenceBundleBuilderTest {
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of(gantt));
     }
 
-    private static ContextSnapshot context() {
-        return new ContextSnapshot(
-                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, CONTEXT_ID,
-                new ProjectId("project-1"), TARGET, "revision",
-                new SourceSnapshot(HASH, 1, 10, SnapshotCompleteness.COMPLETE),
-                new InputSnapshot(InputSnapshotStatus.PRESENT, "input/data.json", HASH, 10, ""),
-                new BuildSnapshot(HASH, "21", "adapter", "1.0"),
-                SnapshotCompleteness.COMPLETE, HASH, List.of(), NOW);
+    private static ContextRecord context() {
+        return new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
     }
 
     private static CollectionValidation validation(

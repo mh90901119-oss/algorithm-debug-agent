@@ -20,9 +20,7 @@ import org.example.algorithmdebug.contracts.EvidenceDimension;
 import org.example.algorithmdebug.contracts.EvidenceFact;
 import org.example.algorithmdebug.contracts.EvidenceValidationStatus;
 import org.example.algorithmdebug.contracts.GanttOutcome;
-import org.example.algorithmdebug.contracts.InputSnapshotStatus;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 
 /** 把显式、已校验的当前与比较来源整理成有界 Evidence Bundle。 */
 public final class EvidenceBundleBuilder {
@@ -108,7 +106,7 @@ public final class EvidenceBundleBuilder {
     private static void validateBaseIdentity(
             EvidenceBuildRequest request, EvidenceBuildSources sources) {
         var outcome = sources.runOutcome();
-        var context = sources.contextSnapshot();
+        var context = sources.contextRecord();
         if (!request.caseId().equals(outcome.caseId())
                 || !request.contextId().equals(outcome.contextId())
                 || !request.runId().equals(outcome.runId())
@@ -187,19 +185,6 @@ public final class EvidenceBundleBuilder {
                     List.of(sources.runOutcomeArtifact())));
         }
 
-        if (sources.contextSnapshot().inputSnapshot().status() == InputSnapshotStatus.PRESENT) {
-            facts.add(fact(ClaimClassification.CONFIRMED_FACT, EvidenceDimension.INPUT,
-                    "INPUT_SNAPSHOT_PRESENT", "算法输入存在且具有内容 Hash",
-                    List.of(sources.contextArtifact())));
-            covered.add(EvidenceDimension.INPUT);
-        }
-        if (sources.contextSnapshot().sourceSnapshot().completeness()
-                == SnapshotCompleteness.COMPLETE) {
-            facts.add(fact(ClaimClassification.CONFIRMED_FACT, EvidenceDimension.SOURCE,
-                    "SOURCE_SNAPSHOT_COMPLETE", "目标源码快照完整",
-                    List.of(sources.contextArtifact())));
-            covered.add(EvidenceDimension.SOURCE);
-        }
         Optional<ArtifactReference> gantt = outcome.artifacts().stream()
                 .filter(value -> "GANTT".equals(value.artifactType())).findFirst();
         if (outcome.ganttOutcome() == GanttOutcome.PRESENT

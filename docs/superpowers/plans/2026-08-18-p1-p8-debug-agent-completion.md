@@ -1,5 +1,8 @@
 # P1～P8 Algorithm Debug Agent Completion Implementation Plan
 
+> **历史计划说明（2026-08-18）：** CodePath package 超集、二次过滤及自动 Context 指纹步骤已由
+> ADR-010 和 `docs/designs/2026-08-18-context-codepath-simplification-design.md` 取代。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Complete the static-analysis, CodePath, JDWP, evidence, multi-turn analysis, OpenCode, generic-adapter and evaluation vertical slices so an OpenCode model can debug one Java/Maven algorithm UT from immutable evidence.

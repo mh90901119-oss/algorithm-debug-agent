@@ -103,7 +103,8 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.CaseOpen open) {
             return caseService.open(
                     open.workspace(), open.projectId(), open.targetTest(),
-                    readQuestion(open.questionFile()), open.caseId(), open.adapterId());
+                    readQuestion(open.questionFile()), open.caseId(), open.adapterId(),
+                    open.contextMode());
         }
         if (command instanceof CliCommand.CaseInspect inspect) {
             return caseService.inspect(

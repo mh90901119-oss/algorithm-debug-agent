@@ -42,7 +42,6 @@ import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.HarnessException;
@@ -72,7 +71,6 @@ public final class JdwpCollectionApplicationService {
     private final JdwpToolConfiguration tool;
     private final JdwpCollectionExecutor executor;
     private final JdwpPortProvider ports;
-    private final SourceSnapshotReader sourceSnapshots;
     private final CollectorDebugPlanWriter collectorPlans = new CollectorDebugPlanWriter();
 
     /** 注入全部机器边界，以便确定性测试端口、进程和源码漂移分支。 */
@@ -87,12 +85,11 @@ public final class JdwpCollectionApplicationService {
             Path javaExecutable,
             JdwpToolConfiguration tool,
             JdwpCollectionExecutor executor,
-            JdwpPortProvider ports,
-            SourceSnapshotReader sourceSnapshots) {
+            JdwpPortProvider ports) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || mavenExecutable == null
                 || javaExecutable == null || tool == null || executor == null
-                || ports == null || sourceSnapshots == null) {
+                || ports == null) {
             throw new IllegalArgumentException("JDWP Collection 用例依赖不能为空");
         }
         this.registrations = registrations;
@@ -106,7 +103,6 @@ public final class JdwpCollectionApplicationService {
         this.tool = tool;
         this.executor = executor;
         this.ports = ports;
-        this.sourceSnapshots = sourceSnapshots;
     }
 
     /** 每次调用创建新的 runId/collectionId，不覆盖同一 Case 的任何历史采集。 */
@@ -119,12 +115,13 @@ public final class JdwpCollectionApplicationService {
                 layout.projectCases(projectId), mapper, writer);
         JdwpCollectionPlan plan = archive.requireJdwpPlan(caseId, planId);
         var context = archive.requireContext(caseId, plan.contextId());
-        if (!context.projectId().equals(projectId)) {
+        var caseManifest = archive.requireCase(caseId);
+        if (!caseManifest.projectId().equals(projectId)) {
             throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于指定 Project");
         }
         Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
         AdapterCatalog.AdapterSelection selection = adapters.select(
-                moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
+                moduleRoot, Optional.of(caseManifest.adapterId()));
         RunId runId = ids.newRunId();
         CollectionId collectionId = ids.newCollectionId();
         JdwpCollectionRecord record = new JdwpCollectionRecord(
@@ -139,9 +136,6 @@ public final class JdwpCollectionApplicationService {
         int observedTargetExitCode = -1;
         int observedCollectorExitCode = -1;
         try {
-            SourceSnapshot before = sourceSnapshots.capture(moduleRoot);
-            CollectionApplicationService.requireSourceReady(
-                    context.sourceSnapshot(), before, plan.sourceFingerprintSha256());
             Optional<CaptureContext> capture = prepareCapture(selection, plan.targetTest());
             Path maven = mavenExecutable.orElseThrow(() ->
                     new CaseRunException("MAVEN_NOT_FOUND", "Maven executable unavailable"));
@@ -171,16 +165,10 @@ public final class JdwpCollectionApplicationService {
                     collectionRoot, request, result.completion(), plan);
             baseline = checkBaseline(
                     archive, record, result.completion(), capture, collectionRoot, moduleRoot);
-            SourceSnapshot after = sourceSnapshots.capture(moduleRoot);
-            boolean sourceStable = after.completeness() == SnapshotCompleteness.COMPLETE
-                    && after.equals(context.sourceSnapshot());
-            if (!sourceStable) {
-                baseline = blockForSourceDrift(baseline, record);
-            }
             archive.createJdwpCollectionBaselineCheck(baseline);
             manifest = successManifest(
                     record, result, external, collectorPlanBytes, collectionRoot,
-                    baseline, sourceStable, startedAt);
+                    baseline, startedAt);
             writer.writeNew(collectionRoot.resolve("manifest.json"), mapper.writeJson(manifest));
         } catch (JdwpAdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.TOOL_FAILED,
@@ -306,19 +294,15 @@ public final class JdwpCollectionApplicationService {
             byte[] collectorPlanBytes,
             Path root,
             CollectionBaselineCheck baseline,
-            boolean sourceStable,
             Instant startedAt) {
         Path raw = root.resolve("raw/jdwp.jsonl");
         int targetExit = result.target().flatMap(run -> run.exitCode().isPresent()
                 ? Optional.of(run.exitCode().getAsInt()) : Optional.empty()).orElse(-1);
         int collectorExit = result.collector().flatMap(run -> run.exitCode().isPresent()
                 ? Optional.of(run.exitCode().getAsInt()) : Optional.empty()).orElse(-1);
-        JdwpCollectionStage stage = baseline != null && sourceStable
+        JdwpCollectionStage stage = baseline != null
                 ? JdwpCollectionStage.BASELINE_CHECKED : JdwpCollectionStage.PROCESS_COMPLETED;
-        Optional<AgentFailureDiagnostic> diagnostic = sourceStable ? Optional.empty()
-                : Optional.of(new AgentFailureDiagnostic(
-                        "COLLECTION_SOURCE_DRIFT_AFTER",
-                        "Source changed during JDWP collection", SourceSnapshot.class.getName()));
+        Optional<AgentFailureDiagnostic> diagnostic = Optional.empty();
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
                 record.analysisId(), record.runId(), record.planId(), record.collectionId(),
@@ -462,15 +446,6 @@ public final class JdwpCollectionApplicationService {
         TargetProjectAdapter adapter = context.selection().adapter();
         return new ScheduleResultCapture(context.snapshotter(), 64L * 1024 * 1024)
                 .capture(context.before(), after, adapter.scheduleResultParser(), destination);
-    }
-
-    private CollectionBaselineCheck blockForSourceDrift(
-            CollectionBaselineCheck baseline, JdwpCollectionRecord record) {
-        return new CollectionBaselineCheck(
-                baseline.schemaVersion(), record.caseId(), record.contextId(), record.analysisId(),
-                record.runId(), record.collectionId(), baseline.outcome(), baseline.referenceRunId(),
-                baseline.currentGanttSha256(), false,
-                baseline.summary() + "; source changed during collection", clock.instant());
     }
 
     private CollectionBaselineCheck incomparable(JdwpCollectionRecord record, String summary) {

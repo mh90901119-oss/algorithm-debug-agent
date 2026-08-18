@@ -42,3 +42,5 @@ YYYY-MM-DD-<module-or-feature>-design.md
   与 Context 首次复现参考；字段级 Gantt Diff 明确后置，状态为 Review。
 - `2026-08-18-p4-generic-runtime-evidence-design.md`：CodePath/JDWP 通用流式摘要、确定性证据校验、
   Evidence Bundle 与大型算法预算，状态为 Approved for Implementation。
+- `2026-08-18-context-codepath-simplification-design.md`：显式最小 Context、精确方法级 CodePath、
+  单线程 Raw/Summary 与开发期 v2 清理，状态为 Approved for Implementation。

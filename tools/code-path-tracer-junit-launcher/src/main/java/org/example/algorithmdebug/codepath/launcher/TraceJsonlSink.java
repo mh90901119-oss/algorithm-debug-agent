@@ -98,7 +98,17 @@ public final class TraceJsonlSink implements AutoCloseable {
         output.write(NEWLINE);
         bytesWritten += lineBytes;
         eventsWritten++;
+        if (eventsWritten >= maxEvents) {
+            limit = Limit.EVENTS;
+        } else if (bytesWritten >= maxOutputBytes) {
+            limit = Limit.OUTPUT_BYTES;
+        }
         return true;
+    }
+
+    /** @return 是否已经命中事件数或字节数预算，调用方应停止后续格式化。 */
+    public synchronized boolean limitReached() {
+        return limit != Limit.NONE;
     }
 
     /** @return 当前确定性计数和命中的首个预算。 */

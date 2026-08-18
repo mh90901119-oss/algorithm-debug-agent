@@ -5,7 +5,7 @@ import org.example.algorithmdebug.contracts.ArchiveWarning;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
@@ -45,11 +45,11 @@ public final class CaseDigestReader {
         CaseManifest manifest = repository.requireCase(caseId);
         CaseArchiveLayout layout = repository.layout(caseId);
         List<ArchiveWarning> warnings = new ArrayList<>();
-        List<ContextSnapshot> contexts = readContexts(layout, warnings);
+        List<ContextRecord> contexts = readContexts(layout, warnings);
         List<AnalysisRequest> analyses = readAnalyses(layout, warnings);
         List<RunEntry> runs = readRuns(layout, warnings);
 
-        contexts.sort(Comparator.comparing(ContextSnapshot::createdAt)
+        contexts.sort(Comparator.comparing(ContextRecord::createdAt)
                 .thenComparing(value -> value.contextId().value()));
         analyses.sort(Comparator.comparing(AnalysisRequest::createdAt)
                 .thenComparing(value -> value.analysisId().value()));
@@ -91,12 +91,12 @@ public final class CaseDigestReader {
                 contexts.size(), analyses.size(), runs.size(), truncated);
     }
 
-    private List<ContextSnapshot> readContexts(
+    private List<ContextRecord> readContexts(
             CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
-        List<ContextSnapshot> values = new ArrayList<>();
+        List<ContextRecord> values = new ArrayList<>();
         for (Path directory : repository.childDirectories(layout.contextsRoot())) {
             Path document = directory.resolve("context.json");
-            readChild(layout, document, ContextSnapshot.class, warnings).ifPresent(value -> {
+            readChild(layout, document, ContextRecord.class, warnings).ifPresent(value -> {
                 if (value.caseId().equals(caseId(layout))
                         && value.contextId().value().equals(directory.getFileName().toString())) {
                     values.add(value);

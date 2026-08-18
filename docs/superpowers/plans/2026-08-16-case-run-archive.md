@@ -1,5 +1,8 @@
 # Case Run Archive Implementation Plan
 
+> **历史计划说明（2026-08-18）：** 其中 Context 快照扫描相关步骤已由 ADR-010 和
+> `docs/designs/2026-08-18-context-codepath-simplification-design.md` 的显式最小 Context 取代。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 建成可持久化/续接 Case、按需执行真实 Maven/JUnit UT，并把结构化 RunOutcome 与原始产物追加归档到外部 Workspace 的首个可用纵向切片。

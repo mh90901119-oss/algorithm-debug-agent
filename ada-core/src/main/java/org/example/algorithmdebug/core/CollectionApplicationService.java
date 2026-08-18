@@ -36,8 +36,6 @@ import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SnapshotCompleteness;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.HarnessException;
 import org.example.algorithmdebug.harness.OutputDirectorySnapshot;
@@ -65,7 +63,6 @@ public final class CollectionApplicationService {
     private final Optional<Path> mavenExecutable;
     private final MethodPathCollector collector;
     private final TargetClasspathResolver classpaths;
-    private final SourceSnapshotReader sourceSnapshots;
     private final Path javaExecutable;
 
     /** 注入项目、Adapter、ID、工具与外部进程配置。 */
@@ -79,12 +76,10 @@ public final class CollectionApplicationService {
             Optional<Path> mavenExecutable,
             Path javaExecutable,
             MethodPathCollector collector,
-            TargetClasspathResolver classpaths,
-            SourceSnapshotReader sourceSnapshots) {
+            TargetClasspathResolver classpaths) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || mavenExecutable == null
-                || javaExecutable == null || collector == null || classpaths == null
-                || sourceSnapshots == null) {
+                || javaExecutable == null || collector == null || classpaths == null) {
             throw new IllegalArgumentException("CollectionApplicationService 依赖不能为空");
         }
         this.registrations = registrations; this.mapper = mapper; this.writer = writer;
@@ -92,7 +87,6 @@ public final class CollectionApplicationService {
         this.mavenExecutable = mavenExecutable;
         this.javaExecutable = javaExecutable.toAbsolutePath().normalize();
         this.collector = collector; this.classpaths = classpaths;
-        this.sourceSnapshots = sourceSnapshots;
     }
 
     /** 每次调用创建新的 runId/collectionId，不自动重试或覆盖。 */
@@ -105,12 +99,13 @@ public final class CollectionApplicationService {
                 layout.projectCases(projectId), mapper, writer);
         var plan = archive.requireCodePathPlan(caseId, planId);
         var context = archive.requireContext(caseId, plan.contextId());
-        if (!context.projectId().equals(projectId)) {
+        var caseManifest = archive.requireCase(caseId);
+        if (!caseManifest.projectId().equals(projectId)) {
             throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于指定 Project");
         }
         Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
         AdapterCatalog.AdapterSelection selection = adapters.select(
-                moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
+                moduleRoot, Optional.of(caseManifest.adapterId()));
         RunId runId = ids.newRunId();
         CollectionId collectionId = ids.newCollectionId();
         MethodPathCollectionRecord record = new MethodPathCollectionRecord(
@@ -118,14 +113,10 @@ public final class CollectionApplicationService {
                 collectionId, plan.targetTest(), "CODEPATH", clock.instant());
         Path collectionRoot = archive.startMethodPathCollection(record);
         CollectionBaselineCheck baseline;
-        MethodPathCollectionResult result;
+        MethodPathCollectionResult result = null;
         String stage = "REQUEST_ARCHIVED";
         Instant startedAt = clock.instant();
         try {
-            var beforeSource = sourceSnapshots.capture(moduleRoot);
-            requireSourceReady(
-                    context.sourceSnapshot(), beforeSource, plan.sourceFingerprintSha256());
-            stage = "SOURCE_VALIDATED";
             Optional<CaptureContext> capture = prepareCapture(selection, plan.targetTest());
             Path maven = mavenExecutable.orElseThrow(() ->
                     new CaseRunException("MAVEN_NOT_FOUND", "Maven executable unavailable"));
@@ -137,15 +128,6 @@ public final class CollectionApplicationService {
                     javaExecutable, classpath, plan.targetTest().selector()));
             stage = "PROCESS_COMPLETED";
             baseline = checkBaseline(archive, record, result, capture, moduleRoot);
-            var afterSource = sourceSnapshots.capture(moduleRoot);
-            if (afterSource.completeness() != SnapshotCompleteness.COMPLETE
-                    || !afterSource.equals(context.sourceSnapshot())) {
-                baseline = new CollectionBaselineCheck(
-                        "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                        record.collectionId(), baseline.outcome(), baseline.referenceRunId(),
-                        baseline.currentGanttSha256(), false,
-                        baseline.summary() + "; source changed during collection", clock.instant());
-            }
             archiveManifest(collectionRoot, result.manifest());
         } catch (MethodPathCollectionException failure) {
             archiveManifest(collectionRoot, failureManifest(
@@ -159,7 +141,7 @@ public final class CollectionApplicationService {
             archiveManifest(collectionRoot, failureManifest(
                     collectionRoot, record, plan, CollectionCompletion.AGENT_FAILED,
                     stage, failure.code(), failure,
-                    false, -1, startedAt));
+                    result, false, -1, startedAt));
             baseline = incomparable(record, "Collection did not start: " + failure.code());
             archive.createCollectionBaselineCheck(baseline);
             throw failure;
@@ -171,25 +153,9 @@ public final class CollectionApplicationService {
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
                 result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
-                        result.manifest().completion(), result.manifest().retainedEventCount(), baseline),
+                        result.manifest().completion(), result.manifest().capturedEventCount(), baseline),
                 artifacts.stream().map(ArtifactReference::relativePath).toList());
         return new MultiArtifactBackedResult<>(summary, artifacts);
-    }
-
-    static void requireSourceReady(
-            SourceSnapshot expected, SourceSnapshot observed, String planSourceSha256) {
-        if (expected == null || observed == null || planSourceSha256 == null) {
-            throw new IllegalArgumentException("源码快照和计划源码 Hash 不能为空");
-        }
-        if (expected.completeness() != SnapshotCompleteness.COMPLETE
-                || observed.completeness() != SnapshotCompleteness.COMPLETE) {
-            throw new CaseRunException(
-                    "CONTEXT_SOURCE_SNAPSHOT_INCOMPLETE", "动态采集要求完整源码快照");
-        }
-        if (!expected.equals(observed) || !expected.sha256().equals(planSourceSha256)) {
-            throw new CaseRunException(
-                    "COLLECTION_SOURCE_DRIFT_BEFORE", "采集前源码已偏离 Context/Plan");
-        }
     }
 
     static boolean isEvidenceUsable(
@@ -267,19 +233,43 @@ public final class CollectionApplicationService {
             boolean processStarted,
             int exitCode,
             Instant startedAt) {
+        return failureManifest(collectionRoot, record, plan, completion, failedStage, code,
+                failure, null, processStarted, exitCode, startedAt);
+    }
+
+    private MethodPathManifest failureManifest(
+            Path collectionRoot,
+            MethodPathCollectionRecord record,
+            org.example.algorithmdebug.contracts.CodePathCollectionPlan plan,
+            CollectionCompletion completion,
+            String failedStage,
+            String code,
+            Throwable failure,
+            MethodPathCollectionResult observedResult,
+            boolean processStarted,
+            int exitCode,
+            Instant startedAt) {
+        MethodPathManifest observed = observedResult == null ? null : observedResult.manifest();
         return new MethodPathManifest(
-                "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                "2.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
                 record.planId(), record.collectionId(), "code-path-tracer", "unavailable",
-                Optional.empty(), sha(mapper.writeJson(plan)), "PACKAGE_SUPERSET",
-                "METHOD_ALLOWLIST", "NONE", plan.packagePrefixes(), completion,
-                processStarted ? "PROCESS_COMPLETED" : failedStage,
-                processStarted, exitCode, false, 0, 0, 0, 0,
-                existingSize(collectionRoot.resolve("raw/codepath.jsonl")), 0,
-                existingSha(collectionRoot.resolve("raw/codepath.jsonl")), Optional.empty(),
+                Optional.empty(), sha(mapper.writeJson(plan)), completion, "FAILED",
+                observed == null ? processStarted : observed.processStarted(),
+                observed == null ? exitCode : observed.exitCode(),
+                completion == CollectionCompletion.TIMED_OUT,
+                observed == null ? "NOT_EXECUTED" : observed.targetOutcome(),
+                observed == null ? 0 : observed.testsFound(),
+                observed == null ? 0 : observed.testsSucceeded(),
+                observed == null ? 0 : observed.testsAborted(),
+                observed == null ? 0 : observed.testsFailed(),
+                observed == null ? 0 : observed.capturedEventCount(),
+                existingSize(collectionRoot.resolve("raw/codepath.jsonl")),
+                existingSha(collectionRoot.resolve("raw/codepath.jsonl")),
                 List.of(), Optional.of(new AgentFailureDiagnostic(
                         code, "Collection failed at " + failedStage,
                         failure.getClass().getName())),
-                "logs/stdout.log", "logs/stderr.log", startedAt, clock.instant());
+                "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log",
+                startedAt, clock.instant());
     }
 
     private static long existingSize(Path path) {

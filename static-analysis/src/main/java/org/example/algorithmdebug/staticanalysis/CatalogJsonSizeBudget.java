@@ -16,7 +16,6 @@ final class CatalogJsonSizeBudget {
 
     private static final long TOP_LEVEL_STRUCTURAL_BYTES = 32L * 1024;
     private static final long METHOD_STRUCTURAL_BYTES = 512;
-    private static final long CENSUS_STRUCTURAL_BYTES = 128;
     private static final long EDGE_STRUCTURAL_BYTES = 256;
 
     private final long maximumBytes;
@@ -32,7 +31,6 @@ final class CatalogJsonSizeBudget {
                 + jsonStringUpperBound(request.analysisId().value())
                 + jsonStringUpperBound(request.targetTest().className())
                 + jsonStringUpperBound(request.targetTest().methodName())
-                + jsonStringUpperBound(request.sourceFingerprintSha256())
                 + jsonStringUpperBound(request.requestedAt().toString())
                 + RESERVED_WARNING_COUNT
                 * (jsonStringUpperBound(MAX_WARNING_CHARACTERS) + 1);
@@ -45,7 +43,7 @@ final class CatalogJsonSizeBudget {
     }
 
     boolean tryMethod(String packageName, String methodKey, SourceAnchor anchor) {
-        long candidateBytes = CENSUS_STRUCTURAL_BYTES + jsonStringUpperBound(packageName);
+        long candidateBytes = 0;
         if (methodKey != null && anchor != null) {
             candidateBytes += METHOD_STRUCTURAL_BYTES
                     + jsonStringUpperBound(methodKey)

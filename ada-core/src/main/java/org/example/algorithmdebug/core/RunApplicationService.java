@@ -20,7 +20,7 @@ import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -149,7 +149,7 @@ public final class RunApplicationService {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于请求项目");
             }
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
-            ContextSnapshot context = requireContext(archive, caseId, analysis.contextId());
+            ContextRecord context = requireContext(archive, caseId, analysis.contextId());
 
             RunId runId = ids.newRunId();
             RunRequest request = new RunRequest(
@@ -171,7 +171,7 @@ public final class RunApplicationService {
             AdapterCatalog.AdapterSelection selection;
             try {
                 selection = adapters.select(
-                        moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
+                        moduleRoot, Optional.of(manifest.adapterId()));
             } catch (CaseRunException failure) {
                 return completeNotStarted(archive, request, failure.code(), failure);
             }
@@ -484,7 +484,7 @@ public final class RunApplicationService {
         }
     }
 
-    private static ContextSnapshot requireContext(
+    private static ContextRecord requireContext(
             CaseArchiveRepository archive,
             CaseId caseId,
             org.example.algorithmdebug.contracts.ContextId contextId) {

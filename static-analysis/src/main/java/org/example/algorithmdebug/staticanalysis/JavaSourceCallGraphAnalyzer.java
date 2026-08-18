@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.TreeSet;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -54,7 +53,6 @@ import javax.tools.ToolProvider;
 import org.example.algorithmdebug.contracts.MethodCallEdge;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
-import org.example.algorithmdebug.contracts.PackageCensusEntry;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.SourceAnchor;
@@ -133,7 +131,6 @@ public final class JavaSourceCallGraphAnalyzer {
             Map<Path, String> sourceHashes,
             BudgetGuard guard) {
         Map<String, MethodModel> methods = new LinkedHashMap<>();
-        Map<String, Integer> census = new TreeMap<>();
         SourcePositions positions = trees.getSourcePositions();
         try {
             for (CompilationUnitTree unit : units) {
@@ -170,7 +167,6 @@ public final class JavaSourceCallGraphAnalyzer {
                         if (!guard.tryCatalogMethod(packageName, method)) {
                             throw ScanLimitReached.INSTANCE;
                         }
-                        census.merge(packageName, 1, Integer::sum);
                         if (method != null) {
                             methods.putIfAbsent(method.key(), method);
                         }
@@ -181,10 +177,7 @@ public final class JavaSourceCallGraphAnalyzer {
         } catch (ScanLimitReached ignored) {
             // BudgetGuard 已记录稳定的截断原因，停止访问剩余 AST。
         }
-        List<PackageCensusEntry> packageCensus = census.entrySet().stream()
-                .map(entry -> new PackageCensusEntry(entry.getKey(), entry.getValue()))
-                .toList();
-        return new MethodScan(Map.copyOf(methods), packageCensus);
+        return new MethodScan(Map.copyOf(methods));
     }
 
     private static EdgeScan collectEdges(
@@ -311,11 +304,9 @@ public final class JavaSourceCallGraphAnalyzer {
                 || !edgeScan.warnings().isEmpty() || compilerErrors;
         return new MethodCatalog(
                 SchemaVersions.METHOD_CATALOG, request.caseId(), request.contextId(),
-                request.analysisId(), request.targetTest(), request.sourceFingerprintSha256(),
-                entries, edges, warnings.values(), methodScan.packageCensus(),
+                request.analysisId(), request.targetTest(),
+                entries, edges, warnings.values(),
                 incomplete ? SnapshotCompleteness.INCOMPLETE : SnapshotCompleteness.COMPLETE,
-                discovery.truncated() || guard.methodTruncated()
-                        ? SnapshotCompleteness.INCOMPLETE : SnapshotCompleteness.COMPLETE,
                 guard.discoveredMethods(), guard.discoveredEdges(), request.requestedAt());
     }
 
@@ -541,8 +532,7 @@ public final class JavaSourceCallGraphAnalyzer {
     private record MethodModel(String key, SourceAnchor anchor) {
     }
 
-    private record MethodScan(
-            Map<String, MethodModel> methods, List<PackageCensusEntry> packageCensus) {
+    private record MethodScan(Map<String, MethodModel> methods) {
     }
 
     private record RawEdge(String caller, String callee, int line) {

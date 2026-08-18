@@ -402,8 +402,7 @@ CaseWorkspace
 CaseResolutionService
 BaselineStabilityService
 CaseContextRepository
-ContextSnapshotRepository
-WorkspaceChangeDetector
+ContextRecordRepository
 RunRecordRepository
 AnalysisRecordRepository
 CaseDigestBuilder
@@ -415,7 +414,7 @@ ReproductionComparator
 
 ```text
 Case       一个目标项目、目标UT和用户问题的分析档案
-Context    同一Case内一版源码、输入、UT内容和运行环境快照
+Context    同一Case内由调用方显式建立的一段分析版本身份
 Run        一次目标UT进程执行
 Analysis   初始问题或追问的一轮大模型分析
 Artifact   一份不可变文件
@@ -424,7 +423,8 @@ Evidence   从Artifact中提取的可引用事实
 
 一个 Case 可以包含多个 Context、Run 和 Analysis。Analysis 显式引用历史 Context/Run/Evidence；
 CodePathTracer、JDWP、Gantt、异常和日志属于 Artifact，确定性代码将其标准化为有界 Evidence 供
-大模型使用。代码变化不会自动拆分新 Case，历史 Evidence 通过 `contextId` 保留作用域。
+大模型使用。代码变化不会自动拆分新 Case；已知修改后由用户或大模型显式新建 Context，系统不扫描
+Workspace 猜测变化。历史 Evidence 通过 `contextId` 保留作用域。
 
 ### 8.4 Case目录
 
@@ -434,7 +434,6 @@ CodePathTracer、JDWP、Gantt、异常和日志属于 Artifact，确定性代码
 ├── contexts/
 │   ├── CONTEXT-001/
 │   │   ├── context.json
-│   │   ├── change-summary.json
 │   │   └── reproduction.json
 │   └── CONTEXT-002/
 ├── runs/

@@ -12,6 +12,7 @@ import org.example.algorithmdebug.adapter.ScheduleResultSource;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
+import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
@@ -78,7 +79,7 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult opened = services.cases().open(
                 workspace, registration.registration().projectId(), target,
                 "验证隔离 Maven 场景 " + scenario.name(), Optional.empty(),
-                Optional.of("fixture-adapter"));
+                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
 
         RunOutcomeSummary outcome = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -107,7 +108,7 @@ class CaseRunArchiveIntegrationTest {
         services.project().register(workspace, module, Optional.of(projectId));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查调度是否稳定", Optional.empty(),
-                Optional.of("fixture-adapter"));
+                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
 
         RunOutcomeSummary first = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -116,7 +117,7 @@ class CaseRunArchiveIntegrationTest {
                 java.nio.file.StandardOpenOption.APPEND);
         CaseOpenResult reopened = services.cases().open(
                 workspace, projectId, target, "代码变化后继续检查", Optional.of(opened.caseId()),
-                Optional.of("fixture-adapter"));
+                Optional.of("fixture-adapter"), ContextMode.CREATE_NEW);
         RunOutcomeSummary crossContext = services.runs().execute(
                 workspace, projectId, opened.caseId(), reopened.analysisId());
         ControlPlaneServices changedServices = services(
@@ -162,7 +163,7 @@ class CaseRunArchiveIntegrationTest {
         services.project().register(workspace, module, Optional.of(projectId));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查异常是否稳定", Optional.empty(),
-                Optional.of("fixture-adapter"));
+                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
 
         RunOutcomeSummary first = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -192,7 +193,7 @@ class CaseRunArchiveIntegrationTest {
         services.project().register(workspace, module, Optional.of(projectId));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "Maven 不可用", Optional.empty(),
-                Optional.of("fixture-adapter"));
+                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
 
         RunOutcomeSummary outcome = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());

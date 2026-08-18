@@ -55,7 +55,7 @@ public final class JdwpPlanCompiler {
             return new JdwpCollectionPlan(
                     SchemaVersions.JDWP_COLLECTION_PLAN,
                     request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
-                    catalog.targetTest(), catalog.sourceFingerprintSha256(), points,
+                    catalog.targetTest(), points,
                     request.budget(), request.rationale(), request.requestedAt());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException("JDWP 计划不满足安全契约: " + failure.getMessage(), failure);

@@ -2,6 +2,7 @@ package org.example.algorithmdebug.casecore;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
@@ -33,10 +34,12 @@ public final class BoundedDocumentMapper {
     public BoundedDocumentMapper() {
         this.jsonMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
-                .registerModule(new Jdk8Module());
+                .registerModule(new Jdk8Module())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.yamlMapper = new ObjectMapper(new YAMLFactory())
                 .registerModule(new JavaTimeModule())
-                .registerModule(new Jdk8Module());
+                .registerModule(new Jdk8Module())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     /**

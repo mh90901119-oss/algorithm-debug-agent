@@ -5,6 +5,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.casecore.ContextMode;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -47,7 +48,7 @@ public final class CliArguments {
         if (matches(arguments, "case", "open")) {
             Map<String, String> options = options(arguments, 2, Set.of(
                     "--workspace", "--project-id", "--test", "--question-file",
-                    "--case-id", "--adapter"));
+                    "--case-id", "--adapter", "--context-mode"));
             requirePresent(options, "--workspace", "--project-id", "--test", "--question-file");
             return new CliCommand.CaseOpen(
                     path(options.get("--workspace"), "--workspace"),
@@ -55,7 +56,8 @@ public final class CliArguments {
                     targetTest(options.get("--test")),
                     path(options.get("--question-file"), "--question-file"),
                     Optional.ofNullable(options.get("--case-id")).map(CaseId::new),
-                    Optional.ofNullable(options.get("--adapter")));
+                    Optional.ofNullable(options.get("--adapter")),
+                    contextMode(options.get("--context-mode")));
         }
         if (matches(arguments, "case", "inspect")) {
             Map<String, String> options = options(
@@ -207,6 +209,16 @@ public final class CliArguments {
         } catch (IllegalArgumentException failure) {
             throw invalid("--test 不是有效的目标测试选择器");
         }
+    }
+
+    private static ContextMode contextMode(String value) {
+        if (value == null || "reuse".equals(value)) {
+            return ContextMode.REUSE_LATEST;
+        }
+        if ("new".equals(value)) {
+            return ContextMode.CREATE_NEW;
+        }
+        throw invalid("CONTEXT_MODE_INVALID: --context-mode 仅支持 reuse 或 new");
     }
 
     private static IllegalArgumentException invalid(String message) {

@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Path;
@@ -21,7 +22,8 @@ class JdwpCollectionJsonTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .registerModule(new JavaTimeModule())
-            .registerModule(new Jdk8Module());
+            .registerModule(new Jdk8Module())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     private static final String HASH = "a".repeat(64);
 
     @Test
@@ -31,14 +33,24 @@ class JdwpCollectionJsonTest {
         byte[] json = MAPPER.writeValueAsBytes(plan);
         assertEquals(plan, MAPPER.readValue(json, JdwpCollectionPlan.class));
 
-        JsonNode schema = schema("jdwp-plan-v1.schema.json");
+        JsonNode schema = schema("jdwp-plan-v2.schema.json");
         assertFalse(schema.path("additionalProperties").asBoolean(true));
         Set<String> required = new HashSet<>();
         schema.path("required").forEach(node -> required.add(node.asText()));
         assertEquals(Set.of(
                 "schemaVersion", "planId", "caseId", "contextId", "analysisId",
-                "targetTest", "sourceFingerprintSha256", "tracepoints", "budget",
+                "targetTest", "tracepoints", "budget",
                 "rationale", "createdAt"), required);
+        for (String id : List.of("planId", "caseId", "contextId", "analysisId")) {
+            assertEquals("string", schema.path("properties").path(id).path("type").asText(), id);
+        }
+        assertEquals("#/$defs/tracepoint",
+                schema.path("properties").path("tracepoints").path("items").path("$ref").asText());
+        assertEquals("#/$defs/capture",
+                schema.path("$defs").path("tracepoint").path("properties")
+                        .path("capture").path("$ref").asText());
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v2.schema.json"),
+                MAPPER.writeValueAsString(plan));
     }
 
     @Test
@@ -49,13 +61,13 @@ class JdwpCollectionJsonTest {
 
         assertThrows(UnrecognizedPropertyException.class, () ->
                 MAPPER.treeToValue(root, JdwpCollectionPlan.class));
-        assertFalse(schema("jdwp-plan-v1.schema.json")
+        assertFalse(schema("jdwp-plan-v2.schema.json")
                 .path("$defs").path("capture").path("additionalProperties").asBoolean(true));
     }
 
     @Test
     void schemasExposeP3HardLimitsAndRejectRemoteHostFields() throws Exception {
-        JsonNode plan = schema("jdwp-plan-v1.schema.json");
+        JsonNode plan = schema("jdwp-plan-v2.schema.json");
         JsonNode tracepoints = plan.path("properties").path("tracepoints");
         JsonNode budget = plan.path("$defs").path("budget").path("properties");
 
@@ -78,7 +90,7 @@ class JdwpCollectionJsonTest {
                 SchemaVersions.JDWP_COLLECTION_PLAN,
                 new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                HASH, List.of(new JdwpTracepointSpec(
+                List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
                         JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "采集关键决策位置",
@@ -86,7 +98,11 @@ class JdwpCollectionJsonTest {
     }
 
     private static JsonNode schema(String fileName) throws Exception {
+        return MAPPER.readTree(schemaPath(fileName).toFile());
+    }
+
+    private static Path schemaPath(String fileName) {
         String root = System.getProperty("maven.multiModuleProjectDirectory", "..");
-        return MAPPER.readTree(Path.of(root, "schemas", "collection", fileName).toFile());
+        return Path.of(root, "schemas", "collection", fileName);
     }
 }

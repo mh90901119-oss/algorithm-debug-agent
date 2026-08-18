@@ -45,6 +45,7 @@ class TraceJsonlSinkTest {
         boolean targetContinued = false;
         try (TraceJsonlSink sink = new TraceJsonlSink(trace, 1_024, 1)) {
             assertTrue(sink.append("{\"event\":1}"));
+            assertTrue(sink.limitReached());
             assertFalse(sink.append("{\"event\":2}"));
             targetContinued = true;
             assertEquals(TraceJsonlSink.Limit.EVENTS, sink.result().limit());
@@ -124,7 +125,7 @@ class TraceJsonlSinkTest {
         assertEquals(TraceJsonlSink.HARD_MAX_EVENTS, result.eventsWritten());
         assertEquals(TraceJsonlSink.HARD_MAX_EVENTS * eventBytes, result.bytesWritten());
         assertEquals(result.bytesWritten(), output.size());
-        assertEquals(TraceJsonlSink.Limit.NONE, result.limit());
+        assertEquals(TraceJsonlSink.Limit.EVENTS, result.limit());
     }
 
     private static final class CountingOutputStream extends OutputStream {

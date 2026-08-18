@@ -5,7 +5,7 @@ import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.PlanId;
@@ -89,9 +89,8 @@ public final class CaseArchiveRepository {
     }
 
     /** 在已有 Case 下追加一个 Context。 */
-    public void createContext(ContextSnapshot context) {
-        CaseManifest manifest = requireCase(requireNonNull(context, "context").caseId());
-        requireCaseIdentity(manifest, context.projectId(), context.targetTest());
+    public void createContext(ContextRecord context) {
+        requireCase(requireNonNull(context, "context").caseId());
         Path document = layout(context.caseId()).contextDocument(context.contextId());
         createChildDocument(document, context);
     }
@@ -117,11 +116,10 @@ public final class CaseArchiveRepository {
     public Path createMethodCatalog(MethodCatalog catalog) {
         MethodCatalog checked = requireNonNull(catalog, "catalog");
         CaseManifest manifest = requireCase(checked.caseId());
-        ContextSnapshot context = requireContext(checked.caseId(), checked.contextId());
+        requireContext(checked.caseId(), checked.contextId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
         if (!analysis.contextId().equals(checked.contextId())
-                || !manifest.targetTest().equals(checked.targetTest())
-                || !context.sourceSnapshot().sha256().equals(checked.sourceFingerprintSha256())) {
+                || !manifest.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("MethodCatalog 与 Case/Context/Analysis 身份不一致");
         }
         Path document = layout(checked.caseId()).analysisMethodCatalog(checked.analysisId());
@@ -158,8 +156,7 @@ public final class CaseArchiveRepository {
         CodePathCollectionPlan checked = requireNonNull(plan, "plan");
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
         if (!catalog.contextId().equals(checked.contextId())
-                || !catalog.targetTest().equals(checked.targetTest())
-                || !catalog.sourceFingerprintSha256().equals(checked.sourceFingerprintSha256())) {
+                || !catalog.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("CodePath 计划与 MethodCatalog 身份不一致");
         }
         validatePlanSelectors(catalog, checked);
@@ -189,8 +186,7 @@ public final class CaseArchiveRepository {
             var anchor = entry.sourceAnchor();
             if (!selector.className().equals(anchor.className())
                     || !selector.methodName().equals(anchor.methodName())
-                    || !selector.descriptor().equals(anchor.descriptor())
-                    || !selector.sourceSha256().equals(anchor.sourceSha256())) {
+                    || !selector.descriptor().equals(anchor.descriptor())) {
                 throw identityMismatch("CodePath selector 与 MethodCatalog SourceAnchor 不一致");
             }
         }
@@ -235,8 +231,7 @@ public final class CaseArchiveRepository {
         JdwpCollectionPlan checked = requireNonNull(plan, "plan");
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
         if (!catalog.contextId().equals(checked.contextId())
-                || !catalog.targetTest().equals(checked.targetTest())
-                || !catalog.sourceFingerprintSha256().equals(checked.sourceFingerprintSha256())) {
+                || !catalog.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("JDWP 计划与 MethodCatalog 身份不一致");
         }
         var entries = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
@@ -640,11 +635,11 @@ public final class CaseArchiveRepository {
      */
     public Optional<RunResultFingerprint> findLatestReproductionBefore(
             CaseId caseId, ContextId currentContextId) {
-        ContextSnapshot current = requireContext(caseId, currentContextId);
-        Comparator<ContextSnapshot> order = Comparator
-                .comparing(ContextSnapshot::createdAt)
+        ContextRecord current = requireContext(caseId, currentContextId);
+        Comparator<ContextRecord> order = Comparator
+                .comparing(ContextRecord::createdAt)
                 .thenComparing(value -> value.contextId().value());
-        List<ContextSnapshot> candidates = childDirectories(layout(caseId).contextsRoot()).stream()
+        List<ContextRecord> candidates = childDirectories(layout(caseId).contextsRoot()).stream()
                 .filter(path -> Files.isRegularFile(
                         path.resolve("context.json"), LinkOption.NOFOLLOW_LINKS))
                 .map(path -> contextIdFromDirectory(path))
@@ -652,7 +647,7 @@ public final class CaseArchiveRepository {
                 .filter(candidate -> order.compare(candidate, current) < 0)
                 .sorted(order.reversed())
                 .toList();
-        for (ContextSnapshot candidate : candidates) {
+        for (ContextRecord candidate : candidates) {
             Optional<RunResultFingerprint> reference =
                     findReproduction(caseId, candidate.contextId());
             if (reference.isPresent()) {
@@ -668,9 +663,9 @@ public final class CaseArchiveRepository {
     }
 
     /** 读取指定 Context。 */
-    public ContextSnapshot requireContext(CaseId caseId, ContextId contextId) {
-        ContextSnapshot value = requireDocument(
-                layout(caseId).contextDocument(contextId), ContextSnapshot.class, "CONTEXT_NOT_FOUND");
+    public ContextRecord requireContext(CaseId caseId, ContextId contextId) {
+        ContextRecord value = requireDocument(
+                layout(caseId).contextDocument(contextId), ContextRecord.class, "CONTEXT_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !contextId.equals(value.contextId())) {
             throw identityMismatch("Context 文档身份与路径不一致");
         }
@@ -872,15 +867,6 @@ public final class CaseArchiveRepository {
         } catch (IllegalArgumentException failure) {
             throw new WorkspaceException(
                     "CASE_DOCUMENT_INVALID", "Context 目录名不是有效 ID", failure);
-        }
-    }
-
-    private static void requireCaseIdentity(
-            CaseManifest manifest,
-            org.example.algorithmdebug.contracts.ProjectId projectId,
-            org.example.algorithmdebug.contracts.TargetTest targetTest) {
-        if (!manifest.projectId().equals(projectId) || !manifest.targetTest().equals(targetTest)) {
-            throw identityMismatch("Context 与 Case 项目或目标 UT 不一致");
         }
     }
 

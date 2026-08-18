@@ -26,11 +26,10 @@
 
 本文档是后续实现的主设计基线。早期文档中提出的“在算法内部增加 Domain Trace Sink”不再作为主方案；真实算法和当前 Demo 均优先采用外部、零源码侵入的数据采集方式。
 
-Case 与多轮协作模型已由 `ADR-006-case-as-analysis-dossier.md` 和
-`../designs/2026-08-12-case-context-run-outcome-multiturn-analysis-design.md` 修订：Case 是一个用户问题的
-分析档案；源码、输入或 UT 内容变化在同一 Case 内追加 Context Snapshot；Run、Analysis、Artifact 和
-Evidence 按 `contextId` 作用域追加保存。本文中更早的复杂 Case State、Inquiry/Turn 或代码变化拆分
-Revision Case 描述不再作为实施依据。
+Case 与多轮协作模型已由 ADR-006、ADR-010 和 Context/CodePath 精简设计修订：Case 是一个用户问题的
+分析档案；新 Case 创建初始 Context，后续默认复用，只有用户或大模型明确决定时才追加最小 Context。
+系统不扫描 Workspace 来自动切换 Context。Run、Analysis、Artifact 和 Evidence 按 `contextId` 作用域追加
+保存；本文中更早的复杂状态机、自动 Workspace 快照或 Revision Case 描述不再作为实施依据。
 
 OpenCode 接入进一步由上述详细设计收敛：当前不实现 Algorithm Debug MCP Server；OpenCode 通过仓库内
 Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库，一次性适配安装只登记
@@ -40,7 +39,7 @@ Skill 与薄 Custom Tool 调用 `ada` CLI。Agent 产品资产保存在本仓库
 CodePathTracer 与 JDWP Collector 的当前已验证能力、产物Hash、限制和“已实现/待实现”边界统一以 [工具单点验证基线](tool-validation-baseline.md) 为准。本文描述目标架构；若示例Schema包含尚未落地字段，不得据此宣称工具已经支持。
 
 当前实现边界：外部 Workspace 初始化、独立 Maven 算法模块登记、固定四层配置解析、Doctor、
-Case/Context/Analysis/Run 追加式 Repository、Context Snapshot、Case Digest、真实目标 UT 的结构化
+Case/Context/Analysis/Run 追加式 Repository、Case Digest、真实目标 UT 的结构化
 RunOutcome/Artifact 归档和有界 JSON CLI 已实现。Workspace 位于目标算法仓库之外；Agent 不修改目标源码、
 UT、POM 或输入。Input Analysis、Baseline 比较、OpenCode 安装器、CodePath/JDWP 编排、Evidence 和端到端
 `/debug-case` 模型流程仍未实现；以下相关内容描述目标架构，不代表当前可调用能力。
@@ -390,11 +389,13 @@ static-analysis/input-provenance.json
 
 ### 9.4 Step 4：方法路径运行
 
-CodePathTracer 只采相关包和方法：
+CodePathTracer 根据归档计划精确采集方法：
 
 ```text
 Run 1
   -> 外部 Debug Runner 包裹 JUnit Platform Launcher
+  -> 在事件写盘前按 className + methodName + descriptor 匹配
+  -> 只保存计划方法的单线程进入/退出事件
   -> 执行原始 UT
   -> 输出 method-path-trace.jsonl
   -> 再次生成 schedule-result.json

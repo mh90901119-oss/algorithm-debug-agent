@@ -1,15 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://algorithm-debug-agent.local/schemas/case/case-manifest-v1.schema.json",
-  "title": "CaseManifest v1",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/case-manifest-v2.schema.json",
+  "title": "CaseManifest v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "caseId", "projectId", "targetTest", "initialQuestion", "createdAt"],
+  "required": ["schemaVersion", "caseId", "projectId", "targetTest", "adapterId", "initialQuestion", "createdAt"],
   "properties": {
-    "schemaVersion": { "const": "1.0" },
+    "schemaVersion": { "const": "2.0" },
     "caseId": { "$ref": "#/$defs/id" },
     "projectId": { "$ref": "#/$defs/id" },
     "targetTest": { "$ref": "#/$defs/targetTest" },
+    "adapterId": { "type": "string", "minLength": 1, "maxLength": 512 },
     "initialQuestion": { "type": "string", "minLength": 1, "maxLength": 65536 },
     "createdAt": { "type": "string", "format": "date-time" }
   },

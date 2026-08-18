@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/trace/method-path-summary-v2.schema.json",
+  "title": "MethodPathSummary v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "evidenceId", "caseId", "contextId", "analysisId", "runId", "planId", "collectionId", "rawTrace", "methods", "observedPaths", "anomalies", "truncated", "createdAt"],
+  "properties": {
+    "schemaVersion": {"const": "2.0"},
+    "evidenceId": {"type": "string"}, "caseId": {"type": "string"}, "contextId": {"type": "string"},
+    "analysisId": {"type": "string"}, "runId": {"type": "string"}, "planId": {"type": "string"},
+    "collectionId": {"type": "string"}, "rawTrace": {"$ref": "#/$defs/artifact"},
+    "methods": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/method"}},
+    "observedPaths": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/path"}},
+    "anomalies": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/anomaly"}},
+    "truncated": {"type": "boolean"}, "createdAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"type": "string", "minLength": 1}, "artifactType": {"type": "string", "minLength": 1},
+        "relativePath": {"type": "string", "minLength": 1}, "mediaType": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "sizeBytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["caseId", "contextId", "runId", "collectionId", "rawArtifact", "jsonlLine", "eventId", "sequence", "observationKind"],
+      "properties": {
+        "caseId": {"type": "string"}, "contextId": {"type": "string"}, "runId": {"type": "string"}, "collectionId": {"type": "string"},
+        "rawArtifact": {"$ref": "#/$defs/artifact"}, "jsonlLine": {"type": "integer", "minimum": 1},
+        "eventId": {"oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
+        "sequence": {"oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
+        "observationKind": {"type": "string", "minLength": 1, "maxLength": 64}
+      }
+    },
+    "method": {
+      "type": "object", "additionalProperties": false,
+      "required": ["methodKey", "enterCount", "exitCount", "minDepth", "maxDepth", "firstObservation", "lastObservation"],
+      "properties": {
+        "methodKey": {"type": "string", "minLength": 1, "maxLength": 2048}, "enterCount": {"type": "integer", "minimum": 0},
+        "exitCount": {"type": "integer", "minimum": 0}, "minDepth": {"type": "integer", "minimum": 0}, "maxDepth": {"type": "integer", "minimum": 0},
+        "firstObservation": {"$ref": "#/$defs/provenance"}, "lastObservation": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "path": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ancestorMethodKey", "descendantMethodKey", "relationshipType", "count", "firstObservation"],
+      "properties": {
+        "ancestorMethodKey": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "descendantMethodKey": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "relationshipType": {"const": "NEAREST_SELECTED_ANCESTOR"}, "count": {"type": "integer", "minimum": 1},
+        "firstObservation": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "anomaly": {
+      "type": "object", "additionalProperties": false,
+      "required": ["code", "detail", "provenance"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1, "maxLength": 128}, "detail": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    }
+  }
+}

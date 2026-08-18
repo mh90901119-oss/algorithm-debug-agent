@@ -41,8 +41,6 @@ import org.example.algorithmdebug.contracts.NormalizationStatus;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.SnapshotCompleteness;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
 import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TraceProvenance;
@@ -134,7 +132,7 @@ class CollectionEvidenceValidatorTest {
                 RUN_ID, PLAN_ID, COLLECTION_ID, TARGET, "JDWP", NOW);
         JdwpCollectionPlan plan = new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, HASH, List.of(new JdwpTracepointSpec(
+                ANALYSIS_ID, TARGET, List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#solve()V",
                         new SourceAnchor("fixture.Algorithm", "solve", "()V",
                                 "src/main/java/fixture/Algorithm.java", 10, 20, HASH),
@@ -171,12 +169,10 @@ class CollectionEvidenceValidatorTest {
                 "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, COLLECTION_ID,
                 ComparisonOutcome.MATCHED, Optional.of(new RunId("baseline-run")),
                 Optional.empty(), true, "baseline MATCHED", NOW);
-        SourceSnapshot source = new SourceSnapshot(HASH, 1, 100, SnapshotCompleteness.COMPLETE);
-
         var validation = new CollectionEvidenceValidator().validateJdwp(
                 new JdwpValidationInput(collection, plan, manifest, normalization,
                         summary, baseline, rawReference, raw, summaryReference, summaryPath,
-                        planPath, source, source, NOW));
+                        planPath, NOW));
 
         assertEquals(EvidenceValidationStatus.VALID, validation.status());
         assertEquals(java.util.Set.of(EvidenceDimension.VALIDATION,
@@ -209,10 +205,10 @@ class CollectionEvidenceValidatorTest {
                 COLLECTION_ID, TARGET, "CODEPATH", NOW);
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, HASH,
+                ANALYSIS_ID, TARGET,
                 List.of(new MethodSelector(
-                        "fixture.Algorithm#solve()V", "fixture.Algorithm", "solve", "()V", HASH)),
-                List.of("fixture"), "PACKAGE_SUPERSET", CollectionBudget.defaults(), 0,
+                        "fixture.Algorithm#solve()V", "fixture.Algorithm", "solve", "()V")),
+                CollectionBudget.defaults(),
                 "定位方法路径", NOW);
         TraceProvenance provenance = new TraceProvenance(
                 CASE_ID, CONTEXT_ID, RUN_ID, COLLECTION_ID, rawReference, 1,
@@ -221,7 +217,7 @@ class CollectionEvidenceValidatorTest {
         MethodPathSummary summary = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
                 ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, rawReference,
-                "EXACT_DESCRIPTOR", List.of(new MethodPathSummary.MethodStatistic(
+                List.of(new MethodPathSummary.MethodStatistic(
                         "fixture.Algorithm#solve()V", 1, 0, 1, 1, provenance, provenance)),
                 List.of(), List.of(), partial, NOW);
         NormalizationManifest normalization = new NormalizationManifest(
@@ -231,25 +227,22 @@ class CollectionEvidenceValidatorTest {
                 Optional.of(summaryReference), NormalizationBudget.defaults(), 1, 1,
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(), "", NOW);
         MethodPathManifest manifest = new MethodPathManifest(
-                "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID,
+                "2.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID,
                 "code-path-tracer", "1.0", Optional.of(HASH), sha(planPath),
-                "PACKAGE_SUPERSET", "METHOD_ALLOWLIST", "EXACT_DESCRIPTOR",
-                List.of("fixture"), partial ? CollectionCompletion.TRUNCATED : CollectionCompletion.SUCCESS,
-                "COMPLETE", true, 0, false, 1, 1, 1, 0,
-                rawReference.sizeBytes(), rawReference.sizeBytes()
-                        + (corruptManifestRawIdentity ? 1 : 0),
-                Optional.of(rawReference.sha256()), Optional.of(rawReference.sha256()),
+                partial ? CollectionCompletion.TRUNCATED : CollectionCompletion.SUCCESS,
+                "COMPLETE", true, 0, false, "PASSED", 1, 1, 0, 0, 1,
+                rawReference.sizeBytes() + (corruptManifestRawIdentity ? 1 : 0),
+                Optional.of(rawReference.sha256()),
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(),
-                "logs/stdout.log", "logs/stderr.log", NOW, NOW);
+                "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log", NOW, NOW);
         CollectionBaselineCheck baseline = new CollectionBaselineCheck(
                 "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, COLLECTION_ID,
                 baselineOutcome, Optional.of(new RunId("baseline-run")), Optional.empty(),
                 baselineOutcome == ComparisonOutcome.MATCHED, "baseline " + baselineOutcome, NOW);
-        SourceSnapshot source = new SourceSnapshot(HASH, 1, 100, SnapshotCompleteness.COMPLETE);
         MethodPathValidationInput input = new MethodPathValidationInput(
                 collection, plan, manifest, normalization, summary, baseline,
                 rawReference, raw, summaryReference, summaryPath, planPath,
-                source, source, NOW);
+                NOW);
         return new Fixture(input, raw);
     }
 

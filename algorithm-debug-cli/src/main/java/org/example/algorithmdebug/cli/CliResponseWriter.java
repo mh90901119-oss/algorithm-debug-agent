@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.example.algorithmdebug.contracts.ToolResponse;
@@ -20,7 +21,8 @@ public final class CliResponseWriter {
     public CliResponseWriter() {
         this.mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
-                .registerModule(new Jdk8Module());
+                .registerModule(new Jdk8Module())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     /**

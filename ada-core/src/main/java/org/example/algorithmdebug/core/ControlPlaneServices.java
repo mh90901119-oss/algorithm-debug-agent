@@ -3,7 +3,6 @@ package org.example.algorithmdebug.core;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.ClasspathWorkspaceTemplateProvider;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
@@ -233,8 +232,7 @@ public final class ControlPlaneServices {
             OpaqueIdGenerator ids = new OpaqueIdGenerator();
             cases = new CaseApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                    catalog, new ContextSnapshotBuilder(), ids, clock,
-                    () -> System.getProperty("java.version", "UNAVAILABLE"));
+                    catalog, ids, clock);
             runs = new RunApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                     catalog, ids, clock, new MavenTestExecutor(),
@@ -245,14 +243,12 @@ public final class ControlPlaneServices {
             collections = new CollectionApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
                     ids, clock, mavenExecutable, currentJavaExecutable(windows),
-                    methodPathCollector, classpathResolver,
-                    new ContextSnapshotBuilder()::captureSourceSnapshot);
+                    methodPathCollector, classpathResolver);
             if (jdwpTool != null) {
                 jdwpCollections = new JdwpCollectionApplicationService(
                         new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
                         ids, clock, mavenExecutable, currentJavaExecutable(windows), jdwpTool,
-                        jdwpExecutor, jdwpPorts,
-                        new ContextSnapshotBuilder()::captureSourceSnapshot);
+                        jdwpExecutor, jdwpPorts);
             }
         }
         return new ControlPlaneServices(
