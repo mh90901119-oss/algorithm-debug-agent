@@ -209,3 +209,4 @@ sequenceDiagram
 |---|---|---|---|
 | 2026-08-19 | 1.0 | 用户批准本地 OpenCode Demo 必要链路 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.1 | Task 4 实现 Case 内 Artifact 登记/有界读取与 Analysis 完成 CLI；审计修复 Run Artifact 原先错误的 Run 相对路径和跨 Run ID 冲突 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.2 | Task 5 增加仓库内 `ada.cmd`、被 Git 忽略的本机配置入口和 `hellomvn doctor` 进程级验证 | Codex / mh90901119-oss |

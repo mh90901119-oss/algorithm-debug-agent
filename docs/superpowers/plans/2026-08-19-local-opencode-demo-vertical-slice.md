@@ -74,9 +74,9 @@
 
 **Produces:** a command that starts the shaded CLI with configured CodePath and JDWP JAR paths without manual classpath construction.
 
-- [ ] Define a failing process-level check showing the launcher is missing or Doctor cannot see configured tools.
-- [ ] Package the shaded CLI and CodePath launcher, then implement the minimal Windows launcher and local ignored Workspace/config.
-- [ ] Verify `ada doctor` with Java, Maven, CodePath, JDWP and `hellomvn`; commit.
+- [x] Define a failing process-level check showing the launcher is missing or Doctor cannot see configured tools.
+- [x] Package the shaded CLI and CodePath launcher, then implement the minimal Windows launcher and local ignored Workspace/config.
+- [x] Verify `ada doctor` with Java, Maven, CodePath, JDWP and `hellomvn`; commit.
 
 ### Task 6: Align the OpenCode tools with the real CLI
 

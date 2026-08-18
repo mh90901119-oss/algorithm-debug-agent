@@ -49,25 +49,26 @@ Run directory and confirms equal raw and JSON Token content SHA-256 values.
 
 ## Current CLI slice
 
-Build the executable JAR, then invoke it from any directory. `case open` only archives the question
+Build the executable JAR and CodePath Launcher once, then use the repository-owned launcher from any
+directory. `case open` only archives the question
 and context; it does not run the UT. Reuse the returned IDs only when the model decides a new Run is
 needed.
 
 ```powershell
-mvn -pl algorithm-debug-cli -am package
-$ada = "D:\tools\algorithm-debug-agent\algorithm-debug-cli\target\algorithm-debug-cli-0.1.0-SNAPSHOT-all.jar"
-java -jar $ada workspace init --root D:\agent-workspace
-java -jar $ada project register --workspace D:\agent-workspace --project D:\large-system\algorithm-module
-java -jar $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt [--context-mode reuse|new]
-java -jar $ada case inspect --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId>
-java -jar $ada run execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
-java -jar $ada static analyze --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
-java -jar $ada plan codepath create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file codepath-plan-request.json
-java -jar $ada collection codepath execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
-java -jar $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
-java -jar $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
-java -jar $ada artifact read --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --artifact-id <artifactId> [--offset-bytes 0] [--max-bytes 16384]
-java -jar $ada analysis complete --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --result-file analysis-result.json
+mvn -Pcodepath-launcher package
+$ada = "D:\tools\algorithm-debug-agent\bin\ada.cmd"
+& $ada workspace init --root D:\agent-workspace
+& $ada project register --workspace D:\agent-workspace --project D:\large-system\algorithm-module
+& $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt [--context-mode reuse|new]
+& $ada case inspect --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId>
+& $ada run execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
+& $ada static analyze --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
+& $ada plan codepath create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file codepath-plan-request.json
+& $ada collection codepath execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
+& $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
+& $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
+& $ada artifact read --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --artifact-id <artifactId> [--offset-bytes 0] [--max-bytes 16384]
+& $ada analysis complete --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --result-file analysis-result.json
 ```
 
 JDWP execution treats the Collector as one configured local JAR. Before starting OpenCode/CLI,
@@ -76,6 +77,9 @@ set its location:
 ```powershell
 $env:ADA_JDWP_COLLECTOR_JAR = "D:\mcpcode\mcp-jdwp-java\jdwp-batch-collector\target\jdwp-batch-collector.jar"
 ```
+
+也可复制 `bin\ada.local.example.cmd` 为被 Git 忽略的 `bin\ada.local.cmd`，只在其中保存本机 JDWP
+路径。启动器自动配置 CodePath Launcher 及其 SHA-256。详见 `bin\README.md`。
 
 `doctor` reports whether the configured path points to a regular JAR file without starting a target JVM.
 The Agent records the configured Collector version but does not require a repository-pinned JAR

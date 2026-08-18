@@ -4,11 +4,14 @@ CLI 是当前 Java 后端的稳定 JSON 控制面。stdout 每次只输出一个
 确定性领域错误退出 3，未预期 Agent 错误退出 10。目标 Maven 日志只作为 Run Artifact 保存，不回显到
 最终 stdout。
 
-打包：
+打包 CLI 与 CodePath Launcher：
 
 ```powershell
-mvn -pl algorithm-debug-cli -am package
+mvn -Pcodepath-launcher package
 ```
+
+本地开发使用仓库根目录的 `bin\ada.cmd` 启动，无需手工拼 fat JAR 命令或设置 CodePath JAR/Hash。
+外部 JDWP JAR 可通过 `ADA_JDWP_COLLECTOR_JAR` 或被 Git 忽略的 `bin\ada.local.cmd` 配置。
 
 当前命令：
 
