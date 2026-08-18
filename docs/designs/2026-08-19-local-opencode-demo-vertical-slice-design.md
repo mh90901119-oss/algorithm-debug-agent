@@ -212,6 +212,20 @@ sequenceDiagram
   `node --test integrations/opencode/test/*.test.mjs`，17 个测试通过；
 - 已知限制：Tool 源码尚未通过 OpenCode 1.18.15 一次性安装和真实发现验证，该项属于 Task 7。
 
+### Task 7：OpenCode 一次性安装与发现验证
+
+- 实际变更：增加 `install-opencode.ps1` 的 `Install/Check` 两种模式，安装 canonical Skill、Agent、
+  Command、10 个 Tool 及其 lib，并生成指向仓库 `bin/ada.cmd` 的安装模块；
+- 用户配置保护：不修改 `opencode.json`；目标文件不存在时新增，内容冲突时先保存唯一
+  `.ada-backup-*`，相同内容重复安装不写入也不重复备份；
+- 真实验证：临时配置完成冲突备份、幂等安装和发现测试；用户配置目录完成安装与 Check；
+  `opencode debug skill`、`debug agent algorithm-debug`、`debug config` 确认 Skill、Agent、Command
+  和全部 10 个 Tool 可见；
+- 审计修复：canonical Skill 原有编码损坏会影响模型理解，已用精简 ASCII 指引重写并通过
+  `quick_validate.py`；OpenCode 首次加载会自行刷新 TypeScript 依赖，这属于 OpenCode 管理文件，
+  Check 前后仍重新校验所有 Agent 管理资产未变化；
+- 已知限制：尚未让真实模型执行完整 `/debug-case` 多轮链路，该项属于 Task 8。
+
 ## 18. 变更记录
 
 | 日期 | 版本 | 变更内容 | 作者 |
@@ -220,3 +234,4 @@ sequenceDiagram
 | 2026-08-19 | 1.1 | Task 4 实现 Case 内 Artifact 登记/有界读取与 Analysis 完成 CLI；审计修复 Run Artifact 原先错误的 Run 相对路径和跨 Run ID 冲突 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.2 | Task 5 增加仓库内 `ada.cmd`、被 Git 忽略的本机配置入口和 `hellomvn doctor` 进程级验证 | Codex / mh90901119-oss |
 | 2026-08-19 | 1.3 | Task 6 将 10 个 OpenCode Tool 对齐真实 CLI，并增加自动项目准备、有界临时文件和失败清理 | Codex / mh90901119-oss |
+| 2026-08-19 | 1.4 | Task 7 增加备份保护的一次性 OpenCode 安装/检查，并完成 1.18.15 临时与用户目录真实发现验证 | Codex / mh90901119-oss |

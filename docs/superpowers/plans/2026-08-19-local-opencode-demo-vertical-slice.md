@@ -95,10 +95,10 @@
 
 **Produces:** idempotent `install` and `check` that register repository-owned Skill, Agent, command and tools while preserving user config.
 
-- [ ] Add a temporary-config test that fails because assets are not currently discovered.
-- [ ] Implement backup-preserving install and non-mutating check; do not add upgrade/uninstall.
-- [ ] Verify with `opencode debug config`, `opencode debug skill` and tool discovery under a temporary config first, then local install.
-- [ ] Confirm `algorithm-debug` is visible and commit.
+- [x] Add a temporary-config test that fails because assets are not currently discovered.
+- [x] Implement backup-preserving install and non-mutating managed-asset check; do not add upgrade/uninstall.
+- [x] Verify with `opencode debug config`, `opencode debug skill` and tool discovery under a temporary config first, then local install.
+- [x] Confirm `algorithm-debug` is visible and commit.
 
 ### Task 8: Run the real `hellomvn` acceptance and final audit
 

@@ -26,13 +26,20 @@ successful Run, static Plan and Collection response now registers its Case-local
 the CLI can read a hash-verified UTF-8 excerpt by Artifact ID and append a final Analysis result.
 The P3 JDWP release audit and real Wafer one-point smoke are complete: the target UT produced three
 bounded hits, its normalized Gantt Hash matched the no-collection same-Context baseline, and no
-managed process survived. Input Analysis, Evidence construction, the OpenCode installer and
-end-to-end `/debug-case` model workflow remain planned.
+managed process survived. Dynamic collections now produce normalized, validated Evidence. Input
+Analysis and the full model-driven `/debug-case` acceptance remain planned.
 
 The approved OpenCode integration target keeps all product assets in this repository. The canonical
-`algorithm-debug` Skill, bounded OpenCode agent/command/custom-tool contract assets and the Java
-CLI exist; the one-time installer and pinned-version OpenCode loading verification are not yet
-implemented. After that adapter work is complete, normal use will be:
+`algorithm-debug` Skill, bounded OpenCode Agent/Command/Custom Tool assets and the Java CLI exist.
+The one-time installer is idempotent, preserves conflicting files as backups, and has been verified
+against OpenCode 1.18.15. Install or check it with:
+
+```powershell
+.\scripts\install-opencode.ps1 -Mode Install
+.\scripts\install-opencode.ps1 -Mode Check
+```
+
+Then restart any running OpenCode session. Normal use is:
 
 ```powershell
 cd D:\path\to\target-algorithm
@@ -41,8 +48,9 @@ opencode
 
 The intended experience is that the user specifies a JUnit UT and asks a question. Each executed UT
 returns a bounded structured summary plus immutable Artifact references; the Skill guides the model to answer from existing
-evidence or request the next minimal action. The current phase does not implement an Algorithm Debug
-MCP server or other CLI-runtime adapters.
+evidence or request the next minimal action. Use `/debug-case <target UT and question>` or ask the
+same information directly. The current phase does not implement an Algorithm Debug MCP server or
+other CLI-runtime adapters.
 
 The verified Reference Demo flow runs one dedicated UT twice, captures each result into a separate
 Run directory and confirms equal raw and JSON Token content SHA-256 values.

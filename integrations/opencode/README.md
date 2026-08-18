@@ -11,7 +11,7 @@
   取得 `projectId`。用户和大模型不需要填写 Workspace 或 `projectId`；
 - `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限，只原样返回通过 ToolResponse 2.0 校验的
   stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误均转为结构化 Adapter 失败；
-- `agents/algorithm-debug.md`、`commands/debug-case.md`：待一次性安装器登记和实测的 OpenCode 资产；
+- `agents/algorithm-debug.md`、`commands/debug-case.md`：已由一次性安装器登记并实测的 OpenCode 资产；
 - 规范 Skill 位于 `skills/algorithm-debug/SKILL.md`。
 
 ## 路径与临时文件
@@ -24,11 +24,22 @@ Workspace 默认位于当前用户数据目录下的 `algorithm-debug-agent/work
 上限分别为 64 KiB、64 KiB 和 256 KiB；成功或失败后都清理。Artifact 每次最多读取 64 KiB，
 只接受 Case 内已登记的 Artifact ID，不接受任意文件路径。
 
-## 使用状态
+## 安装与使用
 
-Java 后端和 Tool 映射已经对齐，但本目录仍不是可直接复制使用的安装包。下一阶段需要实现并验证
-OpenCode 1.18.15 的一次性 `install/check`：进入目标算法模块执行 `opencode` 后即可发现仓库拥有的
-Skill、Agent、Command 和 Tools。当前不提供 MCP Server。
+在仓库根目录执行：
+
+```powershell
+.\scripts\install-opencode.ps1 -Mode Install
+.\scripts\install-opencode.ps1 -Mode Check
+```
+
+安装器只安装本仓库拥有的 Skill、Agent、Command、Tool 和 lib；同名不同内容文件会先生成
+`.ada-backup-*` 副本，不修改 `opencode.json`。用户目录中的文件是安装副本，canonical 内容仍在本仓库。
+`Check` 会核对副本并通过 OpenCode 1.18.15 的 `debug skill`、`debug agent` 和 `debug config` 验证发现。
+OpenCode 可能自行刷新其 TypeScript 运行依赖，但检查器不会改写本仓库拥有的安装资产。
+
+安装后重启已有 OpenCode 会话，进入目标算法模块执行 `opencode`，然后使用 `/debug-case` 或直接指定
+UT 提问。当前不提供 MCP Server。
 
 适配层不猜 Context：已有 Case 默认使用 `reuse`；只有模型根据用户明确说明确认目标算法源码、UT
 或输入被有意修改时才使用 `new`。Gantt `CHANGED` 只是模型可分析的事实，不触发自动切换。

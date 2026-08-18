@@ -1,11 +1,9 @@
-import { fileURLToPath } from "node:url"
-
 import { tool } from "@opencode-ai/plugin"
 import { runAdaCommand } from "../lib/ada-cli.mjs"
+import { defaultLauncher } from "../lib/installation.mjs"
 import { createAlgorithmDebugRuntime } from "../lib/tool-runtime.mjs"
 
-const repositoryLauncher = fileURLToPath(new URL("../../../bin/ada.cmd", import.meta.url))
-const configuredLauncher = process.env.ADA_CLI?.trim() || repositoryLauncher
+const configuredLauncher = process.env.ADA_CLI?.trim() || defaultLauncher
 const runtime = createAlgorithmDebugRuntime({
   execute: (args: string[], cwd: string) => runAdaCommand(args, cwd, Bun.spawn, {
     executable: configuredLauncher,
