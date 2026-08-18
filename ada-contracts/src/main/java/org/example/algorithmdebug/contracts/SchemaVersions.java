@@ -57,7 +57,7 @@ public final class SchemaVersions {
     public static final String JDWP_COLLECTION_REQUEST = "1.0";
 
     /** JDWP Agent Manifest Schema 版本。 */
-    public static final String JDWP_COLLECTION_MANIFEST = "1.0";
+    public static final String JDWP_COLLECTION_MANIFEST = "2.0";
 
     /** 通用 Trace 归一化清单 Schema 版本。 */
     public static final String NORMALIZATION_MANIFEST = "1.0";

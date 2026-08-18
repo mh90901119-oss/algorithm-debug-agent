@@ -4,10 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -71,7 +68,6 @@ public final class JdwpCollectionCoordinator {
         if (request == null) {
             throw new IllegalArgumentException("request 不能为空");
         }
-        verifyCollector(request);
         verifyCollectorPlanEndpoint(request);
         int port = request.port();
         long deadline = deadline(request.overallTimeout());
@@ -175,32 +171,6 @@ public final class JdwpCollectionCoordinator {
     private static boolean rawLimitExceeded(JdwpExecutionRequest request) throws IOException {
         return Files.exists(request.rawTracePath())
                 && Files.size(request.rawTracePath()) > request.maximumRawBytes();
-    }
-
-    private static void verifyCollector(JdwpExecutionRequest request) throws JdwpAdapterException {
-        String actual;
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (var input = Files.newInputStream(request.collectorJar())) {
-                byte[] buffer = new byte[8_192];
-                int read;
-                while ((read = input.read(buffer)) >= 0) {
-                    if (read > 0) {
-                        digest.update(buffer, 0, read);
-                    }
-                }
-            }
-            actual = HexFormat.of().formatHex(digest.digest());
-        } catch (IOException failure) {
-            throw new JdwpAdapterException(
-                    "JDWP_TOOL_VERIFICATION_FAILED", "无法读取锁定的 JDWP Collector JAR", failure);
-        } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
-        }
-        if (!actual.equals(request.expectedCollectorSha256())) {
-            throw new JdwpAdapterException(
-                    "JDWP_TOOL_HASH_MISMATCH", "JDWP Collector JAR SHA-256 与工具锁不一致", null);
-        }
     }
 
     private static void verifyCollectorPlanEndpoint(JdwpExecutionRequest request)

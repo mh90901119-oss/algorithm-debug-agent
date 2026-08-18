@@ -4,11 +4,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-/** 按锁定 Collector CLI 契约生成不经过 Shell 的精确 argv。 */
+/** 按已配置 Collector CLI 契约生成不经过 Shell 的精确 argv。 */
 public final class JdwpCollectorCommandFactory {
     /**
      * @param javaExecutable Java 21 可执行文件
-     * @param collectorJar 已通过 SHA-256 校验的锁定 Collector JAR
+     * @param collectorJar 已配置且存在的 Collector JAR
      * @param collectorPlan 已归档且端口一致的 Collector Plan
      * @param outputDirectory 本次 create-new Collector 输出目录
      * @param port 已写入 Collector Plan 的 loopback 端口

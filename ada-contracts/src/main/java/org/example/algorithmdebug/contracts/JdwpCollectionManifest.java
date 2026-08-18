@@ -21,7 +21,6 @@ public record JdwpCollectionManifest(
         CollectionId collectionId,
         String toolName,
         String toolVersion,
-        String toolSha256,
         String planSha256,
         JdwpCollectionCompletion completion,
         JdwpCollectionStage stage,
@@ -59,7 +58,6 @@ public record JdwpCollectionManifest(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         toolName = ContractChecks.requireBoundedText(toolName, "toolName", 128, false);
         toolVersion = ContractChecks.requireBoundedText(toolVersion, "toolVersion", 256, false);
-        toolSha256 = ContractChecks.requireSha256(toolSha256, "toolSha256");
         planSha256 = ContractChecks.requireSha256(planSha256, "planSha256");
         completion = ContractChecks.requireNonNull(completion, "completion");
         stage = ContractChecks.requireNonNull(stage, "stage");

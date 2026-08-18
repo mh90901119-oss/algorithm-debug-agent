@@ -324,7 +324,7 @@ class JdwpCollectionApplicationServiceTest {
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new AdapterCatalog(List.of(new StubAdapter())), new OpaqueIdGenerator(() -> "fixed"),
                 fixedClock(), Optional.of(maven), java,
-                new JdwpToolConfiguration(collectorJar, sha(read(collectorJar)), "1.0.0"),
+                new JdwpToolConfiguration(collectorJar, "1.0.0"),
                 executor, () -> 51234);
     }
 

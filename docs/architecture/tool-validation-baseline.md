@@ -173,8 +173,9 @@ Maven Surefire fork
 ### 4.5 Agent P3 集成验证（2026-08-18）
 
 上面的 `Agent Adapter=NOT_STARTED` 是外部 Collector 原型验证时的历史结论；当前状态已更新为
-`P3 VERIFIED`。Agent 使用锁定的 Collector `1.0.0`，JAR SHA-256 为
-`be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78`。
+`P3 VERIFIED`。当时验证使用 Collector `1.0.0`。自 2026-08-19 起，Agent 将 JDWP Collector
+视为一个通过路径配置的本地 JAR，仅记录版本，不再锁定或校验 JAR 数字指纹；该调整不改变下述
+功能验证结果。
 
 真实 Wafer 指定 UT 的无采集 Baseline 与单点 JDWP Collection 均成功。采集点为
 `SimpleWaferScheduler.scheduleWafer:81`，最大命中 3；实际得到 3 个 `tracepoint_hit`、5 个总事件、

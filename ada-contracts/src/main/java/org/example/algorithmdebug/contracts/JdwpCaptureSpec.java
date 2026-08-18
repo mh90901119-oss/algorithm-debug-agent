@@ -1,7 +1,7 @@
 package org.example.algorithmdebug.contracts;
 
 /**
- * 当前锁定 JDWP Collector 能够执行的有界快照参数。
+ * 当前已配置 JDWP Collector 能够执行的有界快照参数。
  *
  * <p>{@code locals=true} 表示采集全部可见局部变量，并不表示变量白名单。P3 在 Collector
  * 支持投影前将对象深度和条目数限制在保守范围。</p>

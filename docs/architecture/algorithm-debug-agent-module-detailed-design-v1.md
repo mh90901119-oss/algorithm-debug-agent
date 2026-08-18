@@ -2020,7 +2020,7 @@ CLI创建Case
 
 ### Phase 4：JDWP Collector接入
 
-Collector/Core单点能力已经验证。此Phase只负责Agent侧接入：锁定JAR/commit/hash，编译计划，动态分配localhost端口，启动`suspend=y`目标UT，监管Collector，读取Trace/Manifest，并自动验证 Gantt JSON 内容指纹或失败指纹和错误恢复。
+Collector/Core单点能力已经验证。此 Phase 只负责 Agent 侧接入：读取已配置的本地 JAR，编译计划，动态分配 localhost 端口，启动 `suspend=y` 目标 UT，监管 Collector，读取 Trace/Manifest，并自动验证 Gantt JSON 内容指纹或失败指纹和错误恢复。当前开发阶段不对 JDWP Collector JAR 做数字指纹锁定。
 
 ### Phase 5：Normalizer + Validator + Evidence
 

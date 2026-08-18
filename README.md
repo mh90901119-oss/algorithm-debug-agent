@@ -66,14 +66,16 @@ java -jar $ada plan jdwp create --workspace D:\agent-workspace --project-id <pro
 java -jar $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
 ```
 
-JDWP execution uses the repository-pinned Collector `1.0.0` SHA-256. Before starting OpenCode/CLI,
-set only the local JAR location; callers cannot replace the locked Hash through CLI input:
+JDWP execution treats the Collector as one configured local JAR. Before starting OpenCode/CLI,
+set its location:
 
 ```powershell
 $env:ADA_JDWP_COLLECTOR_JAR = "D:\mcpcode\mcp-jdwp-java\jdwp-batch-collector\target\jdwp-batch-collector.jar"
 ```
 
-`doctor` reports `JDWP_TOOL_OK`, missing JAR, or Hash mismatch without starting a target JVM.
+`doctor` reports whether the configured path points to a regular JAR file without starting a target JVM.
+The Agent records the configured Collector version but does not require a repository-pinned JAR
+fingerprint; a malformed or incompatible JAR is retained as a structured tool execution failure.
 Every execution creates a new Collection and returns only a bounded summary plus relative Artifact
 references. Raw JDWP events, the external Collector Manifest, Agent Manifest, four process logs,
 optional Gantt and Baseline check remain in that Collection directory.

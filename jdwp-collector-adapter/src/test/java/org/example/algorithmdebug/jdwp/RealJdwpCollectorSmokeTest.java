@@ -27,9 +27,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 class RealJdwpCollectorSmokeTest {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final String LOCKED_COLLECTOR_SHA256 =
-            "be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78";
-
     @TempDir
     Path directory;
 
@@ -81,7 +78,7 @@ class RealJdwpCollectorSmokeTest {
                 java, directory.resolve("target-out.log"), directory.resolve("target-err.log"),
                 ProcessLimits.defaults());
         return new JdwpExecutionRequest(
-                launch, targetOptions, port, java, collectorJar, LOCKED_COLLECTOR_SHA256,
+                launch, targetOptions, port, java, collectorJar,
                 plan, directory.resolve("collector-raw"),
                 directory.resolve("collector-out.log"), directory.resolve("collector-err.log"),
                 ProcessLimits.defaults(), 4 * 1024 * 1024,

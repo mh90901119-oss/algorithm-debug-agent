@@ -31,14 +31,9 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.stream.Collectors;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
 public final class AdaMain {
-
-    private static final String LOCKED_JDWP_COLLECTOR_SHA256 =
-            "be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78";
 
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_INVALID_ARGUMENTS = 2;
@@ -218,7 +213,7 @@ public final class AdaMain {
         String jar = System.getenv("ADA_JDWP_COLLECTOR_JAR");
         if (jar == null || jar.isBlank()) {
             JdwpToolConfiguration unavailable = new JdwpToolConfiguration(
-                    javaExecutable, "0".repeat(64), "unavailable");
+                    javaExecutable, "unavailable");
             return new ConfiguredJdwp(
                     unavailable,
                     request -> { throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
@@ -229,47 +224,20 @@ public final class AdaMain {
                             "JDWP Collector 未配置"));
         }
         JdwpToolConfiguration tool = new JdwpToolConfiguration(
-                java.nio.file.Path.of(jar), LOCKED_JDWP_COLLECTOR_SHA256, "1.0.0");
+                java.nio.file.Path.of(jar), "1.0.0");
         ToolDoctorProbe probe = () -> {
             if (!Files.isRegularFile(tool.collectorJar())) {
                 return new DoctorCheck(
                         "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_MISSING",
                         "JDWP Collector JAR 不可用");
             }
-            try {
-                if (!sha256(tool.collectorJar()).equals(tool.sha256())) {
-                    return new DoctorCheck(
-                            "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_HASH_MISMATCH",
-                            "JDWP Collector JAR SHA-256 不匹配");
-                }
-                return new DoctorCheck(
-                        "jdwp", DoctorStatus.PASS, "JDWP_TOOL_OK",
-                        "JDWP Collector 配置和 SHA-256 校验通过");
-            } catch (java.io.IOException failure) {
-                return new DoctorCheck(
-                        "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_VERIFICATION_FAILED",
-                        "JDWP Collector JAR 无法读取");
-            }
+            return new DoctorCheck(
+                    "jdwp", DoctorStatus.PASS, "JDWP_TOOL_OK",
+                    "JDWP Collector JAR 路径可用");
         };
         JdwpCollectionCoordinator coordinator = new JdwpCollectionCoordinator();
         LoopbackPortAllocator ports = new LoopbackPortAllocator();
         return new ConfiguredJdwp(tool, coordinator::execute, ports::allocate, probe);
-    }
-
-    private static String sha256(java.nio.file.Path path) throws java.io.IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (var input = Files.newInputStream(path)) {
-                byte[] buffer = new byte[16 * 1024];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (java.security.NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
-        }
     }
 
     private record ConfiguredJdwp(
@@ -308,7 +276,6 @@ public final class AdaMain {
             case "JDWP_PLAN_COMPILATION_FAILED" -> "JDWP collection plan could not be compiled";
             case "JDWP_PLAN_ARCHIVE_FAILED" -> "JDWP collection plan could not be archived";
             case "JDWP_TOOL_NOT_CONFIGURED" -> "JDWP Collector is not configured";
-            case "JDWP_TOOL_HASH_MISMATCH" -> "JDWP Collector verification failed";
             case "JDWP_ATTACH_FAILED" -> "JDWP Collector could not attach to the target test";
             case "JDWP_MANIFEST_INVALID" -> "JDWP Collector output is invalid";
             case "JDWP_ARCHIVE_FAILED" -> "JDWP collection artifacts could not be archived";

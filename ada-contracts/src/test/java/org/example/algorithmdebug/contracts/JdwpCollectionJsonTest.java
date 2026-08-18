@@ -15,6 +15,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -78,8 +80,34 @@ class JdwpCollectionJsonTest {
         assertFalse(plan.path("properties").has("host"));
         assertFalse(plan.toString().contains("projection"));
         assertFalse(plan.toString().contains("sampling"));
-        assertTrue(schema("jdwp-manifest-v1.schema.json")
+        assertTrue(schema("jdwp-manifest-v2.schema.json")
                 .path("properties").has("rawTraceRelativePath"));
+        assertFalse(schema("jdwp-manifest-v2.schema.json")
+                .path("properties").has("toolSha256"));
+    }
+
+    @Test
+    void roundTripsManifestWithoutCollectorJarFingerprint() throws Exception {
+        JdwpCollectionManifest manifest = new JdwpCollectionManifest(
+                SchemaVersions.JDWP_COLLECTION_MANIFEST,
+                new CaseId("case-1"), new ContextId("context-1"),
+                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new PlanId("plan-1"), new CollectionId("collection-1"),
+                "jdwp-batch-collector", "1.0.0", HASH,
+                JdwpCollectionCompletion.SUCCESS, JdwpCollectionStage.BASELINE_CHECKED,
+                true, true, 0, 0, false, false, 1, 128,
+                Map.of("point-1", 1), Map.of("point-1", 1), Optional.of(HASH),
+                Optional.empty(), "raw/jdwp.jsonl", "raw/collector-manifest.json",
+                "logs/target-stdout.log", "logs/target-stderr.log",
+                "logs/collector-stdout.log", "logs/collector-stderr.log",
+                Instant.parse("2026-08-18T00:00:00Z"),
+                Instant.parse("2026-08-18T00:00:01Z"));
+
+        String json = MAPPER.writeValueAsString(manifest);
+
+        assertEquals(manifest, MAPPER.readValue(json, JdwpCollectionManifest.class));
+        assertFalse(MAPPER.readTree(json).has("toolSha256"));
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-manifest-v2.schema.json"), json);
     }
 
     private static JdwpCollectionPlan plan() {

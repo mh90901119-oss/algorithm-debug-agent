@@ -28,9 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class JdwpCollectionCoordinatorTest {
-    private static final String EMPTY_SHA256 =
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-
     @TempDir
     Path directory;
 
@@ -171,27 +168,6 @@ class JdwpCollectionCoordinatorTest {
     }
 
     @Test
-    void rejectsCollectorHashMismatchBeforeStartingTargetOrCreatingLogs() throws Exception {
-        AtomicBoolean targetCommandRequested = new AtomicBoolean();
-        JdwpCollectionCoordinator coordinator = coordinator(
-                (request, port) -> {
-                    targetCommandRequested.set(true);
-                    return fixture("exit", "0");
-                },
-                (request, port) -> fixture("exit", "0"));
-        JdwpExecutionRequest request = request(
-                Duration.ofSeconds(2), Duration.ofSeconds(3), 1_024, "0".repeat(64));
-
-        JdwpAdapterException failure = assertThrows(
-                JdwpAdapterException.class, () -> coordinator.execute(request));
-
-        assertEquals("JDWP_TOOL_HASH_MISMATCH", failure.code());
-        assertFalse(targetCommandRequested.get());
-        assertFalse(Files.exists(request.targetOptions().stdoutLog()));
-        assertFalse(Files.exists(request.targetOptions().stderrLog()));
-    }
-
-    @Test
     void rejectsCollectorPlanWhoseEndpointDiffersFromExecutionPort() throws Exception {
         AtomicBoolean targetCommandRequested = new AtomicBoolean();
         JdwpCollectionCoordinator coordinator = coordinator(
@@ -258,14 +234,6 @@ class JdwpCollectionCoordinatorTest {
 
     private JdwpExecutionRequest request(
             Duration readyTimeout, Duration overallTimeout, long maximumRawBytes) throws Exception {
-        return request(readyTimeout, overallTimeout, maximumRawBytes, EMPTY_SHA256);
-    }
-
-    private JdwpExecutionRequest request(
-            Duration readyTimeout,
-            Duration overallTimeout,
-            long maximumRawBytes,
-            String expectedCollectorSha256) throws Exception {
         Path java = Files.createFile(directory.resolve("java.exe"));
         Path jar = Files.createFile(directory.resolve("collector.jar"));
         int port = new LoopbackPortAllocator().allocate();
@@ -284,7 +252,7 @@ class JdwpCollectionCoordinatorTest {
                 maven, directory.resolve("target-out.log"), directory.resolve("target-err.log"),
                 ProcessLimits.defaults());
         return new JdwpExecutionRequest(
-                launch, targetOptions, port, java, jar, expectedCollectorSha256,
+                launch, targetOptions, port, java, jar,
                 plan, directory.resolve("raw"),
                 directory.resolve("collector-out.log"), directory.resolve("collector-err.log"),
                 ProcessLimits.defaults(), maximumRawBytes, readyTimeout, overallTimeout);

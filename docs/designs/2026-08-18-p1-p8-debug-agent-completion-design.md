@@ -2,6 +2,9 @@
 
 > **修订说明（2026-08-18）：** 本文的阶段边界继续有效；CodePath 的 package 超集与
 > `MethodPathJsonlFilter` 已由 ADR-010 的精确方法级 Launcher 过滤方案取代。
+>
+> **修订说明（2026-08-19）：** JDWP Collector 当前作为通过环境变量配置的本地 JAR 使用；Agent
+> 记录版本并监管执行，但不再锁定或校验 JAR SHA-256。JDWP Manifest 当前版本为 v2。
 
 - 文档状态：Approved for Continuous Implementation
 - 设计版本：0.4
@@ -78,10 +81,10 @@ Raw Trace、派生 Trace、Evidence 和报告必须追加归档到同一 Case。
 | 工具 | 已验证版本 | 许可证 | Agent 接入策略 |
 |---|---|---|---|
 | CodePathTracer | commit `f8be120694a5d5bb1405c0f3e1a4396e89b6dfa1` | Apache-2.0 | Agent 自有 Launcher Bundle + 锁定的上游 API；执行期流式硬预算，先 package 超集采集，再按计划方法过滤 |
-| JDWP Batch Collector | `1.0.0`，commit `1ef7d2248420189f45321bbbcf113e019fd30ab7`，JAR SHA-256 `be025dba387dd27264bcde2584118d8fbdf37f1df224e60df0f2fb4dcafdad78` | MIT | 外部 JAR；Agent 编译受限 Plan、动态 localhost 端口并监管进程 |
+| JDWP Batch Collector | `1.0.0`，commit `1ef7d2248420189f45321bbbcf113e019fd30ab7` | MIT | 配置的本地 JAR；Agent 编译受限 Plan、动态 localhost 端口并监管进程，不校验 JAR 数字指纹 |
 
 工具路径来自 Workspace 配置或环境变量，不进入 Case 身份，不写死开发机路径。`toolchain-lock.json` 保存版本、
-commit、SHA、许可证和兼容的计划 Schema。
+commit、许可证和兼容的计划 Schema；JDWP Collector 不保存 JAR SHA。
 
 ### 3.3 通用约束
 
@@ -343,7 +346,7 @@ Eval 不伪造在线模型分数。没有配置模型运行器时执行确定性
 - `collection/codepath-plan-v1.schema.json`
 - `collection/method-path-manifest-v1.schema.json`
 - `collection/jdwp-plan-v1.schema.json`
-- `collection/jdwp-manifest-v1.schema.json`
+- `collection/jdwp-manifest-v2.schema.json`
 - `trace/method-path-summary-v1.schema.json`
 - `trace/jdwp-snapshot-summary-v1.schema.json`
 - `evidence/evidence-bundle-v1.schema.json`

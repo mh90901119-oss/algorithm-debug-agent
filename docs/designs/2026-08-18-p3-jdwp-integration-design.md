@@ -2,6 +2,11 @@
 
 > **修订说明（2026-08-18）：** JDWP 采集流程和每个 tracepoint 的 `SourceAnchor` 继续有效；全模块
 > `sourceFingerprintSha256` 与采集前后源码扫描由 ADR-010 删除，详见 Context/CodePath 精简设计。
+>
+> **修订说明（2026-08-19）：** 当前开发阶段将 JDWP Collector 作为通过
+> `ADA_JDWP_COLLECTOR_JAR` 配置的本地 JAR 使用。Agent 仍验证文件存在、监管进程并保留结构化失败，
+> 但不再锁定或校验 JAR SHA-256；Manifest v2 已删除 `toolSha256`。本文后续“锁定 Collector”均只表示
+> 已验证的 CLI/Plan 能力边界，不表示 JAR 数字指纹锁定。
 
 - 文档状态：Implemented（P3 release audit complete）
 - 设计版本：1.7
@@ -52,8 +57,8 @@ P1 已能从目标 UT 建立带源码 Hash 的静态方法目录，P2 已能按�
 
 ## 3. 现状与约束
 
-- 外部 Collector：commit `1ef7d2248420189f45321bbbcf113e019fd30ab7`，MIT，JAR 与完整 SHA-256
-  必须在实现时重新构建并写入 `config/toolchain-lock.json`，不能沿用文档缩写值。
+- 外部 Collector：已验证 commit `1ef7d2248420189f45321bbbcf113e019fd30ab7`，MIT；当前执行从
+  `ADA_JDWP_COLLECTOR_JAR` 读取本地 JAR，不把其 SHA-256 写入 `config/toolchain-lock.json`。
 - 现有 `debug-harness/ExternalProcessRunner` 是阻塞式单进程接口，不能协调 suspended UT 和 Collector。
 - Maven/Surefire 通过结构化 `TestLaunchSpec.jvmArguments` 注入 `-agentlib:jdwp`，不得拼接 shell 命令。
 - Collector 的 `locals=true` 表示全部可见局部变量，不是 allowlist；默认必须使用更小命中和对象预算。
@@ -266,7 +271,7 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 - 所有 argv 使用 `ProcessBuilder(List<String>)`，不经过 Shell。
 - Raw locals 可能包含敏感业务数据，只保存在本地 Case，摘要不内联无界对象或原始绝对路径。
 - 失败路径优先清理目标进程，不能让 suspended JVM 长期存活。
-- 锁定 Collector JAR SHA-256、commit 和 MIT 许可证；Doctor 在执行前校验。
+- 记录 Collector 版本、commit 和 MIT 许可证；Doctor 在执行前检查配置路径是否为普通文件。
 
 ## 12. 测试设计
 
@@ -282,7 +287,7 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 
 ### 12.2 契约与兼容性测试
 
-- `jdwp-plan-v1.schema.json` 和 `jdwp-manifest-v1.schema.json` 的正反例。
+- `jdwp-plan-v2.schema.json` 和 `jdwp-manifest-v2.schema.json` 的正反例。
 - Agent Plan 编译所得 JSON 由锁定 Collector 的 `DebugPlan.validate()` 验证。
 - 未知 `projection/sampling/localVariables` 字段严格拒绝。
 
@@ -376,3 +381,4 @@ Agent 阈值。估算只用于拒绝明显危险计划，不能声明为实际�
 | 2026-08-18 | 1.5 | 真实 Collector Manifest 契约补齐 target、路径和时间字段，并增加本次 loopback endpoint 校验 | Codex |
 | 2026-08-18 | 1.6 | 后处理或外部 Manifest 校验失败时，失败归档继续保留已观察到的目标/Collector 启动与退出事实 | Codex |
 | 2026-08-18 | 1.7 | 外部 Manifest 即使无效，也先把 Raw Trace/Manifest 移入规范只读路径，再执行严格校验并报告 Agent 失败 | Codex |
+| 2026-08-19 | 2.0 | 删除 JDWP Collector JAR 数字指纹门禁，Manifest v2 删除 `toolSha256`；保留文件预检、版本记录、进程监管与结构化失败 | Codex |

@@ -150,7 +150,7 @@ public final class JdwpCollectionApplicationService {
                     new MavenExecutionOptions(
                             maven, collectionRoot.resolve("logs/target-stdout.log"),
                             collectionRoot.resolve("logs/target-stderr.log"), ProcessLimits.defaults()),
-                    port, javaExecutable, tool.collectorJar(), tool.sha256(), collectorPlan,
+                    port, javaExecutable, tool.collectorJar(), collectorPlan,
                     collectionRoot.resolve("raw"),
                     collectionRoot.resolve("logs/collector-stdout.log"),
                     collectionRoot.resolve("logs/collector-stderr.log"), ProcessLimits.defaults(),
@@ -306,7 +306,7 @@ public final class JdwpCollectionApplicationService {
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
                 record.analysisId(), record.runId(), record.planId(), record.collectionId(),
-                "jdwp-batch-collector", tool.version(), tool.sha256(), sha(collectorPlanBytes),
+                "jdwp-batch-collector", tool.version(), sha(collectorPlanBytes),
                 result.completion(), stage, result.targetStarted(), result.collectorStarted(),
                 targetExit, collectorExit,
                 result.completion() == JdwpCollectionCompletion.TIMED_OUT,
@@ -335,7 +335,7 @@ public final class JdwpCollectionApplicationService {
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
                 record.analysisId(), record.runId(), record.planId(), record.collectionId(),
-                "jdwp-batch-collector", tool.version(), tool.sha256(),
+                "jdwp-batch-collector", tool.version(),
                 existingSha(collectionRoot.resolve("collector-plan.json"))
                         .orElseGet(() -> sha(mapper.writeJson(plan))),
                 completion, JdwpCollectionStage.FAILED, targetStarted, collectorStarted,

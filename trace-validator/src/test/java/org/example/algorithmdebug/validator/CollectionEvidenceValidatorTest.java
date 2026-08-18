@@ -140,7 +140,7 @@ class CollectionEvidenceValidatorTest {
                 JdwpCollectionBudget.defaults(), "定位方法内部状态", NOW);
         JdwpCollectionManifest manifest = new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
-                RUN_ID, PLAN_ID, COLLECTION_ID, "jdwp-collector", "1.0", HASH,
+                RUN_ID, PLAN_ID, COLLECTION_ID, "jdwp-collector", "1.0",
                 sha(planPath), JdwpCollectionCompletion.SUCCESS,
                 JdwpCollectionStage.PROCESS_COMPLETED, true, true, 0, 0,
                 false, false, 1, rawReference.sizeBytes(), Map.of("point-1", 1),

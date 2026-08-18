@@ -19,8 +19,7 @@ import org.example.algorithmdebug.harness.ProcessLimits;
  * @param targetOptions Maven 可执行文件、目标日志和进程限制
  * @param port 已写入并归档到 Collector Plan 的 loopback 端口
  * @param javaExecutable 启动 Collector 的 Java 21 可执行文件
- * @param collectorJar 锁定的 Collector JAR
- * @param expectedCollectorSha256 工具锁声明的 Collector JAR SHA-256
+ * @param collectorJar Collector JAR
  * @param collectorPlan 已归档的 Collector Plan
  * @param collectorOutputDirectory 本次 Collector Raw 输出目录
  * @param collectorStdoutLog Collector stdout create-new 日志
@@ -36,7 +35,6 @@ public record JdwpExecutionRequest(
         int port,
         Path javaExecutable,
         Path collectorJar,
-        String expectedCollectorSha256,
         Path collectorPlan,
         Path collectorOutputDirectory,
         Path collectorStdoutLog,
@@ -57,9 +55,6 @@ public record JdwpExecutionRequest(
         JdwpTargetCommandFactory.requirePort(port);
         javaExecutable = requireFile(javaExecutable, "javaExecutable");
         collectorJar = requireFile(collectorJar, "collectorJar");
-        if (expectedCollectorSha256 == null || !expectedCollectorSha256.matches("[0-9a-f]{64}")) {
-            throw new IllegalArgumentException("expectedCollectorSha256 必须是小写 SHA-256");
-        }
         collectorPlan = requireFile(collectorPlan, "collectorPlan");
         collectorOutputDirectory = requireAbsolute(collectorOutputDirectory, "collectorOutputDirectory");
         if (Files.exists(collectorOutputDirectory.resolve("raw-trace.jsonl"))
@@ -84,7 +79,7 @@ public record JdwpExecutionRequest(
         }
     }
 
-    /** @return 锁定 Collector 在 outputDirectory 下使用的 Raw Trace 路径 */
+    /** @return 已配置 Collector 在 outputDirectory 下使用的 Raw Trace 路径 */
     public Path rawTracePath() {
         return collectorOutputDirectory.resolve("raw-trace.jsonl");
     }
