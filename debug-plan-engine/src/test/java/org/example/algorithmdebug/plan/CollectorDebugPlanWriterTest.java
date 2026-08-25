@@ -25,7 +25,6 @@ import org.junit.jupiter.api.Test;
 class CollectorDebugPlanWriterTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final String HASH = "a".repeat(64);
 
     @Test
     void writesExactCurrentCollectorShapeOnLoopback() throws Exception {
@@ -39,12 +38,15 @@ class CollectorDebugPlanWriterTest {
         assertEquals(120_000, root.path("idleTimeoutMillis").asLong());
         assertEquals(100, root.path("maxEvents").asInt());
         JsonNode point = root.path("tracepoints").path(0);
+        assertEquals("2.0", root.path("schemaVersion").asText());
         assertEquals("fixture.Algorithm", point.path("className").asText());
         assertEquals("schedule", point.path("methodName").asText());
+        assertEquals("()V", point.path("methodDescriptor").asText());
         assertEquals(11, point.path("line").asInt());
         assertFalse(point.path("capture").path("locals").asBoolean());
         assertFalse(root.toString().contains("sourceSha256"));
-        assertFalse(root.toString().contains("projection"));
+        assertEquals(0, point.path("capture").path("localNames").size());
+        assertEquals(0, point.path("capture").path("fieldPaths").size());
         assertFalse(root.toString().contains("sampling"));
     }
 
@@ -75,7 +77,7 @@ class CollectorDebugPlanWriterTest {
     private static JdwpTracepointSpec point(String id, int line) {
         SourceAnchor anchor = new SourceAnchor(
                 "fixture.Algorithm", "schedule", "()V",
-                "src/main/java/fixture/Algorithm.java", 10, 20, HASH);
+                "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpTracepointSpec(
                 id, "fixture.Algorithm#schedule()V", anchor, line, 3,
                 JdwpCaptureSpec.stackOnly());

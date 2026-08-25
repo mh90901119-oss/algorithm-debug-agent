@@ -1,17 +1,33 @@
 import { tool } from "@opencode-ai/plugin"
 import { runAdaCommand } from "../lib/ada-cli.mjs"
-import { defaultLauncher } from "../lib/installation.mjs"
+import {
+  defaultLauncher,
+  dfxDirectory,
+  dfxEnabled,
+  resultJsonDirectory,
+  workspaceDirectory,
+} from "../lib/installation.mjs"
+import { createCaseInteractionRecorder } from "../lib/case-interaction-recorder.mjs"
 import { createAlgorithmDebugRuntime } from "../lib/tool-runtime.mjs"
 
 const configuredLauncher = process.env.ADA_CLI?.trim() || defaultLauncher
+const configuredWorkspace = process.env.ADA_EVAL_WORKSPACE?.trim() || workspaceDirectory
+const interactionRecorder = createCaseInteractionRecorder({
+  enabled: dfxEnabled,
+  workspaceDirectory: configuredWorkspace,
+  fallbackDirectory: dfxDirectory,
+})
 const runtime = createAlgorithmDebugRuntime({
+  workspaceDirectory: configuredWorkspace,
+  resultJsonDirectory,
+  interactionRecorder,
   execute: (args: string[], cwd: string) => runAdaCommand(args, cwd, Bun.spawn, {
     executable: configuredLauncher,
   }),
 })
 
 export const analysis_begin = tool({
-  description: "Create a Case or append an analysis round for one Java/Maven target UT; this does not run the UT.",
+  description: "Create a Case or append an analysis round for one Java/Maven target UT; returns the installed Agent result JSON directory and does not run the UT.",
   args: {
     question: tool.schema.string().describe("The user's current debugging question"),
     targetTest: tool.schema.string().describe("Target test as fully.qualified.Class#method"),
@@ -31,8 +47,27 @@ export const case_inspect = tool({
   execute: (args, context) => runtime.caseInspect(args, context),
 })
 
+export const case_audit = tool({
+  description: "Read-only audit of Case control files, Artifact integrity, interaction JSONL and empty directories.",
+  args: { caseId: tool.schema.string() },
+  execute: (args, context) => runtime.caseAudit(args, context),
+})
+
+export const gantt_inspect = tool({
+  description: "Read a bounded structural summary or slice of a registered Gantt JSON Artifact without business interpretation.",
+  args: {
+    caseId: tool.schema.string(),
+    artifactId: tool.schema.string(),
+    operation: tool.schema.enum(["summary", "slice"]).default("summary"),
+    jsonPointer: tool.schema.string().optional(),
+    offset: tool.schema.number().int().min(0).default(0),
+    limit: tool.schema.number().int().min(1).max(100).default(100),
+  },
+  execute: (args, context) => runtime.ganttInspect(args, context),
+})
+
 export const run_test = tool({
-  description: "Run the Case target UT once and archive its structured outcome plus raw artifact references.",
+  description: "Run the Case target UT once and archive objective process/test facts plus raw artifact references; a failed UT is evidence, not a Tool crash.",
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
@@ -99,7 +134,7 @@ export const artifact_read = tool({
 })
 
 export const analysis_complete = tool({
-  description: "Append the final answer, graded claims, and explicit evidence references; schema identity and completion time are added deterministically.",
+  description: "Append the final answer, graded claims, and explicit evidence references once. CONFIRMED_FACT, VALIDATOR_CONCLUSION, and SOURCE_INFERENCE require at least one evidenceReferenceId. On rejection correct this same Analysis payload once; never open a replacement Analysis or submit a dummy result.",
   args: {
     caseId: tool.schema.string(),
     contextId: tool.schema.string(),
@@ -112,7 +147,7 @@ export const analysis_complete = tool({
       ]),
       statement: tool.schema.string(),
       evidenceReferenceIds: tool.schema.array(tool.schema.string()).default([])
-        .describe("Evidence IDs supporting the conclusion; do not put artifact paths here"),
+        .describe("Evidence IDs supporting the conclusion; required and non-empty for CONFIRMED_FACT, VALIDATOR_CONCLUSION, and SOURCE_INFERENCE; do not put artifact paths here"),
     })).default([]),
     referencedRunIds: tool.schema.array(tool.schema.string()).default([])
       .describe("Archived target Run IDs from recentRuns, not collector execution run IDs"),

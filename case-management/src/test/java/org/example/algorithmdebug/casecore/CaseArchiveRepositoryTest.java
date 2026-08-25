@@ -1,5 +1,6 @@
 package org.example.algorithmdebug.casecore;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisConclusion;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
@@ -208,9 +209,10 @@ class CaseArchiveRepositoryTest {
 
         Path collection = repository.startMethodPathCollection(record);
 
-        assertTrue(Files.isDirectory(collection.resolve("raw")));
-        assertTrue(Files.isDirectory(collection.resolve("derived")));
-        assertTrue(Files.isDirectory(collection.resolve("logs")));
+        assertTrue(Files.isRegularFile(collection.resolve("collection-request.json")));
+        assertFalse(Files.exists(collection.resolve("raw")));
+        assertFalse(Files.exists(collection.resolve("derived")));
+        assertFalse(Files.exists(collection.resolve("logs")));
         assertEquals(record, repository.requireMethodPathCollection(
                 CASE_ID, new CollectionId("collection-1")));
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(WorkspaceException.class,
@@ -235,9 +237,10 @@ class CaseArchiveRepositoryTest {
         assertEquals(plan, repository.requireJdwpPlan(CASE_ID, ANALYSIS_ID, plan.planId()));
         assertEquals(record, repository.requireJdwpCollection(CASE_ID, record.collectionId()));
         assertTrue(planPath.endsWith("analyses/analysis-1/plans/jdwp-plan-1.json"));
-        assertTrue(Files.isDirectory(collection.resolve("raw")));
-        assertTrue(Files.isDirectory(collection.resolve("logs")));
-        assertTrue(Files.isDirectory(collection.resolve("validation")));
+        assertTrue(Files.isRegularFile(collection.resolve("collection-request.json")));
+        assertFalse(Files.exists(collection.resolve("raw")));
+        assertFalse(Files.exists(collection.resolve("logs")));
+        assertFalse(Files.exists(collection.resolve("validation")));
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
                 WorkspaceException.class, () -> repository.createJdwpPlan(plan)).code());
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
@@ -488,15 +491,14 @@ class CaseArchiveRepositoryTest {
             String normalizedSeed) {
         return new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, contextId, runId,
-                Optional.of(rawSeed.repeat(64)), Optional.of(normalizedSeed.repeat(64)),
-                Optional.empty());
+                normalizedSeed.repeat(64));
     }
 
     static MethodCatalog methodCatalog() {
         MethodCatalogEntry entry = new MethodCatalogEntry(
                 "a.b.ScheduleTest#case1()V",
                 new SourceAnchor("a.b.ScheduleTest", "case1", "()V",
-                        "src/test/java/a/b/ScheduleTest.java", 1, 2, "a".repeat(64)),
+                        "src/test/java/a/b/ScheduleTest.java", 1, 2),
                 0, true);
         return new MethodCatalog(
                 SchemaVersions.METHOD_CATALOG, CASE_ID, CONTEXT_ID, ANALYSIS_ID, TARGET,

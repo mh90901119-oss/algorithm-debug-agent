@@ -26,11 +26,13 @@ class CliArgumentsTest {
                 new CliCommand.ProjectRegister(
                         Path.of("D:/agent-workspace"),
                         Path.of("D:/large-system/algorithm-module"),
-                        Optional.of(new ProjectId("algorithm-module-123"))),
+                        Optional.of(new ProjectId("algorithm-module-123")),
+                        Optional.of("output/algorithm-results")),
                 CliArguments.parse(new String[]{
                         "project", "register",
                         "--project", "D:/large-system/algorithm-module",
                         "--project-id", "algorithm-module-123",
+                        "--result-directory", "output/algorithm-results",
                         "--workspace", "D:/agent-workspace"}));
         assertEquals(
                 new CliCommand.Doctor(
@@ -45,7 +47,7 @@ class CliArgumentsTest {
     void shouldParseOptionalArgumentsAsEmpty() {
         assertEquals(
                 new CliCommand.ProjectRegister(
-                        Path.of("workspace"), Path.of("module"), Optional.empty()),
+                        Path.of("workspace"), Path.of("module"), Optional.empty(), Optional.empty()),
                 CliArguments.parse(new String[]{
                         "project", "register", "--workspace", "workspace", "--project", "module"}));
         assertEquals(
@@ -81,6 +83,29 @@ class CliArgumentsTest {
                 CliArguments.parse(new String[]{
                         "case", "inspect", "--workspace", "workspace",
                         "--project-id", "demo", "--case-id", "case-1"}));
+        assertEquals(
+                new CliCommand.CaseAudit(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1")),
+                CliArguments.parse(new String[]{
+                        "case", "audit", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1"}));
+        assertEquals(
+                new CliCommand.GanttInspect(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        "gantt-1", "slice", "/tasks", 10, 20),
+                CliArguments.parse(new String[]{
+                        "gantt", "inspect", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--artifact-id", "gantt-1", "--operation", "slice",
+                        "--json-pointer", "/tasks", "--offset", "10", "--limit", "20"}));
+        assertEquals(
+                new CliCommand.GanttInspect(
+                        Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
+                        "gantt-1", "summary", "", 0, 100),
+                CliArguments.parse(new String[]{
+                        "gantt", "inspect", "--workspace", "workspace",
+                        "--project-id", "demo", "--case-id", "case-1",
+                        "--artifact-id", "gantt-1"}));
         assertEquals(
                 new CliCommand.RunExecute(
                         Path.of("workspace"), new ProjectId("demo"),

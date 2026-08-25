@@ -18,16 +18,16 @@ public record ToolResponse<T>(
     public ToolResponse {
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.TOOL_RESPONSE.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 ToolResponse schemaVersion: " + schemaVersion);
+            throw new IllegalArgumentException("Unsupported ToolResponse schemaVersion: " + schemaVersion);
         }
         code = ContractChecks.requireNonBlank(code, "code");
         message = ContractChecks.requireNonBlank(message, "message");
         artifacts = ContractChecks.immutableList(artifacts, "artifacts");
         if (success && data == null) {
-            throw new IllegalArgumentException("成功响应必须包含 data");
+            throw new IllegalArgumentException("Successful response must contain data");
         }
         if (!success && data != null) {
-            throw new IllegalArgumentException("失败响应不得包含 data");
+            throw new IllegalArgumentException("Failed response must not contain data");
         }
     }
 

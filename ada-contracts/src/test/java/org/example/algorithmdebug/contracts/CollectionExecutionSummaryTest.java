@@ -11,8 +11,9 @@ import org.junit.jupiter.api.Test;
 
 class CollectionExecutionSummaryTest {
     @Test
-    void evidenceUsableRequiresMatchedButMatchedCanStillBeUnusable() {
+    void successfulCollectionCanBeUsableWithoutFailureComparison() {
         assertDoesNotThrow(() -> summary(ComparisonOutcome.MATCHED, false));
+        assertDoesNotThrow(() -> summary(ComparisonOutcome.NOT_COMPARED, true));
         assertThrows(IllegalArgumentException.class,
                 () -> summary(ComparisonOutcome.CHANGED, true));
     }
@@ -23,8 +24,13 @@ class CollectionExecutionSummaryTest {
                 "1.0", new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new RunId("run-1"),
                 new CollectionId("collection-1"), ComparisonOutcome.MATCHED,
-                Optional.of(new RunId("baseline-run")), Optional.of("a".repeat(64)),
+                Optional.of(new RunId("baseline-run")),
                 false, "source changed after collection", Instant.EPOCH));
+        assertDoesNotThrow(() -> new CollectionBaselineCheck(
+                "1.0", new CaseId("case-1"), new ContextId("context-1"),
+                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CollectionId("collection-1"), ComparisonOutcome.NOT_COMPARED,
+                Optional.empty(), true, "passing UT has no failure baseline", Instant.EPOCH));
     }
 
     @Test

@@ -12,16 +12,12 @@
     <artifactId>code-path-tracer-junit-launcher</artifactId>
     <name>ADA controlled Code Path Tracer JUnit Launcher</name>
     <properties>
+        <maven.compiler.release>17</maven.compiler.release>
         <code-path-tracer.version>0.1.0-SNAPSHOT</code-path-tracer.version>
         <kotlin.version>1.9.22</kotlin.version>
         <junit.platform.version>1.10.3</junit.platform.version>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>ada-contracts</artifactId>
-            <version>${project.version}</version>
-        </dependency>
         <dependency>
             <groupId>io.github.takahirom.codepathtracer</groupId>
             <artifactId>code-path-tracer</artifactId>

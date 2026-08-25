@@ -16,6 +16,11 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>case-management</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
             <artifactId>method-path-spi</artifactId>
             <version>${project.version}</version>
         </dependency>

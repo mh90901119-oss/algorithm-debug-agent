@@ -1,13 +1,9 @@
 package org.example.algorithmdebug.casecore;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 
@@ -15,6 +11,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 public final class CaseArtifactAccess {
 
     private final Path casesRoot;
+    private final ArtifactIntegrityChecker integrityChecker = new ArtifactIntegrityChecker();
 
     /** @param casesRoot 已存在且不为符号链接的项目 Case 根目录 */
     public CaseArtifactAccess(Path casesRoot) {
@@ -59,6 +56,30 @@ public final class CaseArtifactAccess {
         }
     }
 
+    /**
+     * 解析已注册文件，并验证当前字节数和 SHA-256 仍与归档引用一致。
+     *
+     * @param caseId Case 身份
+     * @param reference 已归档的 Artifact 引用
+     * @return 通过路径边界和完整性校验的绝对路径
+     */
+    public Path requireVerifiedArtifact(CaseId caseId, ArtifactReference reference) {
+        if (caseId == null || reference == null) {
+            throw new IllegalArgumentException("Artifact 完整性校验参数非法");
+        }
+        Path path = requireRegularArtifact(caseId, reference.relativePath(), Long.MAX_VALUE);
+        ArtifactIntegrityChecker.Status status = integrityChecker.verify(reference, path).status();
+        return switch (status) {
+            case VALID -> path;
+            case MISSING, NOT_REGULAR -> throw new WorkspaceException(
+                    "CASE_ARTIFACT_NOT_FOUND", "Artifact 不存在或不是普通文件");
+            case SIZE_MISMATCH, HASH_MISMATCH -> throw new WorkspaceException(
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 与已注册引用不一致");
+            case READ_FAILED -> throw new WorkspaceException(
+                    "CASE_ARTIFACT_READ_FAILED", "无法读取 Artifact 元数据或内容");
+        };
+    }
+
     /** 将已验证文件描述为不泄漏绝对路径的 ArtifactReference。 */
     public ArtifactReference describe(
             CaseId caseId,
@@ -78,7 +99,7 @@ public final class CaseArtifactAccess {
             return new ArtifactReference(
                     artifactId, artifactType,
                     caseRoot.relativize(checked).toString().replace('\\', '/'),
-                    mediaType, sha256(checked), Files.size(checked));
+                    mediaType, integrityChecker.sha256(checked), Files.size(checked));
         } catch (IOException | SecurityException failure) {
             throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "无法描述 Artifact", failure);
         }
@@ -108,20 +129,4 @@ public final class CaseArtifactAccess {
         }
     }
 
-    private static String sha256(Path path) throws IOException {
-        MessageDigest digest;
-        try {
-            digest = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
-        }
-        byte[] buffer = new byte[8 * 1024];
-        try (InputStream input = Files.newInputStream(path)) {
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) digest.update(buffer, 0, read);
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
-    }
 }

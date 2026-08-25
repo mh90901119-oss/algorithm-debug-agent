@@ -47,7 +47,7 @@ public final class WorkspaceException extends RuntimeException {
     public WorkspaceException(String code, String message, Throwable cause) {
         super(requireMessage(message), cause);
         if (code == null || code.isBlank() || !code.equals(code.strip())) {
-            throw new IllegalArgumentException("WorkspaceException code 不能为空或包含首尾空白");
+            throw new IllegalArgumentException("WorkspaceException code must not be blank or contain surrounding whitespace");
         }
         this.code = code;
     }
@@ -59,7 +59,7 @@ public final class WorkspaceException extends RuntimeException {
 
     private static String requireMessage(String message) {
         if (message == null || message.isBlank()) {
-            throw new IllegalArgumentException("WorkspaceException message 不能为空");
+            throw new IllegalArgumentException("WorkspaceException message must not be blank");
         }
         return message;
     }

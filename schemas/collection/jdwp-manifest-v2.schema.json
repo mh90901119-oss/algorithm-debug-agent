@@ -1,51 +1,207 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://algorithm-debug-agent.local/schemas/collection/jdwp-manifest-v2.schema.json",
-  "title": "JDWP Collection Manifest v2",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schemaVersion", "caseId", "contextId", "analysisId", "runId", "planId", "collectionId", "toolName", "toolVersion", "planSha256", "completion", "stage", "targetStarted", "collectorStarted", "targetExitCode", "collectorExitCode", "timedOut", "truncated", "eventCount", "rawBytes", "hitCounts", "installedLocations", "rawTraceSha256", "agentFailure", "rawTraceRelativePath", "collectorManifestRelativePath", "targetStdoutLog", "targetStderrLog", "collectorStdoutLog", "collectorStderrLog", "startedAt", "completedAt"],
-  "properties": {
-    "schemaVersion": {"const": "2.0"},
-    "caseId": {"type": "string"}, "contextId": {"type": "string"},
-    "analysisId": {"type": "string"}, "runId": {"type": "string"},
-    "planId": {"type": "string"}, "collectionId": {"type": "string"},
-    "toolName": {"type": "string", "minLength": 1, "maxLength": 128},
-    "toolVersion": {"type": "string", "minLength": 1, "maxLength": 256},
-    "planSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "completion": {"enum": ["SUCCESS", "TRUNCATED", "TARGET_FAILED", "TOOL_FAILED", "TIMED_OUT", "AGENT_FAILED"]},
-    "stage": {"enum": ["REQUEST_ARCHIVED", "SOURCE_VALIDATED", "TARGET_STARTED", "TARGET_READY", "COLLECTOR_STARTED", "ATTACHED_OR_RESUMED", "PROCESS_COMPLETED", "BASELINE_CHECKED", "FAILED"]},
-    "targetStarted": {"type": "boolean"}, "collectorStarted": {"type": "boolean"},
-    "targetExitCode": {"type": "integer"}, "collectorExitCode": {"type": "integer"},
-    "timedOut": {"type": "boolean"}, "truncated": {"type": "boolean"},
-    "eventCount": {"type": "integer", "minimum": 0},
-    "rawBytes": {"type": "integer", "minimum": 0},
-    "hitCounts": {"$ref": "#/$defs/counters"},
-    "installedLocations": {"$ref": "#/$defs/counters"},
-    "rawTraceSha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
-    "agentFailure": {
-      "oneOf": [
-        {"type": "null"},
-        {"type": "object", "additionalProperties": false,
-         "required": ["code", "message", "exceptionClass"],
-         "properties": {
-           "code": {"type": "string", "minLength": 1, "maxLength": 256},
-           "message": {"type": "string", "minLength": 1, "maxLength": 8192},
-           "exceptionClass": {"type": "string", "maxLength": 1024}
-         }}
-      ]
-    },
-    "rawTraceRelativePath": {"$ref": "#/$defs/path"},
-    "collectorManifestRelativePath": {"$ref": "#/$defs/path"},
-    "targetStdoutLog": {"$ref": "#/$defs/path"},
-    "targetStderrLog": {"$ref": "#/$defs/path"},
-    "collectorStdoutLog": {"$ref": "#/$defs/path"},
-    "collectorStderrLog": {"$ref": "#/$defs/path"},
-    "startedAt": {"type": "string", "format": "date-time"},
-    "completedAt": {"type": "string", "format": "date-time"}
-  },
-  "$defs": {
-    "counters": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}, "maxProperties": 20},
-    "path": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[:\\\\]).+$"}
-  }
+    "$schema":  "https://json-schema.org/draft/2020-12/schema",
+    "$id":  "https://algorithm-debug-agent.local/schemas/collection/jdwp-manifest-v2.schema.json",
+    "title":  "JDWP Collection Manifest v2",
+    "type":  "object",
+    "additionalProperties":  false,
+    "required":  [
+                     "schemaVersion",
+                     "caseId",
+                     "contextId",
+                     "analysisId",
+                     "runId",
+                     "planId",
+                     "collectionId",
+                     "toolName",
+                     "toolVersion",
+                     "completion",
+                     "stage",
+                     "targetStarted",
+                     "collectorStarted",
+                     "targetExitCode",
+                     "collectorExitCode",
+                     "timedOut",
+                     "truncated",
+                     "eventCount",
+                     "rawBytes",
+                     "hitCounts",
+                     "installedLocations",
+                     "agentFailure",
+                     "rawTraceRelativePath",
+                     "collectorManifestRelativePath",
+                     "targetStdoutLog",
+                     "targetStderrLog",
+                     "collectorStdoutLog",
+                     "collectorStderrLog",
+                     "startedAt",
+                     "completedAt",
+                     "completionReason"
+                 ],
+    "properties":  {
+                       "schemaVersion":  {
+                                             "const":  "2.0"
+                                         },
+                       "caseId":  {
+                                      "type":  "string"
+                                  },
+                       "contextId":  {
+                                         "type":  "string"
+                                     },
+                       "analysisId":  {
+                                          "type":  "string"
+                                      },
+                       "runId":  {
+                                     "type":  "string"
+                                 },
+                       "planId":  {
+                                      "type":  "string"
+                                  },
+                       "collectionId":  {
+                                            "type":  "string"
+                                        },
+                       "toolName":  {
+                                        "type":  "string",
+                                        "minLength":  1,
+                                        "maxLength":  128
+                                    },
+                       "toolVersion":  {
+                                           "type":  "string",
+                                           "minLength":  1,
+                                           "maxLength":  256
+                                       },
+                       "completion":  {
+                                          "enum":  [
+                                                       "SUCCESS",
+                                                       "TRUNCATED",
+                                                       "TARGET_FAILED",
+                                                       "TOOL_FAILED",
+                                                       "TIMED_OUT",
+                                                       "AGENT_FAILED"
+                                                   ]
+                                      },
+                       "stage":  {
+                                     "enum":  [
+                                                  "REQUEST_ARCHIVED",
+                                                  "SOURCE_VALIDATED",
+                                                  "TARGET_STARTED",
+                                                  "TARGET_READY",
+                                                  "COLLECTOR_STARTED",
+                                                  "ATTACHED_OR_RESUMED",
+                                                  "PROCESS_COMPLETED",
+                                                  "BASELINE_CHECKED",
+                                                  "FAILED"
+                                              ]
+                                 },
+                       "targetStarted":  {
+                                             "type":  "boolean"
+                                         },
+                       "collectorStarted":  {
+                                                "type":  "boolean"
+                                            },
+                       "targetExitCode":  {
+                                              "type":  "integer"
+                                          },
+                       "collectorExitCode":  {
+                                                 "type":  "integer"
+                                             },
+                       "timedOut":  {
+                                        "type":  "boolean"
+                                    },
+                       "truncated":  {
+                                         "type":  "boolean"
+                                     },
+                       "eventCount":  {
+                                          "type":  "integer",
+                                          "minimum":  0
+                                      },
+                       "rawBytes":  {
+                                        "type":  "integer",
+                                        "minimum":  0
+                                    },
+                       "hitCounts":  {
+                                         "$ref":  "#/$defs/counters"
+                                     },
+                       "installedLocations":  {
+                                                  "$ref":  "#/$defs/counters"
+                                              },
+                       "agentFailure":  {
+                                            "oneOf":  [
+                                                          {
+                                                              "type":  "null"
+                                                          },
+                                                          {
+                                                              "type":  "object",
+                                                              "additionalProperties":  false,
+                                                              "required":  [
+                                                                               "code",
+                                                                               "message",
+                                                                               "exceptionClass"
+                                                                           ],
+                                                              "properties":  {
+                                                                                 "code":  {
+                                                                                              "type":  "string",
+                                                                                              "minLength":  1,
+                                                                                              "maxLength":  256
+                                                                                          },
+                                                                                 "message":  {
+                                                                                                 "type":  "string",
+                                                                                                 "minLength":  1,
+                                                                                                 "maxLength":  8192
+                                                                                             },
+                                                                                 "exceptionClass":  {
+                                                                                                        "type":  "string",
+                                                                                                        "maxLength":  1024
+                                                                                                    }
+                                                                             }
+                                                          }
+                                                      ]
+                                        },
+                       "rawTraceRelativePath":  {
+                                                    "$ref":  "#/$defs/path"
+                                                },
+                       "collectorManifestRelativePath":  {
+                                                             "$ref":  "#/$defs/path"
+                                                         },
+                       "targetStdoutLog":  {
+                                               "$ref":  "#/$defs/path"
+                                           },
+                       "targetStderrLog":  {
+                                               "$ref":  "#/$defs/path"
+                                           },
+                       "collectorStdoutLog":  {
+                                                  "$ref":  "#/$defs/path"
+                                              },
+                       "collectorStderrLog":  {
+                                                  "$ref":  "#/$defs/path"
+                                              },
+                       "startedAt":  {
+                                         "type":  "string",
+                                         "format":  "date-time"
+                                     },
+                       "completedAt":  {
+                                           "type":  "string",
+                                           "format":  "date-time"
+                                       },
+                       "completionReason":  {
+                                                "type":  "string",
+                                                "minLength":  1,
+                                                "maxLength":  128
+                                            }
+                   },
+    "$defs":  {
+                  "counters":  {
+                                   "type":  "object",
+                                   "additionalProperties":  {
+                                                                "type":  "integer",
+                                                                "minimum":  0
+                                                            },
+                                   "maxProperties":  20
+                               },
+                  "path":  {
+                               "type":  "string",
+                               "minLength":  1,
+                               "maxLength":  2048,
+                               "pattern":  "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*[:\\\\]).+$"
+                           }
+              }
 }

@@ -35,13 +35,15 @@ public final class CollectorDebugPlanWriter {
             var capture = point.capture();
             return new CollectorDebugPlan.Tracepoint(
                     point.tracepointId(), point.sourceAnchor().className(), point.line(),
-                    point.sourceAnchor().methodName(), point.maxHits(),
+                    point.sourceAnchor().methodName(), point.sourceAnchor().descriptor(),
+                    point.maxHits(),
                     new CollectorDebugPlan.Capture(
                             capture.locals(), capture.stack(), capture.maxFrames(),
-                            capture.maxDepth(), capture.maxItems(), capture.maxStringLength()));
+                            capture.maxDepth(), capture.maxItems(), capture.maxStringLength(),
+                            capture.localNames(), capture.fieldPaths()));
                 }).toList();
         CollectorDebugPlan document = new CollectorDebugPlan(
-                plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
+                "2.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
                 true, plan.budget().idleTimeoutMillis(), plan.budget().maxEvents(), points);
         try {
             return mapper.writeValueAsBytes(document);

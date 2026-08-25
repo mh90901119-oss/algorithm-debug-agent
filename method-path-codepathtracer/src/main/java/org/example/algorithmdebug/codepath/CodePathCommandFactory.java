@@ -15,11 +15,11 @@ public final class CodePathCommandFactory {
     /** 传入归档 Plan 和单一 Raw Trace，不传包范围。 */
     public List<String> create(
             CodePathToolConfiguration configuration, MethodPathCollectionRequest request,
-            Path archivedPlan, Path rawTrace) {
+            Path launcherPlan, Path rawTrace) {
         List<String> classpath = new ArrayList<>();
         classpath.add(configuration.launcherJar().toString()); classpath.addAll(request.targetClasspath());
         return List.of(configuration.javaExecutable().toString(), "-cp", String.join(pathSeparator, classpath),
-                configuration.mainClass(), "--plan", archivedPlan.toAbsolutePath().normalize().toString(),
+                configuration.mainClass(), "--plan", launcherPlan.toAbsolutePath().normalize().toString(),
                 "--trace", rawTrace.toAbsolutePath().normalize().toString());
     }
 }

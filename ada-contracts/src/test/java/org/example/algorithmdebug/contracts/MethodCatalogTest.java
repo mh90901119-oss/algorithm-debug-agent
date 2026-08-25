@@ -36,6 +36,6 @@ class MethodCatalogTest {
     private static MethodCatalogEntry target() { return entry("fixture.TargetTest", "caseUnderTest", 0, true); }
     private static MethodCatalogEntry service() { return entry("fixture.Service", "solve", 1, false); }
     private static MethodCatalogEntry entry(String type, String method, int distance, boolean target) {
-        return new MethodCatalogEntry(type + "#" + method + "()V", new SourceAnchor(type, method, "()V", "src/main/java/" + type.replace('.', '/') + ".java", 1, 3, "b".repeat(64)), distance, target);
+        return new MethodCatalogEntry(type + "#" + method + "()V", new SourceAnchor(type, method, "()V", "src/main/java/" + type.replace('.', '/') + ".java", 1, 3), distance, target);
     }
 }

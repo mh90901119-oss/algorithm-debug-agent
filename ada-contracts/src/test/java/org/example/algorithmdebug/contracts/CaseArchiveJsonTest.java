@@ -49,7 +49,7 @@ class CaseArchiveJsonTest {
                 targetTest, "UNINSTRUMENTED", RECORDED_AT);
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, caseId, contextId, new RunId("run-1"),
-                Optional.of("d".repeat(64)), Optional.of("e".repeat(64)), Optional.empty());
+                "d".repeat(64));
         ArtifactReference artifact = new ArtifactReference(
                 "artifact-1", "LOG", "runs/run-1/stdout.log", "text/plain",
                 "a".repeat(64), 6);
@@ -110,8 +110,7 @@ class CaseArchiveJsonTest {
                         "executionMode", "createdAt"));
         assertSchema("execution", "run-result-fingerprint-v1.schema.json",
                 SchemaVersions.RUN_RESULT_FINGERPRINT,
-                Set.of("schemaVersion", "caseId", "contextId", "runId", "ganttRawSha256",
-                        "ganttNormalizedJsonSha256", "targetFailureSha256"));
+                Set.of("schemaVersion", "caseId", "contextId", "runId", "targetFailureSha256"));
     }
 
     private static <T> void assertRoundTrip(T value, Class<T> type) throws Exception {

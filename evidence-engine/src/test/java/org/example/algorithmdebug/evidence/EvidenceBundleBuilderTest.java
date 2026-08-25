@@ -52,8 +52,6 @@ class EvidenceBundleBuilderTest {
                 "outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json");
         ArtifactReference contextArtifact = artifact(
                 "context", "CONTEXT_RECORD", "contexts/context-1/context.json");
-        ArtifactReference fingerprintArtifact = artifact(
-                "fingerprint", "RUN_RESULT_FINGERPRINT", "runs/run-1/fingerprint.json");
         ArtifactReference summaryArtifact = artifact(
                 "method-summary", "METHOD_PATH_SUMMARY",
                 "collections/collection-1/derived/evidence-1/summary.json");
@@ -65,10 +63,7 @@ class EvidenceBundleBuilderTest {
                 EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION));
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 outcome(gantt), outcomeArtifact, context(), contextArtifact,
-                Optional.of(new RunResultFingerprint(
-                        SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
-                        Optional.of(gantt.sha256()), Optional.of(HASH), Optional.empty())),
-                Optional.of(fingerprintArtifact), List.of(new ValidatedCollectionSource(
+                Optional.empty(), Optional.empty(), List.of(new ValidatedCollectionSource(
                         validation(EvidenceValidationStatus.VALID, summaryArtifact),
                         validationArtifact)));
 
@@ -143,7 +138,7 @@ class EvidenceBundleBuilderTest {
                 context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.of(new RunResultFingerprint(
                         SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
-                        Optional.empty(), Optional.empty(), Optional.of(HASH))),
+                        HASH)),
                 Optional.of(artifact("fingerprint", "RUN_RESULT_FINGERPRINT",
                         "runs/run-1/fingerprint.json")), List.of());
 
@@ -186,15 +181,23 @@ class EvidenceBundleBuilderTest {
         CollectionValidation oldValidation = validation(
                 EvidenceValidationStatus.VALID, oldSummary,
                 new ContextId("context-old"), oldCollection);
+        EvidenceBuildSources buildSources = sources(List.of(new ValidatedCollectionSource(
+                oldValidation,
+                artifact("old-validation", "COLLECTION_VALIDATION",
+                        "collections/" + "history/".repeat(120) + "validation.json"))));
+        EvidenceBundleBuilder builder = new EvidenceBundleBuilder();
+        EvidenceBuildRequest fullRequest = request(
+                List.of(), List.of(oldCollection),
+                Set.of(EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.VALIDATION),
+                256 * 1024);
+        long constrainedBytes = EvidenceBundleBuilder.estimatedBytes(
+                builder.build(fullRequest, buildSources)) - 1;
         EvidenceBuildRequest request = request(
                 List.of(), List.of(oldCollection),
                 Set.of(EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.VALIDATION),
-                7_000);
+                constrainedBytes);
 
-        var bundle = new EvidenceBundleBuilder().build(request,
-                sources(List.of(new ValidatedCollectionSource(oldValidation,
-                        artifact("old-validation", "COLLECTION_VALIDATION",
-                                "collections/" + "history/".repeat(120) + "validation.json")))));
+        var bundle = builder.build(request, buildSources);
 
         assertTrue(bundle.truncated());
         assertTrue(bundle.comparisonFacts().isEmpty());
@@ -224,11 +227,7 @@ class EvidenceBundleBuilderTest {
         return new EvidenceBuildSources(
                 outcome(gantt), artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
                 context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
-                Optional.of(new RunResultFingerprint(
-                        SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
-                        Optional.of(gantt.sha256()), Optional.of(HASH), Optional.empty())),
-                Optional.of(artifact("fingerprint", "RUN_RESULT_FINGERPRINT",
-                        "runs/run-1/fingerprint.json")), collections);
+                Optional.empty(), Optional.empty(), collections);
     }
 
     private static RunOutcomeSummary outcome(ArtifactReference gantt) {

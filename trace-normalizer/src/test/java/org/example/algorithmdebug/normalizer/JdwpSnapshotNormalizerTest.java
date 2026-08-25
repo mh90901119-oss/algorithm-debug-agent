@@ -89,6 +89,29 @@ class JdwpSnapshotNormalizerTest {
     }
 
     @Test
+    void normalizesV2TypedValuesAndPreservesExactLocation() throws Exception {
+        Path raw = write("""
+                {"schemaVersion":"2.0","sessionId":"s","sequence":1,"timestamp":"2026-08-18T00:00:00Z","eventType":"tracepoint_hit","tracepointId":"point-1","hit":1,"thread":{"id":1,"name":"main"},"location":{"className":"fixture.Algorithm","methodName":"solve","methodDescriptor":"()V","line":12,"codeIndex":4},"frames":[{"index":0,"className":"fixture.Algorithm","methodName":"solve","methodDescriptor":"()V","line":12,"codeIndex":4,"locals":{"count":{"$kind":"primitive","$type":"int","$value":7},"node":{"$kind":"object","$type":"fixture.Child","$id":9,"fields":[{"name":"id","declaringType":"fixture.Parent","declaredType":"int","static":false,"value":{"$kind":"primitive","$type":"int","$value":1}},{"name":"id","declaringType":"fixture.Child","declaredType":"int","static":false,"value":{"$kind":"primitive","$type":"int","$value":2}}]}}}]}
+                """);
+
+        NormalizationResult<JdwpSnapshotSummary> result = normalize(
+                raw, plan("point-1"), NormalizationBudget.defaults(), false);
+
+        assertEquals(NormalizationStatus.COMPLETE, result.status());
+        JdwpSnapshotSummary summary = result.summary().orElseThrow();
+        JdwpSnapshotSummary.TracepointHit hit = summary.hits().getFirst();
+        assertEquals("2.0", summary.schemaVersion());
+        assertEquals(Optional.of("()V"), hit.methodDescriptor());
+        assertEquals(Optional.of(4L), hit.codeIndex());
+        assertEquals(Optional.of("()V"), hit.frames().getFirst().methodDescriptor());
+        assertEquals(Optional.of(4L), hit.frames().getFirst().codeIndex());
+        assertEquals("INTEGER", value(hit, "locals.count").kind());
+        assertEquals(Optional.of("int"), value(hit, "locals.count").runtimeType());
+        assertEquals("1", value(hit, "locals.node.fields.fixture.Parent#id").scalarPreview());
+        assertEquals("2", value(hit, "locals.node.fields.fixture.Child#id").scalarPreview());
+    }
+
+    @Test
     void flattensCapturedValuesAndPreservesCollectorMarkersWithoutNameFiltering() throws Exception {
         Path raw = write("""
                 {"schemaVersion":"1.0","sessionId":"s","sequence":1,"timestamp":"2026-08-18T00:00:00Z","eventType":"tracepoint_hit","tracepointId":"point-1","hit":1,"thread":{"id":1,"name":"main"},"location":{"className":"fixture.Algorithm","methodName":"solve","line":12,"codeIndex":4},"frames":[{"index":0,"className":"fixture.Algorithm","methodName":"solve","line":12,"locals":{"count":7,"context":{"$type":"fixture.Context","$id":9,"fields":{"job":{"$type":"fixture.Job","$id":10,"fields":{"jobId":"JOB-7"}},"scores":{"$type":"int[]","$id":11,"$length":3,"elements":[1,2],"$remaining":1}}}},"this":{"$type":"fixture.Algorithm","$id":1,"$truncated":true,"$remainingFields":2}}]}
@@ -297,7 +320,7 @@ class JdwpSnapshotNormalizerTest {
                 id, "fixture.Algorithm#solve()V",
                 new SourceAnchor(
                         "fixture.Algorithm", "solve", "()V",
-                        "src/main/java/fixture/Algorithm.java", 10, 20, HASH),
+                        "src/main/java/fixture/Algorithm.java", 10, 20),
                 12, capture.locals() ? 5 : 20, capture)).toList();
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,

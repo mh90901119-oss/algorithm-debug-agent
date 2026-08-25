@@ -64,9 +64,15 @@ public final class CaseArchiveRepository {
             throw new IllegalArgumentException("Case Archive 依赖不能为空");
         }
         this.casesRoot = casesRoot.toAbsolutePath().normalize();
-        if (!Files.isDirectory(this.casesRoot, LinkOption.NOFOLLOW_LINKS)) {
+        if (Files.exists(this.casesRoot, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isDirectory(this.casesRoot, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
                     "CASE_ARCHIVE_PATH_INVALID", "项目 Case 根目录不存在或不是普通目录");
+        }
+        Path parent = this.casesRoot.getParent();
+        if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(
+                    "CASE_ARCHIVE_PATH_INVALID", "Project directory does not exist");
         }
         this.mapper = mapper;
         this.writer = writer;
@@ -79,13 +85,8 @@ public final class CaseArchiveRepository {
         }
         CaseArchiveLayout layout = layout(manifest.caseId());
         try {
+            Files.createDirectories(casesRoot);
             Files.createDirectory(layout.caseRoot());
-            Files.createDirectory(layout.contextsRoot());
-            Files.createDirectory(layout.analysesRoot());
-            Files.createDirectory(layout.runsRoot());
-            Files.createDirectory(layout.evidenceRoot());
-            Files.createDirectory(layout.collectionsRoot());
-            Files.createDirectory(layout.artifactsRoot());
             writer.writeNew(layout.caseDocument(), mapper.writeJson(manifest));
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);
@@ -108,8 +109,7 @@ public final class CaseArchiveRepository {
         requireContext(checked.caseId(), checked.contextId());
         CaseArchiveLayout layout = layout(checked.caseId());
         try {
-            Files.createDirectory(layout.analysisRoot(checked.analysisId()));
-            Files.createDirectory(layout.analysisPlansRoot(checked.analysisId()));
+            Files.createDirectories(layout.analysisRoot(checked.analysisId()));
             writer.writeNew(layout.analysisDocument(checked.analysisId()), mapper.writeJson(checked));
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);
@@ -248,9 +248,10 @@ public final class CaseArchiveRepository {
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
+            Files.createDirectories(document.getParent());
             writer.writeNew(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException failure) {
+        } catch (IOException | SecurityException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -330,9 +331,10 @@ public final class CaseArchiveRepository {
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
+            Files.createDirectories(document.getParent());
             writer.writeNew(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException failure) {
+        } catch (IOException | SecurityException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -370,7 +372,7 @@ public final class CaseArchiveRepository {
     }
 
     /**
-     * 在外部 Collector 启动前创建 Collection 目录、raw/derived/logs 子目录和请求文档。
+     * 在外部 Collector 启动前只创建 Collection 根目录和请求文档；其余目录由实际生产者按需创建。
      *
      * @return 已创建的 Collection 绝对目录
      */
@@ -386,11 +388,7 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
         try {
-            Files.createDirectory(root);
-            Files.createDirectory(root.resolve("raw"));
-            Files.createDirectory(root.resolve("derived"));
-            Files.createDirectory(root.resolve("logs"));
-            Files.createDirectory(root.resolve("validation"));
+            Files.createDirectories(root);
             writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
             return root;
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
@@ -400,7 +398,7 @@ public final class CaseArchiveRepository {
         }
     }
 
-    /** 在外部双进程启动前追加 JDWP Collection 请求和固定目录。 */
+    /** 在外部双进程启动前只追加 JDWP Collection 请求，其他目录由实际生产者按需创建。 */
     public Path startJdwpCollection(JdwpCollectionRecord record) {
         JdwpCollectionRecord checked = requireNonNull(record, "record");
         JdwpCollectionPlan plan = requireJdwpPlan(
@@ -412,11 +410,7 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
         try {
-            Files.createDirectory(root);
-            Files.createDirectory(root.resolve("raw"));
-            Files.createDirectory(root.resolve("derived"));
-            Files.createDirectory(root.resolve("logs"));
-            Files.createDirectory(root.resolve("validation"));
+            Files.createDirectories(root);
             writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
             return root;
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
@@ -462,9 +456,10 @@ public final class CaseArchiveRepository {
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
+            Files.createDirectories(document.getParent());
             writer.writeNew(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException failure) {
+        } catch (WorkspaceException | IOException | SecurityException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -502,9 +497,10 @@ public final class CaseArchiveRepository {
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
+            Files.createDirectories(document.getParent());
             writer.writeNew(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException failure) {
+        } catch (WorkspaceException | IOException | SecurityException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -528,7 +524,7 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.evidenceRoot(checked.evidenceId());
         try {
-            Files.createDirectory(root);
+            Files.createDirectories(root);
             Path document = layout.evidenceBuildRequest(checked.evidenceId());
             writer.writeNew(document, mapper.writeJson(checked));
             return document;
@@ -645,7 +641,7 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path runRoot = layout.runRoot(checked.runId());
         try {
-            Files.createDirectory(runRoot);
+            Files.createDirectories(runRoot);
             Files.createDirectory(layout.runRaw(checked.runId()));
             writer.writeNew(layout.runRequest(checked.runId()), mapper.writeJson(checked));
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
@@ -811,6 +807,27 @@ public final class CaseArchiveRepository {
         return Optional.of(value);
     }
 
+    /** 查找同一 Analysis 最近完成的一次无采集目标 UT 运行。 */
+    public Optional<RunOutcomeSummary> findLatestCompletedRun(
+            CaseId caseId, ContextId contextId, AnalysisId analysisId) {
+        requireContext(caseId, contextId);
+        AnalysisRequest analysis = requireAnalysis(caseId, analysisId);
+        if (!analysis.contextId().equals(contextId)) {
+            throw identityMismatch("Analysis does not belong to the requested Context");
+        }
+        return childDirectories(layout(caseId).runsRoot()).stream()
+                .map(path -> new RunId(path.getFileName().toString()))
+                .filter(runId -> Files.isRegularFile(
+                        layout(caseId).runRequest(runId), LinkOption.NOFOLLOW_LINKS))
+                .map(runId -> requireRunRequest(caseId, runId))
+                .filter(request -> request.contextId().equals(contextId)
+                        && request.analysisId().equals(analysisId))
+                .filter(request -> findRunOutcome(caseId, request.runId()).isPresent())
+                .max(Comparator.comparing(RunRequest::createdAt)
+                        .thenComparing(request -> request.runId().value()))
+                .flatMap(request -> findRunOutcome(caseId, request.runId()));
+    }
+
     /** @return 指定 Run 中可写入原始产物的已创建目录 */
     public Path runRawDirectory(CaseId caseId, RunId runId) {
         requireRunRequest(caseId, runId);
@@ -850,7 +867,7 @@ public final class CaseArchiveRepository {
 
     private void createChildDocument(Path document, Object value) {
         try {
-            Files.createDirectory(document.getParent());
+            Files.createDirectories(document.getParent());
             writer.writeNew(document, mapper.writeJson(value));
         } catch (FileAlreadyExistsException | WorkspaceException failure) {
             throw archiveWriteFailure(failure);

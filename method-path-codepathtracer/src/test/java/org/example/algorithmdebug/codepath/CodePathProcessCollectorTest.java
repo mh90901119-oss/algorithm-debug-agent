@@ -33,7 +33,7 @@ class CodePathProcessCollectorTest {
     @TempDir Path directory;
 
     @Test
-    void startFailureArchivesPlanButDoesNotFabricateProcessState() throws Exception {
+    void startFailureDoesNotArchiveLauncherOnlyPlanOrFabricateProcessState() throws Exception {
         CodePathToolConfiguration configuration = configuration(directory.resolve("missing-java"), createEmptyJar());
 
         MethodPathCollectionException failure = assertThrows(
@@ -42,8 +42,7 @@ class CodePathProcessCollectorTest {
 
         assertFalse(failure.processStarted());
         assertEquals(-1, failure.exitCode());
-        assertTrue(Files.isRegularFile(directory.resolve("collection/request/plan.json")));
-        assertFalse(Files.exists(directory.resolve("collection/request/plan.json.tmp")));
+        assertFalse(Files.exists(directory.resolve("collection/request")));
         assertTrue(Files.isRegularFile(directory.resolve("collection/logs/stdout.log")));
         assertTrue(Files.isRegularFile(directory.resolve("collection/logs/stderr.log")));
     }
@@ -69,6 +68,7 @@ class CodePathProcessCollectorTest {
         assertEquals("PASSED", success.manifest().targetOutcome());
         assertEquals(1, success.manifest().testsSucceeded());
         assertEquals(1, success.manifest().capturedEventCount());
+        assertFalse(Files.exists(directory.resolve("collection/request")));
 
         Path second = Files.createDirectories(directory.resolve("zero-collection"));
         var zero = collector().collect(request(2_000, "zero-hit", second));
@@ -118,7 +118,7 @@ class CodePathProcessCollectorTest {
 
     private CodePathToolConfiguration configuration(Path java, Path jar) throws Exception {
         return new CodePathToolConfiguration(
-                java, jar, CodePathToolConfiguration.sha256(jar), "test",
+                java, jar, "test",
                 CodePathProcessFixtureMain.class.getName());
     }
 

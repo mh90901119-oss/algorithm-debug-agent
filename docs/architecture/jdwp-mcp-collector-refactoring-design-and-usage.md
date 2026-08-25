@@ -1,3 +1,5 @@
+> HISTORICAL DOCUMENT: This records the original external mcp-jdwp-java refactoring. The current Agent-owned implementation and build instructions are in docs/designs/2026-08-23-agent-owned-jdwp-collector-design.md.
+
 # JDWP-MCP 与 Batch Collector 重构设计、变更说明及使用手册
 
 ## 1. 文档信息

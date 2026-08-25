@@ -64,8 +64,7 @@ class JdwpCommandFactoryTest {
 
         assertEquals(List.of(
                 java.toString(), "--add-modules", "jdk.jdi", "-jar", jar.toString(), "collect",
-                "--plan", plan.toString(), "--host", "127.0.0.1", "--port", "51234",
-                "--output", output.toString()),
+                "--plan", plan.toString(), "--output", output.toString()),
                 new JdwpCollectorCommandFactory().create(java, jar, plan, output, 51234));
     }
 

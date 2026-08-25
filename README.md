@@ -1,152 +1,144 @@
 # Algorithm Debug Agent
 
-Offline, evidence-driven assistant for reproducing deterministic algorithm UTs, explaining Gantt
-results and locating the responsible input, strategy, runtime state and source code.
+Algorithm Debug Agent 是一个面向本地 Java/Maven 算法 UT 的离线问题定位 Agent。用户指定一个
+JUnit 测试和问题，OpenCode 中的大模型负责选择证据和解释；Agent 负责运行 UT、归档 Gantt、
+静态源码目录、CodePath、JDWP、校验结果和 Case 历史。
 
-The Agent keeps deterministic collection and validation outside prompts. OpenCode/LLM plans and
-explains; Maven/JUnit, static analysis, Code Path Tracer, JDWP Collector, normalizers and validators
-produce verifiable facts.
+当前只正式适配 OpenCode。目标算法模块不需要依赖本 Agent，也不要求修改生产算法源码来插桩。
 
-## Current status
+## 当前可用能力
 
-Phase 0 now contains a usable diagnostic vertical slice. The external Workspace control plane can
-initialize a workspace, register an independent Maven algorithm module, open or resume a Case,
-inspect its bounded history, explicitly run one supported JUnit method and append immutable
-Case/Context/Analysis/Run documents. Each completed Run returns orthogonal process, test, Gantt,
-target-failure and Agent-failure facts plus hashed Artifact references. A valid Gantt and/or target
-failure now produces an immutable Run fingerprint and a write-once Context reproduction reference;
-later Runs report `MATCHED` or `CHANGED` for the same or previous Context.
+- 运行指定的 Maven/JUnit `class#method`，归档退出码、Surefire、stdout、stderr 和结构化失败事实。
+- 从配置的算法结果目录捕获本次 UT 新增或变化的顶层 JSON，并归档为 Gantt Artifact。
+- 使用有界 Javac AST Method Catalog 查找当前源码方法和直接调用边。
+- 独立执行 CodePath 方法路径采集，或独立执行 JDWP 局部变量、字段和栈采集。
+- 对动态失败重跑比较结构化失败指纹；成功重跑不要求 Gantt 完全相同。
+- 将 Raw、Derived、Validation、Evidence 和最终答案追加保存到 Case Workspace。
+- 使用 `ArtifactReference` 的相对路径、大小和 SHA-256 防止归档文件被静默替换。
+- 在每个 Case 根目录写入 `interaction.jsonl`，用于查看真实 Tool 和 Java CLI 执行顺序。
+- 使用 `case_audit` 检查缺失文件、孤儿文件、Artifact 完整性、无效 JSONL 和空 Case 目录。
+- 使用真实 OpenCode Eval Harness 回归 9 个成功、失败、静态、动态和完整性场景。
 
-Gantt comparison deliberately ignores JSON formatting whitespace but preserves object/array order and
-string content. It reports only changed dimensions, not a field-level Diff. Context is now an explicit,
-minimal analysis-version identity: an existing Case reuses the latest Context by default and appends a
-new one only when `--context-mode new` is requested. Static method analysis, exact method-level
-CodePathTracer Plan/collection and the JDWP Plan/collection application flow are implemented. Every
-successful Run, static Plan and Collection response now registers its Case-local Artifact references;
-the CLI can read a hash-verified UTF-8 excerpt by Artifact ID and append a final Analysis result.
-The real Wafer vertical-slice acceptance is complete: an uninstrumented target Run archived its
-Gantt; exact CodePath and bounded JDWP collections matched that same-Context baseline and produced
-usable Evidence; a later OpenCode model round reused the Case, read the registered JDWP summary in
-bounded excerpts, and completed a new Analysis without rerunning the UT or collecting again. Dynamic
-collections now expose both Case-relative provenance paths and registered `artifactIds` for model
-reads. Input Analysis remains planned.
+不提供独立 Gantt 语义引擎。Agent 只提供有界 JSON 结构读取，业务含义由大模型结合问题、源码和证据解释。
 
-The approved OpenCode integration target keeps all product assets in this repository. The canonical
-`algorithm-debug` Skill, bounded OpenCode Agent/Command/Custom Tool assets and the Java CLI exist.
-The one-time installer is idempotent, preserves conflicting files as backups, and has been verified
-against OpenCode 1.18.15. Install or check it with:
+## 安装与路径
+
+所有需要用户调整的路径都在仓库文件 [config/agent-settings.json](config/agent-settings.json)：
+
+```json
+{
+  "schemaVersion": "1.0",
+  "openCodeConfigDirectory": "%USERPROFILE%\\.config\\opencode",
+  "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
+  "dfxDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics",
+  "evalDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\evals",
+  "resultJsonDirectory": "D:\\log\\scheduler\\gant",
+  "agentJavaHome": "",
+  "targetJavaHome": "",
+  "mavenExecutable": "",
+  "dfxEnabled": true
+}
+```
+
+`workspaceDirectory`、`dfxDirectory` 和 `evalDirectory` 有可直接使用的默认值，也可以改成绝对路径。
+`resultJsonDirectory` 与业务算法相关，安装前应修改为目标算法统一输出 Gantt JSON 的绝对目录。
+不在算法项目中创建额外配置文件，也不通过 OpenCode Tool 或安装命令参数传路径。
+
+构建并安装：
 
 ```powershell
+.\scripts\build-agent.ps1
 .\scripts\install-opencode.ps1 -Mode Install
+```
+
+安装器会打印解析后的 OpenCode、Workspace、Gantt、DFX 和 Eval 路径。修改配置或仓库内 Agent、
+Skill、Tool 后重新运行安装器，再重启正在运行的 OpenCode 会话。重复安装是幂等覆盖受管资产，
+不会删除已有 Workspace Case。
+
+检查安装：
+
+```powershell
 .\scripts\install-opencode.ps1 -Mode Check
 ```
 
-Then restart any running OpenCode session. Normal use is:
+安装器不绑定 OpenCode 版本号。只要当前 OpenCode 能发现 Agent、Skill、Command 和 Custom Tools
+并支持所需 CLI 行为即可；不兼容时返回明确错误。
+
+## 在 OpenCode 中使用
+
+从包含目标 `pom.xml` 的算法模块目录启动：
 
 ```powershell
-cd D:\path\to\target-algorithm
+cd D:\path\to\algorithm-module
 opencode
 ```
 
-The intended experience is that the user specifies a JUnit UT and asks a question. Each executed UT
-returns a bounded structured summary plus immutable Artifact references; the Skill guides the model to answer from existing
-evidence or request the next minimal action. Use `/debug-case <target UT and question>` or ask the
-same information directly. The current phase does not implement an Algorithm Debug MCP server or
-other CLI-runtime adapters.
+选择或调用 `algorithm-debug` Custom Agent，然后直接提问，例如：
 
-The verified Reference Demo flow runs one dedicated UT twice, captures each result into a separate
-Run directory and confirms equal raw and JSON Token content SHA-256 values.
-
-## Current CLI slice
-
-Build the executable JAR and CodePath Launcher once, then use the repository-owned launcher from any
-directory. `case open` only archives the question
-and context; it does not run the UT. Reuse the returned IDs only when the model decides a new Run is
-needed.
-
-```powershell
-mvn -Pcodepath-launcher package
-$ada = "D:\tools\algorithm-debug-agent\bin\ada.cmd"
-& $ada workspace init --root D:\agent-workspace
-& $ada project register --workspace D:\agent-workspace --project D:\large-system\algorithm-module
-& $ada case open --workspace D:\agent-workspace --project-id <projectId> --test fully.qualified.Test#method --question-file question.txt [--context-mode reuse|new]
-& $ada case inspect --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId>
-& $ada run execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
-& $ada static analyze --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId>
-& $ada plan codepath create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file codepath-plan-request.json
-& $ada collection codepath execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
-& $ada plan jdwp create --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --request-file jdwp-plan-request.json
-& $ada collection jdwp execute --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --plan-id <planId>
-& $ada artifact read --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --artifact-id <artifactId> [--offset-bytes 0] [--max-bytes 16384]
-& $ada analysis complete --workspace D:\agent-workspace --project-id <projectId> --case-id <caseId> --analysis-id <analysisId> --result-file analysis-result.json
+```text
+分析 org.example.scheduler.wafer.WaferSchedulingReproductionTest#reproduceComplexSchedulingFromTimestampedInput，
+说明本次调度结果是否正确，并定位可疑路径。
 ```
 
-JDWP execution treats the Collector as one configured local JAR. Before starting OpenCode/CLI,
-set its location:
+提问必须能确定目标 UT。无需再次说明 Workspace、项目 ID、Collector JAR 或 Gantt 输出路径。
+如果 UT 不存在，Agent 返回 `TARGET_TEST_NOT_FOUND` 并停止，不强行运行或采集。
 
-```powershell
-$env:ADA_JDWP_COLLECTOR_JAR = "D:\mcpcode\mcp-jdwp-java\jdwp-batch-collector\target\jdwp-batch-collector.jar"
+## 谁负责什么
+
+| 组件 | 职责 |
+|---|---|
+| OpenCode | 会话、模型调用、Custom Agent 和 Tool 执行宿主 |
+| 大模型 | 理解问题、决定下一项证据、生成计划、判断是否足够、解释结论 |
+| Skill | 约束证据顺序、停止条件、工具选择和回答分类 |
+| OpenCode Tools / JS Adapter | 将模型参数映射到 Java CLI，解析仓库配置，记录 DFX |
+| Java Agent | 确定性运行、采集、解析、预算、校验、归档和审计 |
+| Workspace | Case 的持久化事实、证据、计划、日志和答案 |
+| Eval Harness | Agent 外部的回归测试，不参与普通用户问题分析 |
+
+## Workspace 与日志
+
+默认 Case 路径：
+
+```text
+%LOCALAPPDATA%\algorithm-debug-agent\workspace\projects\<projectId>\cases\<caseId>
 ```
 
-也可复制 `bin\ada.local.example.cmd` 为被 Git 忽略的 `bin\ada.local.cmd`，只在其中保存本机 JDWP
-路径。启动器自动配置 CodePath Launcher 及其 SHA-256。详见 `bin\README.md`。
+每个 Case 的 `interaction.jsonl` 可以直接打开，按时间查看 Tool 调用、CLI 启动/结束、结果码以及
+Run、Collection、Evidence、Artifact ID。它不是隐藏思维日志，也不是业务证据。
 
-`doctor` reports whether the configured path points to a regular JAR file without starting a target JVM.
-The Agent records the configured Collector version but does not require a repository-pinned JAR
-fingerprint; a malformed or incompatible JAR is retained as a structured tool execution failure.
-Every execution creates a new Collection and returns only a bounded summary plus relative Artifact
-references. Raw JDWP events, the external Collector Manifest, Agent Manifest, four process logs,
-optional Gantt and Baseline check remain in that Collection directory.
+Case 目录按生产者懒创建。不存在对应行为时，不创建 `runs`、`collections`、`evidence` 或
+`plans` 空目录。零字节 `stderr.log` 是有效的进程流捕获，明确表示该进程没有 stderr，不是占位文件。
 
-JDWP value-depth, item-count and summary budgets deliberately preserve limit markers. When the
-Collector completed, at least one tracepoint hit exists, artifact/plan/provenance checks pass, and the
-Gantt baseline is `MATCHED`, those bounded observed values remain usable runtime evidence; the model
-must not infer that omitted values do not exist. A partial CodePath trace remains inconclusive because
-missing call events can change the path itself.
+完整文件说明见 [工作流与产物指南](docs/algorithm-debug-workflow-and-artifacts.md)。
 
-CodePath collection follows the same Plan-then-execute rule. Its v2 Plan contains only exact
-class/method/descriptor selectors and event/byte/time budgets. The Launcher writes one Raw JSONL stream;
-there is no package-superset collection or post-filter artifact. The current supported target is a
-single-thread UT. The unchanged upstream tracer can still incur Advice callbacks for unselected methods,
-so large-algorithm cost must be confirmed with the supplied real-project smoke and measurements.
-
-The packaged CLI currently loads the Wafer Demo Adapter. Supporting an arbitrary algorithm module
-requires a compatible Adapter; the CLI does not guess Gantt locations.
-
-## Build
-
-```powershell
-.\mvnw.cmd test
-```
-
-If the Maven Wrapper is unavailable, use:
+## 构建与评测
 
 ```powershell
 mvn test
+node --test agent-evals/test/*.test.mjs integrations/opencode/test/*.test.mjs
 ```
 
-## Development workflow
+从目标算法模块目录运行真实 OpenCode Eval：
 
-1. Read `AGENTS.md` and `docs/development/development-rules.md`.
-2. Check architecture, ADRs and existing designs before implementation.
-3. Create or update an implementable design under `docs/designs` when required.
-4. Develop behavior with test-first Red-Green-Refactor.
-5. Verify affected modules and synchronize contracts, documentation and Eval cases.
+```powershell
+D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke
+```
 
-## Start here
+只运行一个 Case：
 
-- `AGENTS.md`
-- `docs/development/development-rules.md`
-- `docs/designs/implementation-design-template.md`
-- `docs/architecture/README.md`
-- `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`
-- `docs/architecture/algorithm-debug-agent-complete-design.md`
-- `docs/plans/algorithm-debug-agent-development-plan.md`
-- `docs/README.md`
+```powershell
+D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke -Case jdwp-independent
+```
 
-## Repository boundaries
+目标模块就是脚本启动时的当前目录，不接收项目路径参数。报告写入配置的 `evalDirectory`。
 
-- This repository owns Agent orchestration, contracts, tooling adapters, knowledge and OpenCode integration.
-- The wafer scheduling demo remains in `D:\javacode\hellomvn`.
-- JDWP/JDI implementation remains in `D:\mcpcode\mcp-jdwp-java`.
-- Code Path Tracer and its external JUnit Bundle remain in `D:\mcpcode\code-path-tracer`.
+## 当前边界
+
+- 静态分析是单 Maven 模块、有界的当前源码目录，不宣称完整项目调用图。
+- CodePath 和 JDWP 都会各自重新运行目标 UT，并可能改变时序；失败目标通过失败指纹校验降低误用风险。
+- JDWP 命中断点时会短暂停止事件线程，不是绝对零影响。
+- LLM 输出具有模型不确定性；确定性 Tool、Evidence 分类、Case Audit 和 Eval 用于约束，不代表自动证明业务真理。
+- 当前不支持多模块跨 Reactor 调用图、在线生产调度决策或自动修改生产算法源码。
+
+当前架构和模块见 [架构索引](docs/architecture/README.md)，最终实施证据见
+[运行时精简最终审计](docs/audits/agent-runtime-simplification-final-audit.md)。

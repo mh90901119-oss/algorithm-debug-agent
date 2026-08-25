@@ -59,8 +59,8 @@ class TraceJsonlSinkTest {
         Path trace = temp.resolve("concurrent.jsonl");
         int workers = 8;
         int perWorker = 100;
-        try (TraceJsonlSink sink = new TraceJsonlSink(trace, 1_000_000, workers * perWorker);
-             var executor = Executors.newFixedThreadPool(workers)) {
+        var executor = Executors.newFixedThreadPool(workers);
+        try (TraceJsonlSink sink = new TraceJsonlSink(trace, 1_000_000, workers * perWorker)) {
             CountDownLatch start = new CountDownLatch(1);
             List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
             for (int worker = 0; worker < workers; worker++) {
@@ -77,6 +77,8 @@ class TraceJsonlSinkTest {
             for (var future : futures) {
                 future.get();
             }
+        } finally {
+            executor.shutdownNow();
         }
         List<String> lines = Files.readAllLines(trace, StandardCharsets.UTF_8);
         assertEquals(workers * perWorker, lines.size());

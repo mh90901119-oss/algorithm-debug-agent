@@ -31,7 +31,7 @@ public record AnalysisResultSummary(
         missingEvidence = ContractChecks.immutableBoundedStrings(
                 missingEvidence, "missingEvidence", 2_048);
         if (missingEvidence.size() > 10) {
-            throw new IllegalArgumentException("missingEvidence 不能超过 10 项");
+            throw new IllegalArgumentException("missingEvidence must not exceed 10 entries");
         }
         completedAt = ContractChecks.requireNonNull(completedAt, "completedAt");
     }
@@ -39,7 +39,7 @@ public record AnalysisResultSummary(
     private static <T> List<T> bounded(List<T> values, String field, int maximum) {
         List<T> copied = ContractChecks.immutableList(values, field);
         if (copied.size() > maximum) {
-            throw new IllegalArgumentException(field + " 不能超过 " + maximum + " 项");
+            throw new IllegalArgumentException(field + " must not exceed " + maximum + " entries");
         }
         return copied;
     }

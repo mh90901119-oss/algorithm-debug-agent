@@ -22,7 +22,6 @@ public record MethodPathValidationInput(
         Path rawPath,
         ArtifactReference summaryReference,
         Path summaryPath,
-        Path planPath,
         Instant validatedAt) {
 
     /** 校验所有必需对象，并把本地路径规范化为绝对路径。 */
@@ -37,7 +36,6 @@ public record MethodPathValidationInput(
         rawPath = normalize(rawPath, "rawPath");
         summaryReference = require(summaryReference, "summaryReference");
         summaryPath = normalize(summaryPath, "summaryPath");
-        planPath = normalize(planPath, "planPath");
         validatedAt = require(validatedAt, "validatedAt");
     }
 

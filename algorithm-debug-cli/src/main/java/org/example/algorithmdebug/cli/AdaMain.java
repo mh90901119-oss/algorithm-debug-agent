@@ -45,7 +45,7 @@ public final class AdaMain {
 
     AdaMain(CommandExecution execution, CliResponseWriter responseWriter) {
         if (execution == null || responseWriter == null) {
-            throw new IllegalArgumentException("execution 和 responseWriter 不能为空");
+            throw new IllegalArgumentException("execution and responseWriter must not be null");
         }
         this.execution = execution;
         this.responseWriter = responseWriter;
@@ -66,7 +66,7 @@ public final class AdaMain {
      */
     public int run(String[] arguments, PrintStream stdout, PrintStream stderr) {
         if (stdout == null || stderr == null) {
-            throw new IllegalArgumentException("stdout 和 stderr 不能为空");
+            throw new IllegalArgumentException("stdout and stderr must not be null");
         }
         CliCommand command;
         try {
@@ -74,7 +74,8 @@ public final class AdaMain {
         } catch (IllegalArgumentException failure) {
             responseWriter.write(
                     ToolResponse.failure(
-                            "CLI_INVALID_ARGUMENTS", "Invalid CLI arguments", List.of()),
+                            "CLI_INVALID_ARGUMENTS",
+                            "Invalid CLI arguments: " + failure.getMessage(), List.of()),
                     stdout);
             return EXIT_INVALID_ARGUMENTS;
         }
@@ -94,7 +95,8 @@ public final class AdaMain {
         } catch (CliInputException failure) {
             responseWriter.write(
                     ToolResponse.failure(
-                            "CLI_INVALID_ARGUMENTS", "Invalid CLI arguments", List.of()),
+                            "CLI_INVALID_ARGUMENTS",
+                            "Invalid CLI input: " + failure.getMessage(), List.of()),
                     stdout);
             return EXIT_INVALID_ARGUMENTS;
         } catch (CaseRunException failure) {
@@ -110,7 +112,7 @@ public final class AdaMain {
         } catch (StaticAnalysisException failure) {
             responseWriter.write(
                     ToolResponse.failure(
-                            "STATIC_ANALYSIS_FAILED", safeDomainMessage("STATIC_ANALYSIS_FAILED"), List.of()),
+                            failure.code(), safeDomainMessage(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (PlanCompilationException failure) {
@@ -138,19 +140,21 @@ public final class AdaMain {
         boolean windows = System.getProperty("os.name", "")
                 .toLowerCase(Locale.ROOT)
                 .contains("win");
-        List<TargetProjectAdapter<?>> adapters = List.copyOf(ServiceLoader
+        List<TargetProjectAdapter> adapters = List.copyOf(ServiceLoader
                 .load(TargetProjectAdapter.class)
                 .stream()
                 .map(ServiceLoader.Provider::get)
-                .map(adapter -> (TargetProjectAdapter<?>) adapter)
+                .map(adapter -> (TargetProjectAdapter) adapter)
                 .collect(Collectors.toList()));
         MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
                 System.getenv(), File.pathSeparator, windows);
-        java.nio.file.Path javaExecutable = java.nio.file.Path.of(
+        java.nio.file.Path agentJavaExecutable = java.nio.file.Path.of(
                 System.getProperty("java.home"), "bin", windows ? "java.exe" : "java")
                 .toAbsolutePath().normalize();
-        ConfiguredCodePath codePath = configuredCodePath(javaExecutable);
-        ConfiguredJdwp jdwp = configuredJdwp(javaExecutable);
+        RuntimeToolchain toolchain = RuntimeToolchain.resolve(
+                System.getenv(), agentJavaExecutable, windows);
+        ConfiguredCodePath codePath = configuredCodePath(toolchain.targetJavaExecutable());
+        ConfiguredJdwp jdwp = configuredJdwp(toolchain.agentJavaExecutable());
         ControlPlaneServices services = ControlPlaneServices.create(
                 Clock.systemUTC(),
                 () -> Runtime.version().feature(),
@@ -158,7 +162,7 @@ public final class AdaMain {
                 File.pathSeparator,
                 windows,
                 adapters,
-                mavenLocator.locate(Optional.empty()),
+                mavenLocator.locate(toolchain.mavenExecutable()),
                 codePath.collector(),
                 new MavenTestClasspathResolver(),
                 jdwp.tool(), jdwp.executor(), jdwp.ports(),
@@ -171,34 +175,33 @@ public final class AdaMain {
 
     private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
         String jar = System.getenv("ADA_CODEPATH_LAUNCHER_JAR");
-        String sha = System.getenv("ADA_CODEPATH_LAUNCHER_SHA256");
-        if (jar == null || jar.isBlank() || sha == null || sha.isBlank()) {
+        if (jar == null || jar.isBlank()) {
             MethodPathCollector unavailable = request -> {
                 throw new org.example.algorithmdebug.methodpath.MethodPathCollectionException(
-                        "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath launcher 未配置", null);
+                        "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath launcher is not configured", null);
             };
             return new ConfiguredCodePath(unavailable, () -> new DoctorCheck(
                     "codepath", DoctorStatus.FAIL, "CODEPATH_TOOL_NOT_CONFIGURED",
-                    "CodePath launcher 未配置"));
+                    "CodePath launcher is not configured"));
         }
         CodePathToolConfiguration configuration = new CodePathToolConfiguration(
-                javaExecutable, java.nio.file.Path.of(jar), sha, "0.1.0-SNAPSHOT",
+                javaExecutable, java.nio.file.Path.of(jar), "0.1.0-SNAPSHOT",
                 "org.example.algorithmdebug.codepath.launcher.ExternalJUnitTraceLauncher");
         ToolDoctorProbe probe = () -> {
             if (!java.nio.file.Files.isRegularFile(javaExecutable)) {
                 return new DoctorCheck(
                         "codepath", DoctorStatus.FAIL, "CODEPATH_JAVA_MISSING",
-                        "CodePath Java executable 不可用");
+                        "CodePath Java executable is unavailable");
             }
             try {
                 configuration.verifyTool();
                 return new DoctorCheck(
                         "codepath", DoctorStatus.PASS, "CODEPATH_TOOL_OK",
-                        "CodePath launcher 配置和 SHA-256 校验通过");
+                        "CodePath launcher configuration and file checks passed");
             } catch (CodePathAdapterException failure) {
                 return new DoctorCheck(
                         "codepath", DoctorStatus.FAIL, failure.code(),
-                        "CodePath launcher 配置校验失败");
+                        "CodePath launcher configuration validation failed");
             }
         };
         return new ConfiguredCodePath(new CodePathProcessCollector(configuration), probe);
@@ -217,23 +220,23 @@ public final class AdaMain {
             return new ConfiguredJdwp(
                     unavailable,
                     request -> { throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                            "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector 未配置", null); },
+                            "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector is not configured", null); },
                     () -> 51234,
                     () -> new DoctorCheck(
                             "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_NOT_CONFIGURED",
-                            "JDWP Collector 未配置"));
+                            "JDWP Collector is not configured"));
         }
         JdwpToolConfiguration tool = new JdwpToolConfiguration(
-                java.nio.file.Path.of(jar), "1.0.0");
+                java.nio.file.Path.of(jar), "2.0.0");
         ToolDoctorProbe probe = () -> {
             if (!Files.isRegularFile(tool.collectorJar())) {
                 return new DoctorCheck(
                         "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_MISSING",
-                        "JDWP Collector JAR 不可用");
+                        "JDWP Collector JAR is unavailable");
             }
             return new DoctorCheck(
                     "jdwp", DoctorStatus.PASS, "JDWP_TOOL_OK",
-                    "JDWP Collector JAR 路径可用");
+                    "JDWP Collector JAR path is available");
         };
         JdwpCollectionCoordinator coordinator = new JdwpCollectionCoordinator();
         LoopbackPortAllocator ports = new LoopbackPortAllocator();
@@ -278,6 +281,7 @@ public final class AdaMain {
             case "RUN_ARCHIVE_WRITE_FAILED" -> "Run outcome could not be archived";
             case "STATIC_SOURCE_DRIFT" -> "Source changed relative to the analysis context";
             case "STATIC_ANALYSIS_FAILED" -> "Static analysis could not be completed";
+            case "TARGET_TEST_NOT_FOUND" -> "Target test was not found in the current source";
             case "STATIC_ARCHIVE_FAILED" -> "Static analysis artifact could not be archived";
             case "PLAN_COMPILATION_FAILED" -> "Collection plan could not be compiled";
             case "PLAN_ARCHIVE_FAILED" -> "Collection plan could not be archived";

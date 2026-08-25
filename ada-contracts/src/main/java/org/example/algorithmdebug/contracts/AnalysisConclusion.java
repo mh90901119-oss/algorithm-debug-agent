@@ -21,7 +21,7 @@ public record AnalysisConclusion(
         evidenceReferenceIds = ContractChecks.immutableNonBlankStrings(
                 evidenceReferenceIds, "evidenceReferenceIds");
         if (evidenceReferenceIds.size() > 32) {
-            throw new IllegalArgumentException("evidenceReferenceIds 不能超过 32 项");
+            throw new IllegalArgumentException("evidenceReferenceIds must not exceed 32 entries");
         }
         evidenceReferenceIds.forEach(value ->
                 ContractChecks.requireOpaqueId(value, "evidenceReferenceId"));
@@ -29,7 +29,8 @@ public record AnalysisConclusion(
                 || classification == ClaimClassification.VALIDATOR_CONCLUSION
                 || classification == ClaimClassification.SOURCE_INFERENCE)
                 && evidenceReferenceIds.isEmpty()) {
-            throw new IllegalArgumentException("事实、校验结论和源码推断必须包含来源引用");
+            throw new IllegalArgumentException(
+                    "Confirmed facts, validator conclusions, and source inferences require evidence references");
         }
     }
 }

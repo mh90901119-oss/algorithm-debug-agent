@@ -79,6 +79,7 @@ public final class JdwpSnapshotNormalizer {
         private long recordCount;
         private long previousSequence;
         private int valueFactCount;
+        private String rawSchemaVersion;
 
         private Accumulator(JdwpNormalizationInput input, JdwpValueFlattener flattener) {
             this.input = input;
@@ -90,7 +91,12 @@ public final class JdwpSnapshotNormalizer {
 
         private void accept(long line, JsonNode json) {
             recordCount++;
-            requireVersion(json, line);
+            String recordVersion = requireVersion(json, line);
+            if (rawSchemaVersion == null) {
+                rawSchemaVersion = recordVersion;
+            } else if (!rawSchemaVersion.equals(recordVersion)) {
+                throw invalid(line, "JDWP Raw schemaVersion changed within one trace");
+            }
             requiredText(json, "sessionId", 1_024, line);
             validateTimestamp(json, line);
             long sequence = requiredPositiveLong(json, "sequence", line);
@@ -127,9 +133,18 @@ public final class JdwpSnapshotNormalizer {
             String className = requiredText(location, "className", 1_024, line);
             String methodName = requiredText(location, "methodName", 512, line);
             int sourceLine = requiredLine(location, "line", line);
+            Optional<String> methodDescriptor = optionalText(
+                    location, "methodDescriptor", 2_048, line);
+            Optional<Long> codeIndex = optionalNonNegativeLong(location, "codeIndex", line);
+            if ("2.0".equals(rawSchemaVersion)
+                    && (methodDescriptor.isEmpty() || codeIndex.isEmpty())) {
+                throw invalid(line, "JDWP Raw 2.0 location lacks methodDescriptor or codeIndex");
+            }
             if (!className.equals(tracepoint.sourceAnchor().className())
                     || !methodName.equals(tracepoint.sourceAnchor().methodName())
-                    || sourceLine != tracepoint.line()) {
+                    || sourceLine != tracepoint.line()
+                    || (methodDescriptor.isPresent() && !methodDescriptor.orElseThrow()
+                            .equals(tracepoint.sourceAnchor().descriptor()))) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
                         "JDWP location 与采集计划不一致", line, null);
@@ -145,7 +160,8 @@ public final class JdwpSnapshotNormalizer {
             TraceProvenance provenance = provenance(line, sequence);
             int frameLimit = Math.min(
                     input.budget().maxFramesPerHit(), tracepoint.capture().maxFrames());
-            List<JdwpSnapshotSummary.StackFrame> frames = frames(framesNode, frameLimit, line);
+            List<JdwpSnapshotSummary.StackFrame> frames = frames(
+                    framesNode, frameLimit, line, "2.0".equals(rawSchemaVersion));
             if (framesNode.size() > frameLimit) reasons.add("FRAME_BUDGET_EXCEEDED");
             String normalizedLocation = className + "#" + methodName + ":" + sourceLine;
             if (!summaryBudget.reserveHit(tracepointId, threadName, normalizedLocation, frames)) {
@@ -179,13 +195,15 @@ public final class JdwpSnapshotNormalizer {
             }
             hits.add(new JdwpSnapshotSummary.TracepointHit(
                     tracepointId, hit, threadName,
-                    normalizedLocation, frames, List.copyOf(retainedFacts), provenance));
+                    normalizedLocation, methodDescriptor, codeIndex,
+                    frames, List.copyOf(retainedFacts), provenance));
         }
 
         private List<JdwpSnapshotSummary.StackFrame> frames(
                 JsonNode frames,
                 int maximum,
-                long line) {
+                long line,
+                boolean requireV2Location) {
             ArrayList<JdwpSnapshotSummary.StackFrame> result = new ArrayList<>();
             java.util.HashSet<Integer> indexes = new java.util.HashSet<>();
             for (int index = 0; index < Math.min(maximum, frames.size()); index++) {
@@ -193,11 +211,19 @@ public final class JdwpSnapshotNormalizer {
                 if (!frame.isObject()) throw invalid(line, "JDWP frame 必须为 object");
                 int frameIndex = requiredNonNegativeInt(frame, "index", line);
                 if (!indexes.add(frameIndex)) throw invalid(line, "JDWP frame index 重复");
+                Optional<String> descriptor = optionalText(
+                        frame, "methodDescriptor", 2_048, line);
+                Optional<Long> codeIndex = optionalNonNegativeLong(frame, "codeIndex", line);
+                if (requireV2Location && (descriptor.isEmpty() || codeIndex.isEmpty())) {
+                    throw invalid(line, "JDWP Raw 2.0 frame lacks methodDescriptor or codeIndex");
+                }
                 result.add(new JdwpSnapshotSummary.StackFrame(
                         frameIndex,
                         requiredText(frame, "className", 1_024, line),
                         requiredText(frame, "methodName", 512, line),
-                        requiredFrameLine(frame, "line", line)));
+                        descriptor,
+                        requiredFrameLine(frame, "line", line),
+                        codeIndex));
             }
             result.sort(Comparator.comparingInt(JdwpSnapshotSummary.StackFrame::index));
             return List.copyOf(result);
@@ -363,10 +389,33 @@ public final class JdwpSnapshotNormalizer {
         }
     }
 
-    private static void requireVersion(JsonNode json, long line) {
-        if (!"1.0".equals(requiredText(json, "schemaVersion", 32, line))) {
+    private static String requireVersion(JsonNode json, long line) {
+        String version = requiredText(json, "schemaVersion", 32, line);
+        if (!"1.0".equals(version) && !"2.0".equals(version)) {
             throw invalid(line, "不支持的 JDWP Raw schemaVersion");
         }
+        return version;
+    }
+
+    private static Optional<String> optionalText(
+            JsonNode json, String field, int maximum, long line) {
+        JsonNode value = json.get(field);
+        if (value == null || value.isNull()) return Optional.empty();
+        if (!value.isTextual() || value.textValue().isBlank()
+                || value.textValue().length() > maximum) {
+            throw invalid(line, field + " invalid");
+        }
+        return Optional.of(value.textValue());
+    }
+
+    private static Optional<Long> optionalNonNegativeLong(
+            JsonNode json, String field, long line) {
+        JsonNode value = json.get(field);
+        if (value == null || value.isNull()) return Optional.empty();
+        if (!value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 0) {
+            throw invalid(line, field + " invalid");
+        }
+        return Optional.of(value.longValue());
     }
 
     private static void validateTimestamp(JsonNode json, long line) {

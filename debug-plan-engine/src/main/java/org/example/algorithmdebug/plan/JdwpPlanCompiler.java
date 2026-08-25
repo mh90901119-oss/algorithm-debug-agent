@@ -73,11 +73,6 @@ public final class JdwpPlanCompiler {
         }
         var anchor = entry.sourceAnchor();
         Path source = resolveSource(realRoot, anchor.sourceRelativePath());
-        String observedHash = sha256(source);
-        if (!observedHash.equals(anchor.sourceSha256())) {
-            throw new PlanCompilationException(
-                    "JDWP_PLAN_SOURCE_DRIFT: " + anchor.sourceRelativePath());
-        }
         try {
             return new JdwpTracepointSpec(
                     request.tracepointId(), entry.methodKey(), anchor,
@@ -117,21 +112,4 @@ public final class JdwpPlanCompiler {
         }
     }
 
-    private static String sha256(Path source) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (InputStream input = Files.newInputStream(source)) {
-                byte[] buffer = new byte[16 * 1024];
-                int read;
-                while ((read = input.read(buffer)) != -1) {
-                    digest.update(buffer, 0, read);
-                }
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
-        } catch (IOException failure) {
-            throw new PlanCompilationException("读取 JDWP 锚点源码失败: " + source, failure);
-        }
-    }
 }

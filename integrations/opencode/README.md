@@ -1,46 +1,47 @@
 # OpenCode integration
 
-这是当前唯一客户端适配层，调用链为：OpenCode 大模型 → canonical Skill → OpenCode Custom Tool →
-`ada` CLI → Java Core。适配层只负责稳定的参数映射和进程边界，不复制事实、不判断算法业务语义。
+The active chain is OpenCode/LLM -> algorithm-debug Agent -> Skill -> Custom Tool -> Java CLI ->
+deterministic Java services. OpenCode plans and explains; Java executes, validates, and archives.
 
-## 当前资产
+## Paths
 
-- `tools/algorithm-debug.ts`：10 个真实 Tool，覆盖 Case 创建/续接与检查、UT 单次运行、静态分析、
-  CodePath/JDWP 计划和采集、Artifact 分段读取以及 Analysis 完成归档；
-- `lib/tool-runtime.mjs`：每次调用先幂等初始化外部 Workspace、登记当前 Maven 模块，并从结构化响应
-  取得 `projectId`。用户和大模型不需要填写 Workspace 或 `projectId`；
-- `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限，只原样返回通过 ToolResponse 2.0 校验的
-  stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误均转为结构化 Adapter 失败；
-- `agents/algorithm-debug.md`、`commands/debug-case.md`：已由一次性安装器登记并实测的 OpenCode 资产；
-- 规范 Skill 位于 `skills/algorithm-debug/SKILL.md`。
+All user-editable paths come from `config/agent-settings.json`. The installer resolves that file and
+generates `lib/installation.mjs` in the OpenCode configuration directory. The Tool reads Workspace
+and algorithm-result paths from that generated module. It does not infer paths, read a target-project
+configuration file, or accept user path arguments.
 
-## 路径与临时文件
+Temporary question, plan, and analysis-result files are internal bounded process transport. They are
+deleted after each Tool call. The internal Java CLI still receives resolved paths because it is a
+subprocess boundary, not a user configuration interface.
 
-本仓库内运行时默认调用仓库自己的 `bin/ada.cmd`；可用 `ADA_CLI` 显式覆盖启动器。外部 Case
-Workspace 默认位于当前用户数据目录下的 `algorithm-debug-agent/workspace`，可用 `ADA_WORKSPACE`
-覆盖。Workspace 不写入目标算法模块。
+## Case-local DFX
 
-问题、CodePath/JDWP Plan 请求和 Analysis 结果通过系统临时目录中的 UTF-8 普通文件传给 Java CLI，
-上限分别为 64 KiB、64 KiB 和 256 KiB；成功或失败后都清理。Artifact 每次最多读取 64 KiB，
-只接受 Case 内已登记的 Artifact ID，不接受任意文件路径。
+When `dfxEnabled` is true, the Tool Runtime writes bounded diagnostic events to
+`<workspaceDirectory>/projects/<projectId>/cases/<caseId>/interaction.jsonl`. Events before a new Case
+is known are buffered and flushed after `analysis_begin`; only a Case-creation failure uses
+`<dfxDirectory>/unassigned/<sessionId>.jsonl`.
 
-## 安装与使用
+Open the JSONL file directly to review Tool and Java CLI order. It is diagnostic metadata, not an
+Artifact or Evidence source. Recorder failures never replace the original ToolResponse.
 
-在仓库根目录执行：
+## Install
 
 ```powershell
 .\scripts\install-opencode.ps1 -Mode Install
 .\scripts\install-opencode.ps1 -Mode Check
 ```
 
-安装器只安装本仓库拥有的 Skill、Agent、Command、Tool 和 lib；同名不同内容文件会先生成
-`.ada-backup-*` 副本，不修改 `opencode.json`。用户目录中的文件是安装副本，canonical 内容仍在本仓库。
-`Check` 会核对副本并通过 OpenCode 1.18.15 的 `debug skill`、`debug agent` 和 `debug config` 验证发现。
-OpenCode 可能自行刷新其 TypeScript 运行依赖，但检查器不会改写本仓库拥有的安装资产。
+Edit `config/agent-settings.json` before installation when a default path must change. `Check` prints
+all effective paths and verifies OpenCode capability discovery without binding to a CLI version.
+Restart OpenCode after installation or configuration changes.
 
-安装后重启已有 OpenCode 会话，进入目标算法模块执行 `opencode`，然后使用 `/debug-case` 或直接指定
-UT 提问。当前不提供 MCP Server。
+## Source checkout and dual JDK
 
-适配层不猜 Context：已有 Case 默认使用 `reuse`；只有模型根据用户明确说明确认目标算法源码、UT
-或输入被有意修改时才使用 `new`。Gantt `CHANGED` 只是模型可分析的事实，不触发自动切换。
-CodePath 和 JDWP 都必须先归档 Plan，再按当前证据缺口执行一次或多次 Collection。
+The GitHub source checkout is the installed Agent. Run `scripts/build-agent.ps1` before the installer.
+The script reads `agentJavaHome`, `targetJavaHome`, and `mavenExecutable` from the same repository
+configuration and never changes system environment variables. The Agent and JDWP Collector use the
+Agent JDK; algorithm Maven/JUnit and CodePath use the target JDK.
+
+Start OpenCode from the company algorithm module. OpenCode can edit that repository when the user
+requests a fix or optimization; the Agent Custom Tools remain responsible for deterministic UT
+execution, collection, validation, and Workspace archiving.

@@ -2,7 +2,6 @@ package org.example.algorithmdebug.methodpath;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
@@ -24,8 +23,6 @@ public record MethodPathManifest(
         CollectionId collectionId,
         String toolName,
         String toolVersion,
-        Optional<String> toolSha256,
-        String planSha256,
         CollectionCompletion completion,
         String stage,
         boolean processStarted,
@@ -38,7 +35,6 @@ public record MethodPathManifest(
         long testsFailed,
         long capturedEventCount,
         long capturedBytes,
-        Optional<String> rawSha256,
         List<String> truncationReasons,
         Optional<AgentFailureDiagnostic> agentFailure,
         String rawTrace,
@@ -54,7 +50,6 @@ public record MethodPathManifest(
         analysisId = Objects.requireNonNull(analysisId); runId = Objects.requireNonNull(runId);
         planId = Objects.requireNonNull(planId); collectionId = Objects.requireNonNull(collectionId);
         toolName = bounded(toolName, "toolName", 128); toolVersion = bounded(toolVersion, "toolVersion", 256);
-        toolSha256 = optionalSha(toolSha256, "toolSha256"); planSha256 = sha(planSha256, "planSha256");
         completion = Objects.requireNonNull(completion, "completion");
         if (!("REQUEST_ARCHIVED".equals(stage) || "CLASSPATH_RESOLVED".equals(stage)
                 || "PROCESS_COMPLETED".equals(stage) || "COMPLETE".equals(stage)
@@ -73,7 +68,6 @@ public record MethodPathManifest(
                 || ("PASSED".equals(targetOutcome) && testsSucceeded == 0)) {
             throw new IllegalArgumentException("targetOutcome 与 JUnit 计数不一致");
         }
-        rawSha256 = optionalSha(rawSha256, "rawSha256");
         truncationReasons = List.copyOf(Objects.requireNonNull(truncationReasons));
         if (truncationReasons.size() > 16) throw new IllegalArgumentException("truncationReasons 超限");
         truncationReasons.forEach(value -> bounded(value, "truncationReason", 2_048));
@@ -94,13 +88,6 @@ public record MethodPathManifest(
     private static String bounded(String value, String name, int max) {
         if (value == null || value.isBlank() || value.length() > max) throw new IllegalArgumentException(name + " 非法");
         return value;
-    }
-    private static String sha(String value, String name) {
-        if (value == null || !value.matches("[0-9a-fA-F]{64}")) throw new IllegalArgumentException(name + " 必须是 SHA-256");
-        return value.toLowerCase(Locale.ROOT);
-    }
-    private static Optional<String> optionalSha(Optional<String> value, String name) {
-        return Objects.requireNonNull(value, name).map(item -> sha(item, name));
     }
     private static String portablePath(String value, String name) {
         String path = bounded(value, name, 1_024);

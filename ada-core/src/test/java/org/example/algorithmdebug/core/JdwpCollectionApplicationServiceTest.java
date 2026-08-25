@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -121,7 +120,7 @@ class JdwpCollectionApplicationServiceTest {
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
-                "a".repeat(64), NOW));
+                "target/schedules", NOW));
         CaseArchiveRepository archive = archive();
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
@@ -143,7 +142,7 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
-    void successfulCollectionArchivesAllPortableArtifactsAndMatchesBaseline() throws Exception {
+    void successfulCollectionArchivesAllPortableArtifactsWithoutGanttBaseline() throws Exception {
         establishBaseline("{\"schedule\":1}");
         JdwpCollectionApplicationService service = service(
                 request -> successfulExecution(request, "{\"schedule\":1}", 101, 102));
@@ -152,17 +151,18 @@ class JdwpCollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals("SUCCESS", result.summary().completion());
-        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
         assertTrue(result.summary().evidenceUsable());
         Set<String> types = result.artifacts().stream()
                 .map(reference -> reference.artifactType()).collect(Collectors.toSet());
         assertTrue(types.containsAll(Set.of(
-                "JDWP_PLAN", "COLLECTION_REQUEST", "JDWP_COLLECTOR_PLAN", "JDWP_RAW",
+                "COLLECTION_REQUEST", "JDWP_COLLECTOR_PLAN", "JDWP_RAW",
                 "JDWP_EXTERNAL_MANIFEST", "JDWP_MANIFEST", "GANTT_RAW",
                 "COLLECTION_BASELINE", "TARGET_STDOUT", "TARGET_STDERR",
                 "COLLECTOR_STDOUT", "COLLECTOR_STDERR", "JDWP_SNAPSHOT_SUMMARY",
                 "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
                 "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE", "SUFFICIENCY_EVALUATION")));
+        assertTrue(!types.contains("JDWP_PLAN"));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
                 Path.of(reference.relativePath()).isAbsolute()));
         assertEquals(SufficiencyStatus.SUFFICIENT, mapper.readJson(
@@ -204,7 +204,7 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
-    void changedGanttBlocksEvidence() throws Exception {
+    void changedGanttDoesNotBlockCurrentRunEvidence() throws Exception {
         establishBaseline("{\"schedule\":1}");
         JdwpCollectionApplicationService service = service(
                 request -> successfulExecution(request, "{\"schedule\":2}", 103, 104));
@@ -212,8 +212,8 @@ class JdwpCollectionApplicationServiceTest {
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
+        assertTrue(result.summary().evidenceUsable());
     }
 
     @Test
@@ -363,6 +363,36 @@ class JdwpCollectionApplicationServiceTest {
         assertTrue(Files.isRegularFile(root.resolve("raw/collector-manifest.json")));
     }
 
+    @Test
+    void rejectsV2ManifestWithoutTheRequiredCollectorCapabilities() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"schemaVersion\":\"1.0\"",
+                                "\"schemaVersion\":\"2.0\","
+                                + "\"collectorVersion\":\"2.0.0\","
+                                + "\"rawTraceSchemaVersion\":\"2.0\","
+                                + "\"capabilities\":[\"exact-method-descriptor\"]"));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 111)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 112)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "fixture write failed", failure);
+            }
+        });
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
+
+        assertEquals("JDWP_MANIFEST_INVALID", failure.code());
+    }
+
     private JdwpCollectionApplicationService service(JdwpCollectionExecutor executor) {
         return new JdwpCollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
@@ -432,20 +462,12 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     private void establishBaseline(String ganttJson) throws Exception {
-        Path reference = Files.writeString(temporaryDirectory.resolve("baseline.json"), ganttJson);
         RunId runId = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(successfulBaselineOutcome(runId));
-        RunResultFingerprint fingerprint = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
-                Optional.of(sha(read(reference))),
-                Optional.of(new org.example.algorithmdebug.harness.JsonTokenContentHasher()
-                        .sha256(reference)), Optional.empty());
-        archive.createRunResultFingerprint(fingerprint);
-        archive.createReproductionIfAbsent(fingerprint);
     }
 
     private void establishFailureBaseline(String message) throws Exception {
@@ -469,9 +491,8 @@ class JdwpCollectionApplicationServiceTest {
                 "fixture.Algorithm.solve(Algorithm.java:42)");
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
-                Optional.empty(), Optional.empty(), Optional.of(
-                        new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
-                                .sha256(diagnostic)));
+                new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
+                        .sha256(diagnostic));
         archive.createRunResultFingerprint(fingerprint);
         archive.createReproductionIfAbsent(fingerprint);
     }
@@ -519,11 +540,10 @@ class JdwpCollectionApplicationServiceTest {
 
     private record Snapshot(String schemaVersion, String value) implements ScheduleResultSnapshot {}
 
-    private final class StubAdapter implements TargetProjectAdapter<Snapshot> {
+    private final class StubAdapter implements TargetProjectAdapter {
         @Override public AdapterDescriptor descriptor() {
             return new AdapterDescriptor("fixture", "1.0", "fixture", Set.of(
-                    AdapterCapability.BASELINE_EXECUTION, AdapterCapability.INPUT_LOCATION,
-                    AdapterCapability.SCHEDULE_RESULT));
+                    AdapterCapability.BASELINE_EXECUTION));
         }
         @Override public ProjectDescriptor inspect(Path root) {
             return new ProjectDescriptor(PROJECT_ID, "fixture", root.toAbsolutePath(),
@@ -534,12 +554,11 @@ class JdwpCollectionApplicationServiceTest {
             return new TestLaunchSpec(project, test, mode, List.of("test"),
                     Map.of("test", test.selector()), List.of(), Duration.ofSeconds(10));
         }
-        @Override public InputLocator inputLocator() { return (project, test) -> Optional.empty(); }
-        @Override public ScheduleResultSource scheduleResultSource(
+        public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest test) {
             return new ScheduleResultSource(scheduleOutput, false);
         }
-        @Override public ScheduleResultParser<Snapshot> scheduleResultParser() {
+        public ScheduleResultParser<Snapshot> scheduleResultParser() {
             return path -> new Snapshot("1.0", "unused");
         }
     }

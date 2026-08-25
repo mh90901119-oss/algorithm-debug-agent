@@ -71,7 +71,8 @@ public final class CaseSessionService {
                 analysisId, request.question(), now));
         CaseDigest digest = digestReader.read(caseId);
         return new CaseOpenResult(
-                caseId, contextId, analysisId, caseCreated, contextCreated, digest);
+                caseId, contextId, analysisId, caseCreated, contextCreated,
+                java.util.Optional.empty(), digest);
     }
 
     private static void validateExistingCase(CaseManifest manifest, CaseSessionRequest request) {

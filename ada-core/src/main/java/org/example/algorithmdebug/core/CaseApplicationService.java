@@ -79,11 +79,15 @@ public final class CaseApplicationService {
             Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
             AdapterCatalog.AdapterSelection selection = adapters.select(moduleRoot, adapterId);
             CaseArchiveRepository archive = archive(layout, projectId);
-            return new CaseSessionService(
+            CaseOpenResult opened = new CaseSessionService(
                     archive, new CaseDigestReader(archive), ids, clock).open(
                     new CaseSessionRequest(
                             caseId, projectId, targetTest,
                             selection.adapter().descriptor().adapterId(), question, contextMode));
+            return new CaseOpenResult(
+                    opened.caseId(), opened.contextId(), opened.analysisId(),
+                    opened.caseCreated(), opened.contextCreated(),
+                    Optional.ofNullable(registration.resultJsonDirectory()), opened.digest());
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "打开 Case 失败", failure);
         }

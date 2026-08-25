@@ -109,7 +109,7 @@ public final class JavaSourceCallGraphAnalyzer {
             Elements elements = task.getElements();
             MethodScan methodScan = collectMethods(
                     request.moduleRoot(), parsed, trees, types, elements,
-                    discovery.sourceHashes(), guard);
+                    guard);
             EdgeScan edgeScan = collectEdges(parsed, trees, types, elements, methodScan.methods().keySet(), guard);
             return selectReachable(request, discovery, diagnostics, methodScan, edgeScan, guard);
         } catch (IOException exception) {
@@ -128,7 +128,6 @@ public final class JavaSourceCallGraphAnalyzer {
             Trees trees,
             Types types,
             Elements elements,
-            Map<Path, String> sourceHashes,
             BudgetGuard guard) {
         Map<String, MethodModel> methods = new LinkedHashMap<>();
         SourcePositions positions = trees.getSourcePositions();
@@ -158,10 +157,9 @@ public final class JavaSourceCallGraphAnalyzer {
                             long start = positions.getStartPosition(unit, node);
                             long end = positions.getEndPosition(unit, node);
                             String relative = moduleRoot.relativize(source).toString().replace('\\', '/');
-                            SourceAnchor anchor = new SourceAnchor(
-                                    className, executable.getSimpleName().toString(), descriptor,
-                                    relative, line(unit, start), line(unit, Math.max(start, end - 1)),
-                                    sourceHashes.get(source));
+                    SourceAnchor anchor = new SourceAnchor(
+                            className, executable.getSimpleName().toString(), descriptor,
+                            relative, line(unit, start), line(unit, Math.max(start, end - 1)));
                             method = new MethodModel(key, anchor);
                         }
                         if (!guard.tryCatalogMethod(packageName, method)) {
@@ -250,6 +248,10 @@ public final class JavaSourceCallGraphAnalyzer {
                 .filter(method -> method.anchor().className().equals(request.targetTest().className()))
                 .filter(method -> method.anchor().methodName().equals(request.targetTest().methodName()))
                 .map(MethodModel::key).sorted().toList();
+        if (targetKeys.isEmpty()) {
+            throw new StaticAnalysisException(
+                    "TARGET_TEST_NOT_FOUND", "当前源码中未找到目标 UT 方法");
+        }
         if (targetKeys.size() != 1) {
             throw new StaticAnalysisException("目标 UT 方法必须唯一，实际匹配数量: " + targetKeys.size());
         }
@@ -349,7 +351,6 @@ public final class JavaSourceCallGraphAnalyzer {
         }
         List<Path> selected = retained.stream().sorted(order).toList();
         List<SourceUnit> sources = new ArrayList<>();
-        Map<Path, String> hashes = new HashMap<>();
         List<String> reasons = new ArrayList<>();
         long remainingBytes = request.budget().maxSourceBytes();
         boolean byteTruncated = false;
@@ -365,7 +366,6 @@ public final class JavaSourceCallGraphAnalyzer {
             }
             SourceUnit unit = new SourceUnit(candidate, content);
             sources.add(unit);
-            hashes.put(candidate, unit.sha256());
             remainingBytes -= content.length;
         }
         boolean fileTruncated = discoveredFiles > request.budget().maxFiles();
@@ -377,7 +377,7 @@ public final class JavaSourceCallGraphAnalyzer {
         if (deadlineTruncated) {
             reasons.add("deadline budget exceeded during source discovery/read");
         }
-        return new Discovery(List.copyOf(sources), Map.copyOf(hashes), List.copyOf(reasons),
+        return new Discovery(List.copyOf(sources), List.copyOf(reasons),
                 fileTruncated || byteTruncated || deadlineTruncated);
     }
 
@@ -473,28 +473,20 @@ public final class JavaSourceCallGraphAnalyzer {
         return Math.max(1, (int) unit.getLineMap().getLineNumber(position));
     }
 
-    private static String sha256(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", exception);
-        }
-    }
-
     private static String bounded(String value, int maxLength) {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     private record Discovery(
             List<SourceUnit> sources,
-            Map<Path, String> sourceHashes,
             List<String> budgetReasons,
             boolean truncated) {
     }
 
-    private record SourceUnit(Path path, byte[] content, String sha256) {
+    private record SourceUnit(Path path, byte[] content) {
         private SourceUnit(Path path, byte[] content) {
-            this(path, content.clone(), JavaSourceCallGraphAnalyzer.sha256(content));
+            this.path = path;
+            this.content = content.clone();
         }
 
         @Override

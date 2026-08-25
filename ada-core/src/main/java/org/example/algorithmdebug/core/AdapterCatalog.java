@@ -14,18 +14,18 @@ import java.util.Optional;
 /** 对装配层注入的 Adapter 做稳定、无猜测的选择，不自行调用 ServiceLoader。 */
 public final class AdapterCatalog {
 
-    private final List<TargetProjectAdapter<?>> adapters;
+    private final List<TargetProjectAdapter> adapters;
 
     /** @param adapters 装配层已发现的无状态 Adapter 列表 */
-    public AdapterCatalog(List<TargetProjectAdapter<?>> adapters) {
+    public AdapterCatalog(List<TargetProjectAdapter> adapters) {
         if (adapters == null || adapters.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException("adapters 不能为空且不得包含 null");
         }
-        List<TargetProjectAdapter<?>> sorted = adapters.stream()
+        List<TargetProjectAdapter> sorted = adapters.stream()
                 .sorted(Comparator.comparing(adapter -> adapter.descriptor().adapterId()))
                 .toList();
         LinkedHashSet<String> ids = new LinkedHashSet<>();
-        for (TargetProjectAdapter<?> adapter : sorted) {
+        for (TargetProjectAdapter adapter : sorted) {
             if (!ids.add(adapter.descriptor().adapterId())) {
                 throw new IllegalArgumentException(
                         "Adapter ID 重复: " + adapter.descriptor().adapterId());
@@ -47,7 +47,7 @@ public final class AdapterCatalog {
             if (requested.isEmpty()) {
                 throw new IllegalArgumentException("requestedAdapterId 不能为空字符串");
             }
-            TargetProjectAdapter<?> adapter = adapters.stream()
+            TargetProjectAdapter adapter = adapters.stream()
                     .filter(candidate -> candidate.descriptor().adapterId().equals(requested))
                     .findFirst()
                     .orElseThrow(() -> new CaseRunException(
@@ -56,7 +56,7 @@ public final class AdapterCatalog {
         }
 
         List<AdapterSelection> matches = new ArrayList<>();
-        for (TargetProjectAdapter<?> adapter : adapters) {
+        for (TargetProjectAdapter adapter : adapters) {
             try {
                 matches.add(new AdapterSelection(adapter, adapter.inspect(root)));
             } catch (AdapterException ignored) {
@@ -76,11 +76,11 @@ public final class AdapterCatalog {
     }
 
     /** @return 按 ID 排序的不可变 Adapter 列表 */
-    public List<TargetProjectAdapter<?>> adapters() {
+    public List<TargetProjectAdapter> adapters() {
         return adapters;
     }
 
-    private static AdapterSelection inspect(TargetProjectAdapter<?> adapter, Path root) {
+    private static AdapterSelection inspect(TargetProjectAdapter adapter, Path root) {
         try {
             return new AdapterSelection(adapter, adapter.inspect(root));
         } catch (AdapterException failure) {
@@ -90,7 +90,7 @@ public final class AdapterCatalog {
 
     /** 一次选择同时返回 Adapter 和它检查生成的显式项目描述。 */
     public record AdapterSelection(
-            TargetProjectAdapter<?> adapter,
+            TargetProjectAdapter adapter,
             ProjectDescriptor project) {
         /** 校验选择结果完整。 */
         public AdapterSelection {

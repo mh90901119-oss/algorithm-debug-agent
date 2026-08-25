@@ -96,9 +96,9 @@ class MethodPathCollectionContractsTest {
                 "2.0", new CaseId("case-1"), new ContextId("ctx-1"),
                 new AnalysisId("analysis-1"), new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "algorithm-debug-agent", "0.1.0",
-                Optional.empty(), "b".repeat(64), CollectionCompletion.AGENT_FAILED,
+                CollectionCompletion.AGENT_FAILED,
                 "REQUEST_ARCHIVED", false, -1, false, "NOT_EXECUTED", 0, 0, 0, 0,
-                0, 0, Optional.empty(),
+                0, 0,
                 List.of(), diagnostic, "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log",
                 Instant.EPOCH, Instant.EPOCH);
     }
@@ -107,10 +107,10 @@ class MethodPathCollectionContractsTest {
         return new MethodPathManifest(
                 "2.0", caseId, new ContextId("ctx-1"), new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"), new CollectionId("collection-1"),
-                "code-path-tracer", "0.1.0", Optional.of("a".repeat(64)), "b".repeat(64),
+                "code-path-tracer", "0.1.0",
                 CollectionCompletion.SUCCESS, "COMPLETE", true, 0, false,
                 "PASSED", 1, 1, 0, 0, 10, 100,
-                Optional.of("c".repeat(64)), List.of(), Optional.empty(),
+                List.of(), Optional.empty(),
                 "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log",
                 Instant.EPOCH, Instant.EPOCH);
     }

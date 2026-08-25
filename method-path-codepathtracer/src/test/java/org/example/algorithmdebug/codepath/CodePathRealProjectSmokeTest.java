@@ -52,7 +52,7 @@ class CodePathRealProjectSmokeTest {
         List<String> classpath = new MavenTestClasspathResolver().resolve(
                 Path.of(System.getProperty("ada.maven", "mvn")), module, collection);
         CodePathToolConfiguration tool = new CodePathToolConfiguration(
-                java, jar, CodePathToolConfiguration.sha256(jar), "0.1.0-SNAPSHOT",
+                java, jar, "0.1.0-SNAPSHOT",
                 "org.example.algorithmdebug.codepath.launcher.ExternalJUnitTraceLauncher");
 
         var result = new CodePathProcessCollector(tool).collect(new MethodPathCollectionRequest(

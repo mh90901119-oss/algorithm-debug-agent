@@ -11,6 +11,8 @@ import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
 import org.example.algorithmdebug.contracts.AnalysisResult;
+import org.example.algorithmdebug.casecore.CaseWorkspaceAuditor;
+import org.example.algorithmdebug.casecore.GanttArtifactInspector;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
@@ -73,7 +75,7 @@ public final class CliCommandExecutor {
         if (workspaceService == null || projectService == null || doctorService == null
                 || caseService == null || runService == null || staticAnalysisService == null
                 || collectionService == null) {
-            throw new IllegalArgumentException("CLI Core 服务不能为空");
+            throw new IllegalArgumentException("CLI core services must not be null");
         }
         this.workspaceService = workspaceService;
         this.projectService = projectService;
@@ -97,7 +99,8 @@ public final class CliCommandExecutor {
         }
         if (command instanceof CliCommand.ProjectRegister projectRegister) {
             return projectService.register(
-                    projectRegister.workspace(), projectRegister.module(), projectRegister.projectId());
+                    projectRegister.workspace(), projectRegister.module(), projectRegister.projectId(),
+                    projectRegister.resultJsonDirectory());
         }
         if (command instanceof CliCommand.Doctor doctor) {
             return doctorService.diagnose(doctor.workspace(), doctor.module(), Optional.empty());
@@ -111,6 +114,13 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.CaseInspect inspect) {
             return caseService.inspect(
                     inspect.workspace(), inspect.projectId(), inspect.caseId());
+        }
+        if (command instanceof CliCommand.CaseAudit audit) {
+            return new CaseWorkspaceAuditor().audit(audit.workspace(), audit.projectId(), audit.caseId());
+        }
+        if (command instanceof CliCommand.GanttInspect inspect) {
+            return new GanttArtifactInspector().inspect(inspect.workspace(), inspect.projectId(), inspect.caseId(),
+                    inspect.artifactId(), inspect.operation(), inspect.jsonPointer(), inspect.offset(), inspect.limit());
         }
         if (command instanceof CliCommand.RunExecute run) {
             return runService.execute(
@@ -137,7 +147,7 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.JdwpCollectionExecute collect) {
             if (jdwpCollectionService == null) {
                 throw new org.example.algorithmdebug.core.CaseRunException(
-                        "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector 未配置");
+                        "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector is not configured");
             }
             return jdwpCollectionService.execute(
                     collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
@@ -152,26 +162,26 @@ public final class CliCommandExecutor {
                     complete.workspace(), complete.projectId(), complete.caseId(),
                     complete.analysisId(), readAnalysisResult(complete.resultFile()));
         }
-        throw new IllegalArgumentException("不支持的 CLI 命令类型");
+        throw new IllegalArgumentException("Unsupported CLI command type");
     }
 
     /** 严格读取 64 KiB 内 UTF-8 普通问题文件；供命令测试复用。 */
     static String readQuestion(Path path) {
         if (path == null) {
-            throw new CliInputException("question-file 不能为空");
+            throw new CliInputException("question-file must not be null");
         }
         Path normalized = path.toAbsolutePath().normalize();
         if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            throw new CliInputException("question-file 不存在或不是普通文件");
+            throw new CliInputException("question-file does not exist or is not a regular file");
         }
         byte[] bytes;
         try (java.io.InputStream input = Files.newInputStream(normalized)) {
             bytes = input.readNBytes(MAX_QUESTION_BYTES + 1);
         } catch (IOException | SecurityException failure) {
-            throw new CliInputException("无法读取 question-file", failure);
+            throw new CliInputException("Unable to read question-file", failure);
         }
         if (bytes.length > MAX_QUESTION_BYTES) {
-            throw new CliInputException("question-file 超过 64 KiB");
+            throw new CliInputException("question-file exceeds 64 KiB");
         }
         String question;
         try {
@@ -180,13 +190,13 @@ public final class CliCommandExecutor {
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(bytes)).toString();
         } catch (CharacterCodingException failure) {
-            throw new CliInputException("question-file 不是有效 UTF-8", failure);
+            throw new CliInputException("question-file is not valid UTF-8", failure);
         }
         if (question.startsWith("\uFEFF")) {
             question = question.substring(1);
         }
         if (question.isBlank()) {
-            throw new CliInputException("question-file 内容不能为空");
+            throw new CliInputException("question-file content must not be blank");
         }
         return question;
     }
@@ -199,7 +209,7 @@ public final class CliCommandExecutor {
             return new ObjectMapper().registerModule(new JavaTimeModule())
                     .readValue(json, CodePathPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("request-file 不是有效的 CodePathPlanRequest JSON", failure);
+            throw new CliInputException("request-file is not valid CodePathPlanRequest JSON", failure);
         }
     }
 
@@ -211,7 +221,7 @@ public final class CliCommandExecutor {
             return new ObjectMapper().registerModule(new JavaTimeModule())
                     .readValue(json, JdwpPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("request-file 不是有效的 JdwpPlanRequest JSON", failure);
+            throw new CliInputException("request-file is not valid JdwpPlanRequest JSON", failure);
         }
     }
 
@@ -223,7 +233,7 @@ public final class CliCommandExecutor {
             return new ObjectMapper().registerModule(new JavaTimeModule())
                     .readValue(json, AnalysisResult.class);
         } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("result-file 不是有效的 AnalysisResult JSON", failure);
+            throw new CliInputException("result-file is not valid AnalysisResult JSON", failure);
         }
     }
 
@@ -235,7 +245,7 @@ public final class CliCommandExecutor {
                     .decode(ByteBuffer.wrap(bytes)).toString();
             return value.startsWith("\uFEFF") ? value.substring(1) : value;
         } catch (CharacterCodingException failure) {
-            throw new CliInputException(label + " 不是有效 UTF-8", failure);
+            throw new CliInputException(label + " is not valid UTF-8", failure);
         }
     }
 
@@ -245,20 +255,20 @@ public final class CliCommandExecutor {
 
     private static byte[] readBoundedFile(Path path, String label, int maximumBytes) {
         if (path == null) {
-            throw new CliInputException(label + " 不能为空");
+            throw new CliInputException(label + " must not be null");
         }
         Path normalized = path.toAbsolutePath().normalize();
         if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            throw new CliInputException(label + " 不存在或不是普通文件");
+            throw new CliInputException(label + " does not exist or is not a regular file");
         }
         try (java.io.InputStream input = Files.newInputStream(normalized)) {
             byte[] bytes = input.readNBytes(maximumBytes + 1);
             if (bytes.length > maximumBytes) {
-                throw new CliInputException(label + " 超过读取预算");
+                throw new CliInputException(label + " exceeds the read budget");
             }
             return bytes;
         } catch (IOException | SecurityException failure) {
-            throw new CliInputException("无法读取 " + label, failure);
+            throw new CliInputException("Unable to read " + label, failure);
         }
     }
 }

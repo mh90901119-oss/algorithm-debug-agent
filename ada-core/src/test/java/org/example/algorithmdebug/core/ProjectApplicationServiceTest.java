@@ -2,7 +2,6 @@ package org.example.algorithmdebug.core;
 
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
-import org.example.algorithmdebug.casecore.ClasspathWorkspaceTemplateProvider;
 import org.example.algorithmdebug.casecore.ProjectIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.ProjectRegistry;
@@ -41,7 +40,7 @@ class ProjectApplicationServiceTest {
                 new BoundedDocumentMapper(), writer);
         Path workspace = temporaryDirectory.resolve("workspace");
         new WorkspaceInitializer(
-                manifestRepository, writer, new ClasspathWorkspaceTemplateProvider(), FIXED_CLOCK)
+                manifestRepository, FIXED_CLOCK)
                 .initialize(workspace);
         Path repository = Files.createDirectories(temporaryDirectory.resolve("large-system"));
         Files.createDirectories(repository.resolve(".git"));

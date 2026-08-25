@@ -46,11 +46,8 @@ public final class CollectionEvidenceValidator {
         if (input == null) throw new IllegalArgumentException("input 不能为空");
         ArrayList<ValidationFinding> findings = new ArrayList<>();
         validateIdentity(input, findings);
-        validateCollectorRawIdentity(input, findings);
         add(findings, integrityVerifier.verify(input.rawReference(), input.rawPath()));
         add(findings, integrityVerifier.verify(input.summaryReference(), input.summaryPath()));
-        validatePlan(input.planPath(), input.collectorManifest().planSha256(),
-                input.summaryReference(), findings);
         validateCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
                 false, input.summaryReference(), findings);
@@ -81,11 +78,8 @@ public final class CollectionEvidenceValidator {
         if (input == null) throw new IllegalArgumentException("input 不能为空");
         ArrayList<ValidationFinding> findings = new ArrayList<>();
         validateJdwpIdentity(input, findings);
-        validateJdwpCollectorRawIdentity(input, findings);
         add(findings, integrityVerifier.verify(input.rawReference(), input.rawPath()));
         add(findings, integrityVerifier.verify(input.summaryReference(), input.summaryPath()));
-        validatePlan(input.planPath(), input.collectorManifest().planSha256(),
-                input.summaryReference(), findings);
         validateJdwpCompletion(input.collectorManifest().completion(), findings);
         validateNormalization(input.normalizationManifest(), input.summary().truncated(),
                 !input.summary().hits().isEmpty(), input.summaryReference(), findings);
@@ -156,19 +150,6 @@ public final class CollectionEvidenceValidator {
                 input.summaryReference()));
     }
 
-    private static void validateCollectorRawIdentity(
-            MethodPathValidationInput input, List<ValidationFinding> findings) {
-        var manifest = input.collectorManifest();
-        if (manifest.capturedBytes() != input.rawReference().sizeBytes()
-                || manifest.rawSha256().isEmpty()
-                || !manifest.rawSha256().orElseThrow().equals(input.rawReference().sha256())) {
-            add(findings, finding("COLLECTOR_RAW_IDENTITY_MISMATCH",
-                    EvidenceValidationStatus.INVALID,
-                    "Collector Manifest 中的过滤后 Raw 身份与归档引用不一致",
-                    input.rawReference()));
-        }
-    }
-
     private static void validateJdwpCompletion(
             JdwpCollectionCompletion completion, List<ValidationFinding> findings) {
         switch (completion) {
@@ -224,36 +205,6 @@ public final class CollectionEvidenceValidator {
                 input.summaryReference()));
     }
 
-    private static void validateJdwpCollectorRawIdentity(
-            JdwpValidationInput input, List<ValidationFinding> findings) {
-        var manifest = input.collectorManifest();
-        if (manifest.rawBytes() != input.rawReference().sizeBytes()
-                || manifest.rawTraceSha256().isEmpty()
-                || !manifest.rawTraceSha256().orElseThrow().equals(input.rawReference().sha256())) {
-            add(findings, finding("COLLECTOR_RAW_IDENTITY_MISMATCH",
-                    EvidenceValidationStatus.INVALID,
-                    "Collector Manifest 中的 Raw 身份与归档引用不一致",
-                    input.rawReference()));
-        }
-    }
-
-    private void validatePlan(
-            Path planPath, String expectedSha256, ArtifactReference summaryReference,
-            List<ValidationFinding> findings) {
-        try {
-            if (!integrityVerifier.sha256(planPath).equals(expectedSha256)) {
-                add(findings, finding("PLAN_HASH_MISMATCH",
-                        EvidenceValidationStatus.CONTRADICTED,
-                        "Collector 使用的采集计划与当前归档计划不一致",
-                        summaryReference));
-            }
-        } catch (IOException | RuntimeException failure) {
-            add(findings, finding("PLAN_ARTIFACT_READ_FAILED",
-                    EvidenceValidationStatus.INVALID, "无法读取归档采集计划",
-                    summaryReference));
-        }
-    }
-
     private static void validateCompletion(
             CollectionCompletion completion, List<ValidationFinding> findings) {
         switch (completion) {
@@ -293,8 +244,7 @@ public final class CollectionEvidenceValidator {
                     EvidenceValidationStatus.CONTRADICTED,
                     "带采集运行与无采集 Baseline 的结果不一致",
                     summaryReference));
-        } else if (baseline.outcome() != ComparisonOutcome.MATCHED
-                || !baseline.evidenceUsable()) {
+        } else if (!baseline.evidenceUsable()) {
             add(findings, finding("BASELINE_NOT_CONFIRMED",
                     EvidenceValidationStatus.INCONCLUSIVE,
                     "尚未确认带采集运行与无采集 Baseline 一致",

@@ -53,14 +53,19 @@ class RealJdwpCollectorSmokeTest {
 
         JdwpExecutionResult result = coordinator.execute(request);
 
-        assertEquals(JdwpCollectionCompletion.SUCCESS, result.completion());
+        assertEquals(
+                JdwpCollectionCompletion.SUCCESS,
+                result.completion(),
+                () -> diagnostics(result, request));
         assertTrue(Files.size(request.rawTracePath()) > 0);
         List<JsonNode> events = Files.readAllLines(request.rawTracePath()).stream()
                 .map(RealJdwpCollectorSmokeTest::readJson)
                 .toList();
         assertTrue(events.stream().anyMatch(event ->
                 "tracepoint_hit".equals(event.path("eventType").asText())
-                        && "compute-entry".equals(event.path("tracepointId").asText())));
+                        && "compute-entry".equals(event.path("tracepointId").asText())
+                        && "(I)I".equals(event.path("location").path("methodDescriptor").asText())
+                        && event.path("location").path("codeIndex").isIntegralNumber()));
         assertTrue(Files.isRegularFile(
                 request.collectorOutputDirectory().resolve("collection-manifest.json")));
     }
@@ -119,6 +124,7 @@ class RealJdwpCollectorSmokeTest {
     private static String collectorPlan(int port, int line) {
         return """
                 {
+                  "schemaVersion": "2.0",
                   "sessionId": "real-jdwp-smoke",
                   "target": {"host": "127.0.0.1", "port": %d},
                   "resumeOnAttach": true,
@@ -129,6 +135,7 @@ class RealJdwpCollectorSmokeTest {
                     "className": "%s",
                     "line": %d,
                     "methodName": "compute",
+                    "methodDescriptor": "(I)I",
                     "maxHits": 1,
                     "capture": {
                       "locals": false,
@@ -148,6 +155,24 @@ class RealJdwpCollectorSmokeTest {
             return JSON.readTree(line);
         } catch (Exception failure) {
             throw new IllegalArgumentException("真实 Collector 输出了非法 JSONL", failure);
+        }
+    }
+
+    private static String diagnostics(JdwpExecutionResult result, JdwpExecutionRequest request) {
+        return "completion=" + result.completion()
+                + ", target=" + result.target()
+                + ", collector=" + result.collector()
+                + System.lineSeparator() + "target stdout:" + readLog(request.targetOptions().stdoutLog())
+                + System.lineSeparator() + "target stderr:" + readLog(request.targetOptions().stderrLog())
+                + System.lineSeparator() + "collector stdout:" + readLog(request.collectorStdoutLog())
+                + System.lineSeparator() + "collector stderr:" + readLog(request.collectorStderrLog());
+    }
+
+    private static String readLog(Path path) {
+        try {
+            return Files.exists(path) ? Files.readString(path) : "<missing>";
+        } catch (Exception failure) {
+            return "<unreadable: " + failure.getMessage() + ">";
         }
     }
 }

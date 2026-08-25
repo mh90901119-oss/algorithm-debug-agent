@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -86,6 +85,7 @@ class CaseApplicationServiceTest {
                 Optional.empty(), Optional.of("missing-input"), ContextMode.REUSE_LATEST);
 
         assertTrue(result.caseCreated());
+        assertEquals("output/algorithm-results", result.resultJsonDirectory().orElseThrow());
         assertEquals(0, result.digest().runCount());
         Path context = workspace.resolve(
                 "projects/project-1/cases/case-1/contexts/context-1/context.json");
@@ -143,18 +143,18 @@ class CaseApplicationServiceTest {
         String path = module.toAbsolutePath().normalize().toString().replace('\\', '/');
         return new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "test", path, path, path,
-                "pom.xml", "MAVEN", "a".repeat(64), TIME);
+                "pom.xml", "MAVEN", "output/algorithm-results", TIME);
     }
 
     private record Snapshot(String schemaVersion) implements ScheduleResultSnapshot {
     }
 
-    private final class MissingInputAdapter implements TargetProjectAdapter<Snapshot> {
+    private final class MissingInputAdapter implements TargetProjectAdapter {
         @Override
         public AdapterDescriptor descriptor() {
             return new AdapterDescriptor(
                     "missing-input", "1.0", "missing-input",
-                    Set.of(AdapterCapability.BASELINE_EXECUTION, AdapterCapability.INPUT_LOCATION));
+                    Set.of(AdapterCapability.BASELINE_EXECUTION));
         }
 
         @Override
@@ -168,19 +168,10 @@ class CaseApplicationServiceTest {
                 ProjectDescriptor project, TargetTest targetTest, RunMode runMode) {
             throw new AssertionError("case open 不得创建运行规格");
         }
-
-        @Override
-        public InputLocator inputLocator() {
-            throw new AssertionError("case open 不得定位输入");
-        }
-
-        @Override
         public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest targetTest) {
             throw new AssertionError("case open 不得定位运行输出");
         }
-
-        @Override
         public ScheduleResultParser<Snapshot> scheduleResultParser() {
             throw new AssertionError("case open 不得解析运行输出");
         }

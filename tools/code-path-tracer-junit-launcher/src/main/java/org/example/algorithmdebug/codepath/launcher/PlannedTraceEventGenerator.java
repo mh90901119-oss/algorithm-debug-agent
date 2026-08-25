@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 
 /** 在上游格式化前按 class + method + descriptor 精确选择事件，并丢弃参数和返回值。 */
 final class PlannedTraceEventGenerator {
@@ -17,7 +16,7 @@ final class PlannedTraceEventGenerator {
     private final AtomicLong selectedThread = new AtomicLong(-1);
     private final AtomicReference<String> failureCode = new AtomicReference<>();
 
-    PlannedTraceEventGenerator(CodePathCollectionPlan plan) {
+    PlannedTraceEventGenerator(LauncherCodePathPlan plan) {
         selectors = plan.selectors().stream()
                 .map(value -> new Identity(value.className(), value.methodName(), value.descriptor()))
                 .collect(Collectors.toUnmodifiableSet());
@@ -40,7 +39,7 @@ final class PlannedTraceEventGenerator {
             return null;
         }
         if (!selectors.contains(new Identity(className, methodName, descriptor))) return null;
-        long current = Thread.currentThread().threadId();
+        long current = Thread.currentThread().getId();
         long owner = selectedThread.updateAndGet(existing -> existing == -1 ? current : existing);
         if (owner != current) {
             failureCode.compareAndSet(null, "CODEPATH_MULTIPLE_THREADS_UNSUPPORTED");

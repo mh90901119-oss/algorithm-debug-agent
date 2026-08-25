@@ -39,12 +39,15 @@ import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.JdwpCollectionStage;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.HarnessException;
+import org.example.algorithmdebug.harness.JsonResultParser;
+import org.example.algorithmdebug.harness.JsonResultSnapshot;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
 import org.example.algorithmdebug.harness.OutputDirectorySnapshot;
 import org.example.algorithmdebug.harness.OutputDirectorySnapshotter;
@@ -58,7 +61,7 @@ import org.example.algorithmdebug.jdwp.JdwpExecutionRequest;
 import org.example.algorithmdebug.jdwp.JdwpExecutionResult;
 import org.example.algorithmdebug.plan.CollectorDebugPlanWriter;
 
-/** 编排一次追加式 JDWP 采集、原始产物归档和无采集 Baseline 一致性检查。 */
+/** 缂栨帓涓€娆¤拷鍔犲紡 JDWP 閲囬泦銆佸師濮嬩骇鐗╁綊妗ｅ拰鏃犻噰闆?Baseline 涓€鑷存€ф鏌ャ€?*/
 public final class JdwpCollectionApplicationService {
     private final ProjectRegistrationRepository registrations;
     private final BoundedDocumentMapper mapper;
@@ -73,7 +76,7 @@ public final class JdwpCollectionApplicationService {
     private final JdwpPortProvider ports;
     private final CollectorDebugPlanWriter collectorPlans = new CollectorDebugPlanWriter();
 
-    /** 注入全部机器边界，以便确定性测试端口、进程和源码漂移分支。 */
+    /** 娉ㄥ叆鍏ㄩ儴鏈哄櫒杈圭晫锛屼互渚跨‘瀹氭€ф祴璇曠鍙ｃ€佽繘绋嬪拰婧愮爜婕傜Щ鍒嗘敮銆?*/
     public JdwpCollectionApplicationService(
             ProjectRegistrationRepository registrations,
             BoundedDocumentMapper mapper,
@@ -90,7 +93,7 @@ public final class JdwpCollectionApplicationService {
                 || ids == null || clock == null || mavenExecutable == null
                 || javaExecutable == null || tool == null || executor == null
                 || ports == null) {
-            throw new IllegalArgumentException("JDWP Collection 用例依赖不能为空");
+            throw new IllegalArgumentException("JDWP Collection 鐢ㄤ緥渚濊禆涓嶈兘涓虹┖");
         }
         this.registrations = registrations;
         this.mapper = mapper;
@@ -105,19 +108,19 @@ public final class JdwpCollectionApplicationService {
         this.ports = ports;
     }
 
-    /** 每次调用创建新的 runId/collectionId，不覆盖同一 Case 的任何历史采集。 */
+    /** 姣忔璋冪敤鍒涘缓鏂扮殑 runId/collectionId锛屼笉瑕嗙洊鍚屼竴 Case 鐨勪换浣曞巻鍙查噰闆嗐€?*/
     public MultiArtifactBackedResult<CollectionExecutionSummary> execute(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, PlanId planId) {
         WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
         var registration = registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "项目尚未登记"));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "椤圭洰灏氭湭鐧昏"));
         CaseArchiveRepository archive = new CaseArchiveRepository(
                 layout.projectCases(projectId), mapper, writer);
         JdwpCollectionPlan plan = archive.requireJdwpPlan(caseId, planId);
         var context = archive.requireContext(caseId, plan.contextId());
         var caseManifest = archive.requireCase(caseId);
         if (!caseManifest.projectId().equals(projectId)) {
-            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于指定 Project");
+            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 涓嶅睘浜庢寚瀹?Project");
         }
         Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
         AdapterCatalog.AdapterSelection selection = adapters.select(
@@ -136,13 +139,15 @@ public final class JdwpCollectionApplicationService {
         int observedTargetExitCode = -1;
         int observedCollectorExitCode = -1;
         try {
-            Optional<CaptureContext> capture = prepareCapture(selection, plan.targetTest());
+            Optional<CaptureContext> capture = prepareCapture(registration);
             Path maven = mavenExecutable.orElseThrow(() ->
                     new CaseRunException("MAVEN_NOT_FOUND", "Maven executable unavailable"));
             int port = ports.allocate();
             Path collectorPlan = collectionRoot.resolve("collector-plan.json");
             byte[] collectorPlanBytes = collectorPlans.write(plan, port);
             writer.writeNew(collectorPlan, collectorPlanBytes);
+            Files.createDirectories(collectionRoot.resolve("logs"));
+            Files.createDirectories(collectionRoot.resolve("raw"));
             var launch = selection.adapter().createLaunchSpec(
                     selection.project(), plan.targetTest(), RunMode.JDWP);
             JdwpExecutionRequest request = new JdwpExecutionRequest(
@@ -163,11 +168,12 @@ public final class JdwpCollectionApplicationService {
             observedCollectorExitCode = exitCode(result.collector());
             ExternalCollectorManifest external = archiveExternalOutputs(
                     collectionRoot, request, result.completion(), plan);
+            JdwpCollectionCompletion effectiveCompletion = effectiveCompletion(result.completion(), external);
             baseline = checkBaseline(
-                    archive, record, result.completion(), capture, collectionRoot, moduleRoot);
+                    archive, record, effectiveCompletion, capture, collectionRoot, moduleRoot);
             archive.createJdwpCollectionBaselineCheck(baseline);
             manifest = successManifest(
-                    record, result, external, collectorPlanBytes, collectionRoot,
+                    record, result, effectiveCompletion, external, collectionRoot,
                     baseline, startedAt);
             writer.writeNew(collectionRoot.resolve("manifest.json"), mapper.writeJson(manifest));
         } catch (JdwpAdapterException failure) {
@@ -176,13 +182,13 @@ public final class JdwpCollectionApplicationService {
                     -1, -1, startedAt);
             baseline = incomparable(record, "JDWP tool failed before baseline check: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException(failure.code(), "JDWP 采集失败", failure);
+            throw new CaseRunException(failure.code(), "JDWP 閲囬泦澶辫触", failure);
         } catch (AdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     "JDWP_LAUNCH_SPEC_FAILED", failure, false, false, -1, -1, startedAt);
             baseline = incomparable(record, "JDWP launch specification failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "无法创建 JDWP 启动规格", failure);
+            throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "鏃犳硶鍒涘缓 JDWP 鍚姩瑙勬牸", failure);
         } catch (CaseRunException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     failure.code(), failure, observedTargetStarted, observedCollectorStarted,
@@ -198,7 +204,7 @@ public final class JdwpCollectionApplicationService {
                     observedTargetExitCode, observedCollectorExitCode, startedAt);
             baseline = incomparable(record, "JDWP artifact validation or archive failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP 产物归档失败", failure);
+            throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP 浜х墿褰掓。澶辫触", failure);
         }
 
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
@@ -242,7 +248,19 @@ public final class JdwpCollectionApplicationService {
             }
         } catch (WorkspaceException persistenceFailure) {
             throw new CaseRunException(
-                    "JDWP_ARCHIVE_FAILED", "JDWP 失败诊断无法安全归档", persistenceFailure);
+                    "JDWP_ARCHIVE_FAILED", "JDWP 澶辫触璇婃柇鏃犳硶瀹夊叏褰掓。", persistenceFailure);
+        } finally {
+            deleteIfEmpty(collectionRoot.resolve("raw"));
+            deleteIfEmpty(collectionRoot.resolve("logs"));
+        }
+    }
+
+    private static void deleteIfEmpty(Path directory) {
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        try (var children = Files.list(directory)) {
+            if (children.findAny().isEmpty()) Files.deleteIfExists(directory);
+        } catch (IOException | SecurityException cleanupFailure) {
+            // Case audit reports any surviving empty directory; cleanup must not hide the original failure.
         }
     }
 
@@ -259,7 +277,7 @@ public final class JdwpCollectionApplicationService {
                 || completion == JdwpCollectionCompletion.TARGET_FAILED)
                 && (!rawPresent || !manifestPresent)) {
             throw new CaseRunException(
-                    "JDWP_MANIFEST_INVALID", "JDWP Collector 未生成完整 Raw Trace 和 Manifest");
+                    "JDWP_MANIFEST_INVALID", "JDWP Collector 鏈敓鎴愬畬鏁?Raw Trace 鍜?Manifest");
         }
         Path archivedRaw = collectionRoot.resolve("raw/jdwp.jsonl");
         Path archivedManifest = collectionRoot.resolve("raw/collector-manifest.json");
@@ -279,30 +297,44 @@ public final class JdwpCollectionApplicationService {
         try {
             ExternalCollectorManifest external = mapper.readJson(
                     document, ExternalCollectorManifest.class);
-            if (!"1.0".equals(external.schemaVersion())
+            if (!("1.0".equals(external.schemaVersion()) || "2.0".equals(external.schemaVersion()))
                     || !plan.planId().value().equals(external.sessionId())
                     || !"127.0.0.1".equals(external.target().host())
                     || external.target().port() != expectedPort) {
-                throw new IllegalArgumentException("schemaVersion、sessionId 或 target endpoint 与本次执行不一致");
+                throw new IllegalArgumentException("Collector manifest identity or endpoint does not match the current plan");
+            }
+            if ("2.0".equals(external.schemaVersion())) {
+                var requiredCapabilities = java.util.Set.of(
+                        "exact-method-descriptor",
+                        "code-index",
+                        "typed-values",
+                        "bounded-projection",
+                        "tracepoint-request-group");
+                if (!"2.0.0".equals(external.collectorVersion())
+                        || !"2.0".equals(external.rawTraceSchemaVersion())
+                        || !external.capabilities().containsAll(requiredCapabilities)) {
+                    throw new IllegalArgumentException(
+                            "JDWP Collector 2.0 capability handshake failed");
+                }
             }
             var allowed = plan.tracepoints().stream()
                     .map(point -> point.tracepointId()).collect(java.util.stream.Collectors.toSet());
             if (!allowed.containsAll(external.hitCounts().keySet())
                     || !allowed.containsAll(external.installedLocations().keySet())) {
-                throw new IllegalArgumentException("Manifest 包含计划外 tracepoint");
+                throw new IllegalArgumentException("Manifest 鍖呭惈璁″垝澶?tracepoint");
             }
             return external;
         } catch (WorkspaceException | IllegalArgumentException failure) {
             throw new CaseRunException(
-                    "JDWP_MANIFEST_INVALID", "外部 JDWP Collector Manifest 无效", failure);
+                    "JDWP_MANIFEST_INVALID", "澶栭儴 JDWP Collector Manifest 鏃犳晥", failure);
         }
     }
 
     private JdwpCollectionManifest successManifest(
             JdwpCollectionRecord record,
             JdwpExecutionResult result,
+            JdwpCollectionCompletion completion,
             ExternalCollectorManifest external,
-            byte[] collectorPlanBytes,
             Path root,
             CollectionBaselineCheck baseline,
             Instant startedAt) {
@@ -317,13 +349,13 @@ public final class JdwpCollectionApplicationService {
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
                 record.analysisId(), record.runId(), record.planId(), record.collectionId(),
-                "jdwp-batch-collector", tool.version(), sha(collectorPlanBytes),
-                result.completion(), stage, result.targetStarted(), result.collectorStarted(),
+                "jdwp-batch-collector", tool.version(), completion, external.completionReason(),
+                stage, result.targetStarted(), result.collectorStarted(),
                 targetExit, collectorExit,
-                result.completion() == JdwpCollectionCompletion.TIMED_OUT,
-                result.completion() == JdwpCollectionCompletion.TRUNCATED,
+                completion == JdwpCollectionCompletion.TIMED_OUT,
+                completion == JdwpCollectionCompletion.TRUNCATED,
                 external.eventCount(), existingSize(raw), external.hitCounts(),
-                external.installedLocations(), existingSha(raw), diagnostic,
+                external.installedLocations(), diagnostic,
                 "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log",
@@ -346,13 +378,11 @@ public final class JdwpCollectionApplicationService {
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
                 record.analysisId(), record.runId(), record.planId(), record.collectionId(),
-                "jdwp-batch-collector", tool.version(),
-                existingSha(collectionRoot.resolve("collector-plan.json"))
-                        .orElseGet(() -> sha(mapper.writeJson(plan))),
-                completion, JdwpCollectionStage.FAILED, targetStarted, collectorStarted,
+                "jdwp-batch-collector", tool.version(), completion, code,
+                JdwpCollectionStage.FAILED, targetStarted, collectorStarted,
                 targetExitCode, collectorExitCode, completion == JdwpCollectionCompletion.TIMED_OUT,
                 completion == JdwpCollectionCompletion.TRUNCATED, 0, 0, Map.of(), Map.of(),
-                Optional.empty(), Optional.of(new AgentFailureDiagnostic(
+                Optional.of(new AgentFailureDiagnostic(
                         code, "JDWP collection failed", failure.getClass().getName())),
                 raw.toString().replace('\\', '/'), "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
@@ -360,15 +390,34 @@ public final class JdwpCollectionApplicationService {
                 startedAt, clock.instant());
     }
 
+    private static JdwpCollectionCompletion effectiveCompletion(
+            JdwpCollectionCompletion processCompletion, ExternalCollectorManifest external) {
+        if (processCompletion != JdwpCollectionCompletion.SUCCESS
+                && processCompletion != JdwpCollectionCompletion.TARGET_FAILED) {
+            return processCompletion;
+        }
+        String reason = external.completionReason().toLowerCase(java.util.Locale.ROOT);
+        if ("idle_timeout".equals(reason) || "max_events".equals(reason) || "max_bytes".equals(reason)
+                || external.installedLocations().values().stream().mapToInt(Integer::intValue).sum() == 0) {
+            return JdwpCollectionCompletion.TRUNCATED;
+        }
+        if ("interrupted".equals(reason) || "unavailable".equals(reason)) {
+            return JdwpCollectionCompletion.TOOL_FAILED;
+        }
+        return processCompletion;
+    }
+
     private Optional<CaptureContext> prepareCapture(
-            AdapterCatalog.AdapterSelection selection,
-            org.example.algorithmdebug.contracts.TargetTest target) {
+            ProjectRegistration registration) {
         try {
-            var source = selection.adapter().scheduleResultSource(selection.project(), target);
+            var source = ProjectResultSource.from(registration);
+            if (source.isEmpty()) {
+                return Optional.empty();
+            }
             OutputDirectorySnapshotter snapshotter = new OutputDirectorySnapshotter(20_000);
             return Optional.of(new CaptureContext(
-                    selection, source, snapshotter, snapshotter.snapshot(source)));
-        } catch (AdapterException | HarnessException failure) {
+                    source.orElseThrow(), snapshotter, snapshotter.snapshot(source.orElseThrow())));
+        } catch (HarnessException failure) {
             return Optional.empty();
         }
     }
@@ -380,54 +429,42 @@ public final class JdwpCollectionApplicationService {
             Optional<CaptureContext> captureContext,
             Path collectionRoot,
             Path moduleRoot) {
-        if (completion == JdwpCollectionCompletion.TRUNCATED) {
-            Optional<RunId> reference = archive.findReproduction(
-                    record.caseId(), record.contextId()).map(RunResultFingerprint::runId);
-            return incomparable(record, reference,
-                    "JDWP collection was truncated before a comparable Gantt result");
-        }
-        if (completion == JdwpCollectionCompletion.TOOL_FAILED
-                || completion == JdwpCollectionCompletion.TIMED_OUT) {
-            return incomparable(record, "No comparable Gantt observation from JDWP collection");
+        if (completion == JdwpCollectionCompletion.TRUNCATED
+                || completion == JdwpCollectionCompletion.TOOL_FAILED
+                || completion == JdwpCollectionCompletion.TIMED_OUT
+                || completion == JdwpCollectionCompletion.AGENT_FAILED) {
+            return incomparable(record, archive.findLatestCompletedRun(
+                            record.caseId(), record.contextId(), record.analysisId())
+                            .map(org.example.algorithmdebug.contracts.RunOutcomeSummary::runId),
+                    "JDWP collection did not complete with confirmable evidence");
         }
         try {
             if (completion == JdwpCollectionCompletion.TARGET_FAILED) {
                 return checkTargetFailureBaseline(
                         archive, record, captureContext, collectionRoot, moduleRoot);
             }
-            if (captureContext.isEmpty()) {
-                return incomparable(record, "No comparable Gantt observation from JDWP collection");
+            if (captureContext.isPresent()) {
+                capture(captureContext.orElseThrow(), collectionRoot.resolve("raw/gantt.json"));
             }
-            CapturedScheduleResult<?> captured = capture(
-                    captureContext.orElseThrow(), collectionRoot.resolve("raw/gantt.json"));
-            Optional<RunResultFingerprint> reference = archive.findReproduction(
-                    record.caseId(), record.contextId());
-            if (reference.isEmpty()) {
-                return new CollectionBaselineCheck(
-                        "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                        record.collectionId(), ComparisonOutcome.NOT_COMPARED, Optional.empty(),
-                        Optional.of(captured.normalizedJsonSha256()), false,
-                        "No uninstrumented same-context reproduction reference", clock.instant());
+            var reference = archive.findLatestCompletedRun(
+                    record.caseId(), record.contextId(), record.analysisId());
+            if (reference.isEmpty()
+                    || reference.orElseThrow().testOutcome()
+                    != org.example.algorithmdebug.contracts.TestOutcome.PASSED) {
+                return incomparable(record,
+                        "No completed passing uninstrumented run exists for this Analysis");
             }
-            RunResultFingerprint current = new RunResultFingerprint(
-                    SchemaVersions.RUN_RESULT_FINGERPRINT, record.caseId(), record.contextId(),
-                    record.runId(), Optional.of(captured.rawSha256()),
-                    Optional.of(captured.normalizedJsonSha256()), Optional.empty());
-            ReproductionComparator.Result compared = new ReproductionComparator().compare(
-                    reference.orElseThrow(), current, ReproductionComparator.Scope.SAME_CONTEXT);
             return new CollectionBaselineCheck(
                     "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
-                    record.collectionId(), compared.outcome(),
-                    Optional.of(reference.orElseThrow().runId()),
-                    Optional.of(captured.normalizedJsonSha256()),
-                    compared.outcome() == ComparisonOutcome.MATCHED,
-                    compared.summary(), clock.instant());
+                    record.collectionId(), ComparisonOutcome.NOT_COMPARED,
+                    Optional.of(reference.orElseThrow().runId()), true,
+                    "Successful JDWP run; Gantt content is archived but is not an evidence gate",
+                    clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
-            return incomparable(record, "Gantt capture or baseline comparison failed: "
+            return incomparable(record, "JDWP result capture failed: "
                     + failure.getClass().getSimpleName());
         }
     }
-
     private CollectionBaselineCheck checkTargetFailureBaseline(
             CaseArchiveRepository archive,
             JdwpCollectionRecord record,
@@ -453,15 +490,13 @@ public final class JdwpCollectionApplicationService {
         return Optional.of(capture(value, destination));
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
     private CapturedScheduleResult<?> capture(CaptureContext context, Path destination)
             throws HarnessException {
         OutputDirectorySnapshot after = new OutputStabilityWaiter(
                 context.snapshotter(), OutputStabilityPolicy.defaults())
                 .awaitStable(context.before(), context.source());
-        TargetProjectAdapter adapter = context.selection().adapter();
-        return new ScheduleResultCapture(context.snapshotter(), 64L * 1024 * 1024)
-                .capture(context.before(), after, adapter.scheduleResultParser(), destination);
+        return new ScheduleResultCapture<JsonResultSnapshot>(context.snapshotter(), 64L * 1024 * 1024)
+                .capture(context.before(), after, new JsonResultParser(), destination);
     }
 
     private CollectionBaselineCheck incomparable(JdwpCollectionRecord record, String summary) {
@@ -473,16 +508,12 @@ public final class JdwpCollectionApplicationService {
         return new CollectionBaselineCheck(
                 "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
                 record.collectionId(), ComparisonOutcome.INCOMPARABLE, referenceRunId,
-                Optional.empty(), false, summary, clock.instant());
+                false, summary, clock.instant());
     }
 
     private static List<ArtifactReference> describeArtifacts(
             Path caseRoot, Path collectionRoot, JdwpCollectionPlan plan, CollectionId collectionId) {
         ArrayList<ArtifactReference> artifacts = new ArrayList<>();
-        addArtifact(artifacts, caseRoot,
-                caseRoot.resolve("analyses").resolve(plan.analysisId().value()).resolve("plans")
-                        .resolve(plan.planId().value() + ".json"),
-                plan.planId().value(), "JDWP_PLAN", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("collection-request.json"),
                 collectionId.value() + "-request", "COLLECTION_REQUEST", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("collector-plan.json"),
@@ -517,14 +548,14 @@ public final class JdwpCollectionApplicationService {
         Path normalizedRoot = caseRoot.toAbsolutePath().normalize();
         Path normalized = path.toAbsolutePath().normalize();
         if (!normalized.startsWith(normalizedRoot) || Files.isSymbolicLink(normalized)) {
-            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "JDWP 产物路径非法");
+            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "JDWP 浜х墿璺緞闈炴硶");
         }
         try {
             artifacts.add(new ArtifactReference(
                     id, type, normalizedRoot.relativize(normalized).toString().replace('\\', '/'),
                     mediaType, existingSha(normalized).orElseThrow(), Files.size(normalized)));
         } catch (IOException failure) {
-            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "无法描述 JDWP 产物", failure);
+            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "鏃犳硶鎻忚堪 JDWP 浜х墿", failure);
         }
     }
 
@@ -553,18 +584,20 @@ public final class JdwpCollectionApplicationService {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
+            throw new IllegalStateException("JDK 缂哄皯 SHA-256", failure);
         }
     }
 
     private record CaptureContext(
-            AdapterCatalog.AdapterSelection selection,
             org.example.algorithmdebug.adapter.ScheduleResultSource source,
             OutputDirectorySnapshotter snapshotter,
             OutputDirectorySnapshot before) {}
 
     private record ExternalCollectorManifest(
             String schemaVersion,
+            String collectorVersion,
+            String rawTraceSchemaVersion,
+            List<String> capabilities,
             String sessionId,
             ExternalCollectorTarget target,
             String plan,
@@ -576,24 +609,27 @@ public final class JdwpCollectionApplicationService {
             Map<String, Integer> hitCounts,
             Map<String, Integer> installedLocations) {
         private ExternalCollectorManifest {
+            capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
             hitCounts = hitCounts == null ? Map.of() : Map.copyOf(hitCounts);
             installedLocations = installedLocations == null ? Map.of() : Map.copyOf(installedLocations);
             if (target == null || plan == null || plan.isBlank() || trace == null || trace.isBlank()
                     || startedAt == null || finishedAt == null || finishedAt.isBefore(startedAt)
                     || completionReason == null || completionReason.isBlank()
-                    || eventCount < 0 || hitCounts.size() > 20 || installedLocations.size() > 20) {
-                throw new IllegalArgumentException("External JDWP Manifest 超出有界契约");
+                    || eventCount < 0 || capabilities.size() > 32
+                    || hitCounts.size() > 20 || installedLocations.size() > 20) {
+                throw new IllegalArgumentException("External JDWP Manifest 瓒呭嚭鏈夌晫濂戠害");
             }
             if (hitCounts.values().stream().anyMatch(value -> value == null || value < 0)
                     || installedLocations.values().stream().anyMatch(
                             value -> value == null || value < 0)) {
-                throw new IllegalArgumentException("External JDWP Manifest 计数无效");
+                throw new IllegalArgumentException("External JDWP Manifest 璁℃暟鏃犳晥");
             }
         }
 
         static ExternalCollectorManifest empty(String sessionId) {
             return new ExternalCollectorManifest(
-                    "1.0", sessionId, new ExternalCollectorTarget("127.0.0.1", 1),
+                    "1.0", null, null, List.of(), sessionId,
+                    new ExternalCollectorTarget("127.0.0.1", 1),
                     "unavailable", "unavailable", Instant.EPOCH, Instant.EPOCH,
                     "unavailable", 0, Map.of(), Map.of());
         }

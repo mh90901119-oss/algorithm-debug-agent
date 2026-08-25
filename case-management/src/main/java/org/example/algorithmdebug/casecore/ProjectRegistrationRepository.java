@@ -93,15 +93,33 @@ public final class ProjectRegistrationRepository {
      */
     public void create(WorkspaceLayout layout, ProjectRegistration registration) {
         if (registration == null) {
+            throw new IllegalArgumentException("registration must not be null");
+        }
+        Path projectRoot = requireLayout(layout).projectWorkspace(registration.projectId());
+        Path path = projectRoot.resolve(REGISTRATION_FILE_NAME);
+        boolean directoryCreated = Files.notExists(projectRoot, LinkOption.NOFOLLOW_LINKS);
+        try {
+            Files.createDirectories(projectRoot);
+            writer.writeNew(path, mapper.writeJson(registration));
+        } catch (IOException | SecurityException | WorkspaceException failure) {
+            cleanupEmptyDirectory(projectRoot, directoryCreated, failure);
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "Unable to create project registration: " + path, failure);
+        }
+    }
+
+    /** 原子替换同一 ProjectId 的已有注册配置。 */
+    public void replace(WorkspaceLayout layout, ProjectRegistration registration) {
+        if (registration == null) {
             throw new IllegalArgumentException("registration 不能为空");
         }
         Path path = requireLayout(layout)
                 .projectWorkspace(registration.projectId())
                 .resolve(REGISTRATION_FILE_NAME);
         try {
-            writer.writeNew(path, mapper.writeJson(registration));
+            writer.replace(path, mapper.writeJson(registration));
         } catch (WorkspaceException failure) {
-            throw new WorkspaceException("WORKSPACE_WRITE_FAILED", "创建项目登记记录失败: " + path, failure);
+            throw new WorkspaceException("WORKSPACE_WRITE_FAILED", "更新项目注册记录失败: " + path, failure);
         }
     }
 
@@ -142,4 +160,18 @@ public final class ProjectRegistrationRepository {
         }
         return layout;
     }
-}
+
+    private static void cleanupEmptyDirectory(Path directory, boolean created, Throwable primaryFailure) {
+        if (!created) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(directory);
+            Path projectsRoot = directory.getParent();
+            if (projectsRoot != null) {
+                Files.deleteIfExists(projectsRoot);
+            }
+        } catch (IOException | SecurityException cleanupFailure) {
+            primaryFailure.addSuppressed(cleanupFailure);
+        }
+    }}

@@ -29,7 +29,7 @@ class CodePathCommandFactoryTest {
     void passesArchivedPlanAndTraceWithoutPackageScope() throws Exception {
         Path jar = Files.write(directory.resolve("launcher.jar"), new byte[]{1, 2, 3});
         CodePathToolConfiguration configuration = new CodePathToolConfiguration(
-                Path.of("java"), jar, CodePathToolConfiguration.sha256(jar), "0.1.0", "launcher.Main");
+                Path.of("java"), jar, "0.1.0", "launcher.Main");
         Path plan = directory.resolve("request/plan.json");
 
         List<String> argv = new CodePathCommandFactory(";").create(
@@ -42,11 +42,13 @@ class CodePathCommandFactoryTest {
     }
 
     @Test
-    void rejectsPinnedJarHashMismatch() throws Exception {
+    void acceptsReadableLauncherWithoutPinnedHash() throws Exception {
         Path jar = Files.write(directory.resolve("launcher.jar"), new byte[]{1, 2, 3});
         CodePathToolConfiguration configuration = new CodePathToolConfiguration(
-                Path.of("java"), jar, "0".repeat(64), "0.1.0", "launcher.Main");
-        assertThrows(CodePathAdapterException.class, configuration::verifyTool);
+                Path.of("java"), jar, "0.1.0", "launcher.Main");
+        Files.write(jar, new byte[]{4, 5, 6});
+
+        configuration.verifyTool();
     }
 
     private MethodPathCollectionRequest request(Path java) {

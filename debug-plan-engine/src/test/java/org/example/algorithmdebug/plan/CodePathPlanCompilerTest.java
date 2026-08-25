@@ -20,7 +20,6 @@ import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.Test;
 
 class CodePathPlanCompilerTest {
-    private static final String HASH = "a".repeat(64);
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
 
     @Test
@@ -91,6 +90,6 @@ class CodePathPlanCompilerTest {
         String key = className + "#" + methodName + descriptor;
         return new MethodCatalogEntry(key, new SourceAnchor(
                 className, methodName, descriptor, "src/test/java/fixture/TargetTest.java",
-                1, 1, HASH), distance, distance == 0);
+                1, 1), distance, distance == 0);
     }
 }

@@ -16,7 +16,7 @@ public sealed interface CliCommand
         CliCommand.StaticAnalyze, CliCommand.CodePathPlanCreate,
         CliCommand.CodePathCollectionExecute, CliCommand.JdwpPlanCreate,
         CliCommand.JdwpCollectionExecute, CliCommand.ArtifactRead,
-        CliCommand.AnalysisComplete {
+        CliCommand.AnalysisComplete, CliCommand.CaseAudit, CliCommand.GanttInspect {
 
     /**
      * 初始化外部 Workspace。
@@ -37,13 +37,18 @@ public sealed interface CliCommand
      * @param module 算法模块目录
      * @param projectId 可选显式 ProjectId
      */
-    record ProjectRegister(Path workspace, Path module, Optional<ProjectId> projectId)
+    record ProjectRegister(
+            Path workspace,
+            Path module,
+            Optional<ProjectId> projectId,
+            Optional<String> resultJsonDirectory)
             implements CliCommand {
         /** 校验命令参数。 */
         public ProjectRegister {
             require(workspace, "workspace");
             require(module, "module");
             require(projectId, "projectId");
+            require(resultJsonDirectory, "resultJsonDirectory");
         }
     }
 
@@ -90,6 +95,21 @@ public sealed interface CliCommand
             require(workspace, "workspace");
             require(projectId, "projectId");
             require(caseId, "caseId");
+        }
+    }
+
+    /** 只读审计一个 Case Workspace。 */
+    record CaseAudit(Path workspace, ProjectId projectId, CaseId caseId) implements CliCommand {
+        public CaseAudit { require(workspace, "workspace"); require(projectId, "projectId"); require(caseId, "caseId"); }
+    }
+
+    /** 通过 Artifact ID 有界读取 Gantt JSON。 */
+    record GanttInspect(Path workspace, ProjectId projectId, CaseId caseId, String artifactId,
+            String operation, String jsonPointer, int offset, int limit) implements CliCommand {
+        public GanttInspect {
+            require(workspace, "workspace"); require(projectId, "projectId"); require(caseId, "caseId");
+            require(artifactId, "artifactId"); require(operation, "operation"); require(jsonPointer, "jsonPointer");
+            if (offset < 0 || limit < 1 || limit > 100) throw new IllegalArgumentException("Gantt inspection budget is invalid");
         }
     }
 
@@ -174,7 +194,7 @@ public sealed interface CliCommand
             require(workspace, "workspace"); require(projectId, "projectId");
             require(caseId, "caseId"); require(artifactId, "artifactId");
             if (offsetBytes < 0 || maxBytes < 1 || maxBytes > 65_536) {
-                throw new IllegalArgumentException("Artifact 读取预算非法");
+                throw new IllegalArgumentException("Artifact read budget is invalid");
             }
         }
     }
@@ -193,7 +213,7 @@ public sealed interface CliCommand
 
     private static void require(Object value, String fieldName) {
         if (value == null) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
+            throw new IllegalArgumentException(fieldName + " must not be null");
         }
     }
 }

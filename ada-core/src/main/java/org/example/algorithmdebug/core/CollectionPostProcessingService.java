@@ -14,6 +14,7 @@ import org.example.algorithmdebug.casecore.CaseArchiveLayout;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.CaseArtifactAccess;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
+import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
@@ -116,9 +117,12 @@ final class CollectionPostProcessingService {
                 plan.budget().maxBytes(), plan.budget().maxEvents(),
                 NormalizationBudget.defaults().maxHits());
         EvidenceId evidenceId = ids.newEvidenceId();
+        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
+                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
+                        "Collection has no completed uninstrumented reference run"));
         EvidenceBuildRequest request = request(
                 evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
-                collection.collectionId(), baseline, EvidenceDimension.METHOD_PATH, budget);
+                evidenceRunId, collection.collectionId(), EvidenceDimension.METHOD_PATH, budget);
         archive.createEvidenceRequest(request);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
         Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/codepath.jsonl");
@@ -147,10 +151,9 @@ final class CollectionPostProcessingService {
                 evidenceId, collection, "CODEPATH", "method-path-normalizer", raw,
                 Optional.of(summaryReference), budget, normalized, now);
         Path normalizationPath = archive.createNormalizationManifest(normalization);
-        Path planPath = layout.planDocument(collection.analysisId(), collection.planId());
         CollectionValidation validation = validator.validateMethodPath(new MethodPathValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
-                raw, rawPath, summaryReference, summaryPath, planPath, clock.instant()));
+                raw, rawPath, summaryReference, summaryPath, clock.instant()));
         return complete(request, validation, summaryReference, normalizationPath);
     }
 
@@ -163,9 +166,12 @@ final class CollectionPostProcessingService {
                 plan.budget().maxBytes(), plan.budget().maxEvents(),
                 plan.budget().maxEvents());
         EvidenceId evidenceId = ids.newEvidenceId();
+        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
+                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
+                        "Collection has no completed uninstrumented reference run"));
         EvidenceBuildRequest request = request(
                 evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
-                collection.collectionId(), baseline, EvidenceDimension.RUNTIME_STATE, budget);
+                evidenceRunId, collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget);
         archive.createEvidenceRequest(request);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
         Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/jdwp.jsonl");
@@ -194,10 +200,9 @@ final class CollectionPostProcessingService {
                 evidenceId, collection, "JDWP", "jdwp-snapshot-normalizer", raw,
                 Optional.of(summaryReference), budget, normalized, now);
         Path normalizationPath = archive.createNormalizationManifest(normalization);
-        Path planPath = layout.collectionRoot(collection.collectionId()).resolve("collector-plan.json");
         CollectionValidation validation = validator.validateJdwp(new JdwpValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
-                raw, rawPath, summaryReference, summaryPath, planPath, clock.instant()));
+                raw, rawPath, summaryReference, summaryPath, clock.instant()));
         return complete(request, validation, summaryReference, normalizationPath);
     }
 
@@ -260,16 +265,13 @@ final class CollectionPostProcessingService {
             org.example.algorithmdebug.contracts.CaseId caseId,
             org.example.algorithmdebug.contracts.ContextId contextId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
+            org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
-            CollectionBaselineCheck baseline,
             EvidenceDimension dynamicDimension,
             NormalizationBudget budget) {
-        var referenceRunId = baseline.referenceRunId().orElseThrow(() ->
-                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
-                        "动态采集缺少可引用的无采集 Run"));
         return new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, evidenceId, caseId, contextId, analysisId,
-                referenceRunId, List.of(collectionId), List.of(), Set.of(
+                runId, List.of(collectionId), List.of(), Set.of(
                         EvidenceDimension.TARGET_OUTCOME,
                         EvidenceDimension.VALIDATION,
                         dynamicDimension), budget.maxSummaryBytes(),
@@ -350,15 +352,23 @@ final class CollectionPostProcessingService {
                 .resolve("validation/post-processing-failure.json");
         AgentFailureDiagnostic diagnostic = new AgentFailureDiagnostic(
                 "COLLECTION_POST_PROCESSING_FAILED",
-                failure instanceof CaseRunException caseFailure
-                        ? "Collection post-processing failed: " + caseFailure.code()
-                        : "Collection post-processing failed",
+                "Collection post-processing failed: " + failureCode(failure),
                 failure.getClass().getName());
         writer.writeNew(document, mapper.writeJson(diagnostic));
         ArtifactReference reference = describe(
                 caseId, document, collectionId.value() + "-post-processing-failure",
                 "POST_PROCESSING_FAILURE", "application/json");
         return new CollectionPostProcessingResult(false, List.of(reference));
+    }
+
+    private static String failureCode(RuntimeException failure) {
+        if (failure instanceof CaseRunException caseFailure) {
+            return caseFailure.code();
+        }
+        if (failure instanceof WorkspaceException workspaceFailure) {
+            return workspaceFailure.code();
+        }
+        return "UNEXPECTED_RUNTIME_FAILURE";
     }
 
     private ArtifactReference describe(

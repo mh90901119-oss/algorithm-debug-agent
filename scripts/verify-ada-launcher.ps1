@@ -1,13 +1,9 @@
-param(
-    [string]$RepositoryRoot = (Split-Path -Parent $PSScriptRoot),
-    [string]$DemoProject = ""
-)
+param()
 
 $ErrorActionPreference = "Stop"
+$RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
-if ([string]::IsNullOrWhiteSpace($DemoProject)) {
-    $DemoProject = Join-Path (Split-Path -Parent $RepositoryRoot) "hellomvn"
-}
+$DemoProject = Join-Path (Split-Path -Parent $RepositoryRoot) "hellomvn"
 $DemoProject = [IO.Path]::GetFullPath($DemoProject)
 $launcher = Join-Path $RepositoryRoot "bin\ada.cmd"
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
@@ -21,11 +17,6 @@ $verificationRoot = Join-Path ([IO.Path]::GetTempPath()) ("ada-launcher-" + [gui
 try {
     New-Item -ItemType Directory -Path $verificationRoot | Out-Null
     $workspace = Join-Path $verificationRoot "workspace"
-    $collector = Join-Path $verificationRoot "jdwp-collector.jar"
-    [IO.File]::WriteAllBytes($collector, [byte[]](1, 2, 3))
-    $previousCollector = $env:ADA_JDWP_COLLECTOR_JAR
-    $env:ADA_JDWP_COLLECTOR_JAR = $collector
-
     $initialized = (& $launcher workspace init --root $workspace) -join "`n" | ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or -not $initialized.success) {
         throw "ada workspace init failed"
@@ -45,7 +36,6 @@ try {
     Write-Output "ADA launcher verification passed"
 }
 finally {
-    $env:ADA_JDWP_COLLECTOR_JAR = $previousCollector
     if (Test-Path -LiteralPath $verificationRoot) {
         $resolvedVerificationRoot = (Resolve-Path -LiteralPath $verificationRoot).Path
         $resolvedTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())

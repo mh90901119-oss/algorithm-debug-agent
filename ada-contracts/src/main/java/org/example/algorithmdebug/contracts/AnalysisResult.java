@@ -38,7 +38,7 @@ public record AnalysisResult(
     /** 校验身份、有界最终内容和不可变引用集合。 */
     public AnalysisResult {
         if (!SchemaVersions.ANALYSIS_RESULT.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 AnalysisResult schemaVersion");
+            throw new IllegalArgumentException("Unsupported AnalysisResult schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
@@ -51,14 +51,14 @@ public record AnalysisResult(
         referencedArtifactIds = ContractChecks.immutableNonBlankStrings(
                 referencedArtifactIds, "referencedArtifactIds");
         if (referencedArtifactIds.size() > 64) {
-            throw new IllegalArgumentException("referencedArtifactIds 不能超过 64 项");
+            throw new IllegalArgumentException("referencedArtifactIds must not exceed 64 entries");
         }
         referencedArtifactIds.forEach(value ->
                 ContractChecks.requireOpaqueId(value, "referencedArtifactId"));
         missingEvidence = ContractChecks.immutableBoundedStrings(
                 missingEvidence, "missingEvidence", 2_048);
         if (missingEvidence.size() > 32) {
-            throw new IllegalArgumentException("missingEvidence 不能超过 32 项");
+            throw new IllegalArgumentException("missingEvidence must not exceed 32 entries");
         }
         completedAt = ContractChecks.requireNonNull(completedAt, "completedAt");
     }
@@ -66,7 +66,7 @@ public record AnalysisResult(
     private static <T> List<T> bounded(List<T> values, String field, int maximum) {
         List<T> copied = ContractChecks.immutableList(values, field);
         if (copied.size() > maximum) {
-            throw new IllegalArgumentException(field + " 不能超过 " + maximum + " 项");
+            throw new IllegalArgumentException(field + " must not exceed " + maximum + " entries");
         }
         return copied;
     }

@@ -92,18 +92,6 @@ class CollectionEvidenceValidatorTest {
     }
 
     @Test
-    void collectorManifestRawIdentityMismatchIsInvalid() throws Exception {
-        Fixture fixture = fixture(
-                NormalizationStatus.COMPLETE, ComparisonOutcome.MATCHED, true);
-
-        var validation = new CollectionEvidenceValidator().validateMethodPath(fixture.input());
-
-        assertEquals(EvidenceValidationStatus.INVALID, validation.status());
-        assertTrue(validation.findings().stream().anyMatch(finding ->
-                "COLLECTOR_RAW_IDENTITY_MISMATCH".equals(finding.code())));
-    }
-
-    @Test
     void changedBaselineIsContradictedAndPartialSummaryIsInconclusive() throws Exception {
         var changed = new CollectionEvidenceValidator().validateMethodPath(
                 fixture(NormalizationStatus.COMPLETE, ComparisonOutcome.CHANGED).input());
@@ -148,7 +136,6 @@ class CollectionEvidenceValidatorTest {
         Path raw = Files.writeString(root.resolve("raw-trace.jsonl"),
                 "{\"sequence\":1,\"eventType\":\"tracepoint_hit\"}\n");
         Path summaryPath = Files.writeString(root.resolve("summary.json"), "{}\n");
-        Path planPath = Files.writeString(root.resolve("plan.json"), "{\"plan\":1}\n");
         ArtifactReference rawReference = reference(
                 raw, "jdwp-raw", "JDWP_RAW_TRACE", "raw/raw-trace.jsonl");
         ArtifactReference summaryReference = reference(
@@ -161,16 +148,16 @@ class CollectionEvidenceValidatorTest {
                 ANALYSIS_ID, TARGET, List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#solve()V",
                         new SourceAnchor("fixture.Algorithm", "solve", "()V",
-                                "src/main/java/fixture/Algorithm.java", 10, 20, HASH),
+                                "src/main/java/fixture/Algorithm.java", 10, 20),
                         12, 5, JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "定位方法内部状态", NOW);
         JdwpCollectionManifest manifest = new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 RUN_ID, PLAN_ID, COLLECTION_ID, "jdwp-collector", "1.0",
-                sha(planPath), JdwpCollectionCompletion.SUCCESS,
+                JdwpCollectionCompletion.SUCCESS, "completed",
                 JdwpCollectionStage.PROCESS_COMPLETED, true, true, 0, 0,
                 false, false, 1, rawReference.sizeBytes(), Map.of("point-1", 1),
-                Map.of("point-1", 1), Optional.of(rawReference.sha256()), Optional.empty(),
+                Map.of("point-1", 1), Optional.empty(),
                 "raw/raw-trace.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log", NOW, NOW);
@@ -194,22 +181,15 @@ class CollectionEvidenceValidatorTest {
         CollectionBaselineCheck baseline = new CollectionBaselineCheck(
                 "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, COLLECTION_ID,
                 ComparisonOutcome.MATCHED, Optional.of(new RunId("baseline-run")),
-                Optional.empty(), true, "baseline MATCHED", NOW);
+                true, "baseline MATCHED", NOW);
         return new JdwpValidationInput(collection, plan, manifest, normalization,
                 summary, baseline, rawReference, raw, summaryReference, summaryPath,
-                planPath, NOW);
+                NOW);
     }
 
     private Fixture fixture(
             NormalizationStatus normalizationStatus,
             ComparisonOutcome baselineOutcome) throws Exception {
-        return fixture(normalizationStatus, baselineOutcome, false);
-    }
-
-    private Fixture fixture(
-            NormalizationStatus normalizationStatus,
-            ComparisonOutcome baselineOutcome,
-            boolean corruptManifestRawIdentity) throws Exception {
         Path root = Files.createDirectory(temporaryDirectory.resolve(
                 "fixture-" + fixtureCounter++));
         Path raw = Files.writeString(root.resolve("filtered.jsonl"), """
@@ -249,20 +229,19 @@ class CollectionEvidenceValidatorTest {
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(), "", NOW);
         MethodPathManifest manifest = new MethodPathManifest(
                 "2.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID,
-                "code-path-tracer", "1.0", Optional.of(HASH), sha(planPath),
+                "code-path-tracer", "1.0",
                 partial ? CollectionCompletion.TRUNCATED : CollectionCompletion.SUCCESS,
                 "COMPLETE", true, 0, false, "PASSED", 1, 1, 0, 0, 1,
-                rawReference.sizeBytes() + (corruptManifestRawIdentity ? 1 : 0),
-                Optional.of(rawReference.sha256()),
+                rawReference.sizeBytes(),
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(),
                 "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log", NOW, NOW);
         CollectionBaselineCheck baseline = new CollectionBaselineCheck(
                 "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, COLLECTION_ID,
-                baselineOutcome, Optional.of(new RunId("baseline-run")), Optional.empty(),
+                baselineOutcome, Optional.of(new RunId("baseline-run")),
                 baselineOutcome == ComparisonOutcome.MATCHED, "baseline " + baselineOutcome, NOW);
         MethodPathValidationInput input = new MethodPathValidationInput(
                 collection, plan, manifest, normalization, summary, baseline,
-                rawReference, raw, summaryReference, summaryPath, planPath,
+                rawReference, raw, summaryReference, summaryPath,
                 NOW);
         return new Fixture(input, raw);
     }

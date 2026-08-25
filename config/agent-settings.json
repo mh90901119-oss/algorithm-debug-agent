@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "openCodeConfigDirectory": "%USERPROFILE%\\.config\\opencode",
+  "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
+  "dfxDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics",
+  "evalDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\evals",
+  "resultJsonDirectory": "D:\\log\\scheduler\\gant",
+  "agentJavaHome": "",
+  "targetJavaHome": "",
+  "mavenExecutable": "",
+  "dfxEnabled": true
+}

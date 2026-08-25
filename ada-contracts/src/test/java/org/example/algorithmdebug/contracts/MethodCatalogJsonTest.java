@@ -15,7 +15,7 @@ class MethodCatalogJsonTest {
     private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     @Test void roundTripsV2WithoutModuleFingerprintOrPackageCensus() throws Exception {
-        SourceAnchor anchor = new SourceAnchor("fixture.TargetTest", "runs", "()V", "src/test/java/fixture/TargetTest.java", 1, 2, "a".repeat(64));
+        SourceAnchor anchor = new SourceAnchor("fixture.TargetTest", "runs", "()V", "src/test/java/fixture/TargetTest.java", 1, 2);
         MethodCatalog catalog = new MethodCatalog(SchemaVersions.METHOD_CATALOG, new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "runs"), List.of(new MethodCatalogEntry("fixture.TargetTest#runs()V", anchor, 0, true)), List.of(), List.of(), SnapshotCompleteness.COMPLETE, 1, 0, Instant.EPOCH);
         JsonNode json = MAPPER.valueToTree(catalog); assertEquals(catalog, MAPPER.treeToValue(json, MethodCatalog.class));
         assertFalse(json.has("sourceFingerprintSha256")); assertFalse(json.has("packageCensus"));

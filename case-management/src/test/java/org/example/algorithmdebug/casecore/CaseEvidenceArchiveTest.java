@@ -133,6 +133,7 @@ class CaseEvidenceArchiveTest {
         CaseArtifactAccess access = new CaseArtifactAccess(casesRoot);
         Path raw = repository.layout(CASE_ID).collectionRoot(COLLECTION_ID)
                 .resolve("raw/filtered.jsonl");
+        Files.createDirectories(raw.getParent());
         Files.writeString(raw, "{}\n");
 
         Path resolved = access.requireRegularArtifact(

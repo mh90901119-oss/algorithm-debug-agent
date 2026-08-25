@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
  * 通过同目录临时文件原子创建终态控制文档，并禁止覆盖已有文档。
@@ -81,6 +82,39 @@ public final class AtomicDocumentWriter {
             primaryFailure = failure;
             throw new WorkspaceException(
                     "WORKSPACE_WRITE_FAILED", "原子创建 Workspace 文档失败: " + normalizedTarget, failure);
+        } catch (RuntimeException failure) {
+            primaryFailure = failure;
+            throw failure;
+        } finally {
+            if (temporary != null) {
+                cleanupTemporary(temporary, primaryFailure);
+            }
+        }
+    }
+
+    /** 通过同目录临时文件原子替换一个已存在的控制文档。 */
+    public void replace(Path target, byte[] content) {
+        if (target == null || content == null) {
+            throw new IllegalArgumentException("target 和 content 不能为空");
+        }
+        Path normalizedTarget = target.toAbsolutePath().normalize();
+        Path parent = normalizedTarget.getParent();
+        if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)
+                || !Files.isRegularFile(normalizedTarget, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(
+                    "WORKSPACE_PATH_INVALID", "待替换文档不存在或不是普通文件: " + normalizedTarget);
+        }
+        Path temporary = null;
+        Throwable primaryFailure = null;
+        try {
+            temporary = Files.createTempFile(parent, "." + normalizedTarget.getFileName() + "-", ".tmp");
+            writeAndFlush(temporary, Math.max(1L, content.length), output -> output.write(content));
+            Files.move(temporary, normalizedTarget, ATOMIC_MOVE, REPLACE_EXISTING);
+            temporary = null;
+        } catch (IOException | SecurityException failure) {
+            primaryFailure = failure;
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "原子替换 Workspace 文档失败: " + normalizedTarget, failure);
         } catch (RuntimeException failure) {
             primaryFailure = failure;
             throw failure;

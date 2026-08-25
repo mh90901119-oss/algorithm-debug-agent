@@ -129,6 +129,20 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
+    void reportsMissingTargetTestWithoutGenericStaticFailure() throws Exception {
+        Path targetSource = module.resolve("src/test/java/fixture/TargetTest.java");
+        Files.writeString(targetSource, """
+                package fixture;
+                class TargetTest { void anotherCase() { } }
+                """);
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID));
+
+        assertEquals("TARGET_TEST_NOT_FOUND", failure.code());
+    }
+
+    @Test
     void jdwpPlanReturnsBoundedSummaryAndCaseRelativeArtifact() {
         service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
         String methodKey = archive().requireMethodCatalog(CASE_ID, ANALYSIS_ID)

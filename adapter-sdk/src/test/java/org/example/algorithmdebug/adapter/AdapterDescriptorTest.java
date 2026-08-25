@@ -14,17 +14,17 @@ class AdapterDescriptorTest {
     void shouldDefensivelyCopyCapabilities() {
         Set<AdapterCapability> capabilities = EnumSet.of(
                 AdapterCapability.BASELINE_EXECUTION,
-                AdapterCapability.SCHEDULE_RESULT);
+                AdapterCapability.CODE_PATH_COLLECTION);
 
         AdapterDescriptor descriptor = new AdapterDescriptor(
                 "wafer-demo", "0.1.0", "Wafer Demo", capabilities);
         capabilities.add(AdapterCapability.JDWP_COLLECTION);
 
         assertEquals(
-                Set.of(AdapterCapability.BASELINE_EXECUTION, AdapterCapability.SCHEDULE_RESULT),
+                Set.of(AdapterCapability.BASELINE_EXECUTION, AdapterCapability.CODE_PATH_COLLECTION),
                 descriptor.capabilities());
         assertThrows(UnsupportedOperationException.class,
-                () -> descriptor.capabilities().add(AdapterCapability.INPUT_LOCATION));
+                () -> descriptor.capabilities().add(AdapterCapability.JDWP_COLLECTION));
     }
 
     @Test
@@ -35,4 +35,3 @@ class AdapterDescriptorTest {
                 () -> new AdapterDescriptor("wafer-demo", " ", "Wafer", Set.of()));
     }
 }
-

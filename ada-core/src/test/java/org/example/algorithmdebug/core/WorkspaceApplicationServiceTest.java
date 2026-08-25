@@ -2,7 +2,6 @@ package org.example.algorithmdebug.core;
 
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
-import org.example.algorithmdebug.casecore.ClasspathWorkspaceTemplateProvider;
 import org.example.algorithmdebug.casecore.WorkspaceInitializer;
 import org.example.algorithmdebug.casecore.WorkspaceManifestRepository;
 import org.example.algorithmdebug.contracts.WorkspaceInitializationResult;
@@ -42,8 +41,6 @@ class WorkspaceApplicationServiceTest {
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
         return new WorkspaceInitializer(
                 new WorkspaceManifestRepository(new BoundedDocumentMapper(), writer),
-                writer,
-                new ClasspathWorkspaceTemplateProvider(),
                 Clock.fixed(Instant.parse("2026-08-16T00:00:00Z"), ZoneOffset.UTC));
     }
 

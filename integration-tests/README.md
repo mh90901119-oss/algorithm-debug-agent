@@ -1,20 +1,25 @@
 # Integration tests
 
-Forked-JVM and end-to-end tests against controlled fixtures. The wafer demo adapter initially
-targets `D:\javacode\hellomvn` but tests must support a configurable project path.
+本模块使用临时目录生成独立的 Maven/JUnit Fixture，不依赖 Wafer Demo、本机算法仓库或固定绝对路径。
 
-`WaferBaselineLifecycleSmokeTest` 使用 `debug-harness` 正式 Maven Runner 连续运行目标 UT 两次，验证：
+`CaseRunArchiveIntegrationTest` 覆盖：
 
-- stdout/stderr 分离归档和退出码 0；
-- 每次只捕获运行窗口内唯一合法 Gantt；
-- 两个不可变 Run 均包含 165 个操作；
-- 两次语义哈希一致并进入 `BASELINE_STABLE`。
+- UT 通过并产生 JSON；
+- 断言失败；
+- 目标代码抛异常；
+- 编译失败；
+- 指定测试不存在；
+- UT 超时；
+- Maven 工具缺失；
+- 同 Context 结果一致/变化和跨 Context 对照；
+- stdout、stderr、Surefire、JSON、Run fingerprint 与 reproduction reference 的不可变归档。
+
+Fixture 中的失败类型用于证明原始结果都能归档，不构成生产失败分类白名单。未知失败仍由同一运行和证据
+链路处理。
 
 ```powershell
-mvn -pl integration-tests -am test `
-  "-Dwafer.demo.projectRoot=D:\javacode\hellomvn" `
-  "-Dada.maven.executable=D:\devtools\apache-maven-3.9.16\bin\mvn.cmd"
+mvn -pl integration-tests -am test
 ```
 
-上面的 Maven 路径只是已验证本地示例；实际路径通过 `ada.maven.executable` 配置。未显式提供时，
-测试从当前 Maven 进程的 `maven.home/bin` 推导 executable。
+Maven executable 未显式提供时，从当前 Maven 进程的 `maven.home/bin` 推导；也可通过
+`ada.maven.executable` 提供路径。

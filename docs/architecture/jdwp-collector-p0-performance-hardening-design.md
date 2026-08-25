@@ -1,3 +1,5 @@
+> STATUS UPDATE (2026-08-23): Exact descriptors, code indexes, typed values, projections, duplicate-install prevention and request-group hit limits are implemented in the Agent repository. Remaining proposals require evidence from real target UTs before implementation.
+
 # JDWP Collector P0 性能加固详细设计与开发方案
 
 ## 1. 文档信息

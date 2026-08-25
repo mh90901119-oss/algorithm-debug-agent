@@ -7,7 +7,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 
 /** 有界、严格读取归档 CodePath v2 计划。 */
 public final class CodePathPlanReader {
@@ -18,11 +17,11 @@ public final class CodePathPlanReader {
             .build();
 
     /** 读取最多 1 MiB 的计划；记录构造器继续执行完整契约校验。 */
-    public CodePathCollectionPlan read(Path plan) throws IOException {
+    public LauncherCodePathPlan read(Path plan) throws IOException {
         long size = Files.size(plan);
         if (size < 1 || size > MAX_PLAN_BYTES) {
             throw new IOException("CodePath Plan 大小必须在 1 到 1 MiB 之间");
         }
-        return mapper.readValue(Files.readAllBytes(plan), CodePathCollectionPlan.class);
+        return mapper.readValue(Files.readAllBytes(plan), LauncherCodePathPlan.class);
     }
 }

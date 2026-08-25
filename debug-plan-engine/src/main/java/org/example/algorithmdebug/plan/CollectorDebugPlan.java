@@ -4,6 +4,7 @@ import java.util.List;
 
 /** 锁定 Collector commit `1ef7d22` 的包内 JSON DTO，不作为 Agent 公共契约暴露。 */
 record CollectorDebugPlan(
+        String schemaVersion,
         String sessionId,
         Target target,
         boolean resumeOnAttach,
@@ -19,6 +20,7 @@ record CollectorDebugPlan(
             String className,
             int line,
             String methodName,
+            String methodDescriptor,
             int maxHits,
             Capture capture) {
     }
@@ -29,6 +31,8 @@ record CollectorDebugPlan(
             int maxFrames,
             int maxDepth,
             int maxItems,
-            int maxStringLength) {
+            int maxStringLength,
+            List<String> localNames,
+            List<String> fieldPaths) {
     }
 }

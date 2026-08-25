@@ -12,8 +12,6 @@ import java.util.Optional;
  * @param caseId 所属 Case
  * @param contextId 本次运行使用的 Context
  * @param runId 产生该指纹的 Run
- * @param ganttRawSha256 可选的 Gantt 原始字节 SHA-256
- * @param ganttNormalizedJsonSha256 可选的 Gantt JSON Token 内容 SHA-256
  * @param targetFailureSha256 可选的目标失败 SHA-256
  */
 public record RunResultFingerprint(
@@ -21,9 +19,7 @@ public record RunResultFingerprint(
         CaseId caseId,
         ContextId contextId,
         RunId runId,
-        Optional<String> ganttRawSha256,
-        Optional<String> ganttNormalizedJsonSha256,
-        Optional<String> targetFailureSha256) {
+        String targetFailureSha256) {
 
     /** 校验版本、身份和观察维度，并把所有 SHA-256 规范为小写。 */
     public RunResultFingerprint {
@@ -35,22 +31,7 @@ public record RunResultFingerprint(
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
         runId = ContractChecks.requireNonNull(runId, "runId");
-        ganttRawSha256 = normalizeHash(ganttRawSha256, "ganttRawSha256");
-        ganttNormalizedJsonSha256 = normalizeHash(
-                ganttNormalizedJsonSha256, "ganttNormalizedJsonSha256");
-        targetFailureSha256 = normalizeHash(targetFailureSha256, "targetFailureSha256");
-        if (ganttRawSha256.isPresent() != ganttNormalizedJsonSha256.isPresent()) {
-            throw new IllegalArgumentException(
-                    "Gantt raw/normalized Hash 必须同时存在或同时缺失");
-        }
-        if (ganttRawSha256.isEmpty() && targetFailureSha256.isEmpty()) {
-            throw new IllegalArgumentException("RunResultFingerprint 至少需要一个目标观察");
-        }
+        targetFailureSha256 = ContractChecks.requireSha256(targetFailureSha256, "targetFailureSha256");
     }
 
-    private static Optional<String> normalizeHash(
-            Optional<String> value, String fieldName) {
-        return ContractChecks.requireNonNull(value, fieldName)
-                .map(hash -> ContractChecks.requireSha256(hash, fieldName));
-    }
 }

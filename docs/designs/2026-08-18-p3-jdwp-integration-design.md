@@ -1,3 +1,5 @@
+> STATUS UPDATE (2026-08-23): The external Collector integration described here remains historical. Current source ownership, v2 contracts and compatibility handshake are defined by ADR-014.
+
 # P3 JDWP 动态采集集成可实施详细设计
 
 > **修订说明（2026-08-18）：** JDWP 采集流程和每个 tracepoint 的 `SourceAnchor` 继续有效；全模块

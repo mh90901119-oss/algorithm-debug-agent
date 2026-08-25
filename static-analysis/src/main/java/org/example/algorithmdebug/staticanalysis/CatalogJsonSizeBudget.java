@@ -50,8 +50,7 @@ final class CatalogJsonSizeBudget {
                     + jsonStringUpperBound(anchor.className())
                     + jsonStringUpperBound(anchor.methodName())
                     + jsonStringUpperBound(anchor.descriptor())
-                    + jsonStringUpperBound(anchor.sourceRelativePath())
-                    + jsonStringUpperBound(anchor.sourceSha256());
+                    + jsonStringUpperBound(anchor.sourceRelativePath());
         }
         return tryAdd(candidateBytes);
     }

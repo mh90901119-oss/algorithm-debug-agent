@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -152,7 +151,7 @@ class RunApplicationServiceTest {
     }
 
     @Test
-    void comparesRepeatedRunsAgainstFirstContextReference() throws Exception {
+    void passingRunsArchiveCurrentFactsWithoutCreatingComparisonFingerprints() throws Exception {
         AtomicInteger starts = new AtomicInteger();
         List<String> ganttContents = List.of(
                 "{\"schedule\":\"ok\"}",
@@ -195,9 +194,9 @@ class RunApplicationServiceTest {
 
         assertEquals(3, starts.get());
         assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
-        assertEquals(ComparisonOutcome.MATCHED, second.comparisonOutcome());
-        assertEquals(ComparisonOutcome.CHANGED, third.comparisonOutcome());
-        assertTrue(second.artifacts().stream().anyMatch(
+        assertEquals(ComparisonOutcome.NOT_COMPARED, second.comparisonOutcome());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, third.comparisonOutcome());
+        assertTrue(second.artifacts().stream().noneMatch(
                 artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
         Path caseRoot = caseRoot();
         assertTrue(second.artifacts().stream().allMatch(
@@ -207,14 +206,14 @@ class RunApplicationServiceTest {
                 .findFirst().orElseThrow().artifactId());
         assertEquals("run-2-stdout", archive().requireArtifactRegistration(
                 opened.caseId(), "run-2-stdout").artifact().artifactId());
-        assertTrue(Files.isRegularFile(caseRoot.resolve(
+        assertTrue(Files.notExists(caseRoot.resolve(
                 "runs/run-2/run-result-fingerprint.json")));
-        assertTrue(Files.isRegularFile(caseRoot.resolve(
+        assertTrue(Files.notExists(caseRoot.resolve(
                 "contexts/context-1/reproduction.json")));
     }
 
     @Test
-    void corruptedReferenceMakesComparisonIncomparableWithoutErasingTargetFacts()
+    void staleMalformedReproductionDoesNotAffectPassingRunFacts()
             throws Exception {
         AtomicInteger starts = new AtomicInteger();
         TargetTestExecutor executor = (spec, options) -> {
@@ -254,17 +253,16 @@ class RunApplicationServiceTest {
         assertEquals(ProcessOutcome.SUCCEEDED, outcome.processOutcome());
         assertEquals(TestOutcome.PASSED, outcome.testOutcome());
         assertEquals(GanttOutcome.PRESENT, outcome.ganttOutcome());
-        assertEquals(ComparisonOutcome.INCOMPARABLE, outcome.comparisonOutcome());
-        assertEquals("REPRODUCTION_REFERENCE_INVALID",
-                outcome.agentFailure().orElseThrow().code());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, outcome.comparisonOutcome());
+        assertTrue(outcome.agentFailure().isEmpty());
         assertTrue(outcome.artifacts().stream().anyMatch(
                 artifact -> "GANTT".equals(artifact.artifactType())));
-        assertTrue(outcome.artifacts().stream().anyMatch(
+        assertTrue(outcome.artifacts().stream().noneMatch(
                 artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
     }
 
     @Test
-    void fingerprintWriteFailureDoesNotEraseSuccessfulTargetFacts() {
+    void unrelatedReservedFingerprintPathDoesNotAffectPassingRunFacts() {
         TargetTestExecutor executor = (spec, options) -> {
             try {
                 Files.writeString(options.stdoutLog(), "[INFO] build ok");
@@ -297,9 +295,8 @@ class RunApplicationServiceTest {
         assertEquals(ProcessOutcome.SUCCEEDED, outcome.processOutcome());
         assertEquals(TestOutcome.PASSED, outcome.testOutcome());
         assertEquals(GanttOutcome.PRESENT, outcome.ganttOutcome());
-        assertEquals(ComparisonOutcome.INCOMPARABLE, outcome.comparisonOutcome());
-        assertEquals("RUN_FINGERPRINT_WRITE_FAILED",
-                outcome.agentFailure().orElseThrow().code());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, outcome.comparisonOutcome());
+        assertTrue(outcome.agentFailure().isEmpty());
         assertTrue(Files.isRegularFile(caseRoot().resolve("runs/run-1/run-outcome.json")));
         assertTrue(outcome.artifacts().stream().anyMatch(
                 artifact -> "GANTT".equals(artifact.artifactType())));
@@ -391,19 +388,18 @@ class RunApplicationServiceTest {
         String path = module.toAbsolutePath().normalize().toString().replace('\\', '/');
         return new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "test", path, path, path,
-                "pom.xml", "MAVEN", "a".repeat(64), TIME);
+                "pom.xml", "MAVEN", "output", TIME);
     }
 
     private record Snapshot(String schemaVersion, String value) implements ScheduleResultSnapshot {
     }
 
-    private final class StubAdapter implements TargetProjectAdapter<Snapshot> {
+    private final class StubAdapter implements TargetProjectAdapter {
         @Override
         public AdapterDescriptor descriptor() {
             return new AdapterDescriptor(
                     "stub", "1.0", "stub", Set.of(
-                    AdapterCapability.BASELINE_EXECUTION, AdapterCapability.INPUT_LOCATION,
-                    AdapterCapability.SCHEDULE_RESULT));
+                    AdapterCapability.BASELINE_EXECUTION));
         }
 
         @Override
@@ -419,19 +415,10 @@ class RunApplicationServiceTest {
                     project, targetTest, runMode, List.of("test"),
                     Map.of("test", targetTest.selector()), List.of(), Duration.ofSeconds(10));
         }
-
-        @Override
-        public InputLocator inputLocator() {
-            return (project, targetTest) -> Optional.of(input);
-        }
-
-        @Override
         public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest targetTest) {
             return new ScheduleResultSource(output, false);
         }
-
-        @Override
         public ScheduleResultParser<Snapshot> scheduleResultParser() {
             return path -> {
                 try {

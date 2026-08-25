@@ -41,15 +41,7 @@ public final class RegisteredArtifactReader {
         if (offsetBytes > registered.sizeBytes()) {
             throw new WorkspaceException("CASE_ARTIFACT_OFFSET_INVALID", "Artifact 偏移超过文件大小");
         }
-        java.nio.file.Path file = access.requireRegularArtifact(
-                caseId, registered.relativePath(), Math.max(1L, registered.sizeBytes()));
-        ArtifactReference actual = access.describe(
-                caseId, registered.artifactId(), registered.artifactType(),
-                registered.mediaType(), file);
-        if (!actual.equals(registered)) {
-            throw new WorkspaceException(
-                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 内容与注册引用不一致");
-        }
+        java.nio.file.Path file = access.requireVerifiedArtifact(caseId, registered);
         int requested = (int) Math.min((long) maxBytes, registered.sizeBytes() - offsetBytes);
         ByteBuffer bytes = ByteBuffer.allocate(requested);
         try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {

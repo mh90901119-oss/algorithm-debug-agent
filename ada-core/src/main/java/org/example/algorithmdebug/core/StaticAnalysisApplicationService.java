@@ -90,7 +90,7 @@ public final class StaticAnalysisApplicationService {
                     catalog.completeness(), catalog.entries().size(), catalog.edges().size(),
                     catalog.warnings().size()), artifact);
         } catch (StaticAnalysisException failure) {
-            throw new CaseRunException("STATIC_ANALYSIS_FAILED", "静态方法目录构建失败", failure);
+            throw new CaseRunException(failure.code(), "静态方法目录构建失败", failure);
         } catch (WorkspaceException failure) {
             throw new CaseRunException("STATIC_ARCHIVE_FAILED", "静态方法目录归档或读取失败", failure);
         }

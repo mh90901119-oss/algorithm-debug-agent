@@ -89,10 +89,10 @@ class JdwpCollectionContractsTest {
                 new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
-                "jdwp-batch-collector", "0.1.0-SNAPSHOT", HASH,
-                JdwpCollectionCompletion.SUCCESS, JdwpCollectionStage.BASELINE_CHECKED,
+                "jdwp-batch-collector", "0.1.0-SNAPSHOT",
+                JdwpCollectionCompletion.SUCCESS, "vm_death", JdwpCollectionStage.BASELINE_CHECKED,
                 true, true, 0, 0, false, false, 4, 2_048,
-                hits, Map.of("point-1", 1), Optional.of(HASH), Optional.empty(),
+                hits, Map.of("point-1", 1), Optional.empty(),
                 "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log", NOW, NOW);
@@ -142,7 +142,7 @@ class JdwpCollectionContractsTest {
     private static SourceAnchor anchor() {
         return new SourceAnchor(
                 "fixture.Algorithm", "schedule", "()V",
-                "src/main/java/fixture/Algorithm.java", 10, 20, HASH);
+                "src/main/java/fixture/Algorithm.java", 10, 20);
     }
 
     private static String methodKey() {
@@ -159,10 +159,10 @@ class JdwpCollectionContractsTest {
                 new CaseId("case-1"), new ContextId("context-1"),
                 new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
-                "jdwp-batch-collector", "1.0.0", HASH,
-                completion, JdwpCollectionStage.FAILED,
+                "jdwp-batch-collector", "1.0.0", completion, "test_completion",
+                JdwpCollectionStage.FAILED,
                 true, true, 1, 2, timedOut, truncated, 0, 0,
-                Map.of(), Map.of(), Optional.empty(), failure,
+                Map.of(), Map.of(), failure,
                 "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log", NOW, NOW);

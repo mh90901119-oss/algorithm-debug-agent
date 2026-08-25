@@ -28,7 +28,7 @@ public final class CliArguments {
      */
     public static CliCommand parse(String[] arguments) {
         if (arguments == null || arguments.length == 0) {
-            throw invalid("缺少命令");
+            throw invalid("Missing command");
         }
         if (matches(arguments, "workspace", "init")) {
             Map<String, String> options = options(arguments, 2, Set.of("--root"));
@@ -37,13 +37,15 @@ public final class CliArguments {
         }
         if (matches(arguments, "project", "register")) {
             Map<String, String> options = options(
-                    arguments, 2, Set.of("--workspace", "--project", "--project-id"));
+                    arguments, 2, Set.of(
+                            "--workspace", "--project", "--project-id", "--result-directory"));
             requirePresent(options, "--workspace", "--project");
             Optional<ProjectId> projectId = Optional.ofNullable(options.get("--project-id")).map(ProjectId::new);
             return new CliCommand.ProjectRegister(
                     path(options.get("--workspace"), "--workspace"),
                     path(options.get("--project"), "--project"),
-                    projectId);
+                    projectId,
+                    Optional.ofNullable(options.get("--result-directory")));
         }
         if (matches(arguments, "case", "open")) {
             Map<String, String> options = options(arguments, 2, Set.of(
@@ -67,6 +69,23 @@ public final class CliArguments {
                     path(options.get("--workspace"), "--workspace"),
                     new ProjectId(options.get("--project-id")),
                     new CaseId(options.get("--case-id")));
+        }
+        if (matches(arguments, "case", "audit")) {
+            Map<String, String> options = options(arguments, 2, Set.of("--workspace", "--project-id", "--case-id"));
+            requireExactly(options, Set.of("--workspace", "--project-id", "--case-id"));
+            return new CliCommand.CaseAudit(path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")), new CaseId(options.get("--case-id")));
+        }
+        if (matches(arguments, "gantt", "inspect")) {
+            Map<String, String> options = options(arguments, 2, Set.of("--workspace", "--project-id", "--case-id",
+                    "--artifact-id", "--operation", "--json-pointer", "--offset", "--limit"));
+            requirePresent(options, "--workspace", "--project-id", "--case-id", "--artifact-id");
+            return new CliCommand.GanttInspect(path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")), new CaseId(options.get("--case-id")),
+                    options.get("--artifact-id"), options.getOrDefault("--operation", "summary"),
+                    options.getOrDefault("--json-pointer", ""),
+                    boundedInt(options.getOrDefault("--offset", "0"), "--offset", 0, Integer.MAX_VALUE),
+                    boundedInt(options.getOrDefault("--limit", "100"), "--limit", 1, 100));
         }
         if (matches(arguments, "run", "execute")) {
             Map<String, String> options = options(arguments, 2, Set.of(
@@ -167,7 +186,7 @@ public final class CliArguments {
                     .map(value -> path(value, "--project"));
             return new CliCommand.Doctor(path(options.get("--workspace"), "--workspace"), module);
         }
-        throw invalid("未知命令");
+        throw invalid("Unknown command");
     }
 
     private static boolean matches(String[] arguments, String first, String second) {
@@ -182,17 +201,17 @@ public final class CliArguments {
         for (int index = start; index < arguments.length; index += 2) {
             String option = arguments[index];
             if (option == null || !allowed.contains(option)) {
-                throw invalid("未知或多余选项");
+                throw invalid("Unknown or unexpected option");
             }
             if (parsed.containsKey(option)) {
-                throw invalid("选项重复: " + option);
+                throw invalid("Duplicate option: " + option);
             }
             if (index + 1 >= arguments.length) {
-                throw invalid("选项缺少值: " + option);
+                throw invalid("Missing option value: " + option);
             }
             String value = arguments[index + 1];
             if (value == null || value.isBlank() || !value.equals(value.strip()) || value.startsWith("--")) {
-                throw invalid("选项值无效: " + option);
+                throw invalid("Invalid option value: " + option);
             }
             parsed.put(option, value);
         }
@@ -202,14 +221,14 @@ public final class CliArguments {
     private static void requireExactly(Map<String, String> options, Set<String> required) {
         requirePresent(options, required.toArray(String[]::new));
         if (options.size() != required.size()) {
-            throw invalid("命令包含多余选项");
+            throw invalid("Command contains unexpected options");
         }
     }
 
     private static void requirePresent(Map<String, String> options, String... names) {
         for (String name : names) {
             if (!options.containsKey(name)) {
-                throw invalid("缺少必需选项: " + name);
+                throw invalid("Missing required option: " + name);
             }
         }
     }
@@ -218,20 +237,20 @@ public final class CliArguments {
         try {
             return Path.of(value);
         } catch (InvalidPathException failure) {
-            throw invalid("路径选项无效: " + option);
+            throw invalid("Invalid path option: " + option);
         }
     }
 
     private static TargetTest targetTest(String selector) {
         int separator = selector == null ? -1 : selector.lastIndexOf('#');
         if (separator <= 0 || separator == selector.length() - 1) {
-            throw invalid("--test 必须使用 fully.qualified.Class#method 格式");
+            throw invalid("--test must use the fully.qualified.Class#method format");
         }
         try {
             return new TargetTest(
                     selector.substring(0, separator), selector.substring(separator + 1));
         } catch (IllegalArgumentException failure) {
-            throw invalid("--test 不是有效的目标测试选择器");
+            throw invalid("--test is not a valid target test selector");
         }
     }
 
@@ -242,26 +261,26 @@ public final class CliArguments {
         if ("new".equals(value)) {
             return ContextMode.CREATE_NEW;
         }
-        throw invalid("CONTEXT_MODE_INVALID: --context-mode 仅支持 reuse 或 new");
+        throw invalid("CONTEXT_MODE_INVALID: --context-mode supports only reuse or new");
     }
 
     private static long nonNegativeLong(String value, String option) {
         try {
             long parsed = Long.parseLong(value);
-            if (parsed < 0) throw invalid(option + " 必须为非负整数");
+            if (parsed < 0) throw invalid(option + " must be a non-negative integer");
             return parsed;
         } catch (NumberFormatException failure) {
-            throw invalid(option + " 必须为非负整数");
+            throw invalid(option + " must be a non-negative integer");
         }
     }
 
     private static int boundedInt(String value, String option, int minimum, int maximum) {
         try {
             int parsed = Integer.parseInt(value);
-            if (parsed < minimum || parsed > maximum) throw invalid(option + " 超出范围");
+            if (parsed < minimum || parsed > maximum) throw invalid(option + " is outside the allowed range");
             return parsed;
         } catch (NumberFormatException failure) {
-            throw invalid(option + " 必须为整数");
+            throw invalid(option + " must be an integer");
         }
     }
 

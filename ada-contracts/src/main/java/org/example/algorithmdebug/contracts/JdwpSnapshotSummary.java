@@ -22,7 +22,8 @@ public record JdwpSnapshotSummary(
 
     /** 校验身份、引用和摘要硬上限。 */
     public JdwpSnapshotSummary {
-        if (!SchemaVersions.JDWP_SNAPSHOT_SUMMARY.equals(schemaVersion)) {
+        if (!SchemaVersions.JDWP_SNAPSHOT_SUMMARY.equals(schemaVersion)
+                && !SchemaVersions.JDWP_SNAPSHOT_SUMMARY_V1.equals(schemaVersion)) {
             throw new IllegalArgumentException("不支持的 JdwpSnapshotSummary schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
@@ -44,12 +45,29 @@ public record JdwpSnapshotSummary(
     /** 一次 tracepoint 命中的线程、位置、栈和值事实。 */
     public record TracepointHit(
             String tracepointId, int hit, String threadName, String location,
+            Optional<String> methodDescriptor, Optional<Long> codeIndex,
             List<StackFrame> frames, List<ValueFact> values, TraceProvenance provenance) {
+
+        /** 兼容 1.0 摘要和既有调用方。 */
+        public TracepointHit(
+                String tracepointId, int hit, String threadName, String location,
+                List<StackFrame> frames, List<ValueFact> values, TraceProvenance provenance) {
+            this(tracepointId, hit, threadName, location, Optional.empty(), Optional.empty(),
+                    frames, values, provenance);
+        }
+
         public TracepointHit {
             tracepointId = ContractChecks.requireOpaqueId(tracepointId, "tracepointId");
             if (hit < 1) throw new IllegalArgumentException("hit 必须为正数");
             threadName = ContractChecks.requireBoundedText(threadName, "threadName", 512, false);
             location = ContractChecks.requireBoundedText(location, "location", 1_024, false);
+            methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
+                    .map(value -> ContractChecks.requireBoundedText(
+                            value, "methodDescriptor", 2_048, false));
+            codeIndex = codeIndex == null ? Optional.empty() : codeIndex;
+            if (codeIndex.isPresent() && codeIndex.orElseThrow() < 0) {
+                throw new IllegalArgumentException("codeIndex must not be negative");
+            }
             frames = ContractChecks.immutableList(frames, "frames");
             values = ContractChecks.immutableList(values, "values");
             if (frames.size() > NormalizationBudget.MAX_FRAMES_PER_HIT
@@ -61,11 +79,30 @@ public record JdwpSnapshotSummary(
     }
 
     /** 一层通用调用栈事实。 */
-    public record StackFrame(int index, String className, String methodName, int line) {
+    public record StackFrame(
+            int index,
+            String className,
+            String methodName,
+            Optional<String> methodDescriptor,
+            int line,
+            Optional<Long> codeIndex) {
+
+        /** 兼容 1.0 摘要和既有调用方。 */
+        public StackFrame(int index, String className, String methodName, int line) {
+            this(index, className, methodName, Optional.empty(), line, Optional.empty());
+        }
+
         public StackFrame {
             if (index < 0 || line < -1) throw new IllegalArgumentException("frame 位置非法");
             className = ContractChecks.requireBoundedText(className, "className", 1_024, false);
             methodName = ContractChecks.requireBoundedText(methodName, "methodName", 512, false);
+            methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
+                    .map(value -> ContractChecks.requireBoundedText(
+                            value, "methodDescriptor", 2_048, false));
+            codeIndex = codeIndex == null ? Optional.empty() : codeIndex;
+            if (codeIndex.isPresent() && codeIndex.orElseThrow() < 0) {
+                throw new IllegalArgumentException("frame codeIndex must not be negative");
+            }
         }
     }
 

@@ -26,21 +26,19 @@
         <module>adapter-sdk</module>
         <module>case-management</module>
         <module>debug-harness</module>
-        <module>gantt-analysis</module>
         <module>static-analysis</module>
         <module>method-path-spi</module>
         <module>method-path-codepathtracer</module>
         <module>debug-plan-engine</module>
+        <module>jdwp-collector-core</module>
         <module>jdwp-collector-adapter</module>
+        <module>tools/jdwp-batch-collector</module>
         <module>trace-normalizer</module>
         <module>trace-validator</module>
         <module>evidence-engine</module>
-        <module>knowledge-engine</module>
-        <module>explanation-reporter</module>
         <module>ada-core</module>
         <module>algorithm-debug-cli</module>
-        <module>agent-evaluation</module>
-        <module>adapters/wafer-demo-adapter</module>
+        <module>adapters/maven-junit-adapter</module>
         <module>integration-tests</module>
     </modules>
 
@@ -62,6 +60,20 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <repositories>
+        <repository>
+            <id>ada-third-party</id>
+            <name>Algorithm Debug Agent pinned third-party artifacts</name>
+            <url>file://${maven.multiModuleProjectDirectory}/third-party/maven-repository</url>
+            <releases><enabled>false</enabled></releases>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>never</updatePolicy>
+                <checksumPolicy>fail</checksumPolicy>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <build>
         <pluginManagement>

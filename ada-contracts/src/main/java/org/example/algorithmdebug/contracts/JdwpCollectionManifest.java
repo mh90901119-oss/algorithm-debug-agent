@@ -21,8 +21,8 @@ public record JdwpCollectionManifest(
         CollectionId collectionId,
         String toolName,
         String toolVersion,
-        String planSha256,
         JdwpCollectionCompletion completion,
+        String completionReason,
         JdwpCollectionStage stage,
         boolean targetStarted,
         boolean collectorStarted,
@@ -34,7 +34,6 @@ public record JdwpCollectionManifest(
         long rawBytes,
         Map<String, Integer> hitCounts,
         Map<String, Integer> installedLocations,
-        Optional<String> rawTraceSha256,
         Optional<AgentFailureDiagnostic> agentFailure,
         String rawTraceRelativePath,
         String collectorManifestRelativePath,
@@ -58,16 +57,14 @@ public record JdwpCollectionManifest(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         toolName = ContractChecks.requireBoundedText(toolName, "toolName", 128, false);
         toolVersion = ContractChecks.requireBoundedText(toolVersion, "toolVersion", 256, false);
-        planSha256 = ContractChecks.requireSha256(planSha256, "planSha256");
         completion = ContractChecks.requireNonNull(completion, "completion");
+        completionReason = ContractChecks.requireBoundedText(completionReason, "completionReason", 128, false);
         stage = ContractChecks.requireNonNull(stage, "stage");
         if (eventCount < 0 || rawBytes < 0) {
             throw new IllegalArgumentException("JDWP 事件数和 Raw 字节数不能为负数");
         }
         hitCounts = immutableCounters(hitCounts, "hitCounts");
         installedLocations = immutableCounters(installedLocations, "installedLocations");
-        rawTraceSha256 = ContractChecks.requireNonNull(rawTraceSha256, "rawTraceSha256")
-                .map(value -> ContractChecks.requireSha256(value, "rawTraceSha256 value"));
         agentFailure = ContractChecks.requireNonNull(agentFailure, "agentFailure");
         if (timedOut != (completion == JdwpCollectionCompletion.TIMED_OUT)) {
             throw new IllegalArgumentException("timedOut 与 completion 不一致");
@@ -86,8 +83,8 @@ public record JdwpCollectionManifest(
         }
         if (completion == JdwpCollectionCompletion.SUCCESS
                 && (!targetStarted || !collectorStarted || targetExitCode != 0
-                || collectorExitCode != 0 || rawTraceSha256.isEmpty()
-                || stage == JdwpCollectionStage.FAILED)) {
+                || collectorExitCode != 0 || stage == JdwpCollectionStage.FAILED
+                || installedLocations.values().stream().mapToInt(Integer::intValue).sum() == 0)) {
             throw new IllegalArgumentException("SUCCESS 与进程、Raw Trace 或阶段事实不一致");
         }
         rawTraceRelativePath = ContractChecks.requirePortableRelativePath(

@@ -35,7 +35,7 @@ class WorkspaceControlPlaneJsonTest {
                 "D:/large-system/algorithm-scheduler",
                 "pom.xml",
                 "MAVEN",
-                "a".repeat(64),
+                "output/algorithm-results",
                 RECORDED_AT);
         ProjectRegistrationResult registrationResult = new ProjectRegistrationResult(registration, true);
         DoctorReport doctorReport = DoctorReport.fromChecks(List.of(
@@ -47,6 +47,27 @@ class WorkspaceControlPlaneJsonTest {
         assertRoundTrip(registration, ProjectRegistration.class);
         assertRoundTrip(registrationResult, ProjectRegistrationResult.class);
         assertRoundTrip(doctorReport, DoctorReport.class);
+    }
+
+    @Test
+    void shouldReadLegacyRegistrationWithoutResultDirectory() throws Exception {
+        String legacyJson = """
+                {
+                  "schemaVersion":"1.0",
+                  "projectId":"algorithm-scheduler-a1b2c3d4e5f6",
+                  "displayName":"algorithm-scheduler",
+                  "repositoryRoot":"D:/large-system",
+                  "moduleRoot":"D:/large-system/algorithm-scheduler",
+                  "mavenExecutionRoot":"D:/large-system/algorithm-scheduler",
+                  "pomPath":"pom.xml",
+                  "buildTool":"MAVEN",
+                  "registeredAt":"2026-08-16T00:00:00Z"
+                }
+                """;
+
+        ProjectRegistration registration = MAPPER.readValue(legacyJson, ProjectRegistration.class);
+
+        assertEquals(null, registration.resultJsonDirectory());
     }
 
     @Test
@@ -62,7 +83,6 @@ class WorkspaceControlPlaneJsonTest {
                 "D:/large-system/algorithm-scheduler",
                 "pom.xml",
                 "MAVEN",
-                "a".repeat(64),
                 RECORDED_AT);
 
         JsonNode manifestJson = MAPPER.readTree(MAPPER.writeValueAsBytes(manifest));
@@ -95,10 +115,9 @@ class WorkspaceControlPlaneJsonTest {
                 "https://algorithm-debug-agent.local/schemas/workspace/project-registration-v1.schema.json",
                 SchemaVersions.PROJECT_REGISTRATION,
                 Set.of("schemaVersion", "projectId", "displayName", "repositoryRoot", "moduleRoot",
-                        "mavenExecutionRoot", "pomPath", "buildTool", "pomSha256", "registeredAt"));
+                        "mavenExecutionRoot", "pomPath", "buildTool", "registeredAt"));
+        assertTrue(schema.path("properties").has("resultJsonDirectory"));
         assertEquals("MAVEN", schema.path("properties").path("buildTool").path("const").asText());
-        assertEquals("^[0-9a-f]{64}$",
-                schema.path("properties").path("pomSha256").path("pattern").asText());
     }
 
     @Test

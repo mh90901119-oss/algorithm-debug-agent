@@ -47,25 +47,22 @@ final class TargetFailureBaselineEvaluator {
                 identity.caseId(), identity.contextId());
         var diagnostic = new SurefireDiagnosticReader().read(
                 moduleRoot.resolve("target/surefire-reports"), identity.targetTest().selector());
-        Optional<String> currentGantt = captured.map(CapturedScheduleResult::normalizedJsonSha256);
         if (diagnostic.isEmpty()) {
             return check(identity, ComparisonOutcome.INCOMPARABLE,
-                    reference.map(RunResultFingerprint::runId), currentGantt, false,
+                    reference.map(RunResultFingerprint::runId), false,
                     "Target failed; Surefire did not provide a comparable failure fingerprint");
         }
         RunResultFingerprint current = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, identity.caseId(), identity.contextId(),
-                identity.runId(), captured.map(CapturedScheduleResult::rawSha256), currentGantt,
-                Optional.of(new TargetFailureFingerprinter().sha256(diagnostic.orElseThrow())));
+                identity.runId(), new TargetFailureFingerprinter().sha256(diagnostic.orElseThrow()));
         if (reference.isEmpty()) {
-            return check(identity, ComparisonOutcome.NOT_COMPARED, Optional.empty(),
-                    currentGantt, false,
+            return check(identity, ComparisonOutcome.NOT_COMPARED, Optional.empty(), false,
                     "No uninstrumented same-context reproduction reference");
         }
         ReproductionComparator.Result compared = new ReproductionComparator().compare(
                 reference.orElseThrow(), current, ReproductionComparator.Scope.SAME_CONTEXT);
         return check(identity, compared.outcome(),
-                Optional.of(reference.orElseThrow().runId()), currentGantt,
+                Optional.of(reference.orElseThrow().runId()),
                 compared.outcome() == ComparisonOutcome.MATCHED, compared.summary());
     }
 
@@ -73,13 +70,12 @@ final class TargetFailureBaselineEvaluator {
             Identity identity,
             ComparisonOutcome outcome,
             Optional<RunId> referenceRunId,
-            Optional<String> currentGantt,
             boolean usable,
             String summary) {
         return new CollectionBaselineCheck(
                 "1.0", identity.caseId(), identity.contextId(), identity.analysisId(),
                 identity.runId(), identity.collectionId(), outcome, referenceRunId,
-                currentGantt, usable, summary, clock.instant());
+                usable, summary, clock.instant());
     }
 
     /** 两类 Collection 共享的最小目标运行身份。 */

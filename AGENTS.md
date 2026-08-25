@@ -12,7 +12,9 @@
 - LLM 只负责规划、证据充分性判断和解释。解析、采集、校验、哈希、关联等确定性能力必须由代码实现。
 - 结论必须区分 `CONFIRMED_FACT`、`VALIDATOR_CONCLUSION`、`SOURCE_INFERENCE`、
   `LLM_HYPOTHESIS` 和 `MISSING_EVIDENCE`，不得把推测写成事实。
-- 每次动态采集必须将调度语义哈希与无采集基线比较；不一致时该次证据不得用于确认根因。
+- 动态采集不得使用 Gantt 内容 SHA 作为通用门禁。目标 UT 已失败时，只比较结构化失败指纹；
+  `MATCHED` 才可用动态证据确认同类失败，`CHANGED/INCOMPARABLE` 只能作为线索。成功运行的
+  Gantt 独立归档并由 LLM 按问题分析。
 - Case、Plan、Trace、Evidence、Report 按 `caseId/runId/analysisId` 追加保存，禁止覆盖历史产物。
 
 ## 2. 设计先行

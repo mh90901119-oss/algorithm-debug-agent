@@ -159,6 +159,21 @@ class AdaMainTest {
     }
 
     @Test
+    void missingStaticTargetUsesStablePublicError() throws Exception {
+        AdaMain application = new AdaMain(
+                command -> { throw new StaticAnalysisException(
+                        "TARGET_TEST_NOT_FOUND", "local source detail"); },
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+
+        assertFailure(invocation, 3, "TARGET_TEST_NOT_FOUND");
+        assertEquals("", invocation.stderr());
+    }
+
+    @Test
     void artifactBackedSuccessKeepsLargeDocumentOutOfData() throws Exception {
         org.example.algorithmdebug.contracts.ArtifactReference artifact =
                 new org.example.algorithmdebug.contracts.ArtifactReference(
@@ -292,6 +307,27 @@ class AdaMainTest {
                 "--test", "a.b.Test#case1", "--question-file", malformed.toString());
 
         assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
+        assertEquals("Invalid CLI input: question-file is not valid UTF-8",
+                invocation.response().path("message").textValue());
+        assertFalse(invocation.stdout().contains(malformed.toString()));
+        assertEquals("", invocation.stderr());
+    }
+
+    @Test
+    void malformedAnalysisResultExplainsHowToCorrectTheCompletionCall() throws Exception {
+        AdaMain application = AdaMain.defaultApplication();
+        Path malformed = Files.writeString(
+                temporaryDirectory.resolve("analysis-result.json"), "{\"unexpected\":true}");
+
+        Invocation invocation = invoke(application,
+                "analysis", "complete", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1",
+                "--result-file", malformed.toString());
+
+        assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
+        assertEquals("Invalid CLI input: result-file is not valid AnalysisResult JSON",
+                invocation.response().path("message").textValue());
+        assertFalse(invocation.stdout().contains(malformed.toString()));
         assertEquals("", invocation.stderr());
     }
 
@@ -324,7 +360,7 @@ class AdaMainTest {
     }
 
     private static void assertSuccess(Invocation invocation) {
-        assertEquals(0, invocation.exitCode());
+        assertEquals(0, invocation.exitCode(), invocation.response().toString());
         assertTrue(invocation.response().path("success").booleanValue());
         assertEquals("OK", invocation.response().path("code").textValue());
     }

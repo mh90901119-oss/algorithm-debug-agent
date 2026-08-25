@@ -70,7 +70,8 @@ public final class SchemaVersions {
     /** 通用方法路径摘要 Schema 版本。 */
     public static final String METHOD_PATH_SUMMARY = "2.0";
     /** 通用 JDWP 快照摘要 Schema 版本。 */
-    public static final String JDWP_SNAPSHOT_SUMMARY = "1.0";
+    public static final String JDWP_SNAPSHOT_SUMMARY_V1 = "1.0";
+    public static final String JDWP_SNAPSHOT_SUMMARY = "2.0";
     /** Collection 证据校验 Schema 版本。 */
     public static final String COLLECTION_VALIDATION = "1.0";
     /** Evidence 构建请求 Schema 版本。 */

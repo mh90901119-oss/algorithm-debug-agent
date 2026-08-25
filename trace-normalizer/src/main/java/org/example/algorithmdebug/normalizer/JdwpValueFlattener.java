@@ -17,7 +17,7 @@ final class JdwpValueFlattener {
 
     private static final List<String> STRUCTURAL_MARKERS = List.of(
             "$id", "$cycle", "$truncated", "$remaining", "$remainingFields",
-            "$collected", "$error", "$length");
+            "$collected", "$error", "$length", "$originalLength");
     private static final List<String> LIMIT_MARKERS = List.of(
             "$cycle", "$truncated", "$remaining", "$remainingFields", "$error");
 
@@ -77,6 +77,18 @@ final class JdwpValueFlattener {
                 String name = names.get(index);
                 pending.addLast(new PendingValue(path + ".fields." + name, fields.get(name)));
             }
+        } else if (fields != null && fields.isArray()) {
+            List<JsonNode> entries = new ArrayList<>();
+            fields.forEach(entries::add);
+            entries.sort(Comparator.comparing(JdwpValueFlattener::fieldIdentity));
+            for (int index = entries.size() - 1; index >= 0; index--) {
+                JsonNode field = entries.get(index);
+                JsonNode fieldValue = field.get("value");
+                if (fieldValue != null) {
+                    pending.addLast(new PendingValue(
+                            path + ".fields." + fieldIdentity(field), fieldValue));
+                }
+            }
         }
         JsonNode elements = value.get("elements");
         if (elements != null && elements.isArray()) {
@@ -133,6 +145,13 @@ final class JdwpValueFlattener {
         if (value.isIntegralNumber()) return "INTEGER";
         if (value.isFloatingPointNumber()) return "DECIMAL";
         if (value.isTextual()) return "STRING";
+        if (value.isObject() && value.has("$kind")) {
+            String declaredKind = value.path("$kind").asText();
+            if ("string".equals(declaredKind)) return "STRING";
+            if ("primitive".equals(declaredKind)) return kind(value.get("$value"));
+            if ("array".equals(declaredKind)) return "ARRAY";
+            if ("object".equals(declaredKind)) return "OBJECT";
+        }
         if (value.isArray() || value.has("elements")) return "ARRAY";
         return "OBJECT";
     }
@@ -149,6 +168,13 @@ final class JdwpValueFlattener {
 
     private static Preview preview(JsonNode value, int maximumChars) {
         if (value == null || value.isNull()) return new Preview("null", false);
+        if (value.isObject() && value.has("$value")) {
+            Preview scalarPreview = preview(value.get("$value"), maximumChars);
+            boolean collectorTruncated = value.path("$truncated").isBoolean()
+                    && value.path("$truncated").booleanValue();
+            return new Preview(
+                    scalarPreview.text(), scalarPreview.truncated() || collectorTruncated);
+        }
         if (value.isContainerNode()) return new Preview("", false);
         String scalar = scalar(value);
         if (scalar.length() <= maximumChars) return new Preview(scalar, false);
@@ -165,6 +191,12 @@ final class JdwpValueFlattener {
 
     private static String bounded(String value, int maximum) {
         return value.length() <= maximum ? value : value.substring(0, maximum);
+    }
+
+    private static String fieldIdentity(JsonNode field) {
+        String declaringType = field.path("declaringType").asText("unknown");
+        String name = field.path("name").asText("unknown");
+        return declaringType + "#" + name;
     }
 
     record RootValue(String path, JsonNode value) {

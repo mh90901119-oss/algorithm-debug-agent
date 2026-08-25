@@ -9,7 +9,6 @@ package org.example.algorithmdebug.contracts;
  * @param sourceRelativePath 相对 Maven 模块根的可移植源码路径
  * @param startLine 方法声明起始行，1-based
  * @param endLine 方法声明结束行，1-based
- * @param sourceSha256 当前源码文件的 SHA-256
  */
 public record SourceAnchor(
         String className,
@@ -17,8 +16,7 @@ public record SourceAnchor(
         String descriptor,
         String sourceRelativePath,
         int startLine,
-        int endLine,
-        String sourceSha256) {
+        int endLine) {
 
     /** 校验 Java 身份、路径、行范围和源码 Hash。 */
     public SourceAnchor {
@@ -31,6 +29,5 @@ public record SourceAnchor(
         if (startLine < 1 || endLine < startLine) {
             throw new IllegalArgumentException("SourceAnchor 行范围非法");
         }
-        sourceSha256 = ContractChecks.requireSha256(sourceSha256, "sourceSha256");
     }
 }

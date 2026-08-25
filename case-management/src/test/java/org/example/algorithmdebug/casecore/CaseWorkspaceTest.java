@@ -1,6 +1,5 @@
 package org.example.algorithmdebug.casecore;
 
-import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.junit.jupiter.api.Test;
@@ -20,34 +19,23 @@ class CaseWorkspaceTest {
     Path temporaryDirectory;
 
     @Test
-    void createsCaseHierarchyAndImmutableRunArtifact() throws Exception {
+    void createsOnlyDirectoriesThatContainCaseData() throws Exception {
         CaseWorkspace workspace = CaseWorkspace.create(temporaryDirectory, new CaseId("CASE-001"));
-        Path run = workspace.createRun(new RunId("RUN-001"));
-        Path source = temporaryDirectory.resolve("source.json");
-        Files.writeString(source, "{\"makespan\":13}");
-        ImmutableArtifactStore store = new ImmutableArtifactStore();
 
-        ArtifactReference reference = store.copy(
-                source,
-                run,
-                Path.of("result", "gantt.json"),
-                "schedule-result",
-                "SCHEDULE_RESULT",
-                "application/json");
+        assertTrue(Files.isDirectory(workspace.caseRoot()));
+        try (var entries = Files.list(workspace.caseRoot())) {
+            assertEquals(0, entries.count());
+        }
+
+        Path run = workspace.createRun(new RunId("RUN-001"));
 
         assertTrue(Files.notExists(workspace.caseRoot().resolve("baseline")));
-        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("contexts")));
-        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("analyses")));
-        assertTrue(Files.isDirectory(workspace.caseRoot().resolve("evidence")));
+        assertTrue(Files.notExists(workspace.caseRoot().resolve("contexts")));
+        assertTrue(Files.notExists(workspace.caseRoot().resolve("analyses")));
+        assertTrue(Files.notExists(workspace.caseRoot().resolve("evidence")));
         assertTrue(Files.notExists(workspace.caseRoot().resolve("inquiries")));
-        assertTrue(Files.isRegularFile(run.resolve("result/gantt.json")));
-        assertEquals("result/gantt.json", reference.relativePath());
-        assertThrows(FileAlreadyExistsException.class, () -> store.copy(
-                source,
-                run,
-                Path.of("result", "gantt.json"),
-                "schedule-result-2",
-                "SCHEDULE_RESULT",
-                "application/json"));
+        assertTrue(Files.isDirectory(run));
+        assertThrows(FileAlreadyExistsException.class,
+                () -> workspace.createRun(new RunId("RUN-001")));
     }
 }

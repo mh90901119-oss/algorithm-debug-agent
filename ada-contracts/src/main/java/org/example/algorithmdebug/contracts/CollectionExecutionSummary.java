@@ -26,8 +26,10 @@ public record CollectionExecutionSummary(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         completion = ContractChecks.requireBoundedText(completion, "completion", 64, false);
         baselineOutcome = ContractChecks.requireNonNull(baselineOutcome, "baselineOutcome");
-        if (evidenceUsable && baselineOutcome != ComparisonOutcome.MATCHED) {
-            throw new IllegalArgumentException("可用证据必须通过 Baseline MATCHED");
+        if (evidenceUsable && (baselineOutcome == ComparisonOutcome.CHANGED
+                || baselineOutcome == ComparisonOutcome.INCOMPARABLE)) {
+            throw new IllegalArgumentException(
+                    "Changed or incomparable collection evidence is not usable");
         }
         artifactRelativePaths = ContractChecks.immutableBoundedStrings(
                 artifactRelativePaths, "artifactRelativePaths", 1_024);

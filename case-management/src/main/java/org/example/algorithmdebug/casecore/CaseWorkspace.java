@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** 管理一个本地 Case 的标准目录边界。 */
+/** 管理一个本地 Case 的目录边界。 */
 public final class CaseWorkspace {
 
     private final Path caseRoot;
@@ -16,17 +16,14 @@ public final class CaseWorkspace {
         this.caseRoot = caseRoot;
     }
 
-    /** 创建或打开 Case 根目录及稳定子目录。 */
+    /** 创建或打开 Case 根目录；子目录仅在写入真实产物时创建。 */
     public static CaseWorkspace create(Path casesRoot, CaseId caseId) throws IOException {
         if (casesRoot == null || caseId == null) {
             throw new IllegalArgumentException("casesRoot 和 caseId 不能为空");
         }
         String segment = safeSegment(caseId.value(), "caseId");
         Path root = casesRoot.toAbsolutePath().normalize().resolve(segment).normalize();
-        Files.createDirectories(root.resolve("contexts"));
-        Files.createDirectories(root.resolve("runs"));
-        Files.createDirectories(root.resolve("analyses"));
-        Files.createDirectories(root.resolve("evidence"));
+        Files.createDirectories(root);
         return new CaseWorkspace(root);
     }
 
@@ -35,11 +32,12 @@ public final class CaseWorkspace {
         if (runId == null) {
             throw new IllegalArgumentException("runId 不能为空");
         }
-        Path run = caseRoot.resolve("runs").resolve(safeSegment(runId.value(), "runId"));
+        Path runs = Files.createDirectories(caseRoot.resolve("runs"));
+        Path run = runs.resolve(safeSegment(runId.value(), "runId"));
         return Files.createDirectory(run);
     }
 
-    /** @return Case 绝对根目录 */
+    /** @return Case 绝对根目录。 */
     public Path caseRoot() {
         return caseRoot;
     }

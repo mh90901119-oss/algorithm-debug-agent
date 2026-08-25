@@ -112,7 +112,8 @@ class JdwpCollectionCoordinatorTest {
 
         JdwpAdapterException failure = assertThrows(
                 JdwpAdapterException.class,
-                () -> coordinator.execute(request(Duration.ofSeconds(2))));
+                () -> coordinator.execute(request(
+                        Duration.ofSeconds(10), Duration.ofSeconds(12), 1_024 * 1_024)));
 
         assertEquals("JDWP_COLLECTOR_START_FAILED", failure.code());
         assertTrue(failure.targetStarted());

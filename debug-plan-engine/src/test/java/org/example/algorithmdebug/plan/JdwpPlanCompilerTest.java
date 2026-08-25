@@ -7,9 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
@@ -80,12 +78,12 @@ class JdwpPlanCompilerTest {
     }
 
     @Test
-    void rejectsChangedSourceAndPreservesMissingFileCause() throws Exception {
+    void usesCurrentSourceAndPreservesMissingFileCause() throws Exception {
         Path service = moduleRoot.resolve(serviceAnchor.sourceRelativePath());
         Files.writeString(service, "changed", StandardCharsets.UTF_8);
-        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(point("changed", 4))),
-                moduleRoot));
+        JdwpCollectionPlan current = new JdwpPlanCompiler().compile(
+                catalog(), request(List.of(point("changed", 4))), moduleRoot);
+        assertEquals("changed", current.tracepoints().getFirst().tracepointId());
 
         Files.delete(service);
         PlanCompilationException missing = assertThrows(PlanCompilationException.class,
@@ -123,9 +121,7 @@ class JdwpPlanCompilerTest {
         Path path = moduleRoot.resolve(relative);
         Files.createDirectories(path.getParent());
         Files.writeString(path, content, StandardCharsets.UTF_8);
-        String hash = HexFormat.of().formatHex(
-                MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(path)));
         return new SourceAnchor(
-                className, methodName, descriptor, relative, startLine, endLine, hash);
+                className, methodName, descriptor, relative, startLine, endLine);
     }
 }

@@ -31,6 +31,8 @@ import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.harness.HarnessException;
+import org.example.algorithmdebug.harness.JsonResultParser;
+import org.example.algorithmdebug.harness.JsonResultSnapshot;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
 import org.example.algorithmdebug.harness.OutputDirectorySnapshotter;
 import org.example.algorithmdebug.harness.OutputStabilityPolicy;
@@ -176,7 +178,7 @@ public final class RunApplicationService {
                 return completeNotStarted(archive, request, failure.code(), failure);
             }
             try {
-                return executeSelected(archive, request, selection, moduleRoot);
+                return executeSelected(archive, request, selection, registration, moduleRoot);
             } catch (AdapterException failure) {
                 return completeNotStarted(archive, request, failure.code(), failure);
             } catch (SurefireDiagnosticException failure) {
@@ -194,36 +196,35 @@ public final class RunApplicationService {
         }
     }
 
-    private <T extends ScheduleResultSnapshot> RunOutcomeSummary executeSelected(
+    private RunOutcomeSummary executeSelected(
             CaseArchiveRepository archive,
             RunRequest request,
             AdapterCatalog.AdapterSelection selection,
+            ProjectRegistration registration,
             Path moduleRoot) throws AdapterException, HarnessException, SurefireDiagnosticException {
-        @SuppressWarnings("unchecked")
-        TargetProjectAdapter<T> adapter = (TargetProjectAdapter<T>) selection.adapter();
+        TargetProjectAdapter adapter = selection.adapter();
         TestLaunchSpec spec = adapter.createLaunchSpec(
                 selection.project(), request.targetTest(), RunMode.BASELINE);
-        ScheduleResultSource resultSource = adapter.scheduleResultSource(
-                selection.project(), request.targetTest());
+        Optional<ScheduleResultSource> resultSource = ProjectResultSource.from(registration);
         Path reports = moduleRoot.resolve("target/surefire-reports").normalize();
         SurefireReportSnapshot before = surefireSnapshotter.snapshot(reports, request.targetTest());
         Path raw = archive.runRawDirectory(request.caseId(), request.runId());
         Path caseRoot = archive.caseRoot(request.caseId());
 
         OutputDirectorySnapshotter outputSnapshotter = new OutputDirectorySnapshotter(20_000);
-        ScheduleProducingTestRunner<T> runner = new ScheduleProducingTestRunner<>(
+        ScheduleProducingTestRunner<JsonResultSnapshot> runner = new ScheduleProducingTestRunner<>(
                 executor,
                 outputSnapshotter,
                 new OutputStabilityWaiter(outputSnapshotter, OutputStabilityPolicy.defaults()),
                 new ScheduleResultCapture<>(outputSnapshotter, MAX_GANTT_BYTES));
-        ScheduleRunResult<T> schedule = runner.run(
+        ScheduleRunResult<JsonResultSnapshot> schedule = runner.run(
                 spec,
                 new MavenExecutionOptions(
                         mavenExecutable.orElseThrow(),
                         raw.resolve("stdout.log"), raw.resolve("stderr.log"),
                         ProcessLimits.defaults()),
                 resultSource,
-                adapter.scheduleResultParser(),
+                new JsonResultParser(),
                 raw.resolve("gantt.json"));
 
         Optional<AgentFailureDiagnostic> agentFailure = schedule.agentFailure();
@@ -302,26 +303,18 @@ public final class RunApplicationService {
             RunRequest request,
             ScheduleRunResult<?> schedule,
             RunOutcomeSummary observed) throws HarnessException {
-        Optional<String> rawHash = Optional.empty();
-        Optional<String> normalizedHash = Optional.empty();
-        if (observed.ganttOutcome() == GanttOutcome.PRESENT
-                && schedule.scheduleResult().isPresent()) {
-            rawHash = Optional.of(schedule.scheduleResult().orElseThrow().rawSha256());
-            normalizedHash = Optional.of(
-                    schedule.scheduleResult().orElseThrow().normalizedJsonSha256());
-        }
         Optional<String> failureHash = Optional.empty();
         if (observed.targetFailure().isPresent()) {
             failureHash = Optional.of(failureFingerprinter.sha256(
                     observed.targetFailure().orElseThrow()));
         }
-        if (rawHash.isEmpty() && failureHash.isEmpty()) {
+        if (failureHash.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT,
                 request.caseId(), request.contextId(), request.runId(),
-                rawHash, normalizedHash, failureHash));
+                failureHash.orElseThrow()));
     }
 
     private ComparisonDecision archiveAndCompare(

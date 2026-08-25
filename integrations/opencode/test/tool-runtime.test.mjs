@@ -31,7 +31,8 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     return success({ command: args.slice(0, 3).join(" ") })
   }
   const runtime = createAlgorithmDebugRuntime({
-    execute, environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot,
+    execute, workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot,
     now: () => new Date("2026-08-19T00:00:00Z"),
   })
   const context = { directory: "D:/large-system/algorithm-module" }
@@ -40,6 +41,11 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     question: "why did it fail?", targetTest: "a.b.Test#case1", contextMode: "reuse",
   }, context)
   await runtime.caseInspect({ caseId: "case-1" }, context)
+  await runtime.caseAudit({ caseId: "case-1" }, context)
+  await runtime.ganttInspect({
+    caseId: "case-1", artifactId: "gantt-1", operation: "slice",
+    jsonPointer: "/tasks", offset: 10, limit: 20,
+  }, context)
   await runtime.runTest({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.staticAnalyze({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.codePathPlanCreate({
@@ -71,6 +77,11 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       "--test", "a.b.Test#case1", "--question-file", "<temp>", "--context-mode", "reuse"],
     ["case", "inspect", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1"],
+    ["case", "audit", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
+      "--case-id", "case-1"],
+    ["gantt", "inspect", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
+      "--case-id", "case-1", "--artifact-id", "gantt-1", "--operation", "slice",
+      "--offset", "10", "--limit", "20", "--json-pointer", "/tasks"],
     ["run", "execute", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1", "--analysis-id", "analysis-1"],
     ["static", "analyze", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
@@ -109,6 +120,30 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   assert.ok(calls.every(call => call.cwd === context.directory))
 })
 
+test("labels collection execution ids without presenting them as archived Run ids", async () => {
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async args => {
+      if (args[0] === "workspace") return success({ created: true })
+      if (args[0] === "project") {
+        return success({ registration: { projectId: "demo-project" }, created: false })
+      }
+      return success({
+        caseId: "case-1", analysisId: "analysis-1", runId: "collector-run-1",
+        planId: "plan-1", collectionId: "collection-1", completion: "SUCCESS",
+      })
+    },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results",
+  })
+
+  const response = JSON.parse(await runtime.codePathCollect(
+    { caseId: "case-1", planId: "plan-1" }, { directory: "D:/project" }))
+
+  assert.equal(response.data.runId, undefined)
+  assert.equal(response.data.collectorExecutionRunId, "collector-run-1")
+  assert.equal(response.data.collectionId, "collection-1")
+})
+
 test("stops before the business command when project preparation fails", async () => {
   const calls = []
   const failure = JSON.stringify({
@@ -120,7 +155,8 @@ test("stops before the business command when project preparation fails", async (
       calls.push([...args])
       return args[0] === "workspace" ? success({ created: false }) : failure
     },
-    environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot: tmpdir(),
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
   const response = await runtime.caseInspect(
@@ -141,17 +177,22 @@ test("passes explicit Case and Adapter identity while defaulting to Context reus
       if (args[0] === "project") return success({ registration: { projectId: "demo-project" } })
       return success({ opened: true })
     },
-    environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot,
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot,
   })
 
   await runtime.analysisBegin({
-    question: "continue", targetTest: "a.b.Test#case1", caseId: "case-1", adapterId: "wafer-demo",
+    question: "continue", targetTest: "a.b.Test#case1", caseId: "case-1", adapterId: "maven-junit",
   }, { directory: "D:/module" })
 
+  assert.deepEqual(calls.at(-2), [
+    "project", "register", "--workspace", "D:/ada-workspace", "--project", "D:/module",
+    "--result-directory", "D:/algorithm-results",
+  ])
   assert.deepEqual(withoutTemporaryPath(calls.at(-1)), [
     "case", "open", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
     "--test", "a.b.Test#case1", "--question-file", "<temp>", "--context-mode", "reuse",
-    "--case-id", "case-1", "--adapter", "wafer-demo",
+    "--case-id", "case-1", "--adapter", "maven-junit",
   ])
 })
 
@@ -166,7 +207,8 @@ test("removes a temporary request when CLI execution throws", async t => {
       requestPath = args[args.indexOf("--request-file") + 1]
       throw new Error("boom at C:/private/path")
     },
-    environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot,
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot,
   })
 
   const response = await runtime.codePathPlanCreate({
@@ -182,7 +224,8 @@ test("rejects an oversized plan before project preparation", async () => {
   let calls = 0
   const runtime = createAlgorithmDebugRuntime({
     execute: async () => { calls += 1; return success({}) },
-    environment: { ADA_WORKSPACE: "D:/ada-workspace" }, temporaryRoot: tmpdir(),
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
   await assert.rejects(runtime.codePathPlanCreate({

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schema/case-workspace-audit-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "passed", "checkedArtifactCount", "expectedArtifacts", "actualArtifacts", "issues"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "caseId": {"type": "string"},
+    "passed": {"type": "boolean"},
+    "checkedArtifactCount": {"type": "integer", "minimum": 0},
+    "expectedArtifacts": {"type": "array", "items": {"type": "string"}},
+    "actualArtifacts": {"type": "array", "items": {"type": "string"}},
+    "issues": {"type": "array", "items": {"type": "object"}}
+  }
+}

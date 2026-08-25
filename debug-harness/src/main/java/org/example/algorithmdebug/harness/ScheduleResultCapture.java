@@ -6,15 +6,11 @@ import org.example.algorithmdebug.adapter.ScheduleResultSnapshot;
 import org.example.algorithmdebug.adapter.ScheduleResultSource;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 
 /** 从目标 UT 运行窗口中确定性发现、验证并不可变复制唯一调度结果。 */
@@ -90,22 +86,8 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
         }
         ParsedCandidate<T> selected = valid.getFirst();
         Path captured = copyAtomically(selected.path(), destination);
-        try {
-            String rawHash = sha256(captured);
-            String normalizedJsonHash = new JsonTokenContentHasher().sha256(captured);
-            return new CapturedScheduleResult<>(
-                    selected.path(),
-                    captured,
-                    rawHash,
-                    normalizedJsonHash,
-                    selected.sizeBytes(),
-                    selected.snapshot());
-        } catch (IOException exception) {
-            throw new HarnessException(
-                    "HARNESS_RESULT_HASH_FAILED",
-                    "无法计算已捕获调度结果原始哈希: " + captured,
-                    exception);
-        }
+        return new CapturedScheduleResult<>(
+                selected.path(), captured, selected.sizeBytes(), selected.snapshot());
     }
 
     private static Path copyAtomically(Path source, Path destination) throws HarnessException {
@@ -135,24 +117,6 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
                     "HARNESS_RESULT_COPY_FAILED",
                     "无法复制调度结果到不可变 Run 目录: " + normalized,
                     exception);
-        }
-    }
-
-    private static String sha256(Path path) throws IOException, HarnessException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (InputStream input = Files.newInputStream(path)) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = input.read(buffer)) >= 0) {
-                    if (read > 0) {
-                        digest.update(buffer, 0, read);
-                    }
-                }
-            }
-            return HexFormat.of().formatHex(digest.digest());
-        } catch (NoSuchAlgorithmException exception) {
-            throw new HarnessException("HARNESS_RESULT_HASH_FAILED", "当前 JVM 不支持 SHA-256", exception);
         }
     }
 

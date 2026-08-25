@@ -13,15 +13,15 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true })
 export async function runAdaCommand(args, cwd, spawn, options = {}) {
   if (!Array.isArray(args) || typeof cwd !== "string" || cwd.length === 0
       || typeof spawn !== "function") {
-    throw new TypeError("args、cwd 和 spawn 必须有效")
+    throw new TypeError("args, cwd, and spawn must be valid")
   }
   const timeoutMilliseconds = options.timeoutMilliseconds ?? DEFAULT_TIMEOUT_MILLISECONDS
   if (!Number.isSafeInteger(timeoutMilliseconds) || timeoutMilliseconds <= 0) {
-    throw new TypeError("timeoutMilliseconds 必须为正整数")
+    throw new TypeError("timeoutMilliseconds must be a positive integer")
   }
   const executable = options.executable ?? "ada"
   if (typeof executable !== "string" || executable.trim().length === 0) {
-    throw new TypeError("executable 必须为非空字符串")
+    throw new TypeError("executable must be a non-empty string")
   }
 
   let process
@@ -71,7 +71,7 @@ function withTimeout(promise, timeoutMilliseconds) {
 
 async function readBounded(stream) {
   if (!stream || typeof stream.getReader !== "function") {
-    throw new TypeError("CLI stream 不可读")
+    throw new TypeError("CLI stream is not readable")
   }
   const reader = stream.getReader()
   const chunks = []

@@ -7,22 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.takahirom.codepathtracer.AdviceData;
 import io.github.takahirom.codepathtracer.TraceEvent;
-import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-import org.example.algorithmdebug.contracts.AnalysisId;
-import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
-import org.example.algorithmdebug.contracts.CollectionBudget;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.MethodSelector;
-import org.example.algorithmdebug.contracts.PlanId;
-import org.example.algorithmdebug.contracts.SchemaVersions;
-import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.Test;
 
 class PlannedTraceEventGeneratorTest {
-
     @Test
     void retainsOnlyExactDescriptorAndDoesNotCarryArgumentsOrReturnValue() {
         PlannedTraceEventGenerator generator = new PlannedTraceEventGenerator(plan());
@@ -45,7 +34,8 @@ class PlannedTraceEventGeneratorTest {
         PlannedTraceEventGenerator generator = new PlannedTraceEventGenerator(plan());
         assertTrue(generator.matches(generator.generate(selectedEnter())));
         AtomicReference<TraceEvent> secondThreadEvent = new AtomicReference<>();
-        Thread thread = Thread.ofPlatform().start(() -> secondThreadEvent.set(generator.generate(selectedEnter())));
+        Thread thread = new Thread(() -> secondThreadEvent.set(generator.generate(selectedEnter())));
+        thread.start();
         thread.join();
 
         assertNull(secondThreadEvent.get());
@@ -57,14 +47,13 @@ class PlannedTraceEventGeneratorTest {
         return new AdviceData.Enter(new Object[0], 0, Service.class, "solve", "()V");
     }
 
-    private static CodePathCollectionPlan plan() {
+    private static LauncherCodePathPlan plan() {
         String className = Service.class.getName();
-        return new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"),
-                new CaseId("case-1"), new ContextId("ctx-1"), new AnalysisId("analysis-1"),
-                new TargetTest("fixture.Test", "case1"),
-                List.of(new MethodSelector(className + "#solve()V", className, "solve", "()V")),
-                CollectionBudget.defaults(), "测试精确方法选择", Instant.EPOCH);
+        return LauncherCodePathPlan.fixture(
+                new LauncherCodePathPlan.TargetTest("fixture.Test", "case1"),
+                List.of(new LauncherCodePathPlan.MethodSelector(
+                        className + "#solve()V", className, "solve", "()V")),
+                new LauncherCodePathPlan.Budget(100, 4096, 30_000));
     }
 
     static final class Service {

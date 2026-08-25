@@ -146,11 +146,11 @@ public final class DoctorApplicationService {
         }
         Path probe = null;
         try {
-            Path systemRoot = layout.orElseThrow().systemRoot();
-            if (!Files.isDirectory(systemRoot, LinkOption.NOFOLLOW_LINKS)) {
-                return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace system 目录不可用");
+            Path workspaceRoot = layout.orElseThrow().root();
+            if (!Files.isDirectory(workspaceRoot, LinkOption.NOFOLLOW_LINKS)) {
+                return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace root is not writable");
             }
-            probe = Files.createTempFile(systemRoot, "doctor-", ".tmp");
+            probe = Files.createTempFile(workspaceRoot, ".doctor-", ".tmp");
             Files.delete(probe);
             probe = null;
             return pass("workspace-write", "WORKSPACE_WRITE_OK", "Workspace 写入探针通过");

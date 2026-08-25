@@ -21,7 +21,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -113,7 +112,7 @@ class CollectionApplicationServiceTest {
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
-                "a".repeat(64), NOW));
+                "target/schedules", NOW));
         CaseArchiveRepository archive = archive();
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
@@ -166,7 +165,7 @@ class CollectionApplicationServiceTest {
     }
 
     @Test
-    void successfulCollectionWithMatchingBaselineReturnsOnlyExistingArtifactReferences()
+    void successfulCollectionDoesNotRequireGanttBaselineAndReturnsOnlyExistingArtifacts()
             throws Exception {
         String gantt = "{\"schedule\":1}";
         establishBaseline(gantt);
@@ -177,7 +176,7 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals("SUCCESS", result.summary().completion());
-        assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
         assertTrue(result.summary().evidenceUsable());
         assertEquals(
                 result.artifacts().stream().map(
@@ -237,7 +236,7 @@ class CollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                         .resolve("case-1/collections/collection-fixed/validation/baseline-check.json"),
                 org.example.algorithmdebug.contracts.CollectionBaselineCheck.class);
-        assertTrue(baseline.currentGanttSha256().isEmpty());
+        assertTrue(baseline.evidenceUsable());
     }
 
     @Test
@@ -255,7 +254,7 @@ class CollectionApplicationServiceTest {
     }
 
     @Test
-    void changedGanttIsArchivedButRejectedByBaselineGate() throws Exception {
+    void changedGanttIsArchivedWithoutAFalseBaselineGate() throws Exception {
         establishBaseline("{\"schedule\":1}");
         CollectionApplicationService service = service(
                 collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":2}")));
@@ -263,8 +262,8 @@ class CollectionApplicationServiceTest {
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
+        assertTrue(result.summary().evidenceUsable());
     }
 
     @Test
@@ -379,14 +378,12 @@ class CollectionApplicationServiceTest {
                 MethodPathManifest manifest = new MethodPathManifest(
                         "2.0", request.caseId(), request.contextId(), request.analysisId(),
                         request.runId(), request.plan().planId(), request.collectionId(),
-                        "code-path-tracer", "0.1.0", Optional.of("a".repeat(64)),
-                        sha(mapper.writeJson(request.plan())), completion, "COMPLETE", true,
+                        "code-path-tracer", "0.1.0", completion, "COMPLETE", true,
                         completion == CollectionCompletion.TARGET_FAILED ? 2 : 0, false,
                         completion == CollectionCompletion.TARGET_FAILED ? "FAILED" : "PASSED",
                         1, completion == CollectionCompletion.TARGET_FAILED ? 0 : 1, 0,
                         completion == CollectionCompletion.TARGET_FAILED ? 1 : 0,
                         eventCount, Files.size(raw),
-                        Optional.of(sha(Files.readAllBytes(raw))),
                         truncationReasons, Optional.empty(), "raw/codepath.jsonl",
                         "logs/stdout.log", "logs/stderr.log", NOW, NOW);
                 return new MethodPathCollectionResult(
@@ -399,21 +396,12 @@ class CollectionApplicationServiceTest {
     }
 
     private void establishBaseline(String ganttJson) throws Exception {
-        Path reference = Files.writeString(
-                temporaryDirectory.resolve("baseline-gantt.json"), ganttJson);
         RunId baselineRun = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 baselineRun, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(successfulBaselineOutcome(baselineRun));
-        RunResultFingerprint fingerprint = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
-                Optional.of(sha(Files.readAllBytes(reference))),
-                Optional.of(new org.example.algorithmdebug.harness.JsonTokenContentHasher()
-                        .sha256(reference)), Optional.empty());
-        archive.createRunResultFingerprint(fingerprint);
-        archive.createReproductionIfAbsent(fingerprint);
     }
 
     private void establishFailureBaseline(String message) throws Exception {
@@ -437,9 +425,8 @@ class CollectionApplicationServiceTest {
                 "fixture.Algorithm.solve(Algorithm.java:42)");
         RunResultFingerprint fingerprint = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
-                Optional.empty(), Optional.empty(), Optional.of(
-                        new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
-                                .sha256(diagnostic)));
+                new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
+                        .sha256(diagnostic));
         archive.createRunResultFingerprint(fingerprint);
         archive.createReproductionIfAbsent(fingerprint);
     }
@@ -490,14 +477,13 @@ class CollectionApplicationServiceTest {
     private record Snapshot(String schemaVersion, String value) implements ScheduleResultSnapshot {
     }
 
-    private final class StubAdapter implements TargetProjectAdapter<Snapshot> {
+    private final class StubAdapter implements TargetProjectAdapter {
         @Override
         public AdapterDescriptor descriptor() {
             return new AdapterDescriptor(
                     "fixture", "1.0", "fixture", Set.of(
                     AdapterCapability.BASELINE_EXECUTION,
-                    AdapterCapability.INPUT_LOCATION,
-                    AdapterCapability.SCHEDULE_RESULT));
+                    AdapterCapability.CODE_PATH_COLLECTION));
         }
 
         @Override
@@ -513,19 +499,10 @@ class CollectionApplicationServiceTest {
                     project, targetTest, runMode, List.of("test"),
                     Map.of("test", targetTest.selector()), List.of(), Duration.ofSeconds(10));
         }
-
-        @Override
-        public InputLocator inputLocator() {
-            return (project, targetTest) -> Optional.empty();
-        }
-
-        @Override
         public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest targetTest) {
             return new ScheduleResultSource(scheduleOutput, false);
         }
-
-        @Override
         public ScheduleResultParser<Snapshot> scheduleResultParser() {
             return path -> new Snapshot("1.0", "unused");
         }

@@ -4,15 +4,16 @@
   "codePathTracer": {
     "version": "0.1.0-SNAPSHOT",
     "gitCommit": "f8be120694a5d5bb1405c0f3e1a4396e89b6dfa1",
-    "launcherSha256": "669a2cc634e5238db8abd35f924f9ad1cc4e9403fb84d7dcb650b612641c6590",
     "license": "Apache-2.0"
   },
   "jdwpCollector": {
-    "version": "1.0.0",
-    "gitCommit": "1ef7d2248420189f45321bbbcf113e019fd30ab7",
+    "version": "2.0.0",
+    "source": "agent-owned",
+    "modules": ["jdwp-collector-core", "tools/jdwp-batch-collector"],
     "jarName": "jdwp-batch-collector.jar",
     "minimumJava": 21,
     "license": "MIT",
-    "capabilityProfile": "MVP_ALL_VISIBLE_LOCALS_V1"
+    "rawTraceSchemaVersion": "2.0",
+    "capabilityProfile": "EXACT_LOCATION_TYPED_BOUNDED_V2"
   }
 }

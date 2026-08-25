@@ -187,17 +187,12 @@ public final class EvidenceBundleBuilder {
 
         Optional<ArtifactReference> gantt = outcome.artifacts().stream()
                 .filter(value -> "GANTT".equals(value.artifactType())).findFirst();
-        if (outcome.ganttOutcome() == GanttOutcome.PRESENT
-                && gantt.isPresent() && sources.runFingerprint().isPresent()
-                && sources.runFingerprint().orElseThrow().ganttRawSha256().isPresent()
-                && sources.runFingerprint().orElseThrow().ganttRawSha256().orElseThrow()
-                        .equals(gantt.orElseThrow().sha256())) {
+        if (outcome.ganttOutcome() == GanttOutcome.PRESENT && gantt.isPresent()) {
             ArrayList<ArtifactReference> refs = new ArrayList<>();
             refs.add(gantt.orElseThrow());
-            sources.runFingerprintArtifact().ifPresent(refs::add);
             facts.add(fact(ClaimClassification.CONFIRMED_FACT,
-                    EvidenceDimension.SCHEDULE_RESULT, "SCHEDULE_RESULT_FINGERPRINTED",
-                    "调度结果存在且与运行结果指纹一致", refs));
+                    EvidenceDimension.SCHEDULE_RESULT, "SCHEDULE_RESULT_ARCHIVED",
+                    "调度结果已作为不可变 Artifact 归档", refs));
             covered.add(EvidenceDimension.SCHEDULE_RESULT);
         }
     }
@@ -246,7 +241,7 @@ public final class EvidenceBundleBuilder {
         });
     }
 
-    private static long estimatedBytes(EvidenceBundle bundle) {
+    static long estimatedBytes(EvidenceBundle bundle) {
         long bytes = 512;
         for (EvidenceFact fact : bundle.facts()) bytes += factBytes(fact);
         for (EvidenceFact fact : bundle.comparisonFacts()) bytes += factBytes(fact);

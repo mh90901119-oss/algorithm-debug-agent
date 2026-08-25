@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/jdwp-collector-manifest-v2.schema.json",
+  "title": "Agent-owned JDWP Collector Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "collectorVersion", "rawTraceSchemaVersion", "capabilities",
+    "sessionId", "target", "plan", "trace", "startedAt", "finishedAt",
+    "completionReason", "eventCount", "hitCounts", "installedLocations"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "2.0"},
+    "collectorVersion": {"const": "2.0.0"},
+    "rawTraceSchemaVersion": {"const": "2.0"},
+    "capabilities": {
+      "type": "array", "minItems": 5, "maxItems": 32, "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    },
+    "sessionId": {"type": "string", "minLength": 1, "maxLength": 1024},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["host", "port"],
+      "properties": {
+        "host": {"const": "127.0.0.1"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "plan": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "trace": {"const": "raw-trace.jsonl"},
+    "startedAt": {"type": "string", "format": "date-time"},
+    "finishedAt": {"type": "string", "format": "date-time"},
+    "completionReason": {"type": "string", "minLength": 1, "maxLength": 128},
+    "eventCount": {"type": "integer", "minimum": 0},
+    "hitCounts": {"$ref": "#/$defs/counters"},
+    "installedLocations": {"$ref": "#/$defs/counters"}
+  },
+  "$defs": {
+    "counters": {
+      "type": "object", "maxProperties": 20,
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    }
+  }
+}

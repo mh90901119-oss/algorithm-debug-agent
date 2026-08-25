@@ -42,10 +42,9 @@ class CollectorDebugPlanCompatibilityTest {
     }
 
     private static JdwpCollectionPlan plan() {
-        String hash = "a".repeat(64);
         SourceAnchor anchor = new SourceAnchor(
                 "fixture.Algorithm", "schedule", "()V",
-                "src/main/java/fixture/Algorithm.java", 10, 20, hash);
+                "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
                 new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),

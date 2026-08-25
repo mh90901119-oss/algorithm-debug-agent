@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import kotlin.Unit;
-import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.launcher.Launcher;
 import org.junit.platform.launcher.LauncherDiscoveryRequest;
@@ -40,7 +39,7 @@ public final class ExternalJUnitTraceLauncher {
     }
 
     private static LauncherSummary execute(
-            LauncherArguments arguments, CodePathCollectionPlan plan) throws Exception {
+            LauncherArguments arguments, LauncherCodePathPlan plan) throws Exception {
         AtomicLong sequence = new AtomicLong();
         AtomicReference<IOException> writeFailure = new AtomicReference<>();
         AtomicBoolean captureStopped = new AtomicBoolean();

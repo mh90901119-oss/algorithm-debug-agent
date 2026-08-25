@@ -16,14 +16,14 @@ import org.example.algorithmdebug.harness.RunResult;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 
-/** 通过锁定版本 Maven Dependency Plugin 构建目标模块测试运行 classpath。 */
+/** 通过锁定版本的 Maven Dependency Plugin 构建目标模块测试运行 classpath。 */
 public final class MavenTestClasspathResolver implements TargetClasspathResolver {
     private static final String DEPENDENCY_GOAL =
             "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:build-classpath";
     private final ExternalProcessRunner processes;
     private final String pathSeparator;
 
-    /** 使用平台 classpath 分隔符和共享进程监管器。 */
+    /** 使用平台 classpath 分隔符和共享进程监控器。 */
     public MavenTestClasspathResolver() {
         this(new ExternalProcessRunner(), java.io.File.pathSeparator);
     }
@@ -34,31 +34,30 @@ public final class MavenTestClasspathResolver implements TargetClasspathResolver
     }
 
     /**
-     * 在 Case Collection 内写 classpath 文件和日志，不向目标源码树写辅助配置。
+     * 在系统临时目录解析 classpath，读取后立即清理，不把启动期中间文件归档到 Case。
      */
     @Override
     public List<String> resolve(
             Path mavenExecutable, Path moduleRoot, Path collectionDirectory)
             throws MethodPathCollectionException {
-        Path metadata = collectionDirectory.resolve("metadata");
-        Path output = metadata.resolve("test-classpath.txt").toAbsolutePath().normalize();
+        Path scratch = null;
         try {
-            Files.createDirectory(metadata);
+            scratch = Files.createTempDirectory("algorithm-debug-classpath-");
+            Path output = scratch.resolve("test-classpath.txt").toAbsolutePath().normalize();
             List<String> argv = List.of(
                     mavenExecutable.toString(), "-q", "test-compile", DEPENDENCY_GOAL,
                     "-Dmdep.includeScope=test", "-Dmdep.outputFile=" + output);
             RunResult result = processes.execute(
-                    argv, moduleRoot, collectionDirectory.resolve("logs/classpath-stdout.log"),
-                    collectionDirectory.resolve("logs/classpath-stderr.log"), Duration.ofMinutes(10),
-                    ProcessLimits.defaults());
+                    argv, moduleRoot, scratch.resolve("stdout.log"), scratch.resolve("stderr.log"),
+                    Duration.ofMinutes(10), ProcessLimits.defaults());
             if (result.completion() != RunCompletion.SUCCEEDED) {
                 throw new MethodPathCollectionException(
-                        "CLASSPATH_RESOLUTION_FAILED", "Maven 测试 classpath 构建失败", null);
+                        "CLASSPATH_RESOLUTION_FAILED", "Maven test classpath resolution failed", null);
             }
             if (!Files.isRegularFile(output, LinkOption.NOFOLLOW_LINKS)
                     || Files.size(output) > 4L * 1024 * 1024) {
                 throw new MethodPathCollectionException(
-                        "CLASSPATH_OUTPUT_INVALID", "Maven classpath 文件缺失或超限", null);
+                        "CLASSPATH_OUTPUT_INVALID", "Maven classpath output is missing or exceeds the limit", null);
             }
             List<String> classpath = new ArrayList<>();
             classpath.add(moduleRoot.resolve("target/test-classes").toAbsolutePath().normalize().toString());
@@ -74,7 +73,24 @@ public final class MavenTestClasspathResolver implements TargetClasspathResolver
             return List.copyOf(classpath);
         } catch (IOException | HarnessException | SecurityException failure) {
             throw new MethodPathCollectionException(
-                    "CLASSPATH_RESOLUTION_FAILED", "无法解析目标 Maven 测试 classpath", failure);
+                    "CLASSPATH_RESOLUTION_FAILED", "Unable to resolve the target Maven test classpath", failure);
+        } finally {
+            deleteScratchDirectory(scratch);
+        }
+    }
+
+    private static void deleteScratchDirectory(Path directory) {
+        if (directory == null) return;
+        try {
+            Files.deleteIfExists(directory.resolve("test-classpath.txt"));
+            Files.deleteIfExists(directory.resolve("stdout.log"));
+            Files.deleteIfExists(directory.resolve("stderr.log"));
+            Files.deleteIfExists(directory);
+        } catch (IOException cleanupFailure) {
+            directory.resolve("test-classpath.txt").toFile().deleteOnExit();
+            directory.resolve("stdout.log").toFile().deleteOnExit();
+            directory.resolve("stderr.log").toFile().deleteOnExit();
+            directory.toFile().deleteOnExit();
         }
     }
 }

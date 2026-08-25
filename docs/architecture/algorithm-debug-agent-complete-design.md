@@ -1,3 +1,5 @@
+> CURRENT STATUS (2026-08-23): JDWP Core and Batch Collector source are now owned by this Agent repository. See docs/designs/2026-08-23-agent-owned-jdwp-collector-design.md and ADR-014. External mcp-jdwp-java paths below are historical references.
+
 # Algorithm Debug Agent 完整架构与开发计划
 
 - 文档状态：实施基线（已按工具单点验证校准）
