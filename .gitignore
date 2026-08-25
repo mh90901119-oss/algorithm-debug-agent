@@ -3,6 +3,7 @@ target/
 .idea/
 .vscode/
 .opencode/
+/opencode.json
 *.iml
 *.log
 .algorithm-debug/
