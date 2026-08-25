@@ -7,13 +7,13 @@ Every path is explicit so users can see and change the defaults. The installer e
 
 - `openCodeConfigDirectory`: OpenCode global configuration directory.
 - `workspaceDirectory`: append-only Case, Run, Collection, Evidence, and Report storage.
-- `dfxDirectory`: future local Agent diagnostic log storage.
+- `dfxDirectory`: fallback diagnostic storage for interactions that fail before a Case identity is available.
 - `evalDirectory`: development-only Eval Harness output storage.
 - `resultJsonDirectory`: business algorithm JSON result directory. An absolute path is supported.
 - `agentJavaHome`: optional JDK 21 home used to build and run the Agent. Empty uses the current environment.
 - `targetJavaHome`: optional target JDK home used by the algorithm Maven/JUnit process and CodePath Launcher.
 - `mavenExecutable`: optional absolute path to the corporate Maven executable. Empty resolves Maven normally.
-- `dfxEnabled`: whether the future DFX plugin is enabled.
+- `dfxEnabled`: whether the implemented Case interaction recorder and fallback diagnostics are enabled.
 
 After changing this file, run `scripts/install-opencode.ps1 -Mode Install` and restart OpenCode.
 Changing `workspaceDirectory` does not migrate or delete evidence in the previous Workspace.
