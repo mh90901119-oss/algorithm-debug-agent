@@ -13,17 +13,17 @@ public record AgentFailureDiagnostic(String code, String message, String excepti
         code = ContractChecks.requireNonBlank(code, "code");
         message = ContractChecks.requireNonBlank(message, "message");
         if (exceptionClass == null) {
-            throw new IllegalArgumentException("exceptionClass 不能为 null");
+            throw new IllegalArgumentException("exceptionClass must not be null");
         }
         exceptionClass = exceptionClass.strip();
         if (code.length() > 256) {
-            throw new IllegalArgumentException("code 长度不能超过 256");
+            throw new IllegalArgumentException("code must not exceed 256 characters");
         }
         if (message.length() > 8192) {
-            throw new IllegalArgumentException("message 长度不能超过 8192");
+            throw new IllegalArgumentException("message must not exceed 8192 characters");
         }
         if (exceptionClass.length() > 1024) {
-            throw new IllegalArgumentException("exceptionClass 长度不能超过 1024");
+            throw new IllegalArgumentException("exceptionClass must not exceed 1024 characters");
         }
     }
 }

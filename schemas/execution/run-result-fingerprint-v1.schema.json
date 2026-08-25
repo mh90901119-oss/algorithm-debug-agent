@@ -1,67 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://algorithm-debug-agent.local/schemas/execution/run-result-fingerprint-v1.schema.json",
-  "title": "RunResultFingerprint v1",
+  "$id": "https://algorithm-debug-agent.local/schema/run-result-fingerprint-v1",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "schemaVersion",
-    "caseId",
-    "contextId",
-    "runId",
-    "ganttRawSha256",
-    "ganttNormalizedJsonSha256",
-    "targetFailureSha256"
-  ],
+  "required": ["schemaVersion", "caseId", "contextId", "runId", "targetFailureSha256"],
   "properties": {
-    "schemaVersion": { "const": "1.0" },
-    "caseId": { "$ref": "#/$defs/opaqueId" },
-    "contextId": { "$ref": "#/$defs/opaqueId" },
-    "runId": { "$ref": "#/$defs/opaqueId" },
-    "ganttRawSha256": { "$ref": "#/$defs/optionalSha256" },
-    "ganttNormalizedJsonSha256": { "$ref": "#/$defs/optionalSha256" },
-    "targetFailureSha256": { "$ref": "#/$defs/optionalSha256" }
-  },
-  "$defs": {
-    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-    "optionalSha256": {
-      "oneOf": [
-        { "type": "null" },
-        { "$ref": "#/$defs/sha256" }
-      ]
-    }
-  },
-  "allOf": [
-    {
-      "if": {
-        "properties": { "ganttRawSha256": { "type": "null" } },
-        "required": ["ganttRawSha256"]
-      },
-      "then": {
-        "properties": { "ganttNormalizedJsonSha256": { "type": "null" } }
-      },
-      "else": {
-        "properties": { "ganttNormalizedJsonSha256": { "$ref": "#/$defs/sha256" } }
-      }
-    },
-    {
-      "if": {
-        "properties": { "ganttNormalizedJsonSha256": { "type": "null" } },
-        "required": ["ganttNormalizedJsonSha256"]
-      },
-      "then": {
-        "properties": { "ganttRawSha256": { "type": "null" } }
-      },
-      "else": {
-        "properties": { "ganttRawSha256": { "$ref": "#/$defs/sha256" } }
-      }
-    },
-    {
-      "anyOf": [
-        { "properties": { "ganttRawSha256": { "$ref": "#/$defs/sha256" } } },
-        { "properties": { "targetFailureSha256": { "$ref": "#/$defs/sha256" } } }
-      ]
-    }
-  ]
+    "schemaVersion": {"const": "1.0"},
+    "caseId": {"type": "string", "minLength": 1},
+    "contextId": {"type": "string", "minLength": 1},
+    "runId": {"type": "string", "minLength": 1},
+    "targetFailureSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
 }

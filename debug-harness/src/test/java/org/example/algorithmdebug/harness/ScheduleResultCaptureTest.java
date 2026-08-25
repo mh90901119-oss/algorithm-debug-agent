@@ -40,8 +40,7 @@ class ScheduleResultCaptureTest {
 
         assertEquals(produced, captured.sourcePath());
         assertTrue(Files.isRegularFile(captured.capturedPath()));
-        assertEquals(new JsonTokenContentHasher().sha256(captured.capturedPath()),
-                captured.normalizedJsonSha256());
+        assertEquals("{\"schedule\":13}", Files.readString(captured.capturedPath()));
     }
 
     @Test

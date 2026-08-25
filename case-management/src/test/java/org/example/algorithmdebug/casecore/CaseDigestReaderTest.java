@@ -2,6 +2,7 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
@@ -115,6 +116,61 @@ class CaseDigestReaderTest {
 
         assertEquals(newest.analysisId(), digest.latestAnalysisId().orElseThrow());
         assertEquals(2_048, digest.latestQuestionExcerpt().length());
+    }
+
+    @Test
+    void shouldExposeCompletedAnalysisWithoutModelReasoning() {
+        repository.completeAnalysis(CaseArchiveRepositoryTest.analysisResult());
+
+        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
+
+        assertEquals(1, digest.completedAnalysisCount());
+        assertEquals("设备空闲来自等待前序操作。",
+                digest.recentAnalysisResults().getFirst().finalAnswerExcerpt());
+        assertEquals(1, digest.recentAnalysisResults().getFirst().conclusions().size());
+    }
+
+    @Test
+    void shouldWarnAboutCorruptAnalysisResultAndKeepRequest() throws Exception {
+        CaseArchiveLayout layout = CaseArchiveLayout.of(
+                temporaryDirectory.resolve("cases"), CaseArchiveRepositoryTest.manifest().caseId());
+        Files.writeString(layout.analysisResult(CaseArchiveRepositoryTest.analysis().analysisId()),
+                "{", StandardCharsets.UTF_8);
+
+        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
+
+        assertEquals(1, digest.analysisCount());
+        assertEquals(0, digest.completedAnalysisCount());
+        assertTrue(digest.archiveWarnings().stream().anyMatch(warning ->
+                "CASE_CHILD_DOCUMENT_INVALID".equals(warning.code())));
+    }
+
+    @Test
+    void shouldLimitRecentAnalysisResultsToTwenty() {
+        repository.completeAnalysis(CaseArchiveRepositoryTest.analysisResult());
+        for (int index = 2; index <= 25; index++) {
+            AnalysisId id = new AnalysisId("analysis-" + index);
+            Instant time = Instant.parse("2026-08-16T00:00:00Z").plusSeconds(index);
+            repository.createAnalysis(new AnalysisRequest(
+                    SchemaVersions.ANALYSIS_REQUEST,
+                    CaseArchiveRepositoryTest.manifest().caseId(),
+                    CaseArchiveRepositoryTest.context().contextId(), id,
+                    "追问 " + index, time));
+            repository.completeAnalysis(new AnalysisResult(
+                    SchemaVersions.ANALYSIS_RESULT,
+                    CaseArchiveRepositoryTest.manifest().caseId(),
+                    CaseArchiveRepositoryTest.context().contextId(), id,
+                    "回答 " + index, List.of(), List.of(), List.of(), List.of(), List.of(),
+                    List.of(), time.plusMillis(1)));
+        }
+
+        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
+
+        assertEquals(25, digest.completedAnalysisCount());
+        assertEquals(20, digest.recentAnalysisResults().size());
+        assertEquals(new AnalysisId("analysis-25"),
+                digest.recentAnalysisResults().getFirst().analysisId());
+        assertTrue(digest.truncated());
     }
 
     private static RunOutcomeSummary outcome(RunId runId) {

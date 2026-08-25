@@ -7,22 +7,26 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true })
  * @param {string[]} args CLI 参数
  * @param {string} cwd 目标项目目录
  * @param {(command: string[], options: object) => object} spawn 进程启动函数
- * @param {{ timeoutMilliseconds?: number }} [options] Adapter 总运行预算
+ * @param {{ timeoutMilliseconds?: number, executable?: string }} [options] Adapter 总运行预算与 CLI 启动器
  * @returns {Promise<string>} ToolResponse 2.0 JSON
  */
 export async function runAdaCommand(args, cwd, spawn, options = {}) {
   if (!Array.isArray(args) || typeof cwd !== "string" || cwd.length === 0
       || typeof spawn !== "function") {
-    throw new TypeError("args、cwd 和 spawn 必须有效")
+    throw new TypeError("args, cwd, and spawn must be valid")
   }
   const timeoutMilliseconds = options.timeoutMilliseconds ?? DEFAULT_TIMEOUT_MILLISECONDS
   if (!Number.isSafeInteger(timeoutMilliseconds) || timeoutMilliseconds <= 0) {
-    throw new TypeError("timeoutMilliseconds 必须为正整数")
+    throw new TypeError("timeoutMilliseconds must be a positive integer")
+  }
+  const executable = options.executable ?? "ada"
+  if (typeof executable !== "string" || executable.trim().length === 0) {
+    throw new TypeError("executable must be a non-empty string")
   }
 
   let process
   try {
-    process = spawn(["ada", ...args], { cwd, stdout: "pipe", stderr: "pipe" })
+    process = spawn([executable, ...args], { cwd, stdout: "pipe", stderr: "pipe" })
   } catch {
     return failure("ADA_CLI_START_FAILED")
   }
@@ -67,7 +71,7 @@ function withTimeout(promise, timeoutMilliseconds) {
 
 async function readBounded(stream) {
   if (!stream || typeof stream.getReader !== "function") {
-    throw new TypeError("CLI stream 不可读")
+    throw new TypeError("CLI stream is not readable")
   }
   const reader = stream.getReader()
   const chunks = []

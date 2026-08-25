@@ -35,6 +35,24 @@ class ProjectRegistrationRepositoryTest {
     }
 
     @Test
+    void shouldAtomicallyReplaceExistingRegistration() throws Exception {
+        WorkspaceLayout layout = layoutWithProjectsRoot();
+        ProjectRegistrationRepository repository = repository();
+        ProjectRegistration original = registration(new ProjectId("algorithm-one-a1b2c3d4e5f6"));
+        Files.createDirectories(layout.projectWorkspace(original.projectId()));
+        repository.create(layout, original);
+        ProjectRegistration updated = new ProjectRegistration(
+                original.schemaVersion(), original.projectId(), original.displayName(),
+                original.repositoryRoot(), original.moduleRoot(), original.mavenExecutionRoot(),
+                original.pomPath(), original.buildTool(),
+                "output/results", original.registeredAt());
+
+        repository.replace(layout, updated);
+
+        assertEquals(updated, repository.findById(layout, original.projectId()).orElseThrow());
+    }
+
+    @Test
     void shouldReturnEmptyWhenProjectsOrRegistrationDoNotExist() throws Exception {
         WorkspaceLayout layout = WorkspaceLayout.of(temporaryDirectory.resolve("workspace"));
         ProjectRegistrationRepository repository = repository();
@@ -99,7 +117,7 @@ class ProjectRegistrationRepositoryTest {
                 "D:/large-system/algorithm-one",
                 "pom.xml",
                 "MAVEN",
-                "a".repeat(64),
+                null,
                 Instant.parse("2026-08-16T00:00:00Z"));
     }
 }

@@ -2,7 +2,6 @@ package org.example.algorithmdebug.core;
 
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
-import org.example.algorithmdebug.casecore.ClasspathWorkspaceTemplateProvider;
 import org.example.algorithmdebug.casecore.WorkspaceInitializer;
 import org.example.algorithmdebug.casecore.WorkspaceManifestRepository;
 import org.example.algorithmdebug.contracts.DoctorCheck;
@@ -20,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -75,8 +75,10 @@ class DoctorApplicationServiceTest {
         assertEquals(5, report.checks().size());
         assertTrue(report.checks().stream().allMatch(check -> check.status() == DoctorStatus.PASS));
         assertEquals(pomBefore, Files.readString(pom, StandardCharsets.UTF_8));
-        try (var systemEntries = Files.list(workspace.resolve("system"))) {
-            assertFalse(systemEntries.anyMatch(path -> path.getFileName().toString().startsWith("doctor-")));
+        assertFalse(Files.exists(workspace.resolve("system")));
+        try (var workspaceEntries = Files.list(workspace)) {
+            assertFalse(workspaceEntries.anyMatch(path ->
+                    path.getFileName().toString().startsWith(".doctor-")));
         }
     }
 
@@ -121,13 +123,30 @@ class DoctorApplicationServiceTest {
         assertTrue(codes(report).contains("PROJECT_NOT_REQUESTED"));
     }
 
+    @Test
+    void shouldIncludeInjectedCodePathToolDiagnostic() {
+        Path workspace = initializeWorkspace();
+        DoctorApplicationService doctor = new DoctorApplicationService(
+                () -> 21,
+                new MavenExecutableLocator(Map.of(), ";", true),
+                manifestRepository(),
+                List.of(() -> new DoctorCheck(
+                        "codepath", DoctorStatus.FAIL,
+                        "CODEPATH_TOOL_MISSING", "Launcher 不可用")));
+
+        DoctorReport report = doctor.diagnose(
+                workspace, Optional.empty(), Optional.empty());
+
+        assertEquals(6, report.checks().size());
+        assertTrue(codes(report).contains("CODEPATH_TOOL_MISSING"));
+        assertEquals(DoctorStatus.FAIL, report.overallStatus());
+    }
+
     private Path initializeWorkspace() {
         Path workspace = temporaryDirectory.resolve("workspace");
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
         new WorkspaceInitializer(
                 new WorkspaceManifestRepository(new BoundedDocumentMapper(), writer),
-                writer,
-                new ClasspathWorkspaceTemplateProvider(),
                 FIXED_CLOCK)
                 .initialize(workspace);
         return workspace;

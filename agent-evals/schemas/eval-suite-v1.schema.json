@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/eval-suite-v1.schema.json",
+  "title": "Algorithm Debug Agent Eval Suite v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "suiteId", "description", "cases"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "suiteId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/evalCase" }
+    }
+  },
+  "$defs": {
+    "stringArray": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "type": "string", "minLength": 1, "maxLength": 1024 }
+    },
+    "evalCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "question", "targetTest", "requiredTools", "forbiddenTools",
+        "requiredAnswerPatterns", "forbiddenAnswerPatterns", "requireAnalysisComplete",
+        "requireEvidenceReferences", "allowCodePath", "allowJdwp", "maxTargetTestExecutions"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 128 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "targetTest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["className", "methodName"],
+          "properties": {
+            "className": { "type": "string", "minLength": 1, "maxLength": 1024 },
+            "methodName": { "type": "string", "minLength": 1, "maxLength": 256 }
+          }
+        },
+        "requiredTools": { "$ref": "#/$defs/stringArray" },
+        "forbiddenTools": { "$ref": "#/$defs/stringArray" },
+        "expectedProcessOutcome": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "expectedTestOutcome": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "expectedExceptionClass": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "requiredAnswerPatterns": { "$ref": "#/$defs/stringArray" },
+        "forbiddenAnswerPatterns": { "$ref": "#/$defs/stringArray" },
+        "requireAnalysisComplete": { "type": "boolean" },
+        "requireEvidenceReferences": { "type": "boolean" },
+        "allowCodePath": { "type": "boolean" },
+        "allowJdwp": { "type": "boolean" },
+        "maxTargetTestExecutions": { "type": "integer", "minimum": 1, "maximum": 32 }
+      }
+    }
+  }
+}

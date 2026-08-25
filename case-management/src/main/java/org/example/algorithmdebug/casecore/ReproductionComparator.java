@@ -34,11 +34,7 @@ public final class ReproductionComparator {
             throw new IllegalArgumentException("不同 Case 的 RunResultFingerprint 不得比较");
         }
 
-        List<String> changed = new ArrayList<>(2);
-        if (!reference.ganttNormalizedJsonSha256()
-                .equals(current.ganttNormalizedJsonSha256())) {
-            changed.add("GANTT");
-        }
+        List<String> changed = new ArrayList<>(1);
         if (!reference.targetFailureSha256().equals(current.targetFailureSha256())) {
             changed.add("TARGET_FAILURE");
         }

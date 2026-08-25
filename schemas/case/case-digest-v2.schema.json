@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/case-digest-v2.schema.json",
+  "title": "CaseDigest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "projectId", "targetTest", "latestContextId", "latestAnalysisId", "latestQuestionExcerpt", "latestRunId", "recentRuns", "incompleteRuns", "recentCollections", "recentEvidence", "recentAnalysisResults", "archiveWarnings", "contextCount", "analysisCount", "runCount", "collectionCount", "evidenceCount", "completedAnalysisCount", "truncated"],
+  "properties": {
+    "schemaVersion": {"const": "2.0"},
+    "caseId": {"$ref": "#/$defs/id"},
+    "projectId": {"$ref": "#/$defs/id"},
+    "targetTest": {"type": "object"},
+    "latestContextId": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/id"}]},
+    "latestAnalysisId": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/id"}]},
+    "latestQuestionExcerpt": {"type": "string", "minLength": 1, "maxLength": 2048},
+    "latestRunId": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/id"}]},
+    "recentRuns": {"$ref": "#/$defs/boundedObjects"},
+    "incompleteRuns": {"type": "array", "maxItems": 20, "items": {"$ref": "#/$defs/id"}},
+    "recentCollections": {"$ref": "#/$defs/boundedObjects"},
+    "recentEvidence": {"$ref": "#/$defs/boundedObjects"},
+    "recentAnalysisResults": {"$ref": "#/$defs/boundedObjects"},
+    "archiveWarnings": {"$ref": "#/$defs/boundedObjects"},
+    "contextCount": {"type": "integer", "minimum": 0},
+    "analysisCount": {"type": "integer", "minimum": 0},
+    "runCount": {"type": "integer", "minimum": 0},
+    "collectionCount": {"type": "integer", "minimum": 0},
+    "evidenceCount": {"type": "integer", "minimum": 0},
+    "completedAnalysisCount": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "boundedObjects": {"type": "array", "maxItems": 20, "items": {"type": "object"}}
+  }
+}

@@ -2,6 +2,14 @@
 
 > 历史草案说明：本文档保留早期方案，包含“算法内部 Domain Trace Sink”等已被调整的设计。当前实施请以 [Algorithm Debug Agent 完整架构与开发计划](../architecture/algorithm-debug-agent-complete-design.md) 为准；主方案采用算法源码零侵入、外部 Debug Harness、CodePathTracer、JDWP Batch Collector 和 Derived Domain Trace。
 
+> 2026-08-21 当前状态：通用 Maven/JUnit + JSON 结果链路、三类失败 UT、英文主运行边界和
+> OpenCode 端到端链路已实施；当前阶段增加轻量 Agent Eval Harness，不恢复已删除的 Eval 生产模块。
+>
+> 2026-08-19 当前状态：ADR-010 的显式最小 Context 与精确方法 CodePath v2 已实施并通过全 Reactor
+> 清洁测试及真实 `hellomvn` smoke。本文后续出现的自动 Context Snapshot、包级 CodePath 和二次过滤内容
+> 均为历史计划，不再是当前实现要求。当前下一阶段是 OpenCode 一次性安装/端到端模型 Eval，而不是继续扩展
+> Context 规则或修改上游 CodePathTracer。
+
 > 2026-08-12 当前实施修订：OpenCode 是唯一 Agent Runtime；Agent 通过仓库内 Skill 与薄
 > Custom Tool 调用 `ada` CLI，不实现 Algorithm Debug MCP Server。一次性 OpenCode 适配登记
 > Agent 安装目录后，用户进入目标算法仓库直接运行 `opencode`。UT 结果采用结构化摘要、原始 Artifact

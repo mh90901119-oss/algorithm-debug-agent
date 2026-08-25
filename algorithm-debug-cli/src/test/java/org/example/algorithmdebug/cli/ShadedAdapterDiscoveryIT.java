@@ -35,7 +35,7 @@ class ShadedAdapterDiscoveryIT {
             String adapterId = (String) descriptor.getClass()
                     .getMethod("adapterId")
                     .invoke(descriptor);
-            assertEquals("wafer-demo", adapterId);
+            assertEquals("maven-junit", adapterId);
         }
     }
 }

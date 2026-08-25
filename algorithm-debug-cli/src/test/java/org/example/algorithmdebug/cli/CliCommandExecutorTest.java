@@ -41,4 +41,65 @@ class CliCommandExecutorTest {
 
         assertEquals("问题", CliCommandExecutor.readQuestion(file));
     }
+
+    @Test
+    void codePathRequestFileRejectsUtf16EvenWhenJsonParserCouldDetectIt() throws Exception {
+        String json = """
+                {"planId":"plan-1","selectedMethodKeys":["fixture.Test#case1()V"],
+                 "rationale":"定位","budget":{"maxEvents":100,"maxBytes":1024,
+                 "timeoutMillis":1000},
+                 "requestedAt":"2026-08-18T00:00:00Z"}
+                """;
+        Path utf16 = Files.write(
+                temporaryDirectory.resolve("request-utf16.json"),
+                json.getBytes(StandardCharsets.UTF_16LE));
+
+        assertThrows(CliInputException.class, () -> CliCommandExecutor.readPlanRequest(utf16));
+    }
+
+    @Test
+    void jdwpRequestUsesStrictUtf8AndRejectsUnknownCapabilities() throws Exception {
+        Path valid = Files.writeString(temporaryDirectory.resolve("jdwp.json"), """
+                {"planId":"jdwp-plan-1","tracepoints":[{
+                 "tracepointId":"entry","methodKey":"fixture.Test#case1()V",
+                 "line":12,"maxHits":3,"capture":{"locals":false,"stack":true,
+                 "maxFrames":8,"maxDepth":1,"maxItems":20,"maxStringLength":256}}],
+                 "budget":{"maxEvents":100,"maxBytes":16777216,
+                 "timeoutMillis":300000,"idleTimeoutMillis":120000},
+                 "rationale":"查看调用栈","requestedAt":"2026-08-18T00:00:00Z"}
+                """);
+        Path unsupported = Files.writeString(temporaryDirectory.resolve("unsupported.json"), """
+                {"planId":"jdwp-plan-1","tracepoints":[],"projection":["x"],
+                 "budget":{"maxEvents":100,"maxBytes":16777216,
+                 "timeoutMillis":300000,"idleTimeoutMillis":120000},
+                 "rationale":"查看调用栈","requestedAt":"2026-08-18T00:00:00Z"}
+                """);
+
+        assertEquals("jdwp-plan-1", CliCommandExecutor.readJdwpPlanRequest(valid).planId().value());
+        assertThrows(CliInputException.class,
+                () -> CliCommandExecutor.readJdwpPlanRequest(unsupported));
+    }
+
+    @Test
+    void analysisResultFileContainsOnlySupportedFinalResultFields() throws Exception {
+        Path valid = Files.writeString(temporaryDirectory.resolve("analysis-result.json"), """
+                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
+                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
+                 "referencedRunIds":[],"referencedCollectionIds":[],
+                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
+                 "missingEvidence":[],"completedAt":"2026-08-19T00:00:00Z"}
+                """);
+        Path reasoning = Files.writeString(temporaryDirectory.resolve("reasoning.json"), """
+                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
+                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
+                 "referencedRunIds":[],"referencedCollectionIds":[],
+                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
+                 "missingEvidence":[],"reasoning":"hidden",
+                 "completedAt":"2026-08-19T00:00:00Z"}
+                """);
+
+        assertEquals("回答", CliCommandExecutor.readAnalysisResult(valid).finalAnswer());
+        assertThrows(CliInputException.class,
+                () -> CliCommandExecutor.readAnalysisResult(reasoning));
+    }
 }

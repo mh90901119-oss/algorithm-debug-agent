@@ -1,40 +1,34 @@
 # adapter-sdk
 
-Algorithm Debug Agent 的目标项目适配 SPI。它把通用 Agent 与具体算法仓库的 Maven 启动方式、
-输入位置和结果格式隔离开。调度结果内容指纹由 Debug Harness 统一计算，不属于目标项目 Adapter。
+Algorithm Debug Agent 的目标项目适配 SPI。Adapter 只隔离项目识别和 Maven/JUnit 启动方式，
+不承担算法输入定位、结果目录配置或领域 JSON 解析。
 
-## 当前能力
+## 当前 SPI
 
-- Adapter 身份、版本和能力声明；
-- Maven 目标项目描述；
-- BASELINE、CODE_PATH、JDWP 运行模式；
-- 结构化 `TestLaunchSpec`；
-- `InputLocator`；
-- `ScheduleResultLocator`；
-- 泛型 `ScheduleResultParser<T>`；
-- 无状态组合接口 `TargetProjectAdapter<T>`；
-- 带稳定错误码和 cause 的 `AdapterException`。
+`TargetProjectAdapter` 只有三个职责：
+
+- 声明 Adapter 身份、版本和采集能力；
+- 检查目标 Maven 模块并返回 `ProjectDescriptor`；
+- 为 BASELINE、CODE_PATH 或 JDWP 创建结构化 `TestLaunchSpec`。
+
+结果 JSON 目录由外部 Workspace 的 `ProjectRegistration.resultJsonDirectory` 配置，通用 Harness
+负责捕获、校验、哈希和归档。UT 输入由 UT 自己准备，Agent 不再定义 `InputLocator`。
 
 ## 设计边界
 
 - 只依赖 `ada-contracts` 和 JDK；
-- 不启动 Maven/JUnit 进程；
-- 不拼接 Shell 命令；
-- 不包含晶圆调度业务语义；
-- 不修改目标算法源码；
-- 具体算法实现位于独立 Adapter 模块。
+- 不启动 Maven/JUnit 进程，不拼接 Shell 命令；
+- 不包含晶圆调度或其他算法领域语义；
+- 不修改目标算法、UT 或 POM；
+- Adapter 必须无状态，项目状态通过方法参数显式传递。
 
 ## 实现示意
 
 ```java
-public final class MyAlgorithmAdapter
-        implements TargetProjectAdapter<MyScheduleSnapshot> {
-    // 实现 inspect、启动规格、输入定位、结果源和结果解析。
+public final class MyMavenAdapter implements TargetProjectAdapter {
+    // 实现 descriptor、inspect 和 createLaunchSpec。
 }
 ```
-
-Adapter 应保持无状态。一次 inspect 得到的 `ProjectDescriptor` 必须显式传给后续方法，不能保存在
-“当前项目”字段中。
 
 ## 测试
 
@@ -42,4 +36,4 @@ Adapter 应保持无状态。一次 inspect 得到的 `ProjectDescriptor` 必须
 mvn -pl adapter-sdk -am test
 ```
 
-详细设计见 `docs/designs/2026-08-10-adapter-sdk-design.md`。
+当前通用实现见 `adapters/maven-junit-adapter`。

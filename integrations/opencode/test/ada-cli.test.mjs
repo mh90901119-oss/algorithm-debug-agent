@@ -22,6 +22,21 @@ test("returns a valid ToolResponse without rewriting facts", async () => {
   assert.equal(result, validSuccess)
 })
 
+test("uses an explicitly configured repository launcher", async () => {
+  let observed
+  const spawn = (command, options) => {
+    observed = { command, options }
+    return fakeProcess(validSuccess, "", 0)
+  }
+
+  await runAdaCommand(["case", "inspect"], "D:/target", spawn, {
+    executable: "D:/agent/bin/ada.cmd",
+  })
+
+  assert.deepEqual(observed.command, ["D:/agent/bin/ada.cmd", "case", "inspect"])
+  assert.equal(observed.options.cwd, "D:/target")
+})
+
 test("accepts artifact hash case normalized by the Java contract", async () => {
   const response = JSON.stringify({
     schemaVersion: "2.0",
@@ -178,12 +193,16 @@ test("returns a valid CLI failure even when the process exits nonzero", async ()
 })
 
 function fakeSpawn(stdout, stderr, exitCode, kill = () => {}) {
-  return () => ({
+  return () => fakeProcess(stdout, stderr, exitCode, kill)
+}
+
+function fakeProcess(stdout, stderr, exitCode, kill = () => {}) {
+  return {
     stdout: stream(stdout),
     stderr: stream(stderr),
     exited: Promise.resolve(exitCode),
     kill,
-  })
+  }
 }
 
 function stream(value) {

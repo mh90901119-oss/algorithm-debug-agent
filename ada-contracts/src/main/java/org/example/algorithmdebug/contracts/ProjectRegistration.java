@@ -2,6 +2,7 @@ package org.example.algorithmdebug.contracts;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import java.nio.file.Path;
 import java.time.Instant;
 
 /**
@@ -17,7 +18,6 @@ import java.time.Instant;
  * @param mavenExecutionRoot 运行目标 UT 时使用的 Maven 工作目录
  * @param pomPath 相对 moduleRoot 的可移植 pom.xml 路径
  * @param buildTool 构建工具，当前固定为 MAVEN
- * @param pomSha256 注册时 pom.xml 内容的 SHA-256
  * @param registeredAt 注册时间
  */
 public record ProjectRegistration(
@@ -29,7 +29,7 @@ public record ProjectRegistration(
         String mavenExecutionRoot,
         String pomPath,
         String buildTool,
-        String pomSha256,
+        String resultJsonDirectory,
         @JsonFormat(shape = JsonFormat.Shape.STRING) Instant registeredAt) {
 
     private static final int MAX_DISPLAY_NAME_LENGTH = 256;
@@ -54,7 +54,33 @@ public record ProjectRegistration(
         if (!MAVEN.equals(buildTool)) {
             throw new IllegalArgumentException("当前只支持 MAVEN 构建工具: " + buildTool);
         }
-        pomSha256 = ContractChecks.requireSha256(pomSha256, "pomSha256");
+        if (resultJsonDirectory != null) {
+            resultJsonDirectory = validateResultJsonDirectory(resultJsonDirectory);
+        }
         registeredAt = ContractChecks.requireNonNull(registeredAt, "registeredAt");
+    }
+
+    /** 校验并返回项目相对的算法 JSON 结果目录，供确定性配置读取复用。 */
+    public static String validateResultJsonDirectory(String value) {
+        Path configuredPath = Path.of(value);
+        if (configuredPath.isAbsolute()) {
+            return configuredPath.normalize().toString().replace('\\', '/');
+        }
+        return ContractChecks.requirePortableRelativePath(value, "resultJsonDirectory");
+    }
+
+    /** 兼容未配置结果目录的既有调用方和旧版 project.json。 */
+    public ProjectRegistration(
+            String schemaVersion,
+            ProjectId projectId,
+            String displayName,
+            String repositoryRoot,
+            String moduleRoot,
+            String mavenExecutionRoot,
+            String pomPath,
+            String buildTool,
+            Instant registeredAt) {
+        this(schemaVersion, projectId, displayName, repositoryRoot, moduleRoot,
+                mavenExecutionRoot, pomPath, buildTool, null, registeredAt);
     }
 }

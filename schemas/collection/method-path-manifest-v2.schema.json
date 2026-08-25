@@ -1,0 +1,198 @@
+{
+    "$schema":  "https://json-schema.org/draft/2020-12/schema",
+    "$id":  "https://algorithm-debug-agent.local/schemas/collection/method-path-manifest-v2.schema.json",
+    "title":  "Method Path Manifest v2",
+    "type":  "object",
+    "additionalProperties":  false,
+    "required":  [
+                     "schemaVersion",
+                     "caseId",
+                     "contextId",
+                     "analysisId",
+                     "runId",
+                     "planId",
+                     "collectionId",
+                     "toolName",
+                     "toolVersion",
+                     "completion",
+                     "stage",
+                     "processStarted",
+                     "exitCode",
+                     "timedOut",
+                     "targetOutcome",
+                     "testsFound",
+                     "testsSucceeded",
+                     "testsAborted",
+                     "testsFailed",
+                     "capturedEventCount",
+                     "capturedBytes",
+                     "truncationReasons",
+                     "agentFailure",
+                     "rawTrace",
+                     "stdoutLog",
+                     "stderrLog",
+                     "startedAt",
+                     "completedAt"
+                 ],
+    "properties":  {
+                       "schemaVersion":  {
+                                             "const":  "2.0"
+                                         },
+                       "caseId":  {
+                                      "type":  "string"
+                                  },
+                       "contextId":  {
+                                         "type":  "string"
+                                     },
+                       "analysisId":  {
+                                          "type":  "string"
+                                      },
+                       "runId":  {
+                                     "type":  "string"
+                                 },
+                       "planId":  {
+                                      "type":  "string"
+                                  },
+                       "collectionId":  {
+                                            "type":  "string"
+                                        },
+                       "toolName":  {
+                                        "type":  "string",
+                                        "minLength":  1,
+                                        "maxLength":  128
+                                    },
+                       "toolVersion":  {
+                                           "type":  "string",
+                                           "minLength":  1,
+                                           "maxLength":  256
+                                       },
+                       "completion":  {
+                                          "enum":  [
+                                                       "SUCCESS",
+                                                       "TARGET_FAILED",
+                                                       "TOOL_FAILED",
+                                                       "AGENT_FAILED",
+                                                       "TIMED_OUT",
+                                                       "TRUNCATED"
+                                                   ]
+                                      },
+                       "stage":  {
+                                     "enum":  [
+                                                  "REQUEST_ARCHIVED",
+                                                  "CLASSPATH_RESOLVED",
+                                                  "PROCESS_COMPLETED",
+                                                  "COMPLETE",
+                                                  "FAILED"
+                                              ]
+                                 },
+                       "processStarted":  {
+                                              "type":  "boolean"
+                                          },
+                       "exitCode":  {
+                                        "type":  "integer"
+                                    },
+                       "timedOut":  {
+                                        "type":  "boolean"
+                                    },
+                       "capturedEventCount":  {
+                                                  "type":  "integer",
+                                                  "minimum":  0
+                                              },
+                       "targetOutcome":  {
+                                             "enum":  [
+                                                          "PASSED",
+                                                          "FAILED",
+                                                          "NOT_EXECUTED"
+                                                      ]
+                                         },
+                       "testsFound":  {
+                                          "type":  "integer",
+                                          "minimum":  0
+                                      },
+                       "testsSucceeded":  {
+                                              "type":  "integer",
+                                              "minimum":  0
+                                          },
+                       "testsAborted":  {
+                                            "type":  "integer",
+                                            "minimum":  0
+                                        },
+                       "testsFailed":  {
+                                           "type":  "integer",
+                                           "minimum":  0
+                                       },
+                       "capturedBytes":  {
+                                             "type":  "integer",
+                                             "minimum":  0
+                                         },
+                       "truncationReasons":  {
+                                                 "type":  "array",
+                                                 "maxItems":  16,
+                                                 "items":  {
+                                                               "type":  "string",
+                                                               "minLength":  1,
+                                                               "maxLength":  2048
+                                                           }
+                                             },
+                       "agentFailure":  {
+                                            "oneOf":  [
+                                                          {
+                                                              "$ref":  "#/$defs/agentFailure"
+                                                          },
+                                                          {
+                                                              "type":  "null"
+                                                          }
+                                                      ]
+                                        },
+                       "rawTrace":  {
+                                        "type":  "string",
+                                        "minLength":  1,
+                                        "maxLength":  1024
+                                    },
+                       "stdoutLog":  {
+                                         "type":  "string",
+                                         "minLength":  1,
+                                         "maxLength":  1024
+                                     },
+                       "stderrLog":  {
+                                         "type":  "string",
+                                         "minLength":  1,
+                                         "maxLength":  1024
+                                     },
+                       "startedAt":  {
+                                         "type":  "string",
+                                         "format":  "date-time"
+                                     },
+                       "completedAt":  {
+                                           "type":  "string",
+                                           "format":  "date-time"
+                                       }
+                   },
+    "$defs":  {
+                  "agentFailure":  {
+                                       "type":  "object",
+                                       "additionalProperties":  false,
+                                       "required":  [
+                                                        "code",
+                                                        "message",
+                                                        "exceptionClass"
+                                                    ],
+                                       "properties":  {
+                                                          "code":  {
+                                                                       "type":  "string",
+                                                                       "minLength":  1,
+                                                                       "maxLength":  256
+                                                                   },
+                                                          "message":  {
+                                                                          "type":  "string",
+                                                                          "minLength":  1,
+                                                                          "maxLength":  8192
+                                                                      },
+                                                          "exceptionClass":  {
+                                                                                 "type":  "string",
+                                                                                 "maxLength":  1024
+                                                                             }
+                                                      }
+                                   }
+              }
+}

@@ -1,5 +1,9 @@
 # Case Context、Run Outcome 与多轮 Analysis 持久化可实施设计
 
+> **修订说明（2026-08-18）：** 本文的 Case 档案、Run Outcome 和多轮 Evidence 模型继续有效；
+> `ContextSnapshotBuilder`、Workspace 指纹自动比较及 ChangeSummary 已由 ADR-010 和
+> `2026-08-18-context-codepath-simplification-design.md` 取代。当前实现使用显式最小 Context。
+
 - 文档状态：Approved / Core Persistence Implemented
 - 设计版本：0.6
 - 创建日期：2026-08-12

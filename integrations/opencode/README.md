@@ -1,18 +1,47 @@
 # OpenCode integration
 
-这是当前唯一客户端适配层，调用链为 OpenCode Model → canonical Skill → OpenCode Custom Tool →
-`ada` CLI → Java Core。该目录不复制或改写事实，也不包含算法业务语义。
+The active chain is OpenCode/LLM -> algorithm-debug Agent -> Skill -> Custom Tool -> Java CLI ->
+deterministic Java services. OpenCode plans and explains; Java executes, validates, and archives.
 
-- `tools/algorithm-debug.ts`：最终 Tool 契约源码；安装器还需把当前 `context.directory` 映射到已登记项目，
-  注入外部 Workspace/`projectId`，并把尚未实现的高层命令映射到稳定 CLI 后才能登记使用。
-- `lib/ada-cli.mjs`：stdout/stderr 各以 1 MiB 为上限读取；只原样返回通过 ToolResponse 2.0 校验的
-  stdout；默认总运行预算 15 分钟；启动、超时、超限或协议错误返回结构化 Adapter 失败、终止 CLI
-  且不回显原始日志。
-- `agents/algorithm-debug.md`：待安装器登记和实测的显式 Debug Agent 资产。
-- `commands/debug-case.md`：待安装器和模型端到端验证的 `/debug-case` 命令资产。
+## Paths
 
-规范 Skill 位于 `skills/algorithm-debug/SKILL.md`。仓库现已提供可执行 CLI 的 Workspace init、Project
-register、Doctor、`case open/inspect` 和 `run execute` 后端命令；本目录仍不是可直接使用的安装包：
-OpenCode 一次性安装器、锁定版本的外部目录发现验证和模型端到端 `/debug-case` 编排尚未实现。不能假设
-任意外部目录会被 OpenCode 自动发现。最终体验仍是进入算法仓库后直接执行 `opencode` 并提问。当前不提供
-Agent MCP Server。
+All user-editable paths come from `config/agent-settings.json`. The installer resolves that file and
+generates `lib/installation.mjs` in the OpenCode configuration directory. The Tool reads Workspace
+and algorithm-result paths from that generated module. It does not infer paths, read a target-project
+configuration file, or accept user path arguments.
+
+Temporary question, plan, and analysis-result files are internal bounded process transport. They are
+deleted after each Tool call. The internal Java CLI still receives resolved paths because it is a
+subprocess boundary, not a user configuration interface.
+
+## Case-local DFX
+
+When `dfxEnabled` is true, the Tool Runtime writes bounded diagnostic events to
+`<workspaceDirectory>/projects/<projectId>/cases/<caseId>/interaction.jsonl`. Events before a new Case
+is known are buffered and flushed after `analysis_begin`; only a Case-creation failure uses
+`<dfxDirectory>/unassigned/<sessionId>.jsonl`.
+
+Open the JSONL file directly to review Tool and Java CLI order. It is diagnostic metadata, not an
+Artifact or Evidence source. Recorder failures never replace the original ToolResponse.
+
+## Install
+
+```powershell
+.\scripts\install-opencode.ps1 -Mode Install
+.\scripts\install-opencode.ps1 -Mode Check
+```
+
+Edit `config/agent-settings.json` before installation when a default path must change. `Check` prints
+all effective paths and verifies OpenCode capability discovery without binding to a CLI version.
+Restart OpenCode after installation or configuration changes.
+
+## Source checkout and dual JDK
+
+The GitHub source checkout is the installed Agent. Run `scripts/build-agent.ps1` before the installer.
+The script reads `agentJavaHome`, `targetJavaHome`, and `mavenExecutable` from the same repository
+configuration and never changes system environment variables. The Agent and JDWP Collector use the
+Agent JDK; algorithm Maven/JUnit and CodePath use the target JDK.
+
+Start OpenCode from the company algorithm module. OpenCode can edit that repository when the user
+requests a fix or optimization; the Agent Custom Tools remain responsible for deterministic UT
+execution, collection, validation, and Workspace archiving.

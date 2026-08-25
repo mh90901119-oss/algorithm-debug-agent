@@ -1,0 +1,515 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { isAbsolute, join, relative, resolve } from "node:path"
+
+const QUESTION_LIMIT_BYTES = 64 * 1024
+const REQUEST_LIMIT_BYTES = 64 * 1024
+const RESULT_LIMIT_BYTES = 256 * 1024
+const DEFAULT_ARTIFACT_BYTES = 16 * 1024
+const MAXIMUM_ARTIFACT_BYTES = 64 * 1024
+
+/**
+ * 创建 OpenCode Tool 的薄编排层。它只处理工作区准备、参数映射和有界临时文件，
+ * 领域校验仍由 Java CLI 完成。
+ *
+ * @param {{
+ *   execute: (args: string[], cwd: string) => Promise<string>,
+ *   workspaceDirectory: string,
+ *   resultJsonDirectory: string,
+ *   temporaryRoot?: string,
+ *   interactionRecorder?: { beginTool: (identity: object) => object }
+ * }} dependencies 可替换的进程与环境依赖
+ */
+export function createAlgorithmDebugRuntime({
+  execute,
+  workspaceDirectory,
+  resultJsonDirectory,
+  temporaryRoot = tmpdir(),
+  now = () => new Date(),
+  interactionRecorder = NOOP_RECORDER,
+}) {
+  if (typeof execute !== "function") throw new TypeError("execute must be a function")
+  const workspace = requiredText(workspaceDirectory, "workspaceDirectory")
+  const resultDirectory = requiredText(resultJsonDirectory, "resultJsonDirectory")
+  const tempRoot = resolve(requiredText(temporaryRoot, "temporaryRoot"))
+
+  const recorder = interactionRecorder && typeof interactionRecorder.beginTool === "function"
+    ? interactionRecorder : NOOP_RECORDER
+
+  async function invoke(args, context, scope) {
+    const cwd = contextDirectory(context)
+    let prepared
+    try {
+      prepared = await prepare(cwd, scope)
+    } catch {
+      return failure("ADA_PROJECT_PREPARATION_FAILED")
+    }
+    if (!prepared.success) return prepared.response
+    await observe(scope, "bindProject", prepared.projectId)
+    if (args.identity?.caseId) {
+      await observe(scope, "bindCase", args.identity)
+    }
+    try {
+      const response = await executeObserved(scope, args.command.join(" "), [
+        ...args.command,
+        "--workspace", workspace,
+        "--project-id", prepared.projectId,
+        ...args.options,
+      ], cwd)
+      const facts = responseFacts(response)
+      if (facts.caseId) {
+        await observe(scope, "bindCase", {
+          ...args.identity, caseId: facts.caseId, analysisId: facts.analysisId,
+        })
+      }
+      return response
+    } catch {
+      return failure("ADA_CLI_EXECUTION_FAILED")
+    }
+  }
+
+  async function prepare(cwd, scope) {
+    const initialized = await executeObserved(
+      scope, "workspace init", ["workspace", "init", "--root", workspace], cwd)
+    if (!successful(initialized)) return { success: false, response: initialized }
+
+    const registered = await executeObserved(scope, "project register", [
+      "project", "register", "--workspace", workspace, "--project", cwd,
+      "--result-directory", resultDirectory,
+    ], cwd)
+    const value = parseResponse(registered)
+    if (!value?.success) return { success: false, response: registered }
+    const projectId = value.data?.registration?.projectId
+    if (!nonBlank(projectId)) {
+      return { success: false, response: failure("ADA_PROJECT_REGISTRATION_INVALID_RESPONSE") }
+    }
+    return { success: true, projectId }
+  }
+
+  async function invokeWithTextFile(
+    args, context, option, fileName, content, maximumBytes, scope) {
+    const text = boundedText(content, fileName, maximumBytes)
+    const cwd = contextDirectory(context)
+    let prepared
+    try {
+      prepared = await prepare(cwd, scope)
+    } catch {
+      return failure("ADA_PROJECT_PREPARATION_FAILED")
+    }
+    if (!prepared.success) return prepared.response
+    await observe(scope, "bindProject", prepared.projectId)
+    if (args.identity?.caseId) {
+      await observe(scope, "bindCase", args.identity)
+    }
+
+    let directory
+    let path
+    try {
+      directory = await mkdtemp(join(tempRoot, "ada-opencode-"))
+      path = join(directory, fileName)
+      await writeFile(path, text, { encoding: "utf8", flag: "wx" })
+    } catch {
+      if (directory) await removeTemporaryDirectory(directory, tempRoot)
+      return failure("ADA_TEMP_FILE_OPERATION_FAILED")
+    }
+    try {
+      const commandOptions = [...args.options]
+      const fileOptionIndex = args.fileOptionIndex ?? commandOptions.length
+      commandOptions.splice(fileOptionIndex, 0, option, path)
+      const response = await executeObserved(scope, args.command.join(" "), [
+        ...args.command,
+        "--workspace", workspace,
+        "--project-id", prepared.projectId,
+        ...commandOptions,
+      ], cwd)
+      const facts = responseFacts(response)
+      if (facts.caseId) {
+        await observe(scope, "bindCase", {
+          ...args.identity, caseId: facts.caseId, analysisId: facts.analysisId,
+        })
+      }
+      return response
+    } catch {
+      return failure("ADA_CLI_EXECUTION_FAILED")
+    } finally {
+      if (directory) await removeTemporaryDirectory(directory, tempRoot)
+    }
+  }
+
+  return Object.freeze({
+    analysisBegin(input, context) {
+      return runObservedTool("analysis_begin", input, context, scope => {
+        const targetTest = requiredText(input.targetTest, "targetTest")
+        const options = [
+          "--test", targetTest,
+          "--context-mode", contextMode(input.contextMode),
+        ]
+        appendOptional(options, "--case-id", input.caseId)
+        appendOptional(options, "--adapter", input.adapterId)
+        return invokeWithTextFile(
+          { command: ["case", "open"], options, fileOptionIndex: 2,
+            identity: { caseId: input.caseId, targetTest } }, context,
+          "--question-file", "question.txt", input.question, QUESTION_LIMIT_BYTES, scope,
+        )
+      })
+    },
+    caseInspect(input, context) {
+      return runObservedTool("case_inspect", input, context, scope =>
+        invoke(command(["case", "inspect"], "--case-id", input.caseId), context, scope))
+    },
+    caseAudit(input, context) {
+      return runObservedTool("case_audit", input, context, scope =>
+        invoke(command(["case", "audit"], "--case-id", input.caseId), context, scope))
+    },
+    ganttInspect(input, context) {
+      return runObservedTool("gantt_inspect", input, context, scope => {
+        const caseId = requiredText(input.caseId, "caseId")
+        const options = [
+          "--case-id", caseId, "--artifact-id", requiredText(input.artifactId, "artifactId"),
+          "--operation", input.operation ?? "summary",
+          "--offset", String(integerInRange(input.offset ?? 0, "offset", 0, Number.MAX_SAFE_INTEGER)),
+          "--limit", String(integerInRange(input.limit ?? 100, "limit", 1, 100)),
+        ]
+        appendOptional(options, "--json-pointer", input.jsonPointer)
+        return invoke({ command: ["gantt", "inspect"], identity: { caseId }, options }, context, scope)
+      })
+    },
+    runTest(input, context) {
+      return runObservedTool("run_test", input, context, scope =>
+        invoke(caseAnalysisCommand(["run", "execute"], input), context, scope))
+    },
+    staticAnalyze(input, context) {
+      return runObservedTool("static_analyze", input, context, scope =>
+        invoke(caseAnalysisCommand(["static", "analyze"], input), context, scope))
+    },
+    codePathPlanCreate(input, context) {
+      return runObservedTool("codepath_plan_create", input, context, scope =>
+        invokePlan(["plan", "codepath", "create"], input, context, scope))
+    },
+    codePathCollect(input, context) {
+      return runObservedTool("codepath_collect", input, context, async scope =>
+        collectionFacingResponse(await invoke(
+          collectionCommand(["collection", "codepath", "execute"], input), context, scope)))
+    },
+    jdwpPlanCreate(input, context) {
+      return runObservedTool("jdwp_plan_create", input, context, scope =>
+        invokePlan(["plan", "jdwp", "create"], input, context, scope))
+    },
+    jdwpCollect(input, context) {
+      return runObservedTool("jdwp_collect", input, context, async scope =>
+        collectionFacingResponse(await invoke(
+          collectionCommand(["collection", "jdwp", "execute"], input), context, scope)))
+    },
+    artifactRead(input, context) {
+      return runObservedTool("artifact_read", input, context, scope => {
+        const offset = integerInRange(
+          input.offsetBytes ?? 0, "offsetBytes", 0, Number.MAX_SAFE_INTEGER)
+        const maximum = integerInRange(
+          input.maxBytes ?? DEFAULT_ARTIFACT_BYTES, "maxBytes", 1, MAXIMUM_ARTIFACT_BYTES,
+        )
+        const caseId = requiredText(input.caseId, "caseId")
+        return invoke({
+          command: ["artifact", "read"], identity: { caseId },
+          options: [
+            "--case-id", caseId,
+            "--artifact-id", requiredText(input.artifactId, "artifactId"),
+            "--offset-bytes", String(offset), "--max-bytes", String(maximum),
+          ],
+        }, context, scope)
+      })
+    },
+    analysisComplete(input, context) {
+      const resultJson = JSON.stringify(analysisResult(input, now))
+      const identity = {
+        caseId: requiredText(input.caseId, "caseId"),
+        analysisId: requiredText(input.analysisId, "analysisId"),
+      }
+      return runObservedTool("analysis_complete", input, context, scope => {
+        return invokeWithTextFile({
+          command: ["analysis", "complete"], identity,
+          options: [
+            "--case-id", identity.caseId,
+            "--analysis-id", identity.analysisId,
+          ],
+        }, context, "--result-file", "result.json", resultJson, RESULT_LIMIT_BYTES, scope)
+      })
+    },
+  })
+
+  function invokePlan(commandName, input, context, scope) {
+    return invokeWithTextFile({
+      command: commandName,
+      identity: {
+        caseId: requiredText(input.caseId, "caseId"),
+        analysisId: requiredText(input.analysisId, "analysisId"),
+      },
+      options: [
+        "--case-id", requiredText(input.caseId, "caseId"),
+        "--analysis-id", requiredText(input.analysisId, "analysisId"),
+      ],
+    }, context, "--request-file", "request.json", input.requestJson, REQUEST_LIMIT_BYTES, scope)
+  }
+
+  async function runObservedTool(toolName, input, context, operation) {
+    let scope = NOOP_SCOPE
+    try {
+      scope = recorder.beginTool({
+        sessionId: context?.sessionID ?? "unknown-session",
+        messageId: context?.messageID,
+        agent: context?.agent,
+        toolName,
+        targetTest: input?.targetTest,
+      }) ?? NOOP_SCOPE
+    } catch {
+      scope = NOOP_SCOPE
+    }
+    try {
+      const response = await operation(scope)
+      const facts = responseFacts(response)
+      await observe(scope, facts.success ? "toolCompleted" : "toolFailed", facts)
+      return response
+    } catch (error) {
+      await observe(scope, "toolFailed", { code: "ADA_TOOL_RUNTIME_EXCEPTION" })
+      throw error
+    }
+  }
+
+  async function executeObserved(scope, commandName, args, cwd) {
+    await observe(scope, "cliStarted", commandName)
+    try {
+      const response = await execute(args, cwd)
+      const facts = responseFacts(response)
+      await observe(scope, facts.success ? "cliCompleted" : "cliFailed", facts)
+      return response
+    } catch (error) {
+      await observe(scope, "cliFailed", { code: "ADA_CLI_PROCESS_FAILED" })
+      throw error
+    }
+  }
+}
+
+function analysisResult(input, now) {
+  const completedAt = now()
+  if (!(completedAt instanceof Date) || Number.isNaN(completedAt.getTime())) {
+    throw new TypeError("now must return a valid Date")
+  }
+  return {
+    schemaVersion: "1.0",
+    caseId: requiredText(input.caseId, "caseId"),
+    contextId: requiredText(input.contextId, "contextId"),
+    analysisId: requiredText(input.analysisId, "analysisId"),
+    finalAnswer: requiredText(input.finalAnswer, "finalAnswer"),
+    conclusions: conclusionArray(input.conclusions),
+    referencedRunIds: textArray(input.referencedRunIds, "referencedRunIds"),
+    referencedCollectionIds: textArray(
+      input.referencedCollectionIds, "referencedCollectionIds"),
+    referencedEvidenceIds: textArray(input.referencedEvidenceIds, "referencedEvidenceIds"),
+    referencedArtifactIds: textArray(input.referencedArtifactIds, "referencedArtifactIds"),
+    missingEvidence: textArray(input.missingEvidence, "missingEvidence"),
+    completedAt: completedAt.toISOString(),
+  }
+}
+
+function conclusionArray(value) {
+  const values = value ?? []
+  if (!Array.isArray(values)) throw new TypeError("conclusions must be an array")
+  return values.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new TypeError(`conclusions[${index}] must be an object`)
+    }
+    const classification = requiredText(
+      item.classification, `conclusions[${index}].classification`)
+    const evidenceReferenceIds = textArray(
+      item.evidenceReferenceIds, `conclusions[${index}].evidenceReferenceIds`)
+    if (["CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE"]
+      .includes(classification) && evidenceReferenceIds.length === 0) {
+      throw new TypeError(
+        `conclusions[${index}].evidenceReferenceIds must contain at least one `
+        + `evidence reference for ${classification}`)
+    }
+    return {
+      classification,
+      statement: requiredText(item.statement, `conclusions[${index}].statement`),
+      evidenceReferenceIds,
+    }
+  })
+}
+
+function textArray(value, name) {
+  const values = value ?? []
+  if (!Array.isArray(values)) throw new TypeError(`${name} must be an array`)
+  return values.map((item, index) => requiredText(item, `${name}[${index}]`))
+}
+
+function command(name, option, value) {
+  const required = requiredText(value, option)
+  return {
+    command: name,
+    options: [option, required],
+    identity: option === "--case-id" ? { caseId: required } : undefined,
+  }
+}
+
+function caseAnalysisCommand(name, input) {
+  const caseId = requiredText(input.caseId, "caseId")
+  const analysisId = requiredText(input.analysisId, "analysisId")
+  return {
+    command: name,
+    identity: { caseId, analysisId },
+    options: [
+      "--case-id", caseId,
+      "--analysis-id", analysisId,
+    ],
+  }
+}
+
+function collectionCommand(name, input) {
+  const caseId = requiredText(input.caseId, "caseId")
+  const planId = requiredText(input.planId, "planId")
+  return {
+    command: name,
+    identity: { caseId, planId },
+    options: [
+      "--case-id", caseId,
+      "--plan-id", planId,
+    ],
+  }
+}
+
+async function observe(scope, method, value) {
+  try {
+    if (typeof scope?.[method] === "function") await scope[method](value)
+  } catch {
+    // DFX 必须与 ToolResponse 隔离。
+  }
+}
+
+function responseFacts(response) {
+  const value = parseResponse(response)
+  if (!value) return { success: false, code: "INVALID_TOOL_RESPONSE" }
+  const facts = {
+    success: value.success === true,
+    code: nonBlank(value.code) ? value.code : undefined,
+  }
+  collectIdentifiers(value.data, facts, 0, { count: 0 })
+  const artifactIds = []
+  collectArtifactIds(value.artifacts, artifactIds)
+  collectArtifactIds(value.data?.artifactIds, artifactIds)
+  if (artifactIds.length > 0) facts.artifactIds = [...new Set(artifactIds)].slice(0, 64)
+  return facts
+}
+
+function collectIdentifiers(value, facts, depth, budget) {
+  if (!value || typeof value !== "object" || depth > 4 || budget.count++ > 128) return
+  if (Array.isArray(value)) {
+    for (const item of value) collectIdentifiers(item, facts, depth + 1, budget)
+    return
+  }
+  for (const key of ["caseId", "analysisId", "runId", "planId", "collectionId", "evidenceId"]) {
+    if (!facts[key] && nonBlank(value[key])) facts[key] = value[key]
+  }
+  for (const child of Object.values(value)) {
+    collectIdentifiers(child, facts, depth + 1, budget)
+  }
+}
+
+function collectArtifactIds(value, result) {
+  if (!Array.isArray(value)) return
+  for (const item of value.slice(0, 64)) {
+    if (nonBlank(item)) result.push(item)
+    else if (nonBlank(item?.artifactId)) result.push(item.artifactId)
+    else if (nonBlank(item?.id)) result.push(item.id)
+  }
+}
+
+function successful(response) {
+  return parseResponse(response)?.success === true
+}
+
+function collectionFacingResponse(response) {
+  const value = parseResponse(response)
+  if (!value?.success || !value.data || typeof value.data !== "object"
+      || Array.isArray(value.data) || !nonBlank(value.data.runId)) {
+    return response
+  }
+  const data = { ...value.data, collectorExecutionRunId: value.data.runId }
+  delete data.runId
+  return JSON.stringify({ ...value, data })
+}
+
+function parseResponse(response) {
+  try {
+    const value = JSON.parse(response)
+    return value && typeof value === "object" && !Array.isArray(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
+function contextDirectory(context) {
+  return requiredText(context?.directory, "context.directory")
+}
+
+function boundedText(value, name, maximumBytes) {
+  const text = requiredText(value, name)
+  if (Buffer.byteLength(text, "utf8") > maximumBytes) {
+    throw new RangeError(`${name} exceeds ${maximumBytes} bytes`)
+  }
+  return text
+}
+
+function requiredText(value, name) {
+  if (!nonBlank(value)) throw new TypeError(`${name} must be a non-empty string`)
+  return value
+}
+
+function contextMode(value) {
+  const mode = value ?? "reuse"
+  if (mode !== "reuse" && mode !== "new") throw new TypeError("contextMode must be reuse or new")
+  return mode
+}
+
+function integerInRange(value, name, minimum, maximum) {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new RangeError(`${name} is outside the allowed range`)
+  }
+  return value
+}
+
+function appendOptional(options, name, value) {
+  if (value === undefined || value === null) return
+  options.push(name, requiredText(value, name))
+}
+
+async function removeTemporaryDirectory(directory, root) {
+  const child = resolve(directory)
+  const pathFromRoot = relative(root, child)
+  if (pathFromRoot === "" || pathFromRoot.startsWith("..") || isAbsolute(pathFromRoot)) return
+  try {
+    await rm(child, { recursive: true, force: true })
+  } catch {
+    // CLI 已经返回时，清理失败不能改写其确定性结果。
+  }
+}
+
+function nonBlank(value) {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function failure(code) {
+  return JSON.stringify({
+    schemaVersion: "2.0",
+    success: false,
+    code,
+    message: "Algorithm Debug OpenCode adapter failed; inspect local Agent logs for details",
+    data: null,
+    artifacts: [],
+  })
+}
+
+const NOOP_SCOPE = Object.freeze({
+  bindProject: async () => {}, bindCase: async () => {},
+  cliStarted: async () => {}, cliCompleted: async () => {}, cliFailed: async () => {},
+  toolCompleted: async () => {}, toolFailed: async () => {},
+})
+const NOOP_RECORDER = Object.freeze({ beginTool: () => NOOP_SCOPE })

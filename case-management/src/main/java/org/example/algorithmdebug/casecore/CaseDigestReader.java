@@ -1,15 +1,24 @@
 package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.AnalysisResult;
+import org.example.algorithmdebug.contracts.AnalysisResultSummary;
 import org.example.algorithmdebug.contracts.ArchiveWarning;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
+import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
+import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
+import org.example.algorithmdebug.contracts.EvidenceId;
+import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
+import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -45,14 +54,16 @@ public final class CaseDigestReader {
         CaseManifest manifest = repository.requireCase(caseId);
         CaseArchiveLayout layout = repository.layout(caseId);
         List<ArchiveWarning> warnings = new ArrayList<>();
-        List<ContextSnapshot> contexts = readContexts(layout, warnings);
-        List<AnalysisRequest> analyses = readAnalyses(layout, warnings);
+        List<ContextRecord> contexts = readContexts(layout, warnings);
+        List<AnalysisEntry> analyses = readAnalyses(layout, warnings);
         List<RunEntry> runs = readRuns(layout, warnings);
+        List<CollectionEntry> collections = readCollections(layout, warnings);
+        List<EvidenceEntry> evidence = readEvidence(layout, warnings);
 
-        contexts.sort(Comparator.comparing(ContextSnapshot::createdAt)
+        contexts.sort(Comparator.comparing(ContextRecord::createdAt)
                 .thenComparing(value -> value.contextId().value()));
-        analyses.sort(Comparator.comparing(AnalysisRequest::createdAt)
-                .thenComparing(value -> value.analysisId().value()));
+        analyses.sort(Comparator.comparing((AnalysisEntry value) -> value.request().createdAt())
+                .thenComparing(value -> value.request().analysisId().value()));
         runs.sort(Comparator.comparing((RunEntry value) -> value.request().createdAt())
                 .thenComparing(value -> value.request().runId().value()));
 
@@ -70,11 +81,33 @@ public final class CaseDigestReader {
                 .limit(MAX_ITEMS)
                 .map(value -> value.request().runId())
                 .toList();
-        AnalysisRequest latestAnalysis = analyses.isEmpty() ? null : analyses.getLast();
+        List<CollectionExecutionSummary> recentCollections = collections.stream()
+                .filter(value -> value.summary().isPresent())
+                .sorted(Comparator.comparing((CollectionEntry value) -> value.createdAt())
+                        .thenComparing(value -> value.collectionId().value()).reversed())
+                .limit(MAX_ITEMS).map(value -> value.summary().orElseThrow()).toList();
+        List<SufficiencyEvaluation> recentEvidence = evidence.stream()
+                .filter(value -> value.sufficiency().isPresent())
+                .sorted(Comparator.comparing((EvidenceEntry value) -> value.request().createdAt())
+                        .thenComparing(value -> value.request().evidenceId().value()).reversed())
+                .limit(MAX_ITEMS).map(value -> value.sufficiency().orElseThrow()).toList();
+        List<AnalysisResultSummary> recentResults = analyses.stream()
+                .filter(value -> value.result().isPresent())
+                .sorted(Comparator.comparing((AnalysisEntry value) ->
+                                value.result().orElseThrow().completedAt())
+                        .thenComparing(value -> value.request().analysisId().value()).reversed())
+                .limit(MAX_ITEMS).map(value -> summarize(value.result().orElseThrow())).toList();
+        AnalysisRequest latestAnalysis = analyses.isEmpty() ? null : analyses.getLast().request();
         String question = latestAnalysis == null
                 ? manifest.initialQuestion() : latestAnalysis.question();
         boolean truncated = completedRunCount(runs) > MAX_ITEMS
-                || incompleteRunCount(runs) > MAX_ITEMS || warnings.size() > MAX_ITEMS;
+                || incompleteRunCount(runs) > MAX_ITEMS
+                || completedCollectionCount(collections) > MAX_ITEMS
+                || completedEvidenceCount(evidence) > MAX_ITEMS
+                || completedAnalysisCount(analyses) > MAX_ITEMS
+                || analyses.stream().flatMap(value -> value.result().stream())
+                        .anyMatch(CaseDigestReader::resultSummaryTruncated)
+                || warnings.size() > MAX_ITEMS;
 
         return new CaseDigest(
                 SchemaVersions.CASE_DIGEST,
@@ -87,16 +120,20 @@ public final class CaseDigestReader {
                 completed.isEmpty() ? Optional.empty() : Optional.of(completed.getFirst().runId()),
                 completed,
                 incomplete,
+                recentCollections,
+                recentEvidence,
+                recentResults,
                 warnings.stream().limit(MAX_ITEMS).toList(),
-                contexts.size(), analyses.size(), runs.size(), truncated);
+                contexts.size(), analyses.size(), runs.size(), collections.size(), evidence.size(),
+                completedAnalysisCount(analyses), truncated);
     }
 
-    private List<ContextSnapshot> readContexts(
+    private List<ContextRecord> readContexts(
             CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
-        List<ContextSnapshot> values = new ArrayList<>();
+        List<ContextRecord> values = new ArrayList<>();
         for (Path directory : repository.childDirectories(layout.contextsRoot())) {
             Path document = directory.resolve("context.json");
-            readChild(layout, document, ContextSnapshot.class, warnings).ifPresent(value -> {
+            readChild(layout, document, ContextRecord.class, warnings).ifPresent(value -> {
                 if (value.caseId().equals(caseId(layout))
                         && value.contextId().value().equals(directory.getFileName().toString())) {
                     values.add(value);
@@ -108,19 +145,133 @@ public final class CaseDigestReader {
         return values;
     }
 
-    private List<AnalysisRequest> readAnalyses(
+    private List<AnalysisEntry> readAnalyses(
             CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
-        List<AnalysisRequest> values = new ArrayList<>();
+        List<AnalysisEntry> values = new ArrayList<>();
         for (Path directory : repository.childDirectories(layout.analysesRoot())) {
             Path document = directory.resolve("analysis-request.json");
             readChild(layout, document, AnalysisRequest.class, warnings).ifPresent(value -> {
                 if (value.caseId().equals(caseId(layout))
                         && value.analysisId().value().equals(directory.getFileName().toString())) {
-                    values.add(value);
+                    Path resultDocument = directory.resolve("analysis-result.json");
+                    Optional<AnalysisResult> result = Files.isRegularFile(
+                            resultDocument, LinkOption.NOFOLLOW_LINKS)
+                            ? readChild(layout, resultDocument, AnalysisResult.class, warnings)
+                            : Optional.empty();
+                    if (result.isPresent() && (!result.orElseThrow().caseId().equals(value.caseId())
+                            || !result.orElseThrow().contextId().equals(value.contextId())
+                            || !result.orElseThrow().analysisId().equals(value.analysisId()))) {
+                        warning(layout, resultDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
+                        result = Optional.empty();
+                    }
+                    values.add(new AnalysisEntry(value, result));
                 } else {
                     warning(layout, document, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
                 }
             });
+        }
+        return values;
+    }
+
+    private List<CollectionEntry> readCollections(
+            CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
+        List<CollectionEntry> values = new ArrayList<>();
+        for (Path directory : repository.childDirectories(layout.collectionsRoot())) {
+            Path requestDocument = directory.resolve("collection-request.json");
+            Optional<CollectionEntry> request = readCollectionRequest(
+                    layout, directory, requestDocument, warnings);
+            if (request.isEmpty()) continue;
+            CollectionEntry entry = request.orElseThrow();
+            Path summaryDocument = directory.resolve("collection-summary.json");
+            Optional<CollectionExecutionSummary> summary = Files.isRegularFile(
+                    summaryDocument, LinkOption.NOFOLLOW_LINKS)
+                    ? readChild(layout, summaryDocument, CollectionExecutionSummary.class, warnings)
+                    : Optional.empty();
+            if (summary.isPresent()) {
+                CollectionExecutionSummary item = summary.orElseThrow();
+                if (!item.caseId().equals(caseId(layout))
+                        || !item.collectionId().equals(entry.collectionId())
+                        || !item.contextId().equals(entry.contextId())
+                        || !item.analysisId().equals(entry.analysisId())) {
+                    warning(layout, summaryDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
+                    summary = Optional.empty();
+                }
+            }
+            values.add(entry.withSummary(summary));
+        }
+        return values;
+    }
+
+    private Optional<CollectionEntry> readCollectionRequest(
+            CaseArchiveLayout layout, Path directory, Path document,
+            List<ArchiveWarning> warnings) {
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            warning(layout, document, "CASE_CHILD_DOCUMENT_MISSING", warnings);
+            return Optional.empty();
+        }
+        try {
+            MethodPathCollectionRecord value = repository.mapper().readJson(
+                    document, MethodPathCollectionRecord.class);
+            return collectionEntry(layout, directory, document, value.caseId(), value.contextId(),
+                    value.analysisId(), value.collectionId(), value.createdAt(), warnings);
+        } catch (RuntimeException ignored) {
+            try {
+                JdwpCollectionRecord value = repository.mapper().readJson(
+                        document, JdwpCollectionRecord.class);
+                return collectionEntry(layout, directory, document, value.caseId(), value.contextId(),
+                        value.analysisId(), value.collectionId(), value.createdAt(), warnings);
+            } catch (RuntimeException failure) {
+                warning(layout, document, "CASE_CHILD_DOCUMENT_INVALID", warnings);
+                return Optional.empty();
+            }
+        }
+    }
+
+    private static Optional<CollectionEntry> collectionEntry(
+            CaseArchiveLayout layout, Path directory, Path document,
+            CaseId caseId, org.example.algorithmdebug.contracts.ContextId contextId,
+            org.example.algorithmdebug.contracts.AnalysisId analysisId,
+            CollectionId collectionId, java.time.Instant createdAt,
+            List<ArchiveWarning> warnings) {
+        if (!caseId.equals(caseId(layout))
+                || !collectionId.value().equals(directory.getFileName().toString())) {
+            warning(layout, document, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
+            return Optional.empty();
+        }
+        return Optional.of(new CollectionEntry(
+                collectionId, contextId, analysisId, createdAt, Optional.empty()));
+    }
+
+    private List<EvidenceEntry> readEvidence(
+            CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
+        List<EvidenceEntry> values = new ArrayList<>();
+        for (Path directory : repository.childDirectories(layout.evidenceRoot())) {
+            Path requestDocument = directory.resolve("evidence-build-request.json");
+            Optional<EvidenceBuildRequest> request = readChild(
+                    layout, requestDocument, EvidenceBuildRequest.class, warnings);
+            if (request.isEmpty()) continue;
+            EvidenceBuildRequest item = request.orElseThrow();
+            if (!item.caseId().equals(caseId(layout))
+                    || !item.evidenceId().value().equals(directory.getFileName().toString())) {
+                warning(layout, requestDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
+                continue;
+            }
+            Path sufficiencyDocument = directory.resolve("sufficiency-evaluation.json");
+            Optional<SufficiencyEvaluation> sufficiency = Files.isRegularFile(
+                    sufficiencyDocument, LinkOption.NOFOLLOW_LINKS)
+                    ? readChild(layout, sufficiencyDocument, SufficiencyEvaluation.class, warnings)
+                    : Optional.empty();
+            if (sufficiency.isPresent()) {
+                SufficiencyEvaluation result = sufficiency.orElseThrow();
+                if (!result.caseId().equals(item.caseId())
+                        || !result.contextId().equals(item.contextId())
+                        || !result.analysisId().equals(item.analysisId())
+                        || !result.evidenceId().equals(item.evidenceId())) {
+                    warning(layout, sufficiencyDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
+                    sufficiency = Optional.empty();
+                }
+            }
+            values.add(new EvidenceEntry(item, sufficiency));
         }
         return values;
     }
@@ -182,6 +333,7 @@ public final class CaseDigestReader {
             Path document,
             String code,
             List<ArchiveWarning> warnings) {
+        if (warnings.size() > MAX_ITEMS) return;
         warnings.add(new ArchiveWarning(
                 code,
                 "Case 子文档不可用，已保留其他可读取事实",
@@ -201,10 +353,58 @@ public final class CaseDigestReader {
         return (int) runs.stream().filter(value -> value.outcome().isEmpty()).count();
     }
 
+    private static int completedCollectionCount(List<CollectionEntry> values) {
+        return (int) values.stream().filter(value -> value.summary().isPresent()).count();
+    }
+
+    private static int completedEvidenceCount(List<EvidenceEntry> values) {
+        return (int) values.stream().filter(value -> value.sufficiency().isPresent()).count();
+    }
+
+    private static int completedAnalysisCount(List<AnalysisEntry> values) {
+        return (int) values.stream().filter(value -> value.result().isPresent()).count();
+    }
+
+    private static AnalysisResultSummary summarize(AnalysisResult value) {
+        return new AnalysisResultSummary(
+                value.caseId(), value.contextId(), value.analysisId(), excerpt(value.finalAnswer()),
+                value.conclusions().stream().limit(5).toList(),
+                value.referencedRunIds().stream().limit(20).toList(),
+                value.referencedCollectionIds().stream().limit(20).toList(),
+                value.referencedEvidenceIds().stream().limit(20).toList(),
+                value.missingEvidence().stream().limit(10).toList(), value.completedAt());
+    }
+
+    private static boolean resultSummaryTruncated(AnalysisResult value) {
+        return value.finalAnswer().length() > MAX_EXCERPT || value.conclusions().size() > 5
+                || value.referencedRunIds().size() > 20
+                || value.referencedCollectionIds().size() > 20
+                || value.referencedEvidenceIds().size() > 20
+                || value.missingEvidence().size() > 10;
+    }
+
     private static String excerpt(String question) {
         return question.length() <= MAX_EXCERPT ? question : question.substring(0, MAX_EXCERPT);
     }
 
     private record RunEntry(RunRequest request, Optional<RunOutcomeSummary> outcome) {
+    }
+
+    private record AnalysisEntry(AnalysisRequest request, Optional<AnalysisResult> result) {
+    }
+
+    private record CollectionEntry(
+            CollectionId collectionId,
+            org.example.algorithmdebug.contracts.ContextId contextId,
+            org.example.algorithmdebug.contracts.AnalysisId analysisId,
+            java.time.Instant createdAt,
+            Optional<CollectionExecutionSummary> summary) {
+        CollectionEntry withSummary(Optional<CollectionExecutionSummary> value) {
+            return new CollectionEntry(collectionId, contextId, analysisId, createdAt, value);
+        }
+    }
+
+    private record EvidenceEntry(
+            EvidenceBuildRequest request, Optional<SufficiencyEvaluation> sufficiency) {
     }
 }

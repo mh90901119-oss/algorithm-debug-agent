@@ -20,7 +20,7 @@ import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
+import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -31,6 +31,8 @@ import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.harness.HarnessException;
+import org.example.algorithmdebug.harness.JsonResultParser;
+import org.example.algorithmdebug.harness.JsonResultSnapshot;
 import org.example.algorithmdebug.harness.MavenExecutionOptions;
 import org.example.algorithmdebug.harness.OutputDirectorySnapshotter;
 import org.example.algorithmdebug.harness.OutputStabilityPolicy;
@@ -149,7 +151,7 @@ public final class RunApplicationService {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于请求项目");
             }
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
-            ContextSnapshot context = requireContext(archive, caseId, analysis.contextId());
+            ContextRecord context = requireContext(archive, caseId, analysis.contextId());
 
             RunId runId = ids.newRunId();
             RunRequest request = new RunRequest(
@@ -171,12 +173,12 @@ public final class RunApplicationService {
             AdapterCatalog.AdapterSelection selection;
             try {
                 selection = adapters.select(
-                        moduleRoot, Optional.of(context.buildSnapshot().adapterId()));
+                        moduleRoot, Optional.of(manifest.adapterId()));
             } catch (CaseRunException failure) {
                 return completeNotStarted(archive, request, failure.code(), failure);
             }
             try {
-                return executeSelected(archive, request, selection, moduleRoot);
+                return executeSelected(archive, request, selection, registration, moduleRoot);
             } catch (AdapterException failure) {
                 return completeNotStarted(archive, request, failure.code(), failure);
             } catch (SurefireDiagnosticException failure) {
@@ -194,35 +196,35 @@ public final class RunApplicationService {
         }
     }
 
-    private <T extends ScheduleResultSnapshot> RunOutcomeSummary executeSelected(
+    private RunOutcomeSummary executeSelected(
             CaseArchiveRepository archive,
             RunRequest request,
             AdapterCatalog.AdapterSelection selection,
+            ProjectRegistration registration,
             Path moduleRoot) throws AdapterException, HarnessException, SurefireDiagnosticException {
-        @SuppressWarnings("unchecked")
-        TargetProjectAdapter<T> adapter = (TargetProjectAdapter<T>) selection.adapter();
+        TargetProjectAdapter adapter = selection.adapter();
         TestLaunchSpec spec = adapter.createLaunchSpec(
                 selection.project(), request.targetTest(), RunMode.BASELINE);
-        ScheduleResultSource resultSource = adapter.scheduleResultSource(
-                selection.project(), request.targetTest());
+        Optional<ScheduleResultSource> resultSource = ProjectResultSource.from(registration);
         Path reports = moduleRoot.resolve("target/surefire-reports").normalize();
         SurefireReportSnapshot before = surefireSnapshotter.snapshot(reports, request.targetTest());
         Path raw = archive.runRawDirectory(request.caseId(), request.runId());
+        Path caseRoot = archive.caseRoot(request.caseId());
 
         OutputDirectorySnapshotter outputSnapshotter = new OutputDirectorySnapshotter(20_000);
-        ScheduleProducingTestRunner<T> runner = new ScheduleProducingTestRunner<>(
+        ScheduleProducingTestRunner<JsonResultSnapshot> runner = new ScheduleProducingTestRunner<>(
                 executor,
                 outputSnapshotter,
                 new OutputStabilityWaiter(outputSnapshotter, OutputStabilityPolicy.defaults()),
                 new ScheduleResultCapture<>(outputSnapshotter, MAX_GANTT_BYTES));
-        ScheduleRunResult<T> schedule = runner.run(
+        ScheduleRunResult<JsonResultSnapshot> schedule = runner.run(
                 spec,
                 new MavenExecutionOptions(
                         mavenExecutable.orElseThrow(),
                         raw.resolve("stdout.log"), raw.resolve("stderr.log"),
                         ProcessLimits.defaults()),
                 resultSource,
-                adapter.scheduleResultParser(),
+                new JsonResultParser(),
                 raw.resolve("gantt.json"));
 
         Optional<AgentFailureDiagnostic> agentFailure = schedule.agentFailure();
@@ -237,14 +239,16 @@ public final class RunApplicationService {
         }
 
         List<ArtifactReference> references = new ArrayList<>();
-        agentFailure = referenceLogs(schedule, raw, references, agentFailure);
+        agentFailure = referenceLogs(
+                request.runId(), schedule, caseRoot, references, agentFailure);
         GanttOutcome ganttOutcome = schedule.ganttOutcome();
         if (schedule.scheduleResult().isPresent()) {
             try {
                 references.add(artifacts.reference(
-                        raw.getParent(),
+                        caseRoot,
                         schedule.scheduleResult().orElseThrow().capturedPath(),
-                        "artifact-gantt", "GANTT", "application/json", MAX_GANTT_BYTES));
+                        runArtifactId(request.runId(), "gantt"),
+                        "GANTT", "application/json", MAX_GANTT_BYTES));
             } catch (CaseRunException failure) {
                 ganttOutcome = GanttOutcome.INCOMPLETE;
                 agentFailure = mergeFailure(agentFailure,
@@ -255,9 +259,11 @@ public final class RunApplicationService {
             try {
                 Path report = testResult.orElseThrow().sourceReport();
                 references.add(artifacts.copy(
-                        raw.getParent(), report,
-                        Path.of("raw", "surefire", report.getFileName().toString()),
-                        "artifact-surefire", "SUREFIRE_XML", "application/xml",
+                        caseRoot, report,
+                        caseRoot.relativize(raw.resolve("surefire")
+                                .resolve(report.getFileName().toString())),
+                        runArtifactId(request.runId(), "surefire"),
+                        "SUREFIRE_XML", "application/xml",
                         MAX_SUREFIRE_BYTES));
             } catch (CaseRunException failure) {
                 agentFailure = mergeFailure(agentFailure,
@@ -276,7 +282,7 @@ public final class RunApplicationService {
         try {
             Optional<RunResultFingerprint> fingerprint =
                     createFingerprint(request, schedule, observed);
-            decision = archiveAndCompare(archive, fingerprint, references);
+            decision = archiveAndCompare(archive, caseRoot, fingerprint, references);
         } catch (HarnessException failure) {
             agentFailure = mergeFailure(agentFailure,
                     diagnostic("TARGET_FAILURE_FINGERPRINT_FAILED", failure));
@@ -297,30 +303,23 @@ public final class RunApplicationService {
             RunRequest request,
             ScheduleRunResult<?> schedule,
             RunOutcomeSummary observed) throws HarnessException {
-        Optional<String> rawHash = Optional.empty();
-        Optional<String> normalizedHash = Optional.empty();
-        if (observed.ganttOutcome() == GanttOutcome.PRESENT
-                && schedule.scheduleResult().isPresent()) {
-            rawHash = Optional.of(schedule.scheduleResult().orElseThrow().rawSha256());
-            normalizedHash = Optional.of(
-                    schedule.scheduleResult().orElseThrow().normalizedJsonSha256());
-        }
         Optional<String> failureHash = Optional.empty();
         if (observed.targetFailure().isPresent()) {
             failureHash = Optional.of(failureFingerprinter.sha256(
                     observed.targetFailure().orElseThrow()));
         }
-        if (rawHash.isEmpty() && failureHash.isEmpty()) {
+        if (failureHash.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT,
                 request.caseId(), request.contextId(), request.runId(),
-                rawHash, normalizedHash, failureHash));
+                failureHash.orElseThrow()));
     }
 
     private ComparisonDecision archiveAndCompare(
             CaseArchiveRepository archive,
+            Path caseRoot,
             Optional<RunResultFingerprint> current,
             List<ArtifactReference> references) {
         if (current.isEmpty()) {
@@ -332,8 +331,9 @@ public final class RunApplicationService {
         try {
             fingerprintPath = archive.createRunResultFingerprint(fingerprint);
             references.add(artifacts.reference(
-                    fingerprintPath.getParent(), fingerprintPath,
-                    "artifact-run-result-fingerprint", "RUN_RESULT_FINGERPRINT",
+                    caseRoot, fingerprintPath,
+                    runArtifactId(fingerprint.runId(), "result-fingerprint"),
+                    "RUN_RESULT_FINGERPRINT",
                     "application/json", MAX_FINGERPRINT_BYTES));
         } catch (WorkspaceException | CaseRunException failure) {
             throw new CaseRunException(
@@ -413,22 +413,25 @@ public final class RunApplicationService {
     }
 
     private Optional<AgentFailureDiagnostic> referenceLogs(
+            RunId runId,
             ScheduleRunResult<?> schedule,
-            Path raw,
+            Path caseRoot,
             List<ArtifactReference> references,
             Optional<AgentFailureDiagnostic> current) {
         Optional<AgentFailureDiagnostic> result = current;
         try {
             references.add(artifacts.reference(
-                    raw.getParent(), schedule.run().stdout().path(),
-                    "artifact-stdout", "STDOUT", "text/plain", MAX_LOG_BYTES));
+                    caseRoot, schedule.run().stdout().path(),
+                    runArtifactId(runId, "stdout"),
+                    "STDOUT", "text/plain", MAX_LOG_BYTES));
         } catch (CaseRunException failure) {
             result = mergeFailure(result, diagnostic(failure.code(), failure));
         }
         try {
             references.add(artifacts.reference(
-                    raw.getParent(), schedule.run().stderr().path(),
-                    "artifact-stderr", "STDERR", "text/plain", MAX_LOG_BYTES));
+                    caseRoot, schedule.run().stderr().path(),
+                    runArtifactId(runId, "stderr"),
+                    "STDERR", "text/plain", MAX_LOG_BYTES));
         } catch (CaseRunException failure) {
             result = mergeFailure(result, diagnostic(failure.code(), failure));
         }
@@ -449,9 +452,11 @@ public final class RunApplicationService {
         return outcome;
     }
 
-    private static void complete(CaseArchiveRepository archive, RunOutcomeSummary outcome) {
+    private void complete(CaseArchiveRepository archive, RunOutcomeSummary outcome) {
         try {
             archive.completeRun(outcome);
+            outcome.artifacts().forEach(artifact ->
+                    archive.registerArtifact(outcome.caseId(), artifact, clock.instant()));
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
                     "RUN_ARCHIVE_WRITE_FAILED", "无法写入 RunOutcome", failure);
@@ -484,7 +489,7 @@ public final class RunApplicationService {
         }
     }
 
-    private static ContextSnapshot requireContext(
+    private static ContextRecord requireContext(
             CaseArchiveRepository archive,
             CaseId caseId,
             org.example.algorithmdebug.contracts.ContextId contextId) {
@@ -513,6 +518,10 @@ public final class RunApplicationService {
                 "MULTIPLE_AGENT_FAILURES",
                 "多个 Agent 后处理步骤未完成: " + first.code() + "," + next.code(),
                 first.exceptionClass().isEmpty() ? next.exceptionClass() : first.exceptionClass()));
+    }
+
+    private static String runArtifactId(RunId runId, String kind) {
+        return runId.value() + "-" + kind;
     }
 
     private static String boundedLogText(Path path) {

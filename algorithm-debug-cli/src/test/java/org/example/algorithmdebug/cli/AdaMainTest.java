@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.algorithmdebug.contracts.ToolResponse;
 import org.example.algorithmdebug.core.CaseRunException;
+import org.example.algorithmdebug.core.ArtifactBackedResult;
+import org.example.algorithmdebug.plan.PlanCompilationException;
+import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,7 +52,11 @@ class AdaMainTest {
         assertSuccess(diagnosed);
         assertTrue(initialized.response().path("data").path("created").booleanValue());
         assertEquals(portable(module), registered.response().path("data").path("registration").path("moduleRoot").textValue());
-        assertEquals(5, diagnosed.response().path("data").path("checks").size());
+        assertEquals(7, diagnosed.response().path("data").path("checks").size());
+        assertTrue(diagnosed.response().path("data").path("checks").toString()
+                .contains("CODEPATH_TOOL_NOT_CONFIGURED"));
+        assertTrue(diagnosed.response().path("data").path("checks").toString()
+                .contains("JDWP_TOOL_NOT_CONFIGURED"));
         assertTrue(Files.isRegularFile(workspace.resolve("workspace.yaml")));
         assertEquals("", initialized.stderr());
     }
@@ -128,6 +135,115 @@ class AdaMainTest {
     }
 
     @Test
+    void staticAndPlanExpectedFailuresUseStageCodesInsteadOfInternalError() throws Exception {
+        AdaMain staticApplication = new AdaMain(
+                command -> { throw new StaticAnalysisException("local source detail"); },
+                new CliResponseWriter());
+        AdaMain planApplication = new AdaMain(
+                command -> { throw new PlanCompilationException("model rationale detail"); },
+                new CliResponseWriter());
+
+        Invocation staticFailure = invoke(staticApplication,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+        Path request = Files.writeString(temporaryDirectory.resolve("plan.json"), "{}");
+        Invocation planFailure = invoke(planApplication,
+                "plan", "codepath", "create", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1",
+                "--analysis-id", "analysis-1", "--request-file", request.toString());
+
+        assertFailure(staticFailure, 3, "STATIC_ANALYSIS_FAILED");
+        assertFailure(planFailure, 3, "PLAN_COMPILATION_FAILED");
+        assertEquals("", staticFailure.stderr());
+        assertEquals("", planFailure.stderr());
+    }
+
+    @Test
+    void missingStaticTargetUsesStablePublicError() throws Exception {
+        AdaMain application = new AdaMain(
+                command -> { throw new StaticAnalysisException(
+                        "TARGET_TEST_NOT_FOUND", "local source detail"); },
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+
+        assertFailure(invocation, 3, "TARGET_TEST_NOT_FOUND");
+        assertEquals("", invocation.stderr());
+    }
+
+    @Test
+    void artifactBackedSuccessKeepsLargeDocumentOutOfData() throws Exception {
+        org.example.algorithmdebug.contracts.ArtifactReference artifact =
+                new org.example.algorithmdebug.contracts.ArtifactReference(
+                        "analysis-1", "METHOD_CATALOG",
+                        "analyses/analysis-1/method-catalog.json", "application/json",
+                        "a".repeat(64), 123);
+        AdaMain application = new AdaMain(
+                command -> new ArtifactBackedResult<>(
+                        java.util.Map.of("methodCount", 3, "edgeCount", 2), artifact),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "static", "analyze", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1");
+
+        assertSuccess(invocation);
+        assertEquals(3, invocation.response().path("data").path("methodCount").intValue());
+        assertFalse(invocation.response().path("data").has("entries"));
+        assertEquals("analyses/analysis-1/method-catalog.json",
+                invocation.response().path("artifacts").get(0).path("relativePath").textValue());
+    }
+
+    @Test
+    void multiArtifactCollectionSuccessReturnsStandardReferences() throws Exception {
+        var manifest = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "collection-1-manifest", "CODEPATH_MANIFEST",
+                "collections/collection-1/manifest.json", "application/json",
+                "a".repeat(64), 321);
+        var raw = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "collection-1-raw", "CODEPATH_RAW",
+                "collections/collection-1/raw/codepath.jsonl", "application/x-ndjson",
+                "b".repeat(64), 654);
+        AdaMain application = new AdaMain(
+                command -> new org.example.algorithmdebug.core.MultiArtifactBackedResult<>(
+                        java.util.Map.of("completion", "SUCCESS"), List.of(manifest, raw)),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "collection", "codepath", "execute", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1", "--plan-id", "plan-1");
+
+        assertSuccess(invocation);
+        assertEquals(2, invocation.response().path("artifacts").size());
+        assertEquals("CODEPATH_MANIFEST",
+                invocation.response().path("artifacts").get(0).path("artifactType").textValue());
+    }
+
+    @Test
+    void artifactReadReturnsBoundedContinuationMetadataInToolResponse() throws Exception {
+        var artifact = new org.example.algorithmdebug.contracts.ArtifactReference(
+                "run-1-stdout", "STDOUT", "runs/run-1/raw/stdout.log", "text/plain",
+                "a".repeat(64), 12);
+        AdaMain application = new AdaMain(
+                command -> new org.example.algorithmdebug.contracts.ArtifactTextExcerpt(
+                        artifact, 0, 6, true, "output"),
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "artifact", "read", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1",
+                "--artifact-id", "run-1-stdout", "--max-bytes", "6");
+
+        assertSuccess(invocation);
+        assertEquals("output", invocation.response().path("data").path("text").textValue());
+        assertEquals(6, invocation.response().path("data").path("nextOffsetBytes").longValue());
+        assertTrue(invocation.response().path("data").path("truncated").booleanValue());
+        assertFalse(invocation.stdout().contains(temporaryDirectory.toString()));
+    }
+
+    @Test
     void caseOpenDoesNotRunUtAndRejectsReusingCaseForAnotherTargetTest() throws Exception {
         AdaMain application = AdaMain.defaultApplication();
         Path workspace = temporaryDirectory.resolve("case-workspace");
@@ -191,6 +307,27 @@ class AdaMainTest {
                 "--test", "a.b.Test#case1", "--question-file", malformed.toString());
 
         assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
+        assertEquals("Invalid CLI input: question-file is not valid UTF-8",
+                invocation.response().path("message").textValue());
+        assertFalse(invocation.stdout().contains(malformed.toString()));
+        assertEquals("", invocation.stderr());
+    }
+
+    @Test
+    void malformedAnalysisResultExplainsHowToCorrectTheCompletionCall() throws Exception {
+        AdaMain application = AdaMain.defaultApplication();
+        Path malformed = Files.writeString(
+                temporaryDirectory.resolve("analysis-result.json"), "{\"unexpected\":true}");
+
+        Invocation invocation = invoke(application,
+                "analysis", "complete", "--workspace", "workspace", "--project-id", "demo",
+                "--case-id", "case-1", "--analysis-id", "analysis-1",
+                "--result-file", malformed.toString());
+
+        assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
+        assertEquals("Invalid CLI input: result-file is not valid AnalysisResult JSON",
+                invocation.response().path("message").textValue());
+        assertFalse(invocation.stdout().contains(malformed.toString()));
         assertEquals("", invocation.stderr());
     }
 
@@ -223,7 +360,7 @@ class AdaMainTest {
     }
 
     private static void assertSuccess(Invocation invocation) {
-        assertEquals(0, invocation.exitCode());
+        assertEquals(0, invocation.exitCode(), invocation.response().toString());
         assertTrue(invocation.response().path("success").booleanValue());
         assertEquals("OK", invocation.response().path("code").textValue());
     }

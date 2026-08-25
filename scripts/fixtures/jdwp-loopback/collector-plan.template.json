@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "2.0",
+  "sessionId": "jdwp-loopback-verification",
+  "target": {"host": "127.0.0.1", "port": __PORT__},
+  "resumeOnAttach": true,
+  "idleTimeoutMillis": 5000,
+  "maxEvents": 10,
+  "tracepoints": [{
+    "id": "probe-marker",
+    "className": "JdwpLoopbackProbe",
+    "line": __LINE__,
+    "methodName": "inspect",
+    "methodDescriptor": "(I)I",
+    "maxHits": 1,
+    "capture": {
+      "locals": true,
+      "stack": true,
+      "maxFrames": 4,
+      "maxDepth": 1,
+      "maxItems": 10,
+      "maxStringLength": 128,
+      "localNames": ["marker"],
+      "fieldPaths": []
+    }
+  }]
+}

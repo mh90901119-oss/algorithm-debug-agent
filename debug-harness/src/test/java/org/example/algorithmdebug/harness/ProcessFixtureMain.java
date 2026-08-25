@@ -12,6 +12,18 @@ public final class ProcessFixtureMain {
         switch (args[0]) {
             case "exit" -> System.exit(Integer.parseInt(args[1]));
             case "sleep" -> Thread.sleep(60_000);
+            case "marker" -> {
+                System.out.print(args[1].substring(0, args[1].length() / 2));
+                System.out.flush();
+                Thread.sleep(50);
+                System.out.println(args[1].substring(args[1].length() / 2));
+                System.out.flush();
+                Thread.sleep(60_000);
+            }
+            case "marker-exit" -> {
+                System.out.print("x".repeat(2_000_000));
+                System.out.print(args[1]);
+            }
             case "spawn-child" -> {
                 Process child = new ProcessBuilder(
                         javaExecutable().toString(),

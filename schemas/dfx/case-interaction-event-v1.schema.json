@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent/schemas/dfx/case-interaction-event-v1.schema.json",
+  "title": "Case Interaction Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "timestamp",
+    "level",
+    "eventType",
+    "source",
+    "outcome",
+    "sessionId",
+    "invocationId"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "level": { "enum": ["INFO", "WARN", "ERROR"] },
+    "eventType": {
+      "enum": [
+        "CASE_INTERACTION_STARTED",
+        "TOOL_CALL_STARTED",
+        "TOOL_CALL_COMPLETED",
+        "TOOL_CALL_FAILED",
+        "CLI_PROCESS_STARTED",
+        "CLI_PROCESS_COMPLETED",
+        "CLI_PROCESS_FAILED",
+        "LOG_TRUNCATED"
+      ]
+    },
+    "source": { "const": "OPENCODE_TOOL_RUNTIME" },
+    "outcome": { "enum": ["STARTED", "SUCCEEDED", "FAILED", "TRUNCATED"] },
+    "sessionId": { "$ref": "#/$defs/id" },
+    "invocationId": { "$ref": "#/$defs/id" },
+    "messageId": { "$ref": "#/$defs/id" },
+    "agent": { "$ref": "#/$defs/id" },
+    "projectId": { "$ref": "#/$defs/id" },
+    "caseId": { "$ref": "#/$defs/id" },
+    "analysisId": { "$ref": "#/$defs/id" },
+    "toolName": { "$ref": "#/$defs/id" },
+    "commandName": { "$ref": "#/$defs/id" },
+    "durationMillis": { "type": "integer", "minimum": 0 },
+    "code": { "$ref": "#/$defs/id" },
+    "targetTest": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "runId": { "$ref": "#/$defs/id" },
+    "planId": { "$ref": "#/$defs/id" },
+    "collectionId": { "$ref": "#/$defs/id" },
+    "evidenceId": { "$ref": "#/$defs/id" },
+    "artifactIds": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/id" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 }
+  }
+}

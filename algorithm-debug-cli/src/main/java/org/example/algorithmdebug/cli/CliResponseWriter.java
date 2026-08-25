@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import org.example.algorithmdebug.contracts.ToolResponse;
@@ -20,7 +21,8 @@ public final class CliResponseWriter {
     public CliResponseWriter() {
         this.mapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
-                .registerModule(new Jdk8Module());
+                .registerModule(new Jdk8Module())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     /**
@@ -31,22 +33,22 @@ public final class CliResponseWriter {
      */
     public void write(ToolResponse<?> response, PrintStream stdout) {
         if (response == null || stdout == null) {
-            throw new IllegalArgumentException("response 和 stdout 不能为空");
+            throw new IllegalArgumentException("response and stdout must not be null");
         }
         byte[] content;
         try {
             content = mapper.writeValueAsBytes(response);
         } catch (IOException | RuntimeException failure) {
-            throw new IllegalStateException("序列化 CLI ToolResponse 失败", failure);
+            throw new IllegalStateException("Failed to serialize CLI ToolResponse", failure);
         }
         if (content.length > MAX_OUTPUT_BYTES) {
             throw new IllegalStateException(
-                    "CLI ToolResponse 超过最大字节数 " + MAX_OUTPUT_BYTES + ": " + content.length);
+                    "CLI ToolResponse exceeds maximum bytes " + MAX_OUTPUT_BYTES + ": " + content.length);
         }
         stdout.write(content, 0, content.length);
         stdout.flush();
         if (stdout.checkError()) {
-            throw new IllegalStateException("写入 CLI stdout 失败");
+            throw new IllegalStateException("Failed to write CLI stdout");
         }
     }
 }

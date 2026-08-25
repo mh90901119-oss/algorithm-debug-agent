@@ -16,19 +16,31 @@ class WorkspaceControlPlaneContractsTest {
 
     @Test
     void shouldKeepModuleAndRepositoryRootsDistinct() {
-        ProjectRegistration registration = registration("A".repeat(64));
+        ProjectRegistration registration = registration();
 
         assertNotEquals(registration.repositoryRoot(), registration.moduleRoot());
         assertEquals(registration.moduleRoot(), registration.mavenExecutionRoot());
-        assertEquals("a".repeat(64), registration.pomSha256());
+    }
+
+    @Test
+    void shouldAcceptAbsoluteAndLegacyPortableResultJsonDirectoriesAndRejectUnsafeRelativePaths() {
+        ProjectRegistration registration = registrationWithResult("output/algorithm-results");
+        ProjectRegistration absolute = registrationWithResult("D:/algorithm-results");
+
+        assertEquals("output/algorithm-results", registration.resultJsonDirectory());
+        assertEquals("D:/algorithm-results", absolute.resultJsonDirectory());
+        assertThrows(IllegalArgumentException.class,
+                () -> registrationWithResult("../results"));
+        assertThrows(IllegalArgumentException.class,
+                () -> registrationWithResult("output\\results"));
     }
 
     @Test
     void shouldRejectUnsupportedBuildToolAndNonPortablePomPath() {
         assertThrows(IllegalArgumentException.class,
-                () -> registration("a".repeat(64), "GRADLE", "pom.xml"));
+                () -> registration("GRADLE", "pom.xml"));
         assertThrows(IllegalArgumentException.class,
-                () -> registration("a".repeat(64), "MAVEN", "..\\pom.xml"));
+                () -> registration("MAVEN", "..\\pom.xml"));
     }
 
     @Test
@@ -72,17 +84,31 @@ class WorkspaceControlPlaneContractsTest {
 
     @Test
     void shouldRequireRegistrationResultPayload() {
-        ProjectRegistration registration = registration("a".repeat(64));
+        ProjectRegistration registration = registration();
 
         assertEquals(registration, new ProjectRegistrationResult(registration, true).registration());
         assertThrows(NullPointerException.class, () -> new ProjectRegistrationResult(null, false));
     }
 
-    private static ProjectRegistration registration(String pomSha256) {
-        return registration(pomSha256, "MAVEN", "pom.xml");
+    private static ProjectRegistration registration() {
+        return registration("MAVEN", "pom.xml");
     }
 
-    private static ProjectRegistration registration(String pomSha256, String buildTool, String pomPath) {
+    private static ProjectRegistration registrationWithResult(String resultJsonDirectory) {
+        return new ProjectRegistration(
+                SchemaVersions.PROJECT_REGISTRATION,
+                new ProjectId("algorithm-scheduler-a1b2c3d4e5f6"),
+                "algorithm-scheduler",
+                "D:/large-system",
+                "D:/large-system/algorithm-scheduler",
+                "D:/large-system/algorithm-scheduler",
+                "pom.xml",
+                "MAVEN",
+                resultJsonDirectory,
+                REGISTERED_AT);
+    }
+
+    private static ProjectRegistration registration(String buildTool, String pomPath) {
         return new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION,
                 new ProjectId("algorithm-scheduler-a1b2c3d4e5f6"),
@@ -92,7 +118,6 @@ class WorkspaceControlPlaneContractsTest {
                 "D:/large-system/algorithm-scheduler",
                 pomPath,
                 buildTool,
-                pomSha256,
                 REGISTERED_AT);
     }
 }

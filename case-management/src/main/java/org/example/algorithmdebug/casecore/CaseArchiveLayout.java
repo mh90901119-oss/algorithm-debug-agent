@@ -4,6 +4,9 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
+import org.example.algorithmdebug.contracts.PlanId;
+import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.EvidenceId;
 
 import java.nio.file.Path;
 
@@ -49,6 +52,16 @@ public final class CaseArchiveLayout {
         return child(caseRoot, "case.json");
     }
 
+    /** @return 当前 Case 的 Artifact 注册根目录 */
+    public Path artifactsRoot() {
+        return child(caseRoot, "artifacts");
+    }
+
+    /** @return 指定 Artifact ID 的不可变注册文档 */
+    public Path artifactRegistration(String artifactId) {
+        return child(artifactsRoot(), safeSegment(artifactId, "artifactId") + ".json");
+    }
+
     /** @return Context 根目录 */
     public Path contextsRoot() {
         return child(caseRoot, "contexts");
@@ -76,8 +89,92 @@ public final class CaseArchiveLayout {
 
     /** @return 指定 Analysis 请求文档 */
     public Path analysisDocument(AnalysisId analysisId) {
-        return child(child(analysesRoot(), safeSegment(analysisId.value(), "analysisId")),
-                "analysis-request.json");
+        return child(analysisRoot(analysisId), "analysis-request.json");
+    }
+
+    /** @return 指定 Analysis 的一次性完成结果 */
+    public Path analysisResult(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "analysis-result.json");
+    }
+
+    /** @return 指定 Analysis 目录 */
+    public Path analysisRoot(AnalysisId analysisId) {
+        return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
+    }
+
+    /** @return 指定 Analysis 的静态方法目录 */
+    public Path analysisMethodCatalog(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "method-catalog.json");
+    }
+
+    /** @return 指定 Analysis 的采集计划根目录 */
+    public Path analysisPlansRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "plans");
+    }
+
+    /** @return 指定 CodePath 计划文档 */
+    public Path planDocument(AnalysisId analysisId, PlanId planId) {
+        return child(analysisPlansRoot(analysisId), safeSegment(planId.value(), "planId") + ".json");
+    }
+
+    /** @return 当前 Case 的动态采集根目录 */
+    public Path collectionsRoot() {
+        return child(caseRoot, "collections");
+    }
+
+    /** @return 指定动态采集目录 */
+    public Path collectionRoot(CollectionId collectionId) {
+        return child(collectionsRoot(), safeSegment(collectionId.value(), "collectionId"));
+    }
+
+    /** @return Collector 启动前的不可变请求文档 */
+    public Path collectionRequest(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "collection-request.json");
+    }
+
+    /** @return 动态采集完成后面向模型的有界摘要 */
+    public Path collectionSummary(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "collection-summary.json");
+    }
+
+    /** @return 动态采集的 Baseline 一致性检查文档 */
+    public Path collectionBaselineCheck(CollectionId collectionId) {
+        return child(child(collectionRoot(collectionId), "validation"), "baseline-check.json");
+    }
+
+    /** @return 指定 Collection 的追加式派生根目录 */
+    public Path collectionDerivedRoot(CollectionId collectionId) {
+        return child(collectionRoot(collectionId), "derived");
+    }
+
+    /** @return 指定 Evidence 版本的 Collection 派生目录 */
+    public Path collectionDerivedRoot(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId),
+                safeSegment(evidenceId.value(), "evidenceId"));
+    }
+
+    /** @return 一次派生的归一化清单 */
+    public Path normalizationManifest(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "normalization-manifest.json");
+    }
+
+    /** @return 一次 CodePath 派生的方法路径摘要 */
+    public Path methodPathSummary(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "method-path-summary.json");
+    }
+
+    /** @return 一次 JDWP 派生的快照摘要 */
+    public Path jdwpSnapshotSummary(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "jdwp-snapshot-summary.json");
+    }
+
+    /** @return 一次派生的 Collection 技术校验 */
+    public Path collectionValidation(CollectionId collectionId, EvidenceId evidenceId) {
+        return child(collectionDerivedRoot(collectionId, evidenceId),
+                "collection-validation.json");
     }
 
     /** @return Run 根目录 */
@@ -113,6 +210,26 @@ public final class CaseArchiveLayout {
     /** @return 预留 Evidence 根目录 */
     public Path evidenceRoot() {
         return child(caseRoot, "evidence");
+    }
+
+    /** @return 指定 Evidence 的追加式目录 */
+    public Path evidenceRoot(EvidenceId evidenceId) {
+        return child(evidenceRoot(), safeSegment(evidenceId.value(), "evidenceId"));
+    }
+
+    /** @return Evidence 构建请求 */
+    public Path evidenceBuildRequest(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "evidence-build-request.json");
+    }
+
+    /** @return 面向模型的 Evidence Bundle */
+    public Path evidenceBundle(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "evidence-bundle.json");
+    }
+
+    /** @return 请求维度的证据充分性评估 */
+    public Path sufficiencyEvaluation(EvidenceId evidenceId) {
+        return child(evidenceRoot(evidenceId), "sufficiency-evaluation.json");
     }
 
     private static Path child(Path parent, String segment) {

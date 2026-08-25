@@ -1,21 +1,36 @@
 package org.example.algorithmdebug.casecore;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.AnalysisConclusion;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
-import org.example.algorithmdebug.contracts.BuildSnapshot;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextSnapshot;
-import org.example.algorithmdebug.contracts.InputSnapshot;
-import org.example.algorithmdebug.contracts.InputSnapshotStatus;
+import org.example.algorithmdebug.contracts.ContextRecord;
+import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
+import org.example.algorithmdebug.contracts.CollectionBudget;
+import org.example.algorithmdebug.contracts.MethodCatalog;
+import org.example.algorithmdebug.contracts.MethodCatalogEntry;
+import org.example.algorithmdebug.contracts.MethodCallEdge;
+import org.example.algorithmdebug.contracts.MethodSelector;
+import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
+import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
+import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
+import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
+import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
+import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
+import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.ClaimClassification;
+import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
-import org.example.algorithmdebug.contracts.SourceSnapshot;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +41,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -56,7 +72,7 @@ class CaseArchiveRepositoryTest {
     @Test
     void shouldCreateAndReadAppendOnlyCaseDocuments() {
         CaseManifest manifest = manifest();
-        ContextSnapshot context = context();
+        ContextRecord context = context();
         AnalysisRequest analysis = analysis();
         RunRequest run = run(new RunId("run-1"), TIME.plusSeconds(3));
 
@@ -73,6 +89,187 @@ class CaseArchiveRepositoryTest {
     }
 
     @Test
+    void shouldCompleteAnalysisOnceWithMatchingRequestIdentity() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        AnalysisResult result = analysisResult();
+
+        Path document = repository.completeAnalysis(result);
+
+        assertTrue(document.endsWith("analyses/analysis-1/analysis-result.json"));
+        assertEquals(result, repository.requireAnalysisResult(CASE_ID, ANALYSIS_ID));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.completeAnalysis(result)).code());
+    }
+
+    @Test
+    void shouldRejectAnalysisResultForDifferentContext() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        AnalysisResult mismatched = new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, CASE_ID, new ContextId("context-2"), ANALYSIS_ID,
+                "结论", List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), TIME);
+
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", assertThrows(
+                WorkspaceException.class, () -> repository.completeAnalysis(mismatched)).code());
+    }
+
+    @Test
+    void shouldArchiveMethodCatalogAndPlanOnceWithMatchingIdentity() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        MethodCatalog catalog = methodCatalog();
+        CodePathCollectionPlan plan = codePathPlan();
+
+        Path catalogPath = repository.createMethodCatalog(catalog);
+        Path planPath = repository.createCodePathPlan(plan);
+
+        assertEquals(catalog, repository.requireMethodCatalog(CASE_ID, ANALYSIS_ID));
+        assertEquals(plan, repository.requireCodePathPlan(
+                CASE_ID, ANALYSIS_ID, new PlanId("plan-1")));
+        assertTrue(catalogPath.endsWith("analyses/analysis-1/method-catalog.json"));
+        assertTrue(planPath.endsWith("analyses/analysis-1/plans/plan-1.json"));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.createMethodCatalog(catalog)).code());
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.createCodePathPlan(plan)).code());
+    }
+
+    @Test
+    void shouldStreamMethodCatalogLargerThanControlDocumentLimitAtomically() throws Exception {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        MethodCatalogEntry target = methodCatalog().entries().getFirst();
+        List<MethodCallEdge> edges = IntStream.range(0, 20_000)
+                .mapToObj(index -> new MethodCallEdge(
+                        target.methodKey(), target.methodKey(), index + 1))
+                .toList();
+        MethodCatalog large = new MethodCatalog(
+                SchemaVersions.METHOD_CATALOG, CASE_ID, CONTEXT_ID, ANALYSIS_ID, TARGET,
+                List.of(target), edges, List.of(),
+                SnapshotCompleteness.COMPLETE,
+                1, edges.size(), TIME.plusSeconds(3));
+
+        Path document = repository.createMethodCatalog(large);
+
+        assertTrue(Files.size(document) > BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+        assertEquals(large, repository.requireMethodCatalog(CASE_ID, ANALYSIS_ID));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.createMethodCatalog(large)).code());
+        try (var files = Files.list(document.getParent())) {
+            assertTrue(files.noneMatch(path -> path.getFileName().toString().endsWith(".tmp")));
+        }
+    }
+
+    @Test
+    void shouldRejectPlanSelectorThatDoesNotExactlyMatchCatalogAnchor() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        MethodSelector unknown = new MethodSelector(
+                "a.b.ScheduleTest#other()V", "a.b.ScheduleTest", "other", "()V");
+        CodePathCollectionPlan plan = planWithSelectors(List.of(unknown));
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class, () -> repository.createCodePathPlan(plan));
+
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", failure.code());
+    }
+
+    @Test
+    void shouldRejectDuplicatePlanSelectorsBeforeArchiving() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
+        MethodSelector selector = new MethodSelector(
+                "a.b.ScheduleTest#case1()V", anchor.className(), anchor.methodName(),
+                anchor.descriptor());
+        assertThrows(IllegalArgumentException.class,
+                () -> planWithSelectors(List.of(selector, selector)));
+    }
+
+    @Test
+    void shouldCreateOneAppendOnlyCollectionDirectory() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        repository.createCodePathPlan(codePathPlan());
+        MethodPathCollectionRecord record = new MethodPathCollectionRecord(
+                "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, new RunId("run-codepath-1"),
+                new PlanId("plan-1"), new CollectionId("collection-1"), TARGET,
+                "CODEPATH", TIME.plusSeconds(5));
+
+        Path collection = repository.startMethodPathCollection(record);
+
+        assertTrue(Files.isRegularFile(collection.resolve("collection-request.json")));
+        assertFalse(Files.exists(collection.resolve("raw")));
+        assertFalse(Files.exists(collection.resolve("derived")));
+        assertFalse(Files.exists(collection.resolve("logs")));
+        assertEquals(record, repository.requireMethodPathCollection(
+                CASE_ID, new CollectionId("collection-1")));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(WorkspaceException.class,
+                () -> repository.startMethodPathCollection(record)).code());
+    }
+
+    @Test
+    void shouldArchiveJdwpPlanAndCollectionUnderOwningAnalysis() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID, CONTEXT_ID);
+
+        Path planPath = repository.createJdwpPlan(plan);
+        JdwpCollectionRecord record = new JdwpCollectionRecord(
+                SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                new RunId("run-jdwp-1"), plan.planId(), new CollectionId("jdwp-1"),
+                TARGET, "JDWP", TIME.plusSeconds(5));
+        Path collection = repository.startJdwpCollection(record);
+
+        assertEquals(plan, repository.requireJdwpPlan(CASE_ID, ANALYSIS_ID, plan.planId()));
+        assertEquals(record, repository.requireJdwpCollection(CASE_ID, record.collectionId()));
+        assertTrue(planPath.endsWith("analyses/analysis-1/plans/jdwp-plan-1.json"));
+        assertTrue(Files.isRegularFile(collection.resolve("collection-request.json")));
+        assertFalse(Files.exists(collection.resolve("raw")));
+        assertFalse(Files.exists(collection.resolve("logs")));
+        assertFalse(Files.exists(collection.resolve("validation")));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.createJdwpPlan(plan)).code());
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class, () -> repository.startJdwpCollection(record)).code());
+    }
+
+    @Test
+    void shouldRejectJdwpPlanAndCollectionWithCrossAnalysisIdentity() {
+        repository.createCase(manifest());
+        repository.createContext(context());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        AnalysisId otherAnalysis = new AnalysisId("analysis-2");
+        JdwpCollectionPlan wrongPlan = jdwpPlan(otherAnalysis, CONTEXT_ID);
+
+        assertEquals("METHOD_CATALOG_NOT_FOUND", assertThrows(
+                WorkspaceException.class, () -> repository.createJdwpPlan(wrongPlan)).code());
+
+        JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID, CONTEXT_ID);
+        repository.createJdwpPlan(plan);
+        JdwpCollectionRecord wrongRecord = new JdwpCollectionRecord(
+                SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, CONTEXT_ID, otherAnalysis,
+                new RunId("run-jdwp-2"), plan.planId(), new CollectionId("jdwp-2"),
+                TARGET, "JDWP", TIME.plusSeconds(6));
+        assertEquals("JDWP_PLAN_NOT_FOUND", assertThrows(
+                WorkspaceException.class, () -> repository.startJdwpCollection(wrongRecord)).code());
+    }
+
+    @Test
     void shouldRejectEveryTerminalDocumentOverwrite() {
         repository.createCase(manifest());
 
@@ -84,17 +281,15 @@ class CaseArchiveRepositoryTest {
     }
 
     @Test
-    void shouldRejectDocumentWhoseIdentityDoesNotBelongToCase() {
+    void shouldRejectContextWhoseCaseDoesNotExist() {
         repository.createCase(manifest());
-        ContextSnapshot wrong = new ContextSnapshot(
-                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, CONTEXT_ID,
-                new ProjectId("project-2"), TARGET, "UNAVAILABLE", source(), input(), build(),
-                SnapshotCompleteness.COMPLETE, "d".repeat(64), List.of(), TIME);
+        ContextRecord wrong = new ContextRecord(
+                SchemaVersions.CONTEXT_RECORD, new CaseId("case-2"), CONTEXT_ID, TIME);
 
         WorkspaceException failure = assertThrows(
                 WorkspaceException.class, () -> repository.createContext(wrong));
 
-        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", failure.code());
+        assertEquals("CASE_NOT_FOUND", failure.code());
     }
 
     @Test
@@ -103,10 +298,8 @@ class CaseArchiveRepositoryTest {
         repository.createContext(context());
         repository.createAnalysis(analysis());
         ContextId secondContextId = new ContextId("context-2");
-        repository.createContext(new ContextSnapshot(
-                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, secondContextId,
-                PROJECT_ID, TARGET, "UNAVAILABLE", source(), input(), build(),
-                SnapshotCompleteness.COMPLETE, "e".repeat(64), List.of(), TIME.plusSeconds(3)));
+        repository.createContext(new ContextRecord(
+                SchemaVersions.CONTEXT_RECORD, CASE_ID, secondContextId, TIME.plusSeconds(3)));
         RunRequest mismatched = new RunRequest(
                 SchemaVersions.RUN_REQUEST, CASE_ID, secondContextId, ANALYSIS_ID,
                 new RunId("run-1"), TARGET, "UNINSTRUMENTED", TIME.plusSeconds(4));
@@ -166,7 +359,7 @@ class CaseArchiveRepositoryTest {
         ContextId currentId = new ContextId("context-c");
         createContextRunAndReproduction(firstId, "analysis-a", "run-a", TIME.plusSeconds(1), "a");
         createContextRunAndReproduction(secondId, "analysis-b", "run-b", TIME.plusSeconds(1), "b");
-        repository.createContext(context(currentId, TIME.plusSeconds(2), "f"));
+        repository.createContext(context(currentId, TIME.plusSeconds(2)));
 
         Optional<RunResultFingerprint> selected =
                 repository.findLatestReproductionBefore(CASE_ID, currentId);
@@ -200,7 +393,7 @@ class CaseArchiveRepositoryTest {
         createContextRunAndReproduction(olderId, "analysis-a", "run-a", TIME.plusSeconds(1), "a");
         createContextRunAndReproduction(
                 latestOlderId, "analysis-b", "run-b", TIME.plusSeconds(2), "b");
-        repository.createContext(context(currentId, TIME.plusSeconds(3), "f"));
+        repository.createContext(context(currentId, TIME.plusSeconds(3)));
         Files.writeString(temporaryDirectory.resolve(
                 "cases/case-1/contexts/context-b/reproduction.json"), "{broken");
 
@@ -227,20 +420,29 @@ class CaseArchiveRepositoryTest {
     static CaseManifest manifest() {
         return new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
-                "为什么有空闲？", TIME);
+                "wafer-demo", "为什么有空闲？", TIME);
     }
 
-    static ContextSnapshot context() {
-        return new ContextSnapshot(
-                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, CONTEXT_ID, PROJECT_ID, TARGET,
-                "UNAVAILABLE", source(), input(), build(), SnapshotCompleteness.COMPLETE,
-                "d".repeat(64), List.of(), TIME.plusSeconds(1));
+    static ContextRecord context() {
+        return new ContextRecord(
+                SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, TIME.plusSeconds(1));
     }
 
     static AnalysisRequest analysis() {
         return new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
                 "继续分析空闲", TIME.plusSeconds(2));
+    }
+
+    static AnalysisResult analysisResult() {
+        return new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                "设备空闲来自等待前序操作。",
+                List.of(new AnalysisConclusion(
+                        ClaimClassification.LLM_HYPOTHESIS, "可能在等待前序操作",
+                        List.of())),
+                List.of(), List.of(), List.of(),
+                List.of(), List.of("缺少候选集合"), TIME.plusSeconds(10));
     }
 
     static RunRequest run(RunId runId, Instant createdAt) {
@@ -262,7 +464,7 @@ class CaseArchiveRepositoryTest {
             String runId,
             Instant createdAt,
             String hashSeed) {
-        repository.createContext(context(contextId, createdAt, hashSeed));
+        repository.createContext(context(contextId, createdAt));
         AnalysisId analysisIdValue = new AnalysisId(analysisId);
         repository.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, contextId, analysisIdValue,
@@ -277,12 +479,9 @@ class CaseArchiveRepositoryTest {
         repository.createReproductionIfAbsent(fingerprint);
     }
 
-    private static ContextSnapshot context(
-            ContextId contextId, Instant createdAt, String hashSeed) {
-        return new ContextSnapshot(
-                SchemaVersions.CONTEXT_SNAPSHOT, CASE_ID, contextId, PROJECT_ID, TARGET,
-                "UNAVAILABLE", source(), input(), build(), SnapshotCompleteness.COMPLETE,
-                hashSeed.repeat(64), List.of(), createdAt);
+    private static ContextRecord context(ContextId contextId, Instant createdAt) {
+        return new ContextRecord(
+                SchemaVersions.CONTEXT_RECORD, CASE_ID, contextId, createdAt);
     }
 
     private static RunResultFingerprint ganttFingerprint(
@@ -292,19 +491,49 @@ class CaseArchiveRepositoryTest {
             String normalizedSeed) {
         return new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, contextId, runId,
-                Optional.of(rawSeed.repeat(64)), Optional.of(normalizedSeed.repeat(64)),
-                Optional.empty());
+                normalizedSeed.repeat(64));
     }
 
-    private static SourceSnapshot source() {
-        return new SourceSnapshot("a".repeat(64), 1, 10, SnapshotCompleteness.COMPLETE);
+    static MethodCatalog methodCatalog() {
+        MethodCatalogEntry entry = new MethodCatalogEntry(
+                "a.b.ScheduleTest#case1()V",
+                new SourceAnchor("a.b.ScheduleTest", "case1", "()V",
+                        "src/test/java/a/b/ScheduleTest.java", 1, 2),
+                0, true);
+        return new MethodCatalog(
+                SchemaVersions.METHOD_CATALOG, CASE_ID, CONTEXT_ID, ANALYSIS_ID, TARGET,
+                List.of(entry), List.of(), List.of(),
+                SnapshotCompleteness.COMPLETE,
+                1, 0, TIME.plusSeconds(3));
     }
 
-    private static InputSnapshot input() {
-        return new InputSnapshot(InputSnapshotStatus.PRESENT, "input/case.json", "b".repeat(64), 10, "");
+    static CodePathCollectionPlan codePathPlan() {
+        SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
+        return new CodePathCollectionPlan(
+                SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"), CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, TARGET,
+                List.of(new MethodSelector(
+                        "a.b.ScheduleTest#case1()V", anchor.className(), anchor.methodName(),
+                        anchor.descriptor())),
+                CollectionBudget.defaults(), "定位", TIME.plusSeconds(4));
     }
 
-    private static BuildSnapshot build() {
-        return new BuildSnapshot("c".repeat(64), "21", "wafer-demo", "0.2.0");
+    private static CodePathCollectionPlan planWithSelectors(List<MethodSelector> selectors) {
+        return new CodePathCollectionPlan(
+                SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-selector-check"), CASE_ID,
+                CONTEXT_ID, ANALYSIS_ID, TARGET, selectors,
+                CollectionBudget.defaults(), "定位", TIME.plusSeconds(4));
+    }
+
+    private static JdwpCollectionPlan jdwpPlan(
+            AnalysisId analysisId, ContextId contextId) {
+        SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
+        return new JdwpCollectionPlan(
+                SchemaVersions.JDWP_COLLECTION_PLAN, new PlanId("jdwp-plan-1"), CASE_ID,
+                contextId, analysisId, TARGET,
+                List.of(new JdwpTracepointSpec(
+                        "schedule-entry", methodCatalog().entries().getFirst().methodKey(),
+                        anchor, 1, 3, JdwpCaptureSpec.stackOnly())),
+                JdwpCollectionBudget.defaults(), "检查调度方法", TIME.plusSeconds(4));
     }
 }

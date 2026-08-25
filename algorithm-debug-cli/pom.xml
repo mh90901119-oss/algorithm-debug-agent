@@ -31,7 +31,17 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>wafer-demo-adapter</artifactId>
+            <artifactId>method-path-codepathtracer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>jdwp-collector-adapter</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>maven-junit-adapter</artifactId>
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>

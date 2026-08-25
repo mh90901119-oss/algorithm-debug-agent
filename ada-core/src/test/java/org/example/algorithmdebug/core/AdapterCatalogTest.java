@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -64,7 +63,7 @@ class AdapterCatalogTest {
     private record Snapshot(String schemaVersion) implements ScheduleResultSnapshot {
     }
 
-    private static final class StubAdapter implements TargetProjectAdapter<Snapshot> {
+    private static final class StubAdapter implements TargetProjectAdapter {
         private final AdapterDescriptor descriptor;
         private final boolean supported;
 
@@ -94,19 +93,10 @@ class AdapterCatalogTest {
                 ProjectDescriptor project, TargetTest targetTest, RunMode runMode) {
             throw new UnsupportedOperationException();
         }
-
-        @Override
-        public InputLocator inputLocator() {
-            return (project, targetTest) -> Optional.empty();
-        }
-
-        @Override
         public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest targetTest) {
             throw new UnsupportedOperationException();
         }
-
-        @Override
         public ScheduleResultParser<Snapshot> scheduleResultParser() {
             throw new UnsupportedOperationException();
         }

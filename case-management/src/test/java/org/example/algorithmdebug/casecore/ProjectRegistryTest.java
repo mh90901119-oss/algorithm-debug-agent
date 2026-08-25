@@ -46,17 +46,14 @@ class ProjectRegistryTest {
         assertEquals(portable(module), result.registration().mavenExecutionRoot());
         assertEquals("pom.xml", result.registration().pomPath());
         assertEquals("MAVEN", result.registration().buildTool());
-        assertEquals(sha256(module.resolve("pom.xml")), result.registration().pomSha256());
         assertEquals(REGISTERED_AT, result.registration().registeredAt());
         assertEquals(targetBefore, snapshot(repository));
 
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Path projectRoot = layout.projectWorkspace(result.registration().projectId());
         assertTrue(Files.isRegularFile(projectRoot.resolve("project.json")));
-        assertTrue(Files.isDirectory(projectRoot.resolve("knowledge/sources")));
-        assertTrue(Files.isDirectory(projectRoot.resolve("knowledge/manifests")));
-        assertTrue(Files.isDirectory(projectRoot.resolve("knowledge/indexes")));
-        assertTrue(Files.isDirectory(projectRoot.resolve("cases")));
+        assertFalse(Files.exists(projectRoot.resolve("knowledge")));
+        assertFalse(Files.exists(projectRoot.resolve("cases")));
     }
 
     @Test
@@ -71,6 +68,71 @@ class ProjectRegistryTest {
         assertTrue(first.created());
         assertFalse(second.created());
         assertEquals(first.registration(), second.registration());
+    }
+
+    @Test
+    void shouldUpdateResultDirectoryAndKeepItWhenLaterRegistrationOmitsOption() throws Exception {
+        Path workspace = initializeWorkspace();
+        Path module = createModule(createRepository(), "algorithm-scheduler", "<project/>");
+        String firstDirectory = portableAbsolute(temporaryDirectory.resolve("results-first"));
+        String finalDirectory = portableAbsolute(temporaryDirectory.resolve("algorithm-results"));
+        ProjectRegistry registry = registry();
+
+        ProjectRegistrationResult first = registry.register(
+                workspace, module, Optional.empty(), Optional.of(firstDirectory));
+        ProjectRegistrationResult updated = registry.register(
+                workspace, module, Optional.empty(), Optional.of(finalDirectory));
+        ProjectRegistrationResult preserved = registry.register(
+                workspace, module, Optional.empty(), Optional.empty());
+
+        assertTrue(first.created());
+        assertFalse(updated.created());
+        assertEquals(first.registration().projectId(), updated.registration().projectId());
+        assertEquals(finalDirectory, updated.registration().resultJsonDirectory());
+        assertEquals(updated.registration(), preserved.registration());
+        assertEquals(updated.registration(), new ProjectRegistrationRepository(
+                new BoundedDocumentMapper(), new AtomicDocumentWriter())
+                .findById(WorkspaceLayout.of(workspace), updated.registration().projectId())
+                .orElseThrow());
+    }
+
+    @Test
+    void shouldIgnoreLegacyConfigurationFileInTargetModule() throws Exception {
+        Path workspace = initializeWorkspace();
+        Path module = createModule(createRepository(), "algorithm-scheduler", "<project/>");
+        Files.writeString(module.resolve(".algorithm-debug-agent.json"), """
+                {"schemaVersion":"1.0","resultJsonDirectory":"output/algorithm-results"}
+                """, StandardCharsets.UTF_8);
+
+        ProjectRegistrationResult result = registry().register(
+                workspace, module, Optional.empty(), Optional.empty());
+
+        assertEquals(null, result.registration().resultJsonDirectory());
+    }
+
+    @Test
+    void shouldUseExplicitAbsoluteResultDirectoryEvenWhenTargetContainsLegacyConfiguration() throws Exception {
+        Path workspace = initializeWorkspace();
+        Path module = createModule(createRepository(), "algorithm-scheduler", "<project/>");
+        Files.writeString(module.resolve(".algorithm-debug-agent.json"), """
+                {"schemaVersion":"1.0","resultJsonDirectory":"output/from-config"}
+                """, StandardCharsets.UTF_8);
+
+        String configuredDirectory = portableAbsolute(temporaryDirectory.resolve("configured-results"));
+        ProjectRegistrationResult result = registry().register(
+                workspace, module, Optional.empty(), Optional.of(configuredDirectory));
+
+        assertEquals(configuredDirectory, result.registration().resultJsonDirectory());
+    }
+
+    @Test
+    void shouldRejectUnsafeResultDirectoryBeforeWritingRegistration() throws Exception {
+        Path workspace = initializeWorkspace();
+        Path module = createModule(createRepository(), "algorithm-scheduler", "<project/>");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> registry().register(
+                        workspace, module, Optional.empty(), Optional.of("../outside")));
     }
 
     @Test
@@ -130,8 +192,6 @@ class ProjectRegistryTest {
         Path overlappingWorkspace = repository.resolve("agent-workspace");
         new WorkspaceInitializer(
                 manifestRepository(),
-                new AtomicDocumentWriter(),
-                new ClasspathWorkspaceTemplateProvider(),
                 Clock.fixed(REGISTERED_AT, ZoneOffset.UTC))
                 .initialize(overlappingWorkspace);
         Map<String, String> beforeRegistration = snapshot(repository);
@@ -164,8 +224,6 @@ class ProjectRegistryTest {
         Path workspace = temporaryDirectory.resolve("agent-workspace");
         new WorkspaceInitializer(
                 manifestRepository(),
-                new AtomicDocumentWriter(),
-                new ClasspathWorkspaceTemplateProvider(),
                 Clock.fixed(REGISTERED_AT, ZoneOffset.UTC))
                 .initialize(workspace);
         return workspace;
@@ -198,6 +256,10 @@ class ProjectRegistryTest {
 
     private static String portable(Path path) throws IOException {
         return path.toRealPath().toString().replace('\\', '/');
+    }
+
+    private static String portableAbsolute(Path path) {
+        return path.toAbsolutePath().normalize().toString().replace('\\', '/');
     }
 
     private static String sha256(Path path) throws Exception {

@@ -37,8 +37,17 @@ public final class ProjectApplicationService {
             Path workspace,
             Path module,
             Optional<ProjectId> projectId) {
+        return register(workspace, module, projectId, Optional.empty());
+    }
+
+    /** 注册项目并可选更新项目相对的算法 JSON 结果目录。 */
+    public ProjectRegistrationResult register(
+            Path workspace,
+            Path module,
+            Optional<ProjectId> projectId,
+            Optional<String> resultJsonDirectory) {
         try {
-            return registry.register(workspace, module, projectId);
+            return registry.register(workspace, module, projectId, resultJsonDirectory);
         } catch (WorkspaceException failure) {
             throw new ControlPlaneException(failure.code(), "项目注册失败", failure);
         }

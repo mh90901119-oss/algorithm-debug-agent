@@ -4,7 +4,6 @@ import org.example.algorithmdebug.adapter.AdapterCapability;
 import org.example.algorithmdebug.adapter.AdapterDescriptor;
 import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.BuildTool;
-import org.example.algorithmdebug.adapter.InputLocator;
 import org.example.algorithmdebug.adapter.ProjectDescriptor;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.ScheduleResultParser;
@@ -14,12 +13,14 @@ import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
-import org.example.algorithmdebug.casecore.ContextSnapshotBuilder;
+import org.example.algorithmdebug.casecore.ContextMode;
+import org.example.algorithmdebug.casecore.CaseArchiveRepository;
+import org.example.algorithmdebug.casecore.CaseArtifactAccess;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
-import org.example.algorithmdebug.contracts.InputSnapshotStatus;
+import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
@@ -72,24 +73,26 @@ class CaseApplicationServiceTest {
     }
 
     @Test
-    void missingInputBecomesContextFactAndDoesNotRunUt() {
+    void openingCaseCreatesMinimalContextWithoutLocatingInputOrRunningUt() {
         ArrayDeque<String> ids = new ArrayDeque<>(List.of("1", "1", "1"));
         CaseApplicationService service = new CaseApplicationService(
                 registrations, mapper, writer,
                 new AdapterCatalog(List.of(new MissingInputAdapter())),
-                new ContextSnapshotBuilder(), new OpaqueIdGenerator(ids::removeFirst),
-                Clock.fixed(TIME, ZoneOffset.UTC), () -> "21.0.4");
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
 
         CaseOpenResult result = service.open(
                 workspace, PROJECT_ID, TARGET, "输入为什么找不到？",
-                Optional.empty(), Optional.of("missing-input"));
+                Optional.empty(), Optional.of("missing-input"), ContextMode.REUSE_LATEST);
 
         assertTrue(result.caseCreated());
+        assertEquals("output/algorithm-results", result.resultJsonDirectory().orElseThrow());
         assertEquals(0, result.digest().runCount());
         Path context = workspace.resolve(
                 "projects/project-1/cases/case-1/contexts/context-1/context.json");
-        assertEquals("MISSING", mapper.readJson(context, com.fasterxml.jackson.databind.JsonNode.class)
-                .path("inputSnapshot").path("status").textValue());
+        com.fasterxml.jackson.databind.JsonNode json = mapper.readJson(
+                context, com.fasterxml.jackson.databind.JsonNode.class);
+        assertEquals(4, json.size());
+        assertTrue(!json.has("inputSnapshot"));
     }
 
     @Test
@@ -98,30 +101,60 @@ class CaseApplicationServiceTest {
         CaseApplicationService service = new CaseApplicationService(
                 registrations, mapper, writer,
                 new AdapterCatalog(List.of(new MissingInputAdapter())),
-                new ContextSnapshotBuilder(), new OpaqueIdGenerator(ids::removeFirst),
-                Clock.fixed(TIME, ZoneOffset.UTC), () -> "21.0.4");
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
         CaseOpenResult opened = service.open(
-                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty());
+                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty(),
+                ContextMode.REUSE_LATEST);
 
         assertEquals(opened.digest(), service.inspect(workspace, PROJECT_ID, opened.caseId()));
+    }
+
+    @Test
+    void completesAnalysisAndReadsOnlyRegisteredArtifact() throws Exception {
+        ArrayDeque<String> ids = new ArrayDeque<>(List.of("1", "1", "1"));
+        CaseApplicationService service = new CaseApplicationService(
+                registrations, mapper, writer,
+                new AdapterCatalog(List.of(new MissingInputAdapter())),
+                new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
+        CaseOpenResult opened = service.open(
+                workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty(),
+                ContextMode.REUSE_LATEST);
+        Path casesRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID);
+        CaseArchiveRepository archive = new CaseArchiveRepository(casesRoot, mapper, writer);
+        Path artifactFile = Files.writeString(
+                casesRoot.resolve("case-1/sample.txt"), "runtime evidence");
+        var artifact = new CaseArtifactAccess(casesRoot).describe(
+                opened.caseId(), "artifact-1", "TRACE", "text/plain", artifactFile);
+        archive.registerArtifact(opened.caseId(), artifact, TIME);
+        AnalysisResult result = new AnalysisResult(
+                SchemaVersions.ANALYSIS_RESULT, opened.caseId(), opened.contextId(),
+                opened.analysisId(), "最终回答", List.of(), List.of(), List.of(), List.of(),
+                List.of("artifact-1"), List.of(), TIME.plusSeconds(1));
+
+        assertEquals(result, service.completeAnalysis(
+                workspace, PROJECT_ID, opened.caseId(), opened.analysisId(), result));
+        assertEquals("runtime evidence", service.readArtifact(
+                workspace, PROJECT_ID, opened.caseId(), "artifact-1", 0, 64).text());
+        assertEquals(1, service.inspect(workspace, PROJECT_ID, opened.caseId())
+                .completedAnalysisCount());
     }
 
     private ProjectRegistration registration() {
         String path = module.toAbsolutePath().normalize().toString().replace('\\', '/');
         return new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "test", path, path, path,
-                "pom.xml", "MAVEN", "a".repeat(64), TIME);
+                "pom.xml", "MAVEN", "output/algorithm-results", TIME);
     }
 
     private record Snapshot(String schemaVersion) implements ScheduleResultSnapshot {
     }
 
-    private final class MissingInputAdapter implements TargetProjectAdapter<Snapshot> {
+    private final class MissingInputAdapter implements TargetProjectAdapter {
         @Override
         public AdapterDescriptor descriptor() {
             return new AdapterDescriptor(
                     "missing-input", "1.0", "missing-input",
-                    Set.of(AdapterCapability.BASELINE_EXECUTION, AdapterCapability.INPUT_LOCATION));
+                    Set.of(AdapterCapability.BASELINE_EXECUTION));
         }
 
         @Override
@@ -135,21 +168,10 @@ class CaseApplicationServiceTest {
                 ProjectDescriptor project, TargetTest targetTest, RunMode runMode) {
             throw new AssertionError("case open 不得创建运行规格");
         }
-
-        @Override
-        public InputLocator inputLocator() {
-            return (project, targetTest) -> {
-                throw new AdapterException("ADAPTER_INPUT_NOT_FOUND", "missing absolute path");
-            };
-        }
-
-        @Override
         public ScheduleResultSource scheduleResultSource(
                 ProjectDescriptor project, TargetTest targetTest) {
             throw new AssertionError("case open 不得定位运行输出");
         }
-
-        @Override
         public ScheduleResultParser<Snapshot> scheduleResultParser() {
             throw new AssertionError("case open 不得解析运行输出");
         }

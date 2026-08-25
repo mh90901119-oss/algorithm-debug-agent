@@ -6,6 +6,7 @@ import org.example.algorithmdebug.adapter.ScheduleResultSource;
 import org.example.algorithmdebug.adapter.TestLaunchSpec;
 
 import java.nio.file.Path;
+import java.util.Optional;
 
 /** 组合运行前快照、目标测试进程、文件稳定确认和不可变结果捕获。 */
 public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot> {
@@ -63,5 +64,21 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             return ScheduleRunResult.incomplete(
                     run, "HARNESS_GANTT_PROCESSING_FAILED", exception, changedOutputCandidates);
         }
+    }
+
+    /** 未配置结果目录时仍执行 UT，只将 Gantt 观察记为 ABSENT。 */
+    public ScheduleRunResult<T> run(
+            TestLaunchSpec spec,
+            MavenExecutionOptions options,
+            Optional<ScheduleResultSource> source,
+            ScheduleResultParser<T> parser,
+            Path destination) throws HarnessException {
+        if (source == null) {
+            throw new IllegalArgumentException("source 不能为空");
+        }
+        if (source.isEmpty()) {
+            return ScheduleRunResult.absent(executor.execute(spec, options));
+        }
+        return run(spec, options, source.orElseThrow(), parser, destination);
     }
 }

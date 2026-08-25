@@ -20,7 +20,6 @@ Phase 0 已实现目标算法 UT 的受控 Maven 执行、动态结果发现与�
 - `OutputDirectorySnapshot`：比较运行前后的新增或修改文件；
 - `OutputStabilityWaiter`：在有限预算内要求结果目录连续稳定；
 - `ScheduleResultCapture`：用业务 Adapter Parser 验证候选，只接受唯一合法结果；
-- `JsonTokenContentHasher`：流式计算忽略 JSON 格式空白、但保留字符串和顺序的内容 SHA-256；
 - `TargetFailureFingerprinter`：对已有结构化失败事实计算稳定指纹，不推断异常根因；
 - `CapturedScheduleResult`：保存源路径、不可变副本、原始 SHA-256 和 JSON Token 内容 SHA-256。
 - `ScheduleProducingTestRunner`：组合快照、执行、稳定确认和不可变捕获；取得进程事实后不再因 Gantt

@@ -35,7 +35,7 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>wafer-demo-adapter</artifactId>
+            <artifactId>maven-junit-adapter</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
