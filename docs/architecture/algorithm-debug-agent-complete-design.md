@@ -1727,7 +1727,10 @@ algorithm-debug-toolkit/
 
 交付：
 
-- `.opencode/agents/algorithm-debug.md`；
+- `integrations/opencode/agents/algorithm-debug.md`；
+- `skills/algorithm-debug/SKILL.md`；
+- `integrations/opencode/commands/debug-case.md`；
+- `integrations/opencode/tools/algorithm-debug.ts`；
 - `/algorithm-debug`；
 - 高层自定义工具；
 - Agent State；

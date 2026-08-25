@@ -2,6 +2,7 @@ target/
 **/target/
 .idea/
 .vscode/
+.opencode/
 *.iml
 *.log
 .algorithm-debug/
