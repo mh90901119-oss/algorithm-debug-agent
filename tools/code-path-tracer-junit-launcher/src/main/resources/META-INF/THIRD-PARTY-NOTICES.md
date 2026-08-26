@@ -1,7 +1,8 @@
 # Third-party notices
 
-This controlled launcher bundles the following runtime components. The exact
-versions are fixed by the Maven build and `config/toolchain-lock.json`.
+This controlled launcher bundles the following runtime components. Exact
+versions are fixed by the Maven build and the repository-local CodePathTracer
+artifact under `third-party/maven-repository`.
 
 | Component | License |
 |---|---|
@@ -13,5 +14,6 @@ versions are fixed by the Maven build and `config/toolchain-lock.json`.
 | OpenTest4J and API Guardian | Apache License 2.0 |
 
 Upstream license and notice resources are also retained under `META-INF` where
-the corresponding dependency publishes them. Distribution-level SBOM and
-license aggregation remain a repository P8 release gate.
+the corresponding dependency publishes them. The pinned upstream coordinate,
+upgrade rule and Apache-2.0 license are documented under
+`third-party/code-path-tracer`.

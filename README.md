@@ -23,6 +23,9 @@ JUnit 测试和问题，OpenCode 中的大模型负责选择证据和解释；Ag
 
 ## 安装与路径
 
+公司电脑使用源码 ZIP、独立 JDK 21、现有 JDK 17 和公司 Maven 的完整流程，见
+[公司环境源码 ZIP 安装与验证](docs/testing/company-environment-installation.md)。
+
 所有需要用户调整的路径都在仓库文件 [config/agent-settings.json](config/agent-settings.json)：
 
 ```json

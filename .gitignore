@@ -2,10 +2,10 @@ target/
 **/target/
 .idea/
 .vscode/
+.opencode/
+/opencode.json
+.agents/
 *.iml
 *.log
-.algorithm-debug/
-distribution/build/
-examples/workspace/
 .superpowers/
 .tmp-tests/
