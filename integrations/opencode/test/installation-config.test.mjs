@@ -36,7 +36,7 @@ test("keeps every user-editable path explicit in the repository settings", async
   assert.equal(settings.workspaceDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace")
   assert.equal(settings.dfxDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics")
   assert.equal(settings.evalDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\evals")
-  assert.equal(settings.resultJsonDirectory, "D:\\log\\scheduler\\gant")
+  assert.equal(settings.resultJsonDirectory, "D:\\log\\scheduler\\${runDate}\\gant")
   assert.equal(settings.dfxEnabled, true)
   assert.equal(settings.agentJavaHome, "")
   assert.equal(settings.targetJavaHome, "")

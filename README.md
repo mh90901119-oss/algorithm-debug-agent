@@ -35,7 +35,7 @@ JUnit 测试和问题，OpenCode 中的大模型负责选择证据和解释；Ag
   "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
   "dfxDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics",
   "evalDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\evals",
-  "resultJsonDirectory": "D:\\log\\scheduler\\gant",
+  "resultJsonDirectory": "D:\\log\\scheduler\\${runDate}\\gant",
   "agentJavaHome": "",
   "targetJavaHome": "",
   "mavenExecutable": "",

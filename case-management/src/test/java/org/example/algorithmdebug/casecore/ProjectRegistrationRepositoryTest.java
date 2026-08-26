@@ -53,6 +53,22 @@ class ProjectRegistrationRepositoryTest {
     }
 
     @Test
+    void shouldReadRegistrationContainingLegacyPomSha256() throws Exception {
+        WorkspaceLayout layout = layoutWithProjectsRoot();
+        ProjectRegistrationRepository repository = repository();
+        ProjectRegistration registration = registration(new ProjectId("algorithm-one-a1b2c3d4e5f6"));
+        Path projectRoot = layout.projectWorkspace(registration.projectId());
+        Files.createDirectories(projectRoot);
+        String currentJson = new String(new BoundedDocumentMapper().writeJson(registration), StandardCharsets.UTF_8);
+        String legacyJson = currentJson.replace(
+                "\"registeredAt\"",
+                "\"pomSha256\":\"a1d7cb2e2e3077e7b23c2fd671dd38410220ab65b07aa64085c24caf29cd3b7d\",\"registeredAt\"");
+        Files.writeString(projectRoot.resolve("project.json"), legacyJson, StandardCharsets.UTF_8);
+
+        assertEquals(registration, repository.findById(layout, registration.projectId()).orElseThrow());
+    }
+
+    @Test
     void shouldReturnEmptyWhenProjectsOrRegistrationDoNotExist() throws Exception {
         WorkspaceLayout layout = WorkspaceLayout.of(temporaryDirectory.resolve("workspace"));
         ProjectRegistrationRepository repository = repository();

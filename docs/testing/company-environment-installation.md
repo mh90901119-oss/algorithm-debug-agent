@@ -183,7 +183,7 @@ try {
   "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
   "dfxDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics",
   "evalDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\evals",
-  "resultJsonDirectory": "D:\\log\\scheduler\\gant",
+  "resultJsonDirectory": "D:\\log\\scheduler\\${runDate}\\gant",
   "agentJavaHome": "D:\\tools\\jdk-21",
   "targetJavaHome": "C:\\Program Files\\Java\\jdk-17",
   "mavenExecutable": "D:\\tools\\apache-maven\\bin\\mvn.cmd",

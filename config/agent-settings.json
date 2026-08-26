@@ -4,7 +4,7 @@
   "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
   "dfxDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics",
   "evalDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\evals",
-  "resultJsonDirectory": "D:\\log\\scheduler\\gant",
+  "resultJsonDirectory": "D:\\log\\scheduler\\${runDate}\\gant",
   "agentJavaHome": "",
   "targetJavaHome": "",
   "mavenExecutable": "",

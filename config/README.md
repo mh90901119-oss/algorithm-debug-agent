@@ -9,7 +9,9 @@ Every path is explicit so users can see and change the defaults. The installer e
 - `workspaceDirectory`: append-only Case, Run, Collection, Evidence, and Report storage.
 - `dfxDirectory`: fallback diagnostic storage for interactions that fail before a Case identity is available.
 - `evalDirectory`: development-only Eval Harness output storage.
-- `resultJsonDirectory`: business algorithm JSON result directory. An absolute path is supported.
+- `resultJsonDirectory`: business algorithm JSON result directory. Use `${runDate}` for a daily
+  `yyyy-MM-dd` directory, for example `D:\\log\\scheduler\\${runDate}\\gant`. A fixed absolute path
+  remains supported. The token is resolved immediately before each UT run, not during installation.
 - `agentJavaHome`: optional JDK 21 home used to build and run the Agent. Empty uses the current environment.
 - `targetJavaHome`: optional target JDK home used by the algorithm Maven/JUnit process and CodePath Launcher.
 - `mavenExecutable`: optional absolute path to the corporate Maven executable. Empty resolves Maven normally.
