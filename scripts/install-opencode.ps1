@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Install", "Check")]
+    [ValidateSet("Install", "Check", "Uninstall")]
     [string]$Mode = "Install"
 )
 
@@ -9,6 +9,7 @@ $repository = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $settingsPath = Join-Path $repository "config\agent-settings.json"
 $launcher = Join-Path $repository "bin\ada.cmd"
 $jdwpCollector = Join-Path $repository "tools\jdwp-collector\jdwp-batch-collector.jar"
+$manifestRelativePath = ".algorithm-debug-agent/install-manifest.json"
 
 $assets = @(
     @{ Source = "skills\algorithm-debug\SKILL.md"; Destination = "skills\algorithm-debug\SKILL.md" },
@@ -32,6 +33,11 @@ function Invoke-Main {
     $script:targetJavaHome = Resolve-OptionalAgentPath -Value $settings.targetJavaHome -Name "targetJavaHome"
     $script:mavenExecutable = Resolve-OptionalAgentPath -Value $settings.mavenExecutable -Name "mavenExecutable"
     $script:dfxEnabled = [bool]$settings.dfxEnabled
+
+    if ($Mode -eq "Uninstall") {
+        Invoke-Uninstall -ConfigDirectory $configuration
+        return
+    }
 
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
         throw "Repository launcher is missing: bin\ada.cmd"
@@ -59,8 +65,25 @@ function Invoke-Main {
         "export const dfxEnabled = $($dfxEnabled.ToString().ToLowerInvariant())"
     )
     $installationBytes = $utf8WithoutBom.GetBytes(($installationLines -join "`n") + "`n")
+    $managedFiles = @()
+    foreach ($asset in $assets) {
+        $managedFiles += [pscustomobject]@{
+            RelativePath = $asset.Destination.Replace("\", "/")
+            Content = [System.IO.File]::ReadAllBytes((Join-Path $repository $asset.Source))
+        }
+    }
+    $managedFiles += [pscustomobject]@{
+        RelativePath = "lib/installation.mjs"
+        Content = $installationBytes
+    }
+    $manifestPath = Join-Path $configuration $manifestRelativePath.Replace("/", "\")
+    $manifestBytes = [byte[]](New-InstallManifestBytes -ManagedFiles $managedFiles)
 
     if ($Mode -eq "Install") {
+        if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+            Assert-InstalledFilesUnmodified -ConfigDirectory $configuration -ManifestPath $manifestPath `
+                -ExpectedRelativePaths @($managedFiles.RelativePath)
+        }
         foreach ($directory in @($configuration, $workspaceDirectory, $dfxDirectory, $evalDirectory)) {
             New-Item -ItemType Directory -Path $directory -Force | Out-Null
         }
@@ -70,6 +93,7 @@ function Invoke-Main {
             Install-Bytes -Destination $destination -Content ([System.IO.File]::ReadAllBytes($source))
         }
         Install-Bytes -Destination (Join-Path $configuration "lib\installation.mjs") -Content $installationBytes
+        Install-Bytes -Destination $manifestPath -Content $manifestBytes
         # OpenCode 首次发现 Custom Tool 时会在配置目录安装自身 TypeScript 运行依赖；这是安装行为，
         # 必须在 Install 阶段完成，确保后续 Check 只读。
         Assert-OpenCodeDiscovery -ConfigDirectory $configuration
@@ -87,6 +111,9 @@ function Invoke-Main {
         Assert-SameBytes -Expected ([System.IO.File]::ReadAllBytes($source)) -Destination $destination
     }
     Assert-SameBytes -Expected $installationBytes -Destination (Join-Path $configuration "lib\installation.mjs")
+    Assert-SameBytes -Expected $manifestBytes -Destination $manifestPath
+    Assert-InstalledFilesUnmodified -ConfigDirectory $configuration -ManifestPath $manifestPath `
+        -ExpectedRelativePaths @($managedFiles.RelativePath)
 
     Assert-OpenCodeDiscovery -ConfigDirectory $configuration
     foreach ($asset in $assets) {
@@ -187,12 +214,139 @@ function Format-OptionalSetting {
     return $Value
 }
 
+function New-InstallManifestBytes {
+    param([object[]]$ManagedFiles)
+
+    $entries = @($ManagedFiles | ForEach-Object {
+        [ordered]@{
+            relativePath = $_.RelativePath
+            sha256 = Get-Sha256 -Content ([byte[]]$_.Content)
+        }
+    })
+    $manifest = [ordered]@{
+        schemaVersion = "1.0"
+        agentId = "algorithm-debug"
+        managedFiles = $entries
+    }
+    return ,$utf8WithoutBom.GetBytes(($manifest | ConvertTo-Json -Depth 5) + "`n")
+}
+
+function Get-Sha256 {
+    param([byte[]]$Content)
+
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($algorithm.ComputeHash($Content))).Replace("-", "").ToLowerInvariant()
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Read-InstallManifest {
+    param([string]$Path, [string[]]$ExpectedRelativePaths)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "OpenCode installation manifest is missing: $Path"
+    }
+    try {
+        $manifest = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "OpenCode installation manifest is invalid: $($_.Exception.Message)"
+    }
+    if ($manifest.schemaVersion -ne "1.0" -or $manifest.agentId -ne "algorithm-debug") {
+        throw "OpenCode installation manifest identity is invalid"
+    }
+    $seen = @{}
+    foreach ($entry in @($manifest.managedFiles)) {
+        $relative = [string]$entry.relativePath
+        $sha = [string]$entry.sha256
+        if ([string]::IsNullOrWhiteSpace($relative) -or [System.IO.Path]::IsPathRooted($relative) `
+                -or $relative.Contains("\") -or $relative -match '(^|/)\.\.(/|$)' `
+                -or $sha -notmatch '^[0-9a-f]{64}$' -or $seen.ContainsKey($relative)) {
+            throw "OpenCode installation manifest contains an invalid managed file"
+        }
+        $seen[$relative] = $sha
+    }
+    $expected = @($ExpectedRelativePaths | Sort-Object)
+    $actual = @($seen.Keys | Sort-Object)
+    if (($expected -join "`n") -cne ($actual -join "`n")) {
+        throw "OpenCode installation manifest managed file set is incompatible with this Agent version"
+    }
+    return $manifest
+}
+
+function Assert-InstalledFilesUnmodified {
+    param([string]$ConfigDirectory, [string]$ManifestPath, [string[]]$ExpectedRelativePaths)
+
+    $manifest = Read-InstallManifest -Path $ManifestPath -ExpectedRelativePaths $ExpectedRelativePaths
+    foreach ($entry in @($manifest.managedFiles)) {
+        $destination = Join-Path $ConfigDirectory ([string]$entry.relativePath).Replace("/", "\")
+        if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+            throw "Managed OpenCode asset is missing: $($entry.relativePath)"
+        }
+        $actual = Get-Sha256 -Content ([System.IO.File]::ReadAllBytes($destination))
+        if ($actual -cne [string]$entry.sha256) {
+            throw "Managed OpenCode asset was modified after installation: $($entry.relativePath)"
+        }
+    }
+}
+
+function Invoke-Uninstall {
+    param([string]$ConfigDirectory)
+
+    $knownRelativePaths = @($assets | ForEach-Object { $_.Destination.Replace("\", "/") }) + "lib/installation.mjs"
+    $manifestPath = Join-Path $ConfigDirectory $manifestRelativePath.Replace("/", "\")
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        $legacyFiles = @($knownRelativePaths | Where-Object {
+            Test-Path -LiteralPath (Join-Path $ConfigDirectory $_.Replace("/", "\"))
+        })
+        if ($legacyFiles.Count -gt 0) {
+            throw "OpenCode installation manifest is missing while managed assets still exist. Run Install once with this Agent version, then run uninstall again."
+        }
+        Write-Output "OPENCODE_ADAPTER_ALREADY_UNINSTALLED $ConfigDirectory"
+        return
+    }
+
+    $manifest = Read-InstallManifest -Path $manifestPath -ExpectedRelativePaths $knownRelativePaths
+    $conflicts = @()
+    foreach ($entry in @($manifest.managedFiles)) {
+        $destination = Join-Path $ConfigDirectory ([string]$entry.relativePath).Replace("/", "\")
+        if (-not (Test-Path -LiteralPath $destination)) { continue }
+        if (-not (Test-Path -LiteralPath $destination -PathType Leaf)) {
+            $conflicts += [string]$entry.relativePath
+            continue
+        }
+        $actual = Get-Sha256 -Content ([System.IO.File]::ReadAllBytes($destination))
+        if ($actual -cne [string]$entry.sha256) { $conflicts += [string]$entry.relativePath }
+    }
+    if ($conflicts.Count -gt 0) {
+        throw "Uninstall refused because managed OpenCode assets were modified: $($conflicts -join ', ')"
+    }
+
+    foreach ($entry in @($manifest.managedFiles)) {
+        $destination = Join-Path $ConfigDirectory ([string]$entry.relativePath).Replace("/", "\")
+        if (Test-Path -LiteralPath $destination -PathType Leaf) {
+            Remove-Item -LiteralPath $destination -Force
+        }
+    }
+    Remove-Item -LiteralPath $manifestPath -Force
+    foreach ($relativeDirectory in @("skills\algorithm-debug\references", "skills\algorithm-debug", ".algorithm-debug-agent")) {
+        $directory = Join-Path $ConfigDirectory $relativeDirectory
+        if ((Test-Path -LiteralPath $directory -PathType Container) `
+                -and @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) {
+            Remove-Item -LiteralPath $directory -Force
+        }
+    }
+    Write-Output "OPENCODE_ADAPTER_UNINSTALLED $ConfigDirectory"
+    Write-EffectivePaths
+}
+
 function Install-Bytes {
     param([string]$Destination, [byte[]]$Content)
 
     $parent = Split-Path -Parent $Destination
-    $backup = $null
-    $installed = $false
     New-Item -ItemType Directory -Path $parent -Force | Out-Null
     if ((Test-Path -LiteralPath $Destination -PathType Leaf) -and (Bytes-Equal $Content ([System.IO.File]::ReadAllBytes($Destination)))) {
         return
@@ -202,9 +356,6 @@ function Install-Bytes {
         if (-not (Test-Path -LiteralPath $Destination -PathType Leaf)) {
             throw "OpenCode asset destination is not a regular file: $Destination"
         }
-        $suffix = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmssfff") + "-" + [guid]::NewGuid().ToString("N")
-        $backup = "$Destination.ada-backup-$suffix"
-        Copy-Item -LiteralPath $Destination -Destination $backup
     }
 
     $temporary = Join-Path $parent ("." + [System.IO.Path]::GetFileName($Destination) + ".ada-" + [guid]::NewGuid().ToString("N") + ".tmp")
@@ -216,13 +367,9 @@ function Install-Bytes {
         else {
             Move-Item -LiteralPath $temporary -Destination $Destination
         }
-        $installed = $true
     }
     finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
-        if ($installed -and $backup -and (Test-Path -LiteralPath $backup -PathType Leaf)) {
-            Remove-Item -LiteralPath $backup -Force
-        }
     }
 }
 

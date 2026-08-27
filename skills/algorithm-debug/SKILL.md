@@ -3,7 +3,7 @@ name: algorithm-debug
 description: Use when a user asks about a specified Java/Maven algorithm UT, including its exception, assertion failure, Gantt result, runtime call path, internal state, or changes across analysis rounds.
 metadata:
   owner: algorithm-debug-agent
-  version: "2.0"
+  version: "2.2"
 ---
 
 # Algorithm Debug Workflow
@@ -17,6 +17,17 @@ evidence is needed; let the Agent execute, validate, archive, and reference dete
   unless the user explicitly requests a cross-UT comparison.
 - Call `algorithm-debug_analysis_begin` for every new question. Pass the prior `caseId` for a
   follow-up; omit it for a new Case.
+- Immediately call `algorithm-debug_algorithm_input_capture` for the returned `caseId` and
+  `analysisId`. This deterministic step inspects only first-level declarations in the target test
+  method and accepts exactly one direct `String` or `java.lang.String` literal whose value ends with
+  `input.json`. If the Tool reports a missing target, no input, a computed expression, multiple
+  inputs, a missing file, or an invalid file, report that boundary and stop before running or
+  collecting the UT. Never choose one input on the user's behalf.
+- Read the returned `ALGORITHM_INPUT` Artifact through bounded `artifact_read` calls before deciding
+  the first execution or collection action. The input is planning context and immutable evidence;
+  its SHA proves only exact input bytes. If comparison is `CHANGED`, do not reuse older
+  input-dependent Run or Collection evidence as current evidence and run the UT again. If comparison
+  is `INCOMPARABLE`, state that historical input reuse is unsafe.
 - Reuse the current Context by default. Use `contextMode=new` only when the user or model already
   knows that the target source, UT, or input was deliberately changed. Never scan the repository or
   infer a new Context only because Gantt output changed.
@@ -35,6 +46,7 @@ evidence is needed; let the Agent execute, validate, archive, and reference dete
 
 | Evidence gap | Tool action |
 |---|---|
+| Current Analysis input is not captured | Run `algorithm-debug_algorithm_input_capture` and inspect its Artifact |
 | Current execution facts are missing | Run `algorithm-debug_run_test` once |
 | Prior facts may already answer | Use `algorithm-debug_case_inspect` |
 | Relevant methods are unknown | Use `algorithm-debug_static_analyze` |
@@ -65,6 +77,14 @@ complete the analysis. If not, choose only the single most valuable next action:
 excerpt, Static analysis, CodePath collection, or JDWP collection. Unknown failure shapes remain raw
 evidence for model analysis; never convert them into `OTHER` or reject them because they were not
 predefined.
+
+Dynamic collection is not a general confidence booster. Do not use CodePath or JDWP when a failed
+Run already provides the exception class, normalized message, first relevant business stack frame,
+and current source is sufficient to explain the throw condition. Use dynamic evidence only when the
+user explicitly asks for an actual runtime path/state, or when one named runtime value would
+distinguish two concrete source-level explanations that remain plausible. For an assertion failure,
+expected/actual values plus the relevant current source are normally sufficient. Do not reread the
+same Artifact range, and do not delegate this workflow to a general subagent or task.
 
 Do not repeat a failed collection with the same effective plan. Retry only when the Tool error names
 a correctable Plan input and the next Plan materially changes that input; otherwise preserve the

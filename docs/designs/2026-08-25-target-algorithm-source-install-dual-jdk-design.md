@@ -1,18 +1,18 @@
-# 公司环境源码安装与双 JDK 设计
+# 目标环境源码安装与双 JDK 设计
 
 ## 1. 目标
 
 本设计解决以下实际部署场景：
 
 - 用户从 GitHub 下载 Algorithm Debug Agent 的普通源码 ZIP，而不是仅含 JAR 的离线发行包。
-- 公司 Maven 镜像可提供 Maven 插件、JUnit、Jackson 等主流依赖，但不提供 CodePathTracer。
-- 公司电脑已有 JDK 17，算法模块及其 UT 继续使用 JDK 17。
+- 受限环境 Maven 镜像可提供 Maven 插件、JUnit、Jackson 等主流依赖，但不提供 CodePathTracer。
+- 目标环境电脑已有 JDK 17，算法模块及其 UT 继续使用 JDK 17。
 - 用户可额外解压 JDK 21，但不修改系统 `JAVA_HOME`、`PATH` 或注册表。
 - Agent 自身使用 JDK 21 构建和运行。
-- OpenCode 在公司算法仓中启动后，既能调用 Agent 工具，也能按用户要求修改算法源码、UT 和配置。
+- OpenCode 在目标算法仓库中启动后，既能调用 Agent 工具，也能按用户要求修改算法源码、UT 和配置。
 - JDWP loopback attach 必须有仓库内可执行的验证脚本。
 
-本设计不制作运行时专用安装包，也不复制公司算法源码到 Agent 仓。
+本设计不制作运行时专用安装包，也不复制目标算法源码到 Agent 仓。
 
 ## 2. 仓库边界
 
@@ -24,18 +24,18 @@ Agent 仓负责保存：
 - OpenCode Agent、Skill、Command、Custom Tool 的安装源文件。
 - 构建脚本、安装脚本和 JDWP 环境验证脚本。
 - CodePathTracer 的固定版本 Maven 制品及许可证。
-- 默认配置、配置说明和公司环境安装说明。
+- 默认配置、配置说明和目标环境安装说明。
 
-### 2.2 公司算法仓
+### 2.2 目标算法仓库
 
-公司算法仓负责保存：
+目标算法仓库负责保存：
 
 - 算法生产源码。
 - 目标算法 UT。
 - UT 使用的算法输入及业务配置。
 - UT 运行后产生的算法结果。
 
-OpenCode 应从公司算法模块目录启动。普通文件编辑由 OpenCode 自身工具完成；Agent Custom Tool 负责运行 UT、归档证据、静态分析、CodePath 和 JDWP 采集。两者不存在“运行时包导致不能修改源码”的限制。
+OpenCode 应从目标算法模块目录启动。普通文件编辑由 OpenCode 自身工具完成；Agent Custom Tool 负责运行 UT、归档证据、静态分析、CodePath 和 JDWP 采集。两者不存在“运行时包导致不能修改源码”的限制。
 
 ## 3. CodePathTracer 依赖策略
 
@@ -55,7 +55,7 @@ third-party/
 
 根 POM 声明仓库内 `file:` Maven Repository，路径基于 `${maven.multiModuleProjectDirectory}` 解析，Snapshot 更新策略为 `never`。因此：
 
-- 公司 Maven 镜像继续提供主流依赖和 Maven 插件。
+- 受限环境 Maven 镜像继续提供主流依赖和 Maven 插件。
 - CodePathTracer 仅从源码 ZIP 内的固定制品读取。
 - 不依赖开发机的 `~/.m2` 缓存。
 - 不使用 Maven `systemPath`。
@@ -78,10 +78,10 @@ third-party/
 | 字段 | 用途 | 为空时行为 |
 |---|---|---|
 | `agentJavaHome` | 构建和运行 Agent CLI、JDWP Collector | 使用当前 `JAVA_HOME`，再回退到 `PATH` |
-| `targetJavaHome` | 运行公司算法 Maven/JUnit 和 CodePath 目标 JVM | 使用目标进程当前 Java 环境 |
-| `mavenExecutable` | 指定公司 Maven 可执行文件 | 使用 `mvn` |
+| `targetJavaHome` | 运行目标算法 Maven/JUnit 和 CodePath 目标 JVM | 使用目标进程当前 Java 环境 |
+| `mavenExecutable` | 指定目标环境 Maven 可执行文件 | 使用 `mvn` |
 
-配置文件必须保留带说明的默认字段，使用户知道可以修改。公司电脑只修改 Agent 仓中的这一个配置文件，不在每个算法仓创建 Agent 配置。
+配置文件必须保留带说明的默认字段，使用户知道可以修改。目标环境电脑只修改 Agent 仓中的这一个配置文件，不在每个算法仓创建 Agent 配置。
 
 本地已有配置不填新字段时，行为保持不变。
 
@@ -107,7 +107,7 @@ third-party/
   -> 执行 build-agent.ps1
   -> 执行 install-opencode.ps1
   -> 执行 verify-jdwp-loopback.ps1
-  -> 进入公司算法模块并启动 opencode
+  -> 进入目标算法模块并启动 opencode
 ```
 
 `install-opencode.ps1` 继续把仓库内 Agent、Skill、Command 和 Custom Tool 复制到 OpenCode 配置目录，并让 Launcher 指向 Agent 仓的 `bin/ada.cmd`。
@@ -119,7 +119,7 @@ flowchart TD
     C[Agent 统一配置] -->|agentJavaHome| B[build-agent.ps1]
     C -->|agentJavaHome| L[bin/ada.cmd]
     C -->|targetJavaHome| T[目标 UT 进程]
-    C -->|mavenExecutable| M[公司 Maven]
+    C -->|mavenExecutable| M[目标环境 Maven]
     B -->|JDK 21| BUILD[构建 Agent 源码]
     L -->|JDK 21| CLI[Algorithm Debug CLI]
     CLI -->|JDK 21| JDWP[JDWP Collector]
@@ -133,11 +133,11 @@ flowchart TD
 - 配置到脚本或进程的箭头表示该字段决定可执行程序选择。
 - Agent CLI 和 Collector 使用 JDK 21。
 - 算法 Maven/JUnit、CodePath Launcher 及目标 UT 使用 JDK 17。
-- JDK 21 不接管公司算法构建，也不修改公司电脑的全局 Java 配置。
+- JDK 21 不接管目标算法构建，也不修改目标环境电脑的全局 Java 配置。
 
 ## 7. CodePath Launcher 的 Java 17 兼容
 
-当前 Agent Contracts 使用 Java 21，CodePath Launcher 不能把 Java 21 Contracts JAR 带入公司 JDK 17 的目标进程。改造方式：
+当前 Agent Contracts 使用 Java 21，CodePath Launcher 不能把 Java 21 Contracts JAR 带入目标环境 JDK 17 的目标进程。改造方式：
 
 - CodePath Launcher 编译目标调整为 Java 17。
 - Launcher 内定义最小、不可变的 `LauncherCodePathPlan` DTO。
@@ -167,25 +167,25 @@ scripts/fixtures/jdwp-loopback/collector-plan.template.json
 6. 校验 Raw Trace、Manifest、退出码和目标 JVM 恢复执行。
 7. 超时或失败时终止自身启动的进程，并输出明确英文错误。
 
-该脚本验证 JDK、端口、JDWP attach、Collector 和本机安全软件是否允许真实链路。它不绕过公司安全策略。
+该脚本验证 JDK、端口、JDWP attach、Collector 和本机安全软件是否允许真实链路。它不绕过目标环境安全策略。
 
-## 9. 公司算法仓使用流程
+## 9. 目标算法仓库使用流程
 
-在公司算法模块目录执行 `opencode`。用户可以提出两类请求：
+在目标算法模块目录执行 `opencode`。用户可以提出两类请求：
 
 - 定位请求：运行目标 UT、归档控制台和 Gantt、按证据需要执行静态分析、CodePath 或 JDWP，然后解释根因。
-- 修改请求：在证据支持后，由 OpenCode 修改公司算法源码或 UT，再运行目标 UT 验证。
+- 修改请求：在证据支持后，由 OpenCode 修改目标算法源码或 UT，再运行目标 UT 验证。
 
-Agent Workspace 仍位于统一配置指定的位置；公司算法源码保留在原仓。Agent 不要求为每个算法仓写额外配置文件。
+Agent Workspace 仍位于统一配置指定的位置；目标算法源码保留在原仓。Agent 不要求为每个算法仓写额外配置文件。
 
 ## 10. 验收标准
 
 - 当前电脑不填新配置仍可使用现有构建和安装流程。
-- 公司电脑仅解压 JDK 21，不配置系统环境变量，即可构建和运行 Agent。
-- 公司算法 Maven/JUnit 明确由 JDK 17 执行。
+- 目标环境电脑仅解压 JDK 21，不配置系统环境变量，即可构建和运行 Agent。
+- 目标算法 Maven/JUnit 明确由 JDK 17 执行。
 - 清空用户本地 CodePathTracer Maven 缓存后，源码 ZIP 仍可通过仓库内制品构建。
 - JDWP loopback 脚本能明确报告 PASS 或具体失败环节。
-- OpenCode 从公司算法模块启动后可调用 Agent，并可按用户请求修改该模块源码。
+- OpenCode 从目标算法模块启动后可调用 Agent，并可按用户请求修改该模块源码。
 - 所有脚本输出为英文，文档说明为中文。
 
 ## 11. 非目标与风险
@@ -195,11 +195,11 @@ Agent Workspace 仍位于统一配置指定的位置；公司算法源码保留�
 - 不制作 runtime-only 离线 ZIP。
 - 不修改系统 Java 配置。
 - 不把完整 CodePathTracer 上游源码合并进 Agent。
-- 不自动修改公司 Maven `settings.xml`。
+- 不自动修改目标环境 Maven `settings.xml`。
 - 不自动绕过终端安全软件。
 
 ### 风险
 
-- 公司 Maven 镜像若缺少构建插件或主流依赖，仍需公司镜像管理员补齐；仓库不复制全部 Maven Central。
-- 公司安全软件可能禁止 JDWP loopback attach；验证脚本只能识别和报告。
-- 公司算法使用超出 Java 17 的字节码或特殊测试启动器时，需要按目标仓实际构建方式增加 Adapter，但不改变双 JDK 边界。
+- 受限环境 Maven 镜像若缺少构建插件或主流依赖，仍需受限环境镜像管理员补齐；仓库不复制全部 Maven Central。
+- 目标环境终端安全软件可能禁止 JDWP loopback attach；验证脚本只能识别和报告。
+- 目标算法使用超出 Java 17 的字节码或特殊测试启动器时，需要按目标仓实际构建方式增加 Adapter，但不改变双 JDK 边界。

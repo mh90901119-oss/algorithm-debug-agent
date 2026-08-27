@@ -1,6 +1,8 @@
 package org.example.algorithmdebug.cli;
 
 import org.example.algorithmdebug.core.CaseApplicationService;
+import org.example.algorithmdebug.core.AlgorithmInputApplicationService;
+import org.example.algorithmdebug.core.CaseRunException;
 import org.example.algorithmdebug.core.DoctorApplicationService;
 import org.example.algorithmdebug.core.ProjectApplicationService;
 import org.example.algorithmdebug.core.RunApplicationService;
@@ -33,6 +35,7 @@ public final class CliCommandExecutor {
     private final ProjectApplicationService projectService;
     private final DoctorApplicationService doctorService;
     private final CaseApplicationService caseService;
+    private final AlgorithmInputApplicationService algorithmInputService;
     private final RunApplicationService runService;
     private final StaticAnalysisApplicationService staticAnalysisService;
     private final CollectionApplicationService collectionService;
@@ -59,7 +62,7 @@ public final class CliCommandExecutor {
             StaticAnalysisApplicationService staticAnalysisService,
             CollectionApplicationService collectionService) {
         this(workspaceService, projectService, doctorService, caseService, runService,
-                staticAnalysisService, collectionService, null);
+                staticAnalysisService, collectionService, null, null);
     }
 
     /** 创建同时支持 CodePath 和 JDWP 的 CLI 命令执行器。 */
@@ -72,6 +75,21 @@ public final class CliCommandExecutor {
             StaticAnalysisApplicationService staticAnalysisService,
             CollectionApplicationService collectionService,
             JdwpCollectionApplicationService jdwpCollectionService) {
+        this(workspaceService, projectService, doctorService, caseService, runService,
+                staticAnalysisService, collectionService, jdwpCollectionService, null);
+    }
+
+    /** 创建支持算法输入捕获、CodePath 和 JDWP 的完整 CLI 执行器。 */
+    public CliCommandExecutor(
+            WorkspaceApplicationService workspaceService,
+            ProjectApplicationService projectService,
+            DoctorApplicationService doctorService,
+            CaseApplicationService caseService,
+            RunApplicationService runService,
+            StaticAnalysisApplicationService staticAnalysisService,
+            CollectionApplicationService collectionService,
+            JdwpCollectionApplicationService jdwpCollectionService,
+            AlgorithmInputApplicationService algorithmInputService) {
         if (workspaceService == null || projectService == null || doctorService == null
                 || caseService == null || runService == null || staticAnalysisService == null
                 || collectionService == null) {
@@ -81,6 +99,7 @@ public final class CliCommandExecutor {
         this.projectService = projectService;
         this.doctorService = doctorService;
         this.caseService = caseService;
+        this.algorithmInputService = algorithmInputService;
         this.runService = runService;
         this.staticAnalysisService = staticAnalysisService;
         this.collectionService = collectionService;
@@ -125,6 +144,14 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.RunExecute run) {
             return runService.execute(
                     run.workspace(), run.projectId(), run.caseId(), run.analysisId());
+        }
+        if (command instanceof CliCommand.AlgorithmInputCapture capture) {
+            if (algorithmInputService == null) {
+                throw new CaseRunException(
+                        "ALGORITHM_INPUT_CAPTURE_UNAVAILABLE", "Algorithm input service is unavailable");
+            }
+            return algorithmInputService.capture(
+                    capture.workspace(), capture.projectId(), capture.caseId(), capture.analysisId());
         }
         if (command instanceof CliCommand.StaticAnalyze analyze) {
             return staticAnalysisService.analyze(

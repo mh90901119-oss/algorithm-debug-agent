@@ -3,14 +3,13 @@ param()
 $ErrorActionPreference = "Stop"
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
-$DemoProject = Join-Path (Split-Path -Parent $RepositoryRoot) "hellomvn"
-$DemoProject = [IO.Path]::GetFullPath($DemoProject)
+$TargetProject = [IO.Path]::GetFullPath((Get-Location).Path)
 $launcher = Join-Path $RepositoryRoot "bin\ada.cmd"
 if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
     throw "ADA launcher not found: $launcher"
 }
-if (-not (Test-Path -LiteralPath (Join-Path $DemoProject "pom.xml") -PathType Leaf)) {
-    throw "Demo Maven module not found: $DemoProject"
+if (-not (Test-Path -LiteralPath (Join-Path $TargetProject "pom.xml") -PathType Leaf)) {
+    throw "Target Maven module was not found in the current directory. Run this script from the target algorithm module: $TargetProject"
 }
 
 $verificationRoot = Join-Path ([IO.Path]::GetTempPath()) ("ada-launcher-" + [guid]::NewGuid())
@@ -22,7 +21,7 @@ try {
         throw "ada workspace init failed"
     }
 
-    $doctor = (& $launcher doctor --workspace $workspace --project $DemoProject) -join "`n" |
+    $doctor = (& $launcher doctor --workspace $workspace --project $TargetProject) -join "`n" |
         ConvertFrom-Json
     if ($LASTEXITCODE -ne 0 -or -not $doctor.success) {
         throw "ada doctor failed"
@@ -33,7 +32,7 @@ try {
             throw "ada doctor missing required check: $required"
         }
     }
-    Write-Output "ADA launcher verification passed"
+    Write-Output "ADA launcher verification passed for current target module: $TargetProject"
 }
 finally {
     if (Test-Path -LiteralPath $verificationRoot) {

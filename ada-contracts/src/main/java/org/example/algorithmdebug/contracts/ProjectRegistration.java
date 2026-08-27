@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.contracts;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -20,6 +21,7 @@ import java.time.Instant;
  * @param buildTool 构建工具，当前固定为 MAVEN
  * @param registeredAt 注册时间
  */
+@JsonIgnoreProperties("pomSha256")
 public record ProjectRegistration(
         String schemaVersion,
         ProjectId projectId,

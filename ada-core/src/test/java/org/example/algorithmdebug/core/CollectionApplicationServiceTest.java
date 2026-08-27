@@ -66,6 +66,7 @@ import org.example.algorithmdebug.methodpath.MethodPathManifest;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
+import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -101,8 +102,11 @@ class CollectionApplicationServiceTest {
         Files.createDirectories(targetSource.getParent());
         Files.writeString(targetSource, """
                 package fixture;
-                class TargetTest { void caseUnderTest() { } }
+                class TargetTest { void caseUnderTest() { String algorithmInput = "input/caseinput.json"; } }
                 """);
+        Path input = module.resolve("input/caseinput.json");
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "{}");
 
         mapper = new BoundedDocumentMapper();
         writer = new AtomicDocumentWriter();
@@ -120,6 +124,11 @@ class CollectionApplicationServiceTest {
         archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+
+        new AlgorithmInputApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new JavaTestAlgorithmInputLocator(), fixedClock())
+                .capture(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
 
         StaticAnalysisApplicationService staticAnalysis = new StaticAnalysisApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,

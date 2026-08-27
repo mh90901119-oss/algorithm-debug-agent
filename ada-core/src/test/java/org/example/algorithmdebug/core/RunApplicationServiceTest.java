@@ -37,6 +37,7 @@ import org.example.algorithmdebug.harness.RunLog;
 import org.example.algorithmdebug.harness.RunResult;
 import org.example.algorithmdebug.harness.TargetTestExecutor;
 import org.example.algorithmdebug.harness.TerminationReport;
+import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -85,8 +86,9 @@ class RunApplicationServiceTest {
         Files.writeString(module.resolve("pom.xml"), "<project/>");
         Path source = module.resolve("src/test/java/a/b/TargetTest.java");
         Files.createDirectories(source.getParent());
-        Files.writeString(source, "package a.b; class TargetTest {}");
-        input = module.resolve("input/case.json");
+        Files.writeString(source, "package a.b; class TargetTest { void runs() {"
+                + " String algorithmInput = \"input/caseinput.json\"; } }");
+        input = module.resolve("input/caseinput.json");
         Files.createDirectories(input.getParent());
         Files.writeString(input, "{}");
         output = Files.createDirectories(module.resolve("output"));
@@ -105,6 +107,29 @@ class RunApplicationServiceTest {
         opened = sessions.open(new CaseSessionRequest(
                 Optional.empty(), PROJECT_ID, TARGET, "stub",
                 "为什么调度结果不对？", ContextMode.REUSE_LATEST));
+        new AlgorithmInputApplicationService(
+                registrations, mapper, writer, new JavaTestAlgorithmInputLocator(),
+                Clock.fixed(TIME, ZoneOffset.UTC))
+                .capture(workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
+    }
+
+    @Test
+    void refusesToStartTheUtWhenTheCurrentAnalysisHasNoCapturedInput() {
+        org.example.algorithmdebug.contracts.AnalysisId analysisId =
+                new org.example.algorithmdebug.contracts.AnalysisId("analysis-2");
+        archive().createAnalysis(new org.example.algorithmdebug.contracts.AnalysisRequest(
+                SchemaVersions.ANALYSIS_REQUEST, opened.caseId(), opened.contextId(), analysisId,
+                "continue", TIME.plusSeconds(1)));
+        AtomicInteger starts = new AtomicInteger();
+        RunApplicationService service = new RunApplicationService(
+                registrations, mapper, writer, new AdapterCatalog(List.of(new StubAdapter())),
+                new OpaqueIdGenerator(() -> "2"), Clock.fixed(TIME, ZoneOffset.UTC),
+                (spec, options) -> { starts.incrementAndGet(); throw new AssertionError("must not run"); },
+                new RunArtifactArchiver(), mavenExecutable);
+        CaseRunException failure = assertThrows(CaseRunException.class, () -> service.execute(
+                workspace, PROJECT_ID, opened.caseId(), analysisId));
+        assertEquals("ANALYSIS_INPUT_NOT_CAPTURED", failure.code());
+        assertEquals(0, starts.get());
     }
 
     @Test

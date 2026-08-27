@@ -12,6 +12,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "case_audit",
         "analysis_complete"
@@ -39,6 +40,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "case_audit",
         "analysis_complete"
       ],
@@ -62,31 +64,33 @@
     },
     {
       "id": "missing-input",
-      "question": "Explain why this UT fails and stop at the earliest sufficient failure fact.",
+      "question": "Check whether this UT has exactly one supported algorithm input. If it does not, explain the unsupported target and stop without running it.",
       "targetTest": {
         "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
         "methodName": "missingAlgorithmInputCausesNullPointerException"
       },
       "requiredTools": [
         "analysis_begin",
-        "run_test",
+        "algorithm_input_capture",
         "case_audit",
         "analysis_complete"
       ],
-      "forbiddenTools": [],
-      "expectedProcessOutcome": "FAILED",
-      "expectedTestOutcome": "ERROR",
-      "expectedExceptionClass": "java.lang.NullPointerException",
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect"
+      ],
       "requiredAnswerPatterns": [
-        "algorithm input|input.*required|null"
+        "algorithm input|input.*not found|unsupported target"
       ],
       "forbiddenAnswerPatterns": [],
       "requireAnalysisComplete": true,
-      "requireEvidenceReferences": true,
+      "requireEvidenceReferences": false,
       "allowCodePath": false,
       "allowJdwp": false,
-      "maxTargetTestExecutions": 1,
-      "expectedGanttOutcome": "ABSENT"
+      "maxTargetTestExecutions": 0
     },
     {
       "id": "algorithm-loop-guard",
@@ -97,6 +101,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "case_audit",
         "analysis_complete"
@@ -113,9 +118,9 @@
       ],
       "requireAnalysisComplete": true,
       "requireEvidenceReferences": true,
-      "allowCodePath": true,
-      "allowJdwp": true,
-      "maxTargetTestExecutions": 3,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
       "expectedGanttOutcome": "ABSENT"
     },
     {
@@ -127,6 +132,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "case_audit",
         "analysis_complete"
@@ -159,6 +165,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "static_analyze",
         "case_audit",
@@ -189,6 +196,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "static_analyze",
         "codepath_plan_create",
@@ -223,6 +231,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "static_analyze",
         "jdwp_plan_create",
@@ -257,6 +266,7 @@
       },
       "requiredTools": [
         "analysis_begin",
+        "algorithm_input_capture",
         "run_test",
         "case_audit",
         "analysis_complete"

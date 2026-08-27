@@ -152,6 +152,7 @@ public final class RunApplicationService {
             }
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
             ContextRecord context = requireContext(archive, caseId, analysis.contextId());
+            archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
 
             RunId runId = ids.newRunId();
             RunRequest request = new RunRequest(

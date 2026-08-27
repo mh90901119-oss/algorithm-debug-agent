@@ -31,7 +31,7 @@ P2 已经能够按计划运行 CodePathTracer，并追加保存包级采集超�
 1. 大型算法 Trace 可能达到数十 MiB 或数十万事件，不能整体进入模型上下文；
 2. Raw 工具格式缺少统一的 Case 身份、来源定位、完整性结论和证据覆盖信息；
 3. 早期设计把 `candidate_selected`、`schedule_committed` 等 Wafer 领域概念写入通用 Normalizer，
-   无法适配业务模型完全不同的公司算法。
+   无法适配业务模型完全不同的目标算法。
 
 P4 必须把 Raw Trace 确定性整理成通用运行时事实，同时保留原始数据、精度限制、截断、失败和 Baseline
 状态。P4 不替代大模型理解算法业务，也不把工具成功错误地提升为根因已经确认。
@@ -414,7 +414,7 @@ EVIDENCE_ARCHIVE_FAILED
 ### 12.5 测试夹具与 Golden 数据
 
 - 使用合成、最小化的 P2/P3 Raw JSONL 形状；
-- Fixture 不包含真实公司输入、绝对路径或大型 Trace；
+- Fixture 不包含真实敏感目标输入、绝对路径或大型 Trace；
 - Golden 变更必须说明 Schema/规则版本和行为原因，禁止为通过测试随意更新。
 
 ## 13. 实施步骤

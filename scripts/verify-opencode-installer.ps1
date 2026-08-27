@@ -3,6 +3,7 @@ param()
 $ErrorActionPreference = "Stop"
 $RepositoryRoot = Split-Path -Parent $PSScriptRoot
 $installer = Join-Path $PSScriptRoot "install-opencode.ps1"
+$uninstaller = Join-Path $PSScriptRoot "uninstall-opencode.ps1"
 $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ada-opencode-installer-" + [guid]::NewGuid().ToString("N"))
 $previousUserProfile = $env:USERPROFILE
 $previousLocalAppData = $env:LOCALAPPDATA
@@ -38,6 +39,11 @@ try {
 
     & $installer -Mode Check
 
+    $manifestPath = Join-Path $configRoot ".algorithm-debug-agent\install-manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "Installer did not create the ownership manifest"
+    }
+
     $installationModule = [System.IO.File]::ReadAllText((Join-Path $configRoot "lib\installation.mjs"))
     $expectedLauncher = (Join-Path $RepositoryRoot "bin\ada.cmd").Replace("\", "\\")
     if (-not $installationModule.Contains($expectedLauncher)) {
@@ -54,6 +60,41 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $configRoot "lib\case-interaction-recorder.mjs") -PathType Leaf)) {
         throw "Installed Case interaction recorder is missing"
     }
+
+    $sentinel = Join-Path $configRoot "unrelated-user-config.txt"
+    [System.IO.File]::WriteAllText($sentinel, "preserve", [System.Text.UTF8Encoding]::new($false))
+    $workspaceSentinel = Join-Path $env:LOCALAPPDATA "algorithm-debug-agent\workspace\preserve.txt"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $workspaceSentinel) -Force | Out-Null
+    [System.IO.File]::WriteAllText($workspaceSentinel, "preserve", [System.Text.UTF8Encoding]::new($false))
+
+    $installedAgent = Join-Path $configRoot "agents\algorithm-debug.md"
+    [System.IO.File]::AppendAllText($installedAgent, "`nmodified", [System.Text.UTF8Encoding]::new($false))
+    $conflictDetected = $false
+    try { & $uninstaller } catch { $conflictDetected = $_.Exception.Message -match "modified" }
+    if (-not $conflictDetected) { throw "Uninstaller did not reject a modified managed file" }
+    if (-not (Test-Path -LiteralPath (Join-Path $configRoot "tools\algorithm-debug.ts") -PathType Leaf)) {
+        throw "Conflict preflight partially deleted managed files"
+    }
+    [System.IO.File]::WriteAllBytes(
+        $installedAgent,
+        [System.IO.File]::ReadAllBytes((Join-Path $RepositoryRoot "integrations\opencode\agents\algorithm-debug.md")))
+    & $installer -Mode Check
+
+    & $uninstaller
+    foreach ($relative in @(
+            "agents\algorithm-debug.md", "commands\debug-case.md", "skills\algorithm-debug\SKILL.md",
+            "tools\algorithm-debug.ts", "lib\ada-cli.mjs", "lib\case-interaction-recorder.mjs",
+            "lib\tool-runtime.mjs", "lib\installation.mjs", ".algorithm-debug-agent\install-manifest.json")) {
+        if (Test-Path -LiteralPath (Join-Path $configRoot $relative)) {
+            throw "Uninstaller left a managed file: $relative"
+        }
+    }
+    if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) { throw "Uninstaller removed unrelated OpenCode data" }
+    if (-not (Test-Path -LiteralPath $workspaceSentinel -PathType Leaf)) { throw "Uninstaller removed Workspace data" }
+    & $uninstaller
+
+    & $installer -Mode Install
+    & $installer -Mode Check
 
     Write-Output "OPENCODE_INSTALLER_VERIFIED"
 }

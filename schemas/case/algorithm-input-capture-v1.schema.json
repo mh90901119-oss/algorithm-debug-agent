@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/case/algorithm-input-capture-v1.schema.json",
+  "title": "AlgorithmInputCapture v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "caseId", "contextId", "analysisId", "targetTest",
+    "variableName", "sourceFile", "sourceLine", "pathKind", "fileName",
+    "comparison", "previousAnalysisId", "artifact", "capturedAt"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "caseId": {"$ref": "#/$defs/id"},
+    "contextId": {"$ref": "#/$defs/id"},
+    "analysisId": {"$ref": "#/$defs/id"},
+    "targetTest": {"$ref": "#/$defs/targetTest"},
+    "variableName": {"type": "string", "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"},
+    "sourceFile": {"type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"},
+    "sourceLine": {"type": "integer", "minimum": 1},
+    "pathKind": {"enum": ["RELATIVE", "ABSOLUTE"]},
+    "fileName": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^[^/:\\\\]+$"},
+    "comparison": {"enum": ["FIRST_CAPTURE", "UNCHANGED", "CHANGED", "INCOMPARABLE"]},
+    "previousAnalysisId": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "capturedAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "targetTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["className", "methodName"],
+      "properties": {
+        "className": {"type": "string", "minLength": 1},
+        "methodName": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactType": {"const": "ALGORITHM_INPUT"},
+        "relativePath": {"type": "string", "pattern": "^analyses/[A-Za-z0-9._:-]+/input/algorithm-input\\.json$"},
+        "mediaType": {"const": "application/json"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 268435456}
+      }
+    }
+  }
+}

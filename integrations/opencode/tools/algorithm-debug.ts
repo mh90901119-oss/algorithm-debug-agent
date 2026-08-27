@@ -47,6 +47,15 @@ export const case_inspect = tool({
   execute: (args, context) => runtime.caseInspect(args, context),
 })
 
+export const algorithm_input_capture = tool({
+  description: "Locate the one supported first-level target-UT String literal ending with input.json, copy and register it for this Analysis, and report input consistency with the previous Analysis. Stop on zero, multiple, computed, missing, or invalid inputs.",
+  args: {
+    caseId: tool.schema.string(),
+    analysisId: tool.schema.string(),
+  },
+  execute: (args, context) => runtime.algorithmInputCapture(args, context),
+})
+
 export const case_audit = tool({
   description: "Read-only audit of Case control files, Artifact integrity, interaction JSONL and empty directories.",
   args: { caseId: tool.schema.string() },

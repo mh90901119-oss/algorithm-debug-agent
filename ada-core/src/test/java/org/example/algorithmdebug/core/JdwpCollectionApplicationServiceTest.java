@@ -70,6 +70,7 @@ import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
 import org.example.algorithmdebug.plan.JdwpTracepointRequest;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
+import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -105,9 +106,12 @@ class JdwpCollectionApplicationServiceTest {
         Files.writeString(source, """
                 package fixture;
                 class TargetTest {
-                    void caseUnderTest() { int marker = 1; }
+                    void caseUnderTest() { String algorithmInput = "input/caseinput.json"; int marker = 1; }
                 }
                 """);
+        Path input = module.resolve("input/caseinput.json");
+        Files.createDirectories(input.getParent());
+        Files.writeString(input, "{}");
         maven = Files.writeString(temporaryDirectory.resolve("mvn.cmd"), "stub").toAbsolutePath();
         java = Files.writeString(temporaryDirectory.resolve("java.exe"), "stub").toAbsolutePath();
         collectorJar = Files.writeString(temporaryDirectory.resolve("collector.jar"), "collector")
@@ -128,6 +132,10 @@ class JdwpCollectionApplicationServiceTest {
         archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+        new AlgorithmInputApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new JavaTestAlgorithmInputLocator(), fixedClock())
+                .capture(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
         StaticAnalysisApplicationService staticAnalysis = new StaticAnalysisApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());

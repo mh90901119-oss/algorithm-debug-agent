@@ -29,7 +29,7 @@ Case、目标 UT 运行、Gantt 基线、精确方法级 CodePath 和 JDWP 采�
 
 ### 2.2 非目标
 
-- 不实现 MCP、其他 CLI 客户端、Debug Viewer、完整 Knowledge Engine 或通用公司算法 Adapter；
+- 不实现 MCP、其他 CLI 客户端、Debug Viewer、完整 Knowledge Engine 或通用目标算法 Adapter；
 - 不修改目标算法源码、POM 或 UT；
 - 不实现业务字段级 Gantt Diff；
 - 不修改外部 CodePathTracer 源码；
@@ -205,7 +205,7 @@ sequenceDiagram
 - 测试与命令：真实 `hellomvn` 基线、CodePath、JDWP 和同 Plan 重复采集通过；根项目
   `mvn clean test` 的 21 个模块全部成功，OpenCode Node 测试 17/17 通过，Schema JSON、
   `git diff --check` 和安装资产检查通过；
-- 已知限制：当前验证目标为单线程 Demo UT；大型公司算法的性能预算和 Adapter 映射需在接入
+- 已知限制：当前验证目标为单线程 Demo UT；大型目标算法的性能预算和 Adapter 映射需在接入
   真实项目后按实际 Trace 规模校准，不在本阶段预设复杂规则。
 
 ### Task 6：OpenCode Tool 与真实 CLI 对齐

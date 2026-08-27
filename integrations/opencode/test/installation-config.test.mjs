@@ -36,7 +36,7 @@ test("keeps every user-editable path explicit in the repository settings", async
   assert.equal(settings.workspaceDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace")
   assert.equal(settings.dfxDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\diagnostics")
   assert.equal(settings.evalDirectory, "%LOCALAPPDATA%\\algorithm-debug-agent\\evals")
-  assert.equal(settings.resultJsonDirectory, "D:\\log\\scheduler\\gant")
+  assert.equal(settings.resultJsonDirectory, "D:\\log\\scheduler\\${runDate}\\gant")
   assert.equal(settings.dfxEnabled, true)
   assert.equal(settings.agentJavaHome, "")
   assert.equal(settings.targetJavaHome, "")
@@ -76,7 +76,8 @@ test("keeps installer path selection in agent-settings.json instead of path para
   assert.match(installer, /AGENT_JAVA_HOME=/u)
   assert.match(installer, /TARGET_JAVA_HOME=/u)
   assert.match(installer, /MAVEN_EXECUTABLE=/u)
-  assert.match(installer, /Remove-Item -LiteralPath \$backup -Force/u)
+  assert.doesNotMatch(installer, /\.ada-backup-/u)
+  assert.match(installer, /install-manifest\.json/u)
   assert.match(installer, /\$global:LASTEXITCODE = 0/u)
 })
 
@@ -121,4 +122,27 @@ test("does not expose DFX or workspace paths as Custom Tool arguments", async ()
     new URL("../tools/algorithm-debug.ts", import.meta.url), "utf8")
 
   assert.doesNotMatch(tools, /\b(?:logPath|dfxPath|workspacePath|outputPath)\s*:/u)
+})
+
+test("launcher verification uses the current target module without a bundled Demo path", async () => {
+  const verifier = await readFile(
+    new URL("../../../scripts/verify-ada-launcher.ps1", import.meta.url), "utf8")
+
+  assert.doesNotMatch(verifier, /hellomvn/iu)
+  assert.doesNotMatch(verifier, /DemoProject/u)
+  assert.match(verifier, /Get-Location/u)
+  assert.match(verifier, /Target Maven module was not found in the current directory/u)
+})
+
+test("keeps a repository-owned manifest-based uninstall entry point", async () => {
+  const installer = await readFile(
+    new URL("../../../scripts/install-opencode.ps1", import.meta.url), "utf8")
+  const uninstaller = await readFile(
+    new URL("../../../scripts/uninstall-opencode.ps1", import.meta.url), "utf8")
+
+  assert.match(installer, /install-manifest\.json/u)
+  assert.match(installer, /ValidateSet\("Install", "Check", "Uninstall"\)/u)
+  assert.match(installer, /Managed OpenCode asset was modified after installation/u)
+  assert.match(uninstaller, /-Mode Uninstall/u)
+  assert.doesNotMatch(uninstaller, /ConfigRoot|ProjectRoot|Workspace/u)
 })

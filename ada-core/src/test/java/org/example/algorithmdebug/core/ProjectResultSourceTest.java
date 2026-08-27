@@ -6,9 +6,12 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProjectResultSourceTest {
@@ -33,6 +36,28 @@ class ProjectResultSourceTest {
         assertEquals(Path.of("D:/shared/algorithm-results").toAbsolutePath().normalize(),
                 source.outputDirectory());
         assertEquals(false, source.recursive());
+    }
+
+    @Test
+    void shouldResolveRunDateTokenUsingTheConfiguredClockZone() {
+        ProjectRegistration registration = registration("D:/log/scheduler/${runDate}/gant");
+        Clock clock = Clock.fixed(
+                Instant.parse("2026-08-25T16:30:00Z"),
+                ZoneId.of("Asia/Shanghai"));
+
+        var source = ProjectResultSource.from(registration, clock).orElseThrow();
+
+        assertEquals(Path.of("D:/log/scheduler/2026-08-26/gant").toAbsolutePath().normalize(),
+                source.outputDirectory());
+        assertEquals(false, source.recursive());
+    }
+
+    @Test
+    void shouldRejectUnsupportedDynamicDirectoryToken() {
+        ProjectRegistration registration = registration("D:/log/scheduler/${today}/gant");
+
+        assertThrows(CaseRunException.class,
+                () -> ProjectResultSource.from(registration, Clock.systemUTC()));
     }
 
     @Test

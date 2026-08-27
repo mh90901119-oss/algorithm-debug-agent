@@ -97,7 +97,7 @@ class AdaMainTest {
 
     @Test
     void shouldSanitizeUnexpectedFailuresAndKeepStderrOutOfStdout() throws Exception {
-        String secret = "D:/company/secret/algorithm";
+        String secret = "D:/sensitive/target-algorithm";
         AdaMain application = new AdaMain(
                 command -> {
                     throw new IllegalStateException("unexpected at " + secret);
@@ -117,7 +117,7 @@ class AdaMainTest {
 
     @Test
     void caseDomainFailureUsesExitThreeWithoutLeakingTargetLogs() throws Exception {
-        String targetLog = "[ERROR] company secret algorithm output";
+        String targetLog = "[ERROR] sensitive target algorithm output";
         AdaMain application = new AdaMain(
                 command -> {
                     throw new CaseRunException(

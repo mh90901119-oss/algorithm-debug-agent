@@ -12,7 +12,8 @@ import java.util.Optional;
 /** CLI 严格解析后交给执行器的封闭命令集合。 */
 public sealed interface CliCommand
         permits CliCommand.WorkspaceInit, CliCommand.ProjectRegister, CliCommand.Doctor,
-        CliCommand.CaseOpen, CliCommand.CaseInspect, CliCommand.RunExecute,
+        CliCommand.CaseOpen, CliCommand.CaseInspect, CliCommand.AlgorithmInputCapture,
+        CliCommand.RunExecute,
         CliCommand.StaticAnalyze, CliCommand.CodePathPlanCreate,
         CliCommand.CodePathCollectionExecute, CliCommand.JdwpPlanCreate,
         CliCommand.JdwpCollectionExecute, CliCommand.ArtifactRead,
@@ -121,6 +122,21 @@ public sealed interface CliCommand
             AnalysisId analysisId) implements CliCommand {
         /** 校验解析后的 Run execute 参数。 */
         public RunExecute {
+            require(workspace, "workspace");
+            require(projectId, "projectId");
+            require(caseId, "caseId");
+            require(analysisId, "analysisId");
+        }
+    }
+
+    /** 为已有 Analysis 定位、复制并注册目标 UT 的单一算法输入。 */
+    record AlgorithmInputCapture(
+            Path workspace,
+            ProjectId projectId,
+            CaseId caseId,
+            AnalysisId analysisId) implements CliCommand {
+        /** 校验输入捕获命令身份。 */
+        public AlgorithmInputCapture {
             require(workspace, "workspace");
             require(projectId, "projectId");
             require(caseId, "caseId");
