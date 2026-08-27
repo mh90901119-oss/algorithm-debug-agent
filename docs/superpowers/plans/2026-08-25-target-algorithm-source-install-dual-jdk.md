@@ -1,13 +1,13 @@
-# 公司环境源码安装与双 JDK 实施计划
+# 目标环境源码安装与双 JDK 实施计划
 
-> 对应设计：`docs/designs/2026-08-25-company-source-install-dual-jdk-design.md`
+> 对应设计：`docs/designs/2026-08-25-target-algorithm-source-install-dual-jdk-design.md`
 
 ## 实施原则
 
 - 交付普通 GitHub 源码仓，不制作 runtime-only 离线发行包。
 - 不改变当前本地默认行为。
 - 不修改系统 `JAVA_HOME`、`PATH` 或注册表。
-- 公司算法源码始终位于公司算法仓，OpenCode 可按用户请求直接修改。
+- 目标算法源码始终位于目标算法仓库，OpenCode 可按用户请求直接修改。
 - 每项行为变更先补失败测试，再做最小实现。
 - 实施结束执行根项目测试、安装检查、JDWP loopback 和真实 OpenCode 端到端验收。
 
@@ -202,12 +202,12 @@
 - 每个 Case 检查 Workspace 必需文件、无空文件和无无意义空目录。
 - 分析每个端到端 Case 的 DFX 日志和退出状态。
 
-## Task 9：公司算法仓使用与验收文档
+## Task 9：目标算法仓库使用与验收文档
 
 ### 涉及文件
 
 - 修改根 `README.md`
-- 新增或修改公司环境安装说明
+- 新增或修改目标环境安装说明
 - 修改 OpenCode Skill 中的环境失败提示
 - 修改 Eval 使用说明
 
@@ -215,12 +215,12 @@
 
 1. 写清普通 GitHub 源码 ZIP 安装步骤。
 2. 写清 JDK 21 只需解压、无需系统环境变量。
-3. 写清 JDK 17 用于公司算法 UT，JDK 21 用于 Agent。
-4. 写清公司算法仓与 Agent 仓是两个目录。
-5. 写清必须从公司算法模块目录启动 OpenCode。
+3. 写清 JDK 17 用于目标算法 UT，JDK 21 用于 Agent。
+4. 写清目标算法仓库与 Agent 仓是两个目录。
+5. 写清必须从目标算法模块目录启动 OpenCode。
 6. 写清 OpenCode 可按用户要求修改算法源码或 UT；Agent 工具负责证据采集和归档。
 7. 写清 JDWP 验证失败时的排查顺序和安全软件边界。
-8. 写清公司 Maven 镜像负责主流依赖，CodePathTracer 来自 Agent 仓固定制品。
+8. 写清受限环境 Maven 镜像负责主流依赖，CodePathTracer 来自 Agent 仓固定制品。
 
 ### 端到端验收
 
@@ -234,14 +234,14 @@
 8. 运行业务异常 UT，确认异常证据归档。
 9. 运行断言失败 UT，确认断言证据归档。
 10. 执行 CodePath 和 JDWP 采集。
-11. 要求 OpenCode 对 Demo 算法做一个隔离的测试性修改，再运行 UT，证明公司算法仓可编辑且 Agent 工具继续有效。
+11. 要求 OpenCode 对 Demo 算法做一个隔离的测试性修改，再运行 UT，证明目标算法仓库可编辑且 Agent 工具继续有效。
 12. 审计所有 Case 的 Workspace 文件和 DFX 日志；发现缺失、空文件或孤立目录时必须定位根因并修复后重跑。
 
 ## 完成定义
 
 - 普通 GitHub 源码 ZIP 包含构建所需的 CodePathTracer 固定制品和 JDWP 验证脚本。
-- 公司电脑无需联网访问 Maven Central，也无需修改系统 JDK 配置。
-- Agent 使用 JDK 21，公司算法和 UT 使用 JDK 17。
-- OpenCode 能在公司算法仓中调用 Agent，也能按用户要求修改代码。
+- 目标环境电脑无需联网访问 Maven Central，也无需修改系统 JDK 配置。
+- Agent 使用 JDK 21，目标算法和 UT 使用 JDK 17。
+- OpenCode 能在目标算法仓库中调用 Agent，也能按用户要求修改代码。
 - 当前本地安装和 Demo 端到端流程无回归。
 - README、设计、测试、脚本输出和实际行为一致。

@@ -83,7 +83,7 @@ Case 内需要追加轻量 `ContextSnapshot` 标记每份 Run、Analysis 和 Evi
 - `ada-contracts` 已存在 `CaseId`、`RunId`、`AnalysisId`、`ArtifactReference` 和证据分级规则；
 - `RunOutcomeSummary` 已正交表达进程、测试、Gantt、目标失败和 Agent 失败；
 - 目标算法源码和 UT 不得为采集而修改；输入、源码、UT 未变化时，默认目标 UT 结果确定；
-- 所有路径写入 Artifact 前转为 Case/Run 相对路径，日志和回答不得泄漏未脱敏的公司路径；
+- 所有路径写入 Artifact 前转为 Case/Run 相对路径，日志和回答不得泄漏未脱敏的敏感本地路径；
 - Case、Run、Analysis、Artifact 和 Evidence 历史只追加保存，不覆盖已有终态文件。
 
 ## 4. 用例与验收标准

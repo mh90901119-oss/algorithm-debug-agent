@@ -7,7 +7,7 @@
 
 CodePathTracer 和 JDWP Collector 已经能够在不修改目标算法源码的前提下采集方法路径、调用栈和局部变量。
 早期架构要求 P4 Normalizer 直接生成 `candidate_generated`、`constraint_filtered`、
-`candidate_selected`、`schedule_committed` 等晶圆调度事件。这些事件适合当前 Wafer Demo，但公司的大型
+`candidate_selected`、`schedule_committed` 等晶圆调度事件。这些事件适合当前 Wafer Demo，但目标环境的大型
 算法可能使用完全不同的任务、资源、约束、搜索和结果模型。把这些概念写进通用 Normalizer 会导致：
 
 - 新算法必须修改核心模块；

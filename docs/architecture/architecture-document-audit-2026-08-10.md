@@ -111,7 +111,7 @@ Evidence           带Provenance、可被报告引用的事实或确定性推导
 
 - Agent仓库正式许可证；
 - 最终Java group/package namespace；
-- 大型公司算法的首个脱敏Fixture和性能规模；
+- 大型目标算法的首个脱敏Fixture和性能规模；
 - P0加固是先在JDWP仓库完成全部项，还是先实现Agent MVP所需的allowlist/projection/limits子集；
 - Viewer第一版采用静态HTML还是本地服务。
 

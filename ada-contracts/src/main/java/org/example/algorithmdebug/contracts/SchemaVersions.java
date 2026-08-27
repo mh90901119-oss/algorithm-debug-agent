@@ -28,6 +28,9 @@ public final class SchemaVersions {
     /** Analysis 请求 Schema 版本。 */
     public static final String ANALYSIS_REQUEST = "1.0";
 
+    /** Analysis 算法输入归档 Schema 版本。 */
+    public static final String ALGORITHM_INPUT_CAPTURE = "1.0";
+
     /** Analysis 面向用户的完成结果 Schema 版本。 */
     public static final String ANALYSIS_RESULT = "1.0";
 

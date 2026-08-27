@@ -24,6 +24,8 @@ flowchart LR
 
 ## 2. 已实现
 
+- 目标 UT 第一层唯一 `String` 字面量 `*input.json` 的确定性定位、256 MiB 有界复制、Artifact 注册和多轮变化比较。
+
 - 任意合法 Maven/JUnit 单方法目标执行。
 - 通过、异常、断言失败和工具失败的通用结构化结果。
 - 顶层算法 JSON 差分捕获和 Gantt Artifact 归档。
@@ -35,9 +37,9 @@ flowchart LR
 - 失败目标结构化指纹 `MATCHED/CHANGED/INCOMPARABLE`。
 - ArtifactReference 唯一文件完整性机制。
 - Case/Context/Analysis/Run/Collection/Evidence 追加归档。
-- Case-local DFX `interaction.jsonl`。
+- OpenCode DFX 启用时生成可选的 Case-local `interaction.jsonl`；存在即严格校验，缺失不阻断 Java CLI Case。
 - `case_audit` 和 Eval Workspace/Interaction/Expected-Actual 审计。
-- 12 个 OpenCode Custom Tools。
+- 13 个 OpenCode Custom Tools。
 - 幂等 OpenCode 安装，不绑定 OpenCode 版本号。
 - 9 个真实 OpenCode Smoke Case。
 
@@ -46,6 +48,7 @@ flowchart LR
 | Tool | 作用 |
 |---|---|
 | `analysis_begin` | 初始化项目、Case、Context 和 Analysis |
+| `algorithm_input_capture` | 定位、复制并登记当前 Analysis 的唯一算法输入；失败时阻止运行和动态计划 |
 | `case_inspect` | 返回 Case 的有界近期摘要 |
 | `case_audit` | 审计 Case 文件、Artifact 和空目录 |
 | `gantt_inspect` | 有界读取已注册 Gantt 的结构 |
@@ -72,6 +75,7 @@ flowchart LR
 | 机制 | 必要性 |
 |---|---|
 | Artifact SHA-256 | 防止注册后文件被替换、截断或篡改 |
+| 算法输入字节比较 | 复用 Artifact SHA 判断同一 Case 相邻成功捕获的输入是否完全一致；不是源码、Gantt 或正确性门禁 |
 | 失败事实 SHA-256 | 判断动态失败是否仍是同一个目标失败 |
 | projectId/DFX/Eval 内部 Hash | 稳定 ID、脱敏和评测可比性，不是业务证据门禁 |
 
@@ -83,16 +87,18 @@ flowchart LR
 - 在线生产设备连接或生产调度决策。
 - 自动修改算法生产源码进行插桩。
 - Gantt 业务语义硬编码、字段级业务 Diff 或根因规则引擎。
-- 自动生成公司领域知识库。
+- 自动生成目标算法领域知识库。
 - 独立 MCP Server。
 - 自动保证 LLM 结论绝对正确。
 
 ## 7. 需要继续优化
 
+- 当前不递归追踪 helper、常量、属性、拼接表达式或一个 UT 多个算法输入；这些情况明确停止，由用户调整目标 UT。
+
 - 静态分析目前不注入完整 Maven test classpath，遇到 JUnit、Lombok、生成代码和外部依赖时会保留
   compiler/unresolved warnings，并将目录标记为 `INCOMPLETE`。
 - CodePath 使用动态 Byte Buddy Attach，未来 JDK 默认禁用动态 Agent 加载时需要发布策略调整。
-- 大型公司算法需要用真实规模 UT 测量 CodePath/JDWP 事件量、耗时和截断率，再调整默认预算。
+- 大型目标算法需要用真实规模 UT 测量 CodePath/JDWP 事件量、耗时和截断率，再调整默认预算。
 - OpenCode Tool/Plugin 接口是客户端适配层；迁移到其他 CLI 时复用 Java CLI 和 Workspace，
   重新实现薄适配器与 DFX hook。
 - LLM 具有非确定性；新增问题类型时应增加 Eval Case，而不是增加业务硬编码分类。

@@ -13,6 +13,7 @@ import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.harness.MavenTestExecutor;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
+import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
 import org.example.algorithmdebug.methodpath.MethodPathCollector;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
@@ -34,6 +35,7 @@ public final class ControlPlaneServices {
     private final ProjectApplicationService project;
     private final DoctorApplicationService doctor;
     private final CaseApplicationService cases;
+    private final AlgorithmInputApplicationService algorithmInputs;
     private final RunApplicationService runs;
     private final StaticAnalysisApplicationService staticAnalysis;
     private final CollectionApplicationService collections;
@@ -44,6 +46,7 @@ public final class ControlPlaneServices {
             ProjectApplicationService project,
             DoctorApplicationService doctor,
             CaseApplicationService cases,
+            AlgorithmInputApplicationService algorithmInputs,
             RunApplicationService runs,
             StaticAnalysisApplicationService staticAnalysis,
             CollectionApplicationService collections,
@@ -52,6 +55,7 @@ public final class ControlPlaneServices {
         this.project = project;
         this.doctor = doctor;
         this.cases = cases;
+        this.algorithmInputs = algorithmInputs;
         this.runs = runs;
         this.staticAnalysis = staticAnalysis;
         this.collections = collections;
@@ -212,6 +216,7 @@ public final class ControlPlaneServices {
         MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
                 environment, pathSeparator, windows);
         CaseApplicationService cases = null;
+        AlgorithmInputApplicationService algorithmInputs = null;
         RunApplicationService runs = null;
         StaticAnalysisApplicationService staticAnalysis = null;
         CollectionApplicationService collections = null;
@@ -222,6 +227,9 @@ public final class ControlPlaneServices {
             cases = new CaseApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                     catalog, ids, clock);
+            algorithmInputs = new AlgorithmInputApplicationService(
+                    new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                    new JavaTestAlgorithmInputLocator(), clock);
             runs = new RunApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                     catalog, ids, clock, new MavenTestExecutor(),
@@ -246,6 +254,7 @@ public final class ControlPlaneServices {
                 new DoctorApplicationService(
                         javaFeatureSupplier, mavenLocator, manifestRepository, toolProbes),
                 cases,
+                algorithmInputs,
                 runs,
                 staticAnalysis,
                 collections,
@@ -273,6 +282,14 @@ public final class ControlPlaneServices {
             throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?Adapter");
         }
         return cases;
+    }
+
+    /** @return 目标 UT 单一算法输入捕获服务。 */
+    public AlgorithmInputApplicationService algorithmInputs() {
+        if (algorithmInputs == null) {
+            throw new IllegalStateException("ControlPlaneServices has no target Project Adapter");
+        }
+        return algorithmInputs;
     }
 
     /** @return 瀹屾暣瑁呴厤涓嬬殑 Run 鐢ㄤ緥锛涘熀纭€鎺у埗闈㈣閰嶄笉鎻愪緵锛孧aven 鍙湪鎵ц鏃舵姤鍛婄己澶?*/

@@ -15,7 +15,7 @@ JUnit 测试和问题，OpenCode 中的大模型负责选择证据和解释；Ag
 - 对动态失败重跑比较结构化失败指纹；成功重跑不要求 Gantt 完全相同。
 - 将 Raw、Derived、Validation、Evidence 和最终答案追加保存到 Case Workspace。
 - 使用 `ArtifactReference` 的相对路径、大小和 SHA-256 防止归档文件被静默替换。
-- 在每个 Case 根目录写入 `interaction.jsonl`，用于查看真实 Tool 和 Java CLI 执行顺序。
+- 启用 DFX 且经 OpenCode Tool 执行时，在 Case 根目录写入 `interaction.jsonl` 查看真实 Tool/CLI 顺序。
 - 使用 `case_audit` 检查缺失文件、孤儿文件、Artifact 完整性、无效 JSONL 和空 Case 目录。
 - 使用真实 OpenCode Eval Harness 回归 9 个成功、失败、静态、动态和完整性场景。
 
@@ -23,8 +23,8 @@ JUnit 测试和问题，OpenCode 中的大模型负责选择证据和解释；Ag
 
 ## 安装与路径
 
-公司电脑使用源码 ZIP、独立 JDK 21、现有 JDK 17 和公司 Maven 的完整流程，见
-[公司环境源码 ZIP 安装与验证](docs/testing/company-environment-installation.md)。
+目标环境电脑使用源码 ZIP、独立 JDK 21、现有 JDK 17 和目标环境 Maven 的完整流程，见
+[目标环境源码 ZIP 安装与验证](docs/testing/target-algorithm-environment-installation.md)。
 
 所有需要用户调整的路径都在仓库文件 [config/agent-settings.json](config/agent-settings.json)：
 
@@ -64,8 +64,23 @@ Skill、Tool 后重新运行安装器，再重启正在运行的 OpenCode 会话
 .\scripts\install-opencode.ps1 -Mode Check
 ```
 
+安装器不保存目标算法模块路径。需要验证 Java CLI 与目标 Maven 模块的适配时，进入该模块目录后调用
+Agent 仓库中的 `scripts\verify-ada-launcher.ps1`；脚本将当前工作目录作为目标模块，不接受项目路径参数。
+
 安装器不绑定 OpenCode 版本号。只要当前 OpenCode 能发现 Agent、Skill、Command 和 Custom Tools
 并支持所需 CLI 行为即可；不兼容时返回明确错误。
+
+卸载和重新安装：
+
+```powershell
+.\scripts\uninstall-opencode.ps1
+.\scripts\build-agent.ps1
+.\scripts\install-opencode.ps1 -Mode Install
+.\scripts\install-opencode.ps1 -Mode Check
+```
+
+卸载只删除安装清单中经完整性校验的 Agent 资产，不删除 Workspace 和其他 OpenCode 内容。完整说明见
+[OpenCode Algorithm Debug Agent 卸载与重新安装](docs/testing/opencode-uninstallation.md)。
 
 ## 在 OpenCode 中使用
 
@@ -85,6 +100,25 @@ opencode
 
 提问必须能确定目标 UT。无需再次说明 Workspace、项目 ID、Collector JAR 或 Gantt 输出路径。
 如果 UT 不存在，Agent 返回 `TARGET_TEST_NOT_FOUND` 并停止，不强行运行或采集。
+
+## 算法输入前置捕获
+
+每轮分析固定从 `analysis_begin -> algorithm_input_capture` 开始。第二步由 Java AST 只检查目标 UT
+方法第一层直接声明的局部变量，要求类型是 `String` 或 `java.lang.String`、初始化器是单个字符串
+字面量、值以 `input.json` 结尾。相对路径按当前 Maven 模块根目录解析，绝对路径直接使用。
+
+当前只支持一个 UT 对应一个算法输入。零个、多个、表达式拼接、helper/分支内路径、文件缺失或文件
+超过 256 MiB 都返回稳定错误并停止 `run_test`、CodePath Plan 和 JDWP Plan，不允许模型猜测路径。
+成功时写入：
+
+```text
+analyses/<analysisId>/input/input-analysis.json
+analyses/<analysisId>/input/algorithm-input.json
+```
+
+`input-analysis.json` 保存源码位置、路径类型、ArtifactReference，以及相对上一轮成功捕获的
+`FIRST_CAPTURE/UNCHANGED/CHANGED/INCOMPARABLE`。输入 SHA 只用于验证归档副本和精确字节变化，
+不证明源码版本、Gantt 一致性或算法正确性。
 
 ## 谁负责什么
 
@@ -106,8 +140,11 @@ opencode
 %LOCALAPPDATA%\algorithm-debug-agent\workspace\projects\<projectId>\cases\<caseId>
 ```
 
-每个 Case 的 `interaction.jsonl` 可以直接打开，按时间查看 Tool 调用、CLI 启动/结束、结果码以及
+启用 DFX 且通过 OpenCode Tool 执行时，Case 的 `interaction.jsonl` 可以直接打开，按时间查看 Tool 调用、CLI 启动/结束、结果码以及
 Run、Collection、Evidence、Artifact ID。它不是隐藏思维日志，也不是业务证据。
+
+直接调用 Java CLI、关闭 DFX 或 Recorder 写入失败时可以没有该文件；`case_audit` 不因此判定业务 Case
+失败。文件存在时仍严格校验 JSONL，真实 OpenCode Eval 另行要求并审计交互日志。
 
 Case 目录按生产者懒创建。不存在对应行为时，不创建 `runs`、`collections`、`evidence` 或
 `plans` 空目录。零字节 `stderr.log` 是有效的进程流捕获，明确表示该进程没有 stderr，不是占位文件。

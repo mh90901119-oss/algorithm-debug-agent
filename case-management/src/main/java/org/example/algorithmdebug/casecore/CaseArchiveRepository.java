@@ -197,6 +197,107 @@ public final class CaseArchiveRepository {
         return value;
     }
 
+    /** 以流式硬上限把目标 UT 的单一算法输入原子复制到当前 Analysis。 */
+    public Path copyAlgorithmInput(
+            CaseId caseId, AnalysisId analysisId, Path source, long maximumBytes) {
+        requireAnalysis(requireNonNull(caseId, "caseId"), requireNonNull(analysisId, "analysisId"));
+        if (source == null || maximumBytes < 1) {
+            throw new IllegalArgumentException("source and maximumBytes are required");
+        }
+        CaseArchiveLayout layout = layout(caseId);
+        Path directory = layout.analysisInputRoot(analysisId);
+        try {
+            Files.createDirectories(directory);
+            Path target = layout.analysisInputArtifact(analysisId);
+            writer.writeNew(target, maximumBytes, output -> Files.copy(source, output));
+            return target;
+        } catch (IOException | SecurityException failure) {
+            throw new WorkspaceException(
+                    "ALGORITHM_INPUT_COPY_FAILED", "Unable to copy the algorithm input", failure);
+        }
+    }
+
+    /** 原子创建当前 Analysis 的输入控制文档；同一 Analysis 不得覆盖。 */
+    public Path createAlgorithmInputCapture(
+            org.example.algorithmdebug.contracts.AlgorithmInputCapture capture) {
+        var checked = requireNonNull(capture, "capture");
+        CaseManifest manifest = requireCase(checked.caseId());
+        AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
+        if (!analysis.contextId().equals(checked.contextId())
+                || !manifest.targetTest().equals(checked.targetTest())) {
+            throw identityMismatch("Algorithm input identity does not match its Analysis");
+        }
+        return createP4Document(
+                layout(checked.caseId()).analysisInputCapture(checked.analysisId()),
+                checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 读取当前 Analysis 的算法输入控制文档，不存在时返回空。 */
+    public Optional<org.example.algorithmdebug.contracts.AlgorithmInputCapture>
+            findAlgorithmInputCapture(CaseId caseId, AnalysisId analysisId) {
+        requireAnalysis(requireNonNull(caseId, "caseId"), requireNonNull(analysisId, "analysisId"));
+        Path document = layout(caseId).analysisInputCapture(analysisId);
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            return Optional.empty();
+        }
+        var capture = mapper.readJson(
+                document, org.example.algorithmdebug.contracts.AlgorithmInputCapture.class);
+        validateAlgorithmInputIdentity(caseId, analysisId, capture);
+        return Optional.of(capture);
+    }
+
+    /** 读取并校验当前 Analysis 的算法输入控制文档、注册记录和内容 SHA。 */
+    public org.example.algorithmdebug.contracts.AlgorithmInputCapture
+            requireVerifiedAlgorithmInputCapture(CaseId caseId, AnalysisId analysisId) {
+        var capture = findAlgorithmInputCapture(caseId, analysisId).orElseThrow(() ->
+                new WorkspaceException(
+                        "ANALYSIS_INPUT_NOT_CAPTURED",
+                        "Current Analysis has no captured algorithm input"));
+        ArtifactReference registered = requireArtifactRegistration(
+                caseId, capture.artifact().artifactId()).artifact();
+        if (!registered.equals(capture.artifact())) {
+            throw new WorkspaceException(
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH",
+                    "Algorithm input registration does not match its control document");
+        }
+        new CaseArtifactAccess(casesRoot).requireVerifiedArtifact(caseId, registered);
+        return capture;
+    }
+
+    /** 返回同一 Case 中、当前 Analysis 之外最近一次成功写入的输入控制文档。 */
+    public Optional<org.example.algorithmdebug.contracts.AlgorithmInputCapture>
+            findLatestAlgorithmInputCaptureBefore(CaseId caseId, AnalysisId analysisId) {
+        requireAnalysis(requireNonNull(caseId, "caseId"), requireNonNull(analysisId, "analysisId"));
+        Path analyses = layout(caseId).analysesRoot();
+        if (!Files.isDirectory(analyses, LinkOption.NOFOLLOW_LINKS)) {
+            return Optional.empty();
+        }
+        try (java.util.stream.Stream<Path> entries = Files.list(analyses)) {
+            return entries.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
+                    .map(path -> path.resolve("input/input-analysis.json"))
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .map(path -> mapper.readJson(
+                            path, org.example.algorithmdebug.contracts.AlgorithmInputCapture.class))
+                    .filter(capture -> capture.caseId().equals(caseId))
+                    .filter(capture -> !capture.analysisId().equals(analysisId))
+                    .max(java.util.Comparator
+                            .comparing(org.example.algorithmdebug.contracts.AlgorithmInputCapture::capturedAt)
+                            .thenComparing(capture -> capture.analysisId().value()));
+        } catch (IOException | SecurityException failure) {
+            throw new WorkspaceException(
+                    "ALGORITHM_INPUT_HISTORY_READ_FAILED",
+                    "Unable to inspect previous algorithm inputs", failure);
+        }
+    }
+
+    private static void validateAlgorithmInputIdentity(
+            CaseId caseId, AnalysisId analysisId,
+            org.example.algorithmdebug.contracts.AlgorithmInputCapture capture) {
+        if (!capture.caseId().equals(caseId) || !capture.analysisId().equals(analysisId)) {
+            throw identityMismatch("Algorithm input document identity does not match its path");
+        }
+    }
+
     /** 为已有 Analysis 原子创建静态方法目录；同一 Analysis 不得覆盖。 */
     public Path createMethodCatalog(MethodCatalog catalog) {
         MethodCatalog checked = requireNonNull(catalog, "catalog");

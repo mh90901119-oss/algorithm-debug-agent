@@ -136,6 +136,27 @@ export function gradeCase(evalCase, trace, runtime) {
     correctnessFailures.push("JDWP was used although this Eval Case does not allow it")
   }
 
+  const beginIndex = toolNames.indexOf("analysis_begin")
+  const inputIndex = toolNames.indexOf("algorithm_input_capture")
+  const runIndex = toolNames.indexOf("run_test")
+  if (inputIndex >= 0 && beginIndex >= 0 && inputIndex <= beginIndex) {
+    correctnessFailures.push("algorithm_input_capture was called before analysis_begin")
+  }
+  if (runIndex >= 0 && (inputIndex < 0 || inputIndex >= runIndex)) {
+    correctnessFailures.push("run_test was called before a successful algorithm input capture attempt")
+  }
+  if (runIndex >= 0) {
+    for (const evidenceTool of [
+      "static_analyze", "codepath_plan_create", "codepath_collect",
+      "jdwp_plan_create", "jdwp_collect",
+    ]) {
+      const evidenceIndex = toolNames.indexOf(evidenceTool)
+      if (evidenceIndex >= 0 && evidenceIndex < runIndex) {
+        correctnessFailures.push(`${evidenceTool} was called before run_test`)
+      }
+    }
+  }
+
   const runOutcome = trace.runOutcomes[0]
   if ((evalCase.expectedProcessOutcome || evalCase.expectedTestOutcome
       || evalCase.expectedGanttOutcome || evalCase.expectedExceptionClass) && !runOutcome) {

@@ -45,6 +45,10 @@ sequenceDiagram
     T->>J: 创建 Case、Context、Analysis
     J->>W: 追加 case/context/analysis-request
     T-->>M: IDs + 配置摘要
+    M->>T: algorithm_input_capture
+    T->>J: 定位目标方法第一层唯一直接 String input.json
+    J->>W: 追加输入分析、不可变副本和 Artifact 注册
+    T-->>M: 输入比较状态 + ArtifactReference
     M->>T: static_analyze 或 run_test
     alt 目标 UT 不存在
         T-->>M: TARGET_TEST_NOT_FOUND
@@ -113,6 +117,7 @@ UT 失败分开，不得把缺失证据补成事实。
 | Tool | Java 能力 | 主要输出 |
 |---|---|---|
 | `analysis_begin` | 建立分析边界、解析统一配置 | caseId/contextId/analysisId |
+| `algorithm_input_capture` | 定位目标方法第一层唯一直接输入并原子归档 | AlgorithmInputCapture、输入 Artifact |
 | `run_test` | Maven/JUnit 单方法执行、结果捕获 | Run、Surefire、stdout/stderr、可选 Gantt |
 | `static_analyze` | 当前源码 Javac AST 方法目录 | MethodCatalog、SourceAnchor、诊断 |
 | `codepath_plan_create` | 编译精确方法选择计划 | CodePath Plan |
@@ -135,7 +140,7 @@ UT 失败分开，不得把缺失证据补成事实。
 - 保存 unresolved symbol 和覆盖边界。
 
 不保存 whole-file Source SHA。行号只代表本次 Analysis 的当前源码位置，不是跨代码版本身份。
-大型公司算法仍可使用该能力，但完整类型解析受 Maven test classpath 解析程度影响；`INCOMPLETE`
+大型目标算法仍可使用该能力，但完整类型解析受 Maven test classpath 解析程度影响；`INCOMPLETE`
 必须呈现给 LLM，不能宣称完整调用图。
 
 ## 7. CodePath 与 JDWP
@@ -165,10 +170,14 @@ UT 失败分开，不得把缺失证据补成事实。
 
 ## 9. SHA 边界
 
-生产链路只保留两个有用户行为闭环的 SHA：
+生产链路只保留两个底层 SHA 机制；算法输入比较复用 Artifact SHA，不新增第三套哈希：
 
 1. `ArtifactReference.sha256`：文件登记时计算，读取/审计时重算；不一致则拒绝读取和引用。
 2. 失败事实指纹 SHA：把结构化失败字段编码为稳定值，动态失败重跑时比较；不一致降低证据等级。
+
+输入副本也是 `ArtifactReference`。同一 Case 新 Analysis 捕获成功后，用当前和上一份输入 Artifact 的
+SHA 给出精确字节层面的 `UNCHANGED/CHANGED`；历史 Artifact 无法校验时给出 `INCOMPARABLE`。
+该状态只帮助 LLM 判断多轮问题是否仍基于同一输入，不允许推导源码版本、Gantt 一致性或算法正确性。
 
 projectId、DFX 和 Eval 内部哈希只用于稳定 ID、脱敏或报告版本关联，不是运行门禁。
 
@@ -179,11 +188,15 @@ normalized SHA。
 
 Case 按 `caseId/contextId/analysisId/runId/collectionId/evidenceId` 追加保存。目录仅在有文件时创建：
 
+每轮输入归档到 `analyses/<analysisId>/input`；`run_test`、CodePath Plan 和 JDWP Plan 都要求当前
+Analysis 已有可校验输入。输入契约失败时不创建 `runs`、`plans` 或 `collections`。
+
 - 不预创建 `raw`、`logs`、`derived`、`validation` 或 `request`；
 - 不使用 `.gitkeep`；
 - 失败动作保留 manifest、退出码、错误和已有原始证据；
 - `case_audit` 根据状态判断文件是否应该存在，不用固定模板误报；
 - 空 stdout/stderr 是精确进程流记录，零字节有语义，不是占位文件。
+- `interaction.jsonl` 由 OpenCode DFX Recorder 可选生成；存在时严格校验，关闭 DFX、Recorder 失败或直接 Java CLI 调用时缺失不使业务 Case Audit 失败。
 
 每种文件的完整说明见
 [工作流与产物](../algorithm-debug-workflow-and-artifacts.md) 和
@@ -243,5 +256,5 @@ Skill、Tools、JS Adapter 和 Java 发布物复制到当前用户的 OpenCode �
 - 静态 AST 在复杂依赖 classpath 下可能为 `INCOMPLETE`。
 - CodePath 上游可能对未选方法仍有 Advice 成本。
 - JDWP 命中会短暂停止事件线程，不是严格“完全无感”。
-- 尚未完成大型公司算法的长时间、高事件量和高频断点压力验收。
-- 不自动生成公司领域知识库，也不在 Java 中实现 Gantt 业务语义。
+- 尚未完成大型目标算法的长时间、高事件量和高频断点压力验收。
+- 不自动生成目标算法领域知识库，也不在 Java 中实现 Gantt 业务语义。

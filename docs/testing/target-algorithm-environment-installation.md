@@ -1,7 +1,7 @@
-# 公司环境源码 ZIP 安装与验证
+# 目标环境源码 ZIP 安装与验证
 
-本手册适用于 Windows 公司电脑：OpenCode 和大模型已可用，算法项目使用 JDK 17，
-Agent 通过 GitHub 源码 ZIP 安装，公司 Maven 只能从公司镜像获取主流依赖。
+本手册适用于 Windows 目标环境电脑：OpenCode 和大模型已可用，算法项目使用 JDK 17，
+Agent 通过 GitHub 源码 ZIP 安装，目标环境 Maven 只能从受限环境镜像获取主流依赖。
 
 ## 1. 安装结果和边界
 
@@ -17,7 +17,7 @@ Agent 通过 GitHub 源码 ZIP 安装，公司 Maven 只能从公司镜像获取
 → 大模型基于证据返回结论
 ```
 
-Agent 不会重装 OpenCode、修改模型 Provider、更改系统 JDK，也不要求在公司算法仓
+Agent 不会重装 OpenCode、修改模型 Provider、更改系统 JDK，也不要求在目标算法仓库
 创建 Agent 专用配置文件。本方案是源码 ZIP 安装，不是包含 JDK、Maven 和 OpenCode
 的完全离线二进制发行包。
 
@@ -27,24 +27,18 @@ Agent 不会重装 OpenCode、修改模型 Provider、更改系统 JDK，也不�
 |---|---|
 | OpenCode | 已安装，已配置可用的大模型 |
 | JDK 21 | 已下载或解压，专供 Agent 和 JDWP Collector 使用 |
-| JDK 17 | 公司算法实际运行 JDK，供 Maven/JUnit 和 CodePath 使用 |
-| Maven | 可从公司镜像解析主流 Maven 插件、JUnit 和 Jackson |
+| JDK 17 | 目标算法实际运行 JDK，供 Maven/JUnit 和 CodePath 使用 |
+| Maven | 可从受限环境镜像解析主流 Maven 插件、JUnit 和 Jackson |
 | 目标 UT | 能在包含它的 Maven 模块中独立运行 |
 | Gantt 输出 | UT 运行后向固定目录写入新的时间戳 `.json` |
 
 CodePathTracer 的固定 JAR、Sources、POM 和 Apache-2.0 License 位于 `third-party`，
-不要求公司 Maven 镜像提供该制品。JDWP Collector 核心源码和可执行 JAR 也在本仓内维护。
+不要求受限环境 Maven 镜像提供该制品。JDWP Collector 核心源码和可执行 JAR 也在本仓内维护。
 
 ## 3. 下载和解压 ZIP
 
-在 GitHub 选择包含目标提交的分支或 Tag 后下载源码 ZIP。当前已验证版本为：
-
-```text
-branch: codex/run-outcome-opencode-adapter
-commit: 6f02572
-```
-
-如果该提交还没有合并到 `main`，必须下载上述分支的 ZIP，不能使用 GitHub 默认主分支 ZIP。
+在 GitHub 选择需要安装的目标分支、Tag 或发布版本，下载对应的 Source code ZIP。手册不绑定临时
+开发分支或提交号；下载后以 ZIP 中的 README、配置 Schema 和安装脚本为同一版本基线。
 
 将 ZIP 解压到不会随意移动的目录，例如：
 
@@ -63,7 +57,7 @@ JDK 21 可以只解压，无需写入系统 `JAVA_HOME` 或 `PATH`。假设它�
 D:\tools\jdk-21
 ```
 
-公司现有 JDK 17 例如：
+目标环境现有 JDK 17 例如：
 
 ```text
 C:\Program Files\Java\jdk-17
@@ -85,7 +79,7 @@ C:\Program Files\Java\jdk-17
 | Maven/JUnit 目标 UT | JDK 17 |
 | CodePath Launcher | JDK 17 |
 
-脚本只在自身进程和子进程中设置 Java 环境，不改变公司电脑全局配置。
+脚本只在自身进程和子进程中设置 Java 环境，不改变目标环境电脑全局配置。
 
 ## 5. 理解 IDEA 和 Maven
 
@@ -102,8 +96,8 @@ IDEA 可以使用三种 Maven：
 | 类型 | 特点 | Agent 建议 |
 |---|---|---|
 | IDEA Bundled Maven | 路径与 IDEA 版本绑定 | 不作为首选 |
-| 电脑独立安装 Maven | 路径稳定，可使用公司镜像 | 推荐 |
-| 项目 `mvnw.cmd` | 锁定 Maven 版本，可能下载 Distribution | 只在公司已适配 Wrapper 时使用 |
+| 电脑独立安装 Maven | 路径稳定，可使用受限环境镜像 | 推荐 |
+| 项目 `mvnw.cmd` | 锁定 Maven 版本，可能下载 Distribution | 只在目标环境已适配 Wrapper 时使用 |
 
 在 IDEA 中检查 `Settings -> Build Tools -> Maven`，记录 Maven Home、User settings file、
 Local repository 和 Maven 使用的 JDK。再检查目标 UT 的 Run Configuration 类型是 `JUnit` 还是 `Maven`。
@@ -131,14 +125,14 @@ mvn -version
 ```
 
 如果 IDEA 使用自定义 `settings.xml`，而命令行 Maven 不读取它，可能出现“IDEA 能下载依赖，
-终端无法解析依赖”。优先使用公司统一 Maven 配置，将公司镜像保存到上述标准位置之一。
+终端无法解析依赖”。优先使用目标环境统一 Maven 配置，将受限环境镜像保存到上述标准位置之一。
 
 ## 7. 脱离 IDEA 验证目标 UT
 
 这是安装 Agent 前最重要的业务验收。进入真正包含目标 UT 和 `pom.xml` 的 Maven 模块：
 
 ```powershell
-cd D:\path\to\company-algorithm-module
+cd D:\path\to\target-environment-algorithm-module
 ```
 
 在当前 PowerShell 临时让 Maven 使用 JDK 17，执行后恢复环境：
@@ -153,7 +147,7 @@ try {
 
     & "D:\tools\apache-maven\bin\mvn.cmd" -version
     & "D:\tools\apache-maven\bin\mvn.cmd" `
-        "-Dtest=com.company.scheduler.TargetAlgorithmTest#targetCase" `
+        "-Dtest=org.example.targetalgorithm.scheduler.TargetAlgorithmTest#targetCase" `
         test
 } finally {
     $env:JAVA_HOME = $oldJavaHome
@@ -208,7 +202,7 @@ Workspace、DFX 和 Eval 有可用默认值，也可改为绝对路径。`result
 
 ## 9. 处理 PowerShell 执行策略
 
-如果公司策略允许直接执行脚本，跳过本步。如果当前会话禁止脚本，可以只对当前 PowerShell 进程设置：
+如果目标环境策略允许直接执行脚本，跳过本步。如果当前会话禁止脚本，可以只对当前 PowerShell 进程设置：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -228,14 +222,17 @@ Set-ExecutionPolicy -Scope Process Bypass
 JDWP Collector，并将 Collector JAR 归档到 `tools\jdwp-collector`。同一个 Maven 可以在构建 Agent 时
 使用 JDK 21，在运行目标 UT 时使用 JDK 17。
 
-## 11. 验证 Java CLI
+## 11. 从目标算法模块验证 Java CLI
 
 ```powershell
-.\scripts\verify-ada-launcher.ps1
+$agentRoot = "D:\path\to\algorithm-debug-agent"
+cd D:\path\to\target-algorithm-module
+& "$agentRoot\scripts\verify-ada-launcher.ps1"
 ```
 
 验证链路为 `ada.cmd -> run-ada.ps1 -> JDK 21 -> Java CLI -> ToolResponse JSON`。这一步在进入 OpenCode
-之前区分 JDK、构建产物、脚本或 CLI 问题。
+之前区分 JDK、Maven、目标模块、构建产物、脚本或 CLI 问题。脚本不接受项目路径参数，也不推断
+Agent 同级 Demo；当前工作目录就是待验证的目标 Maven 模块。
 
 ## 12. 安装到现有 OpenCode
 
@@ -268,21 +265,21 @@ OpenCode 版本号；所需 CLI 行为不兼容时返回明确错误。
 <workspaceDirectory>\environment-checks\jdwp-loopback\<runId>
 ```
 
-如果失败发生在端口监听或 attach，需要由公司安全管理员确认终端防护策略。脚本不会关闭或绕过安全软件。
+如果失败发生在端口监听或 attach，需要由目标环境安全管理员确认终端防护策略。脚本不会关闭或绕过安全软件。
 
-## 14. 在公司算法模块使用
+## 14. 在目标算法模块使用
 
 进入包含目标 UT 和 `pom.xml` 的 Maven 模块：
 
 ```powershell
-cd D:\path\to\company-algorithm-module
+cd D:\path\to\target-environment-algorithm-module
 opencode
 ```
 
 在 OpenCode 选择 `algorithm-debug` Agent，直接提问：
 
 ```text
-请分析 com.company.scheduler.TargetAlgorithmTest#targetCase，
+请分析 org.example.targetalgorithm.scheduler.TargetAlgorithmTest#targetCase，
 说明本次调度结果异常的根因。
 ```
 
@@ -311,7 +308,7 @@ UT 不存在时直接返回 `TARGET_TEST_NOT_FOUND`。UT 失败时保留真实�
 %LOCALAPPDATA%\algorithm-debug-agent\workspace\projects\<projectId>\cases\<caseId>
 ```
 
-Workspace 与 Agent 源码仓和公司算法仓分离，所以不会污染业务 Git 仓库。每个 Case 根目录的
+Workspace 与 Agent 源码仓和目标算法仓库分离，所以不会污染业务 Git 仓库。每个 Case 根目录的
 `interaction.jsonl` 可以直接打开，查看 Tool、Java CLI、Run、Collection 和 Evidence 的时序。
 
 ## 16. 常见问题
@@ -321,14 +318,14 @@ Workspace 与 Agent 源码仓和公司算法仓分离，所以不会污染业务
 | `Agent Java executable not found` | 确认 `agentJavaHome\bin\java.exe` 存在 |
 | Maven 显示错误 Java 版本 | 确认 `targetJavaHome` 是 JDK 17 根目录 |
 | `Maven executable not found` | 确认 `mavenExecutable` 指向存在的 `mvn.cmd` |
-| `Could not resolve artifact` | 确认命令行 Maven 读取公司 `settings.xml` 和镜像 |
+| `Could not resolve artifact` | 确认命令行 Maven 读取目标环境 `settings.xml` 和镜像 |
 | `No tests matching pattern` | 确认当前目录、测试类/方法和 Surefire 配置 |
 | IDEA 成功但 Maven 失败 | 比较 JDK、Maven Home、settings、Profile、注解处理和手工 Library |
 | UT 成功但没有 Gantt | 手工确认 `resultJsonDirectory` 在 UT 期间生成新 `.json` |
 | OpenCode 找不到 Agent/Tool | 重跑 `Install` 和 `Check`，然后重启 OpenCode 会话 |
-| JDWP 连接失败 | 检查 loopback 证据和公司安全软件策略 |
+| JDWP 连接失败 | 检查 loopback 证据和目标环境终端安全软件策略 |
 
-如果公司算法只能在特定旧 Maven 下运行，而 Agent 必须使用另一 Maven，应先用真实 UT 证明冲突。
+如果目标算法只能在特定旧 Maven 下运行，而 Agent 必须使用另一 Maven，应先用真实 UT 证明冲突。
 当前只配置一个 `mavenExecutable`；在没有真实冲突前不引入双 Maven 过度设计。
 
 ## 17. 更新 ZIP
@@ -337,10 +334,14 @@ Workspace 与 Agent 源码仓和公司算法仓分离，所以不会污染业务
 
 1. 下载包含目标提交的新 ZIP。
 2. 解压到稳定目录。
-3. 重新填写新仓的 `config/agent-settings.json`。
-4. 重跑 `build-agent.ps1`。
-5. 重跑 `install-opencode.ps1 -Mode Install`。
-6. 重跑 `Check` 和 JDWP loopback 验证。
+3. 在旧 Agent 仓执行 `scripts\uninstall-opencode.ps1`；Workspace 和历史证据会保留。
+4. 重新填写新仓的 `config/agent-settings.json`。
+5. 重跑 `build-agent.ps1`。
+6. 重跑 `install-opencode.ps1 -Mode Install`。
+7. 重跑 `Check` 和 JDWP loopback 验证。
+
+首次从没有安装清单的旧版本升级时，先用新版本执行一次 Install 生成清单，再执行卸载。详细边界见
+[OpenCode Algorithm Debug Agent 卸载与重新安装](opencode-uninstallation.md)。
 
 Workspace 默认在 `%LOCALAPPDATA%` 中，更换 Agent 源码 ZIP 不会删除历史 Case。
 
@@ -355,14 +356,19 @@ Workspace 默认在 `%LOCALAPPDATA%` 中，更换 Agent 源码 ZIP 不会删除�
 ```powershell
 cd D:\tools\algorithm-debug-agent
 Set-ExecutionPolicy -Scope Process Bypass
+$agentRoot = (Get-Location).Path
 
 # 先修改 config\agent-settings.json
 .\scripts\build-agent.ps1
-.\scripts\verify-ada-launcher.ps1
+
+cd D:\path\to\target-algorithm-module
+& "$agentRoot\scripts\verify-ada-launcher.ps1"
+
+cd $agentRoot
 .\scripts\install-opencode.ps1 -Mode Install
 .\scripts\install-opencode.ps1 -Mode Check
 .\scripts\verify-jdwp-loopback.ps1
 
-cd D:\path\to\company-algorithm-module
+cd D:\path\to\target-environment-algorithm-module
 opencode
 ```

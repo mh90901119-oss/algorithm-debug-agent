@@ -40,6 +40,7 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   await runtime.analysisBegin({
     question: "why did it fail?", targetTest: "a.b.Test#case1", contextMode: "reuse",
   }, context)
+  await runtime.algorithmInputCapture({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.caseInspect({ caseId: "case-1" }, context)
   await runtime.caseAudit({ caseId: "case-1" }, context)
   await runtime.ganttInspect({
@@ -75,6 +76,8 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   assert.deepEqual(businessCalls.map(call => withoutTemporaryPath(call.args)), [
     ["case", "open", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--test", "a.b.Test#case1", "--question-file", "<temp>", "--context-mode", "reuse"],
+    ["input", "capture", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
+      "--case-id", "case-1", "--analysis-id", "analysis-1"],
     ["case", "inspect", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1"],
     ["case", "audit", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",

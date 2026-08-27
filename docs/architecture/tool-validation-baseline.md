@@ -41,7 +41,7 @@ OpenCode JS Adapter、ToolResponse、DFX 和 Eval Grader 的 Node 测试为 44/4
 - 成功采集 E2E：46 个 Case 文件，审计 expected=actual，Collection `SUCCESS`，
   baseline `NOT_COMPARED`，`evidenceUsable=true`。
 
-已知限制：上游 Instrumentation 对未选择方法可能仍产生 Advice 调用开销；大型公司算法尚未完成专项
+已知限制：上游 Instrumentation 对未选择方法可能仍产生 Advice 调用开销；大型目标算法尚未完成专项
 压力基线。
 
 ## 4. JDWP 验证事实
@@ -102,7 +102,7 @@ JDWP 使用 `SUSPEND_EVENT_THREAD`。断点命中时对应线程会短暂停顿�
 ## 7. 尚未证明
 
 - Gradle、TestNG 或一次选择多个 UT。
-- 公司算法规模下的 CodePath/JDWP 长时间压力、吞吐和可接受扰动。
+- 目标算法规模下的 CodePath/JDWP 长时间压力、吞吐和可接受扰动。
 - 完整 Maven test classpath 下的全项目静态调用图。
 - 多线程算法的跨线程一致快照。
 - 自动领域知识生成。

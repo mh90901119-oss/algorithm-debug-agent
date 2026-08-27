@@ -104,6 +104,7 @@ public final class StaticAnalysisApplicationService {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
+            archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
             CodePathCollectionPlan plan = compiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request);
             Path document = archive.createCodePathPlan(plan);
@@ -130,6 +131,7 @@ public final class StaticAnalysisApplicationService {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             ProjectRegistration registration = requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
+            archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
             var plan = jdwpCompiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request,
                     Path.of(registration.moduleRoot()));

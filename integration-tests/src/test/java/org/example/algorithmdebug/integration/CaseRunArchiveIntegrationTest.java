@@ -27,6 +27,7 @@ import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TestOutcome;
 import org.example.algorithmdebug.core.ControlPlaneServices;
+import org.example.algorithmdebug.core.CaseRunException;
 import org.example.algorithmdebug.core.MavenExecutableLocator;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -48,6 +49,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CaseRunArchiveIntegrationTest {
@@ -58,7 +60,7 @@ class CaseRunArchiveIntegrationTest {
     Path temporaryDirectory;
 
     @ParameterizedTest(name = "{0}")
-    @EnumSource(Scenario.class)
+    @EnumSource(value = Scenario.class, names = "TEST_NOT_FOUND", mode = EnumSource.Mode.EXCLUDE)
     void archivesDeterministicFactsForIsolatedMavenScenario(Scenario scenario) throws Exception {
         Path scenarioRoot = Files.createDirectories(
                 temporaryDirectory.resolve(scenario.name().toLowerCase(Locale.ROOT)));
@@ -83,6 +85,8 @@ class CaseRunArchiveIntegrationTest {
                 workspace, registration.registration().projectId(), target,
                 "验证隔离 Maven 场景 " + scenario.name(), Optional.empty(),
                 Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+        services.algorithmInputs().capture(
+                workspace, projectId, opened.caseId(), opened.analysisId());
 
         RunOutcomeSummary outcome = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -114,6 +118,8 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查调度是否稳定", Optional.empty(),
                 Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+        services.algorithmInputs().capture(
+                workspace, projectId, opened.caseId(), opened.analysisId());
 
         RunOutcomeSummary first = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -123,6 +129,8 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult reopened = services.cases().open(
                 workspace, projectId, target, "代码变化后继续检查", Optional.of(opened.caseId()),
                 Optional.of("fixture-adapter"), ContextMode.CREATE_NEW);
+        services.algorithmInputs().capture(
+                workspace, projectId, opened.caseId(), reopened.analysisId());
         RunOutcomeSummary crossContext = services.runs().execute(
                 workspace, projectId, opened.caseId(), reopened.analysisId());
         ControlPlaneServices changedServices = services(
@@ -174,6 +182,8 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查异常是否稳定", Optional.empty(),
                 Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+        services.algorithmInputs().capture(
+                workspace, projectId, opened.caseId(), opened.analysisId());
 
         RunOutcomeSummary first = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -206,6 +216,8 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "Maven 不可用", Optional.empty(),
                 Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+        services.algorithmInputs().capture(
+                workspace, projectId, opened.caseId(), opened.analysisId());
 
         RunOutcomeSummary outcome = services.runs().execute(
                 workspace, projectId, opened.caseId(), opened.analysisId());
@@ -217,6 +229,36 @@ class CaseRunArchiveIntegrationTest {
                 .resolve("run-result-fingerprint.json")));
         assertTrue(Files.notExists(caseRoot.resolve("contexts")
                 .resolve(opened.contextId().value()).resolve("reproduction.json")));
+    }
+
+    @org.junit.jupiter.api.Test
+    void missingTargetStopsBeforeRunCreation() throws Exception {
+        Path scenarioRoot = Files.createDirectories(temporaryDirectory.resolve("missing-target"));
+        Path module = Files.createDirectories(scenarioRoot.resolve("module"));
+        Path workspace = scenarioRoot.resolve("workspace");
+        MavenFixture.create(module, Scenario.TEST_NOT_FOUND);
+        TargetTest target = new TargetTest(TEST_CLASS, Scenario.TEST_NOT_FOUND.targetMethod());
+        ControlPlaneServices services = services(
+                new FixtureAdapter(Scenario.TEST_NOT_FOUND), Optional.of(locateMaven()));
+        services.workspace().initialize(workspace);
+        ProjectId projectId = new ProjectId("fixture-missing-target");
+        services.project().register(
+                workspace, module, Optional.of(projectId),
+                Optional.of(module.resolve("output").toAbsolutePath().normalize().toString()));
+        CaseOpenResult opened = services.cases().open(
+                workspace, projectId, target, "check missing target", Optional.empty(),
+                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                services.algorithmInputs().capture(
+                        workspace, projectId, opened.caseId(), opened.analysisId()));
+
+        assertEquals("TARGET_TEST_NOT_FOUND", failure.code());
+        Path caseRoot = workspace.resolve("projects").resolve(projectId.value())
+                .resolve("cases").resolve(opened.caseId().value());
+        assertTrue(Files.notExists(caseRoot.resolve("runs")));
+        assertTrue(Files.notExists(caseRoot.resolve("analyses")
+                .resolve(opened.analysisId().value()).resolve("input")));
     }
 
     private static void assertScenario(RunOutcomeSummary outcome, Scenario scenario) {
@@ -403,6 +445,9 @@ class CaseRunArchiveIntegrationTest {
             Path testSource = module.resolve("src/test/java/fixture/TargetTest.java");
             Files.createDirectories(testSource.getParent());
             Files.writeString(testSource, testSource(scenario));
+            Path input = module.resolve("input/case-input.json");
+            Files.createDirectories(input.getParent());
+            Files.writeString(input, "{}");
             if (scenario == Scenario.COMPILE_FAILURE) {
                 Path broken = module.resolve("src/main/java/fixture/Broken.java");
                 Files.createDirectories(broken.getParent());
@@ -435,6 +480,7 @@ class CaseRunArchiveIntegrationTest {
                     class TargetTest {
                         @org.junit.jupiter.api.Test
                         void %s() throws Exception {
+                            String algorithmInputFilePath = "input/case-input.json";
                             %s
                             %s
                         }

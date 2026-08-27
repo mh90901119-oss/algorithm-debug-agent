@@ -157,6 +157,10 @@ export function createAlgorithmDebugRuntime({
       return runObservedTool("case_inspect", input, context, scope =>
         invoke(command(["case", "inspect"], "--case-id", input.caseId), context, scope))
     },
+    algorithmInputCapture(input, context) {
+      return runObservedTool("algorithm_input_capture", input, context, scope =>
+        invoke(caseAnalysisCommand(["input", "capture"], input), context, scope))
+    },
     caseAudit(input, context) {
       return runObservedTool("case_audit", input, context, scope =>
         invoke(command(["case", "audit"], "--case-id", input.caseId), context, scope))

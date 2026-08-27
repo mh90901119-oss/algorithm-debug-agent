@@ -42,6 +42,10 @@ function assertionTrace() {
       contextId: "context-1",
       analysisId: "analysis-1",
     })),
+    toolEvent("algorithm_input_capture", {}, toolResponse({
+      comparison: "FIRST_CAPTURE",
+      artifact: { artifactId: "algorithm-input-analysis-1" },
+    })),
     toolEvent("run_test", {}, toolResponse({
       processOutcome: "FAILED",
       testOutcome: "FAILED",
@@ -69,7 +73,7 @@ function assertionTrace() {
 
 const assertionCase = {
   id: "assertion-failure",
-  requiredTools: ["analysis_begin", "run_test", "analysis_complete"],
+  requiredTools: ["analysis_begin", "algorithm_input_capture", "run_test", "analysis_complete"],
   forbiddenTools: [],
   expectedProcessOutcome: "FAILED",
   expectedTestOutcome: "FAILED",
@@ -93,6 +97,7 @@ test("parses OpenCode JSONL tool events and grades an evidence-backed assertion 
 
   assert.deepEqual(trace.toolCalls.map((call) => call.name), [
     "analysis_begin",
+    "algorithm_input_capture",
     "run_test",
     "analysis_complete",
   ])
@@ -127,7 +132,7 @@ test("accepts a statically confirmed missing target without forcing a test run",
       contextId: "context-1",
       analysisId: "analysis-1",
     })),
-    toolEvent("static_analyze", {}, toolResponse({ status: "STATIC_ANALYSIS_FAILED" })),
+    toolEvent("algorithm_input_capture", {}, toolResponse({ status: "TARGET_TEST_NOT_FOUND" })),
     toolEvent("case_audit", {}, toolResponse({ passed: true })),
     toolEvent("analysis_complete", {
       conclusions: [{
@@ -143,7 +148,7 @@ test("accepts a statically confirmed missing target without forcing a test run",
   ].join("\n")
   const evalCase = {
     id: "missing-ut",
-    requiredTools: ["analysis_begin", "case_audit", "analysis_complete"],
+    requiredTools: ["analysis_begin", "algorithm_input_capture", "case_audit", "analysis_complete"],
     forbiddenTools: ["codepath_collect", "jdwp_collect"],
     requiredAnswerPatterns: ["does not exist|not found"],
     requireAnalysisComplete: true,
@@ -162,7 +167,7 @@ test("accepts a statically confirmed missing target without forcing a test run",
 
 test("requires the configured dynamic collection completion instead of only a tool call", () => {
   const lines = assertionTrace().split("\n")
-  lines.splice(2, 0, toolEvent("codepath_collect", {}, toolResponse({ completion: "SUCCESS" })))
+  lines.splice(3, 0, toolEvent("codepath_collect", {}, toolResponse({ completion: "SUCCESS" })))
   const evalCase = {
     ...assertionCase,
     allowCodePath: true,
@@ -175,7 +180,7 @@ test("requires the configured dynamic collection completion instead of only a to
   })
   assert.equal(passed.passed, true)
 
-  lines[2] = toolEvent("codepath_collect", {}, JSON.stringify({
+  lines[3] = toolEvent("codepath_collect", {}, JSON.stringify({
     schemaVersion: "2.0",
     success: false,
     code: "COLLECTION_FAILED",
@@ -188,4 +193,17 @@ test("requires the configured dynamic collection completion instead of only a to
 
   assert.equal(failed.passed, false)
   assert.match(failed.correctnessFailures.join("\n"), /completion SUCCESS.*none/iu)
+})
+
+test("rejects current-source or dynamic evidence collection before the first target run", () => {
+  const lines = assertionTrace().split("\n")
+  lines.splice(2, 0, toolEvent("static_analyze", {}, toolResponse({ status: "COMPLETE" })))
+
+  const grade = gradeCase(assertionCase, parseOpenCodeJsonl(lines.join("\n")), {
+    openCodeExitCode: 0,
+    sourceModified: false,
+  })
+
+  assert.equal(grade.passed, false)
+  assert.match(grade.correctnessFailures.join("\n"), /static_analyze was called before run_test/)
 })

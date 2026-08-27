@@ -3,6 +3,12 @@
 The active chain is OpenCode/LLM -> algorithm-debug Agent -> Skill -> Custom Tool -> Java CLI ->
 deterministic Java services. OpenCode plans and explains; Java executes, validates, and archives.
 
+Every analysis starts with `analysis_begin -> algorithm_input_capture`. The second Tool locates
+exactly one direct `String` literal ending in `input.json` in the target test method, copies it to the
+current Analysis, and returns its ArtifactReference. `run_test`, CodePath plan creation, and JDWP plan
+creation reject an Analysis without a verified input capture. Unsupported or multiple inputs stop the
+workflow instead of asking the model to guess.
+
 ## Paths
 
 All user-editable paths come from `config/agent-settings.json`. The installer resolves that file and
@@ -35,6 +41,10 @@ Edit `config/agent-settings.json` before installation when a default path must c
 all effective paths and verifies OpenCode capability discovery without binding to a CLI version.
 Restart OpenCode after installation or configuration changes.
 
+Use `scripts/uninstall-opencode.ps1` before a clean reinstall. Uninstall validates the installation
+manifest before deleting managed files and preserves Workspace, diagnostics, evaluations, shared
+OpenCode dependencies, and unrelated extensions.
+
 ## Source checkout and dual JDK
 
 The GitHub source checkout is the installed Agent. Run `scripts/build-agent.ps1` before the installer.
@@ -42,6 +52,9 @@ The script reads `agentJavaHome`, `targetJavaHome`, and `mavenExecutable` from t
 configuration and never changes system environment variables. The Agent and JDWP Collector use the
 Agent JDK; algorithm Maven/JUnit and CodePath use the target JDK.
 
-Start OpenCode from the company algorithm module. OpenCode can edit that repository when the user
+Invoke `scripts/verify-ada-launcher.ps1` while the current working directory is the target Maven
+module. It never discovers a sibling Demo and does not accept a target-project path parameter.
+
+Start OpenCode from the target algorithm module. OpenCode can edit that repository when the user
 requests a fix or optimization; the Agent Custom Tools remain responsible for deterministic UT
 execution, collection, validation, and Workspace archiving.

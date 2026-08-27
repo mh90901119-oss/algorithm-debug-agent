@@ -6,7 +6,7 @@
 
 ## 1. 问题
 
-公司算法把每次 UT 的 Gantt JSON 写入 `D:\log\scheduler\yyyy-MM-dd\gant`，而 Agent 原先只支持固定目录。
+目标算法把每次 UT 的 Gantt JSON 写入 `D:\log\scheduler\yyyy-MM-dd\gant`，而 Agent 原先只支持固定目录。
 如果继续配置 `D:\log\scheduler\gant`，UT 事实仍可归档，但 Agent 会把 Gantt 判断为 `ABSENT`。
 
 ## 2. 设计

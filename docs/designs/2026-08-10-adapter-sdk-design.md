@@ -9,7 +9,7 @@
 
 ## 1. 背景与问题
 
-Algorithm Debug Agent 必须适配不同公司的 Maven 算法仓库，而不能在 Core 中写死 UT 启动方式、
+Algorithm Debug Agent 必须适配不同目标算法的 Maven 仓库，而不能在 Core 中写死 UT 启动方式、
 输入位置和调度结果格式。1.1 已把语义 Hash 策略放在 Adapter 中，但真实时间戳文件名场景只需要
 通用 JSON 内容一致性；继续由 Adapter 选择业务字段会过早引入目标业务耦合。初版建立 SPI 时，
 其中 `createLaunchSpec(TargetTest, RunMode)` 没有目标项目参数，会迫使 Adapter 保存一次 inspect 的

@@ -42,7 +42,6 @@ public final class CaseWorkspaceAuditor {
         entries.stream().filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                 .map(path -> relative(root, path)).forEach(actual::add);
         require(root, caseId, "case.json", "CASE_MANIFEST", expected, issues);
-        require(root, caseId, "interaction.jsonl", "CASE_INTERACTION_LOG", expected, issues);
         checkScopes(root.resolve("contexts"), "context.json", "CONTEXT", caseId, expected, issues);
         checkScopes(root.resolve("analyses"), "analysis-request.json", "ANALYSIS", caseId, expected, issues);
         checkScopes(root.resolve("runs"), "run-request.json", "RUN", caseId, expected, issues);
@@ -91,6 +90,16 @@ public final class CaseWorkspaceAuditor {
                 }
                 Path artifact = root.resolve(registration.artifact().relativePath()).normalize();
                 expected.add(registration.artifact().relativePath()); checked++;
+                if ("ALGORITHM_INPUT".equals(registration.artifact().artifactType())) {
+                    String metadata = registration.artifact().relativePath()
+                            .replace("algorithm-input.json", "input-analysis.json");
+                    expected.add(metadata);
+                    if (!Files.isRegularFile(root.resolve(metadata), LinkOption.NOFOLLOW_LINKS)) {
+                        issues.add(issue("ALGORITHM_INPUT_CONTROL_MISSING", "ANALYSIS",
+                                registration.artifact().artifactId(), "ALGORITHM_INPUT", metadata,
+                                "Algorithm input control document is missing"));
+                    }
+                }
                 ArtifactIntegrityChecker.Status status = integrity.verify(registration.artifact(), artifact).status();
                 if (status != ArtifactIntegrityChecker.Status.VALID) {
                     issues.add(issue("ARTIFACT_" + status, "ARTIFACT", registration.artifact().artifactId(),
@@ -157,6 +166,7 @@ public final class CaseWorkspaceAuditor {
                 || path.equals("interaction.jsonl")
                 || path.matches("contexts/[^/]+/(context|reproduction)\\.json")
                 || path.matches("analyses/[^/]+/(analysis-request|analysis-result|method-catalog)\\.json")
+                || path.matches("analyses/[^/]+/input/input-analysis\\.json")
                 || path.matches("analyses/[^/]+/plans/[^/]+\\.json")
                 || path.matches("runs/[^/]+/(run-request|run-outcome|run-result-fingerprint)\\.json")
                 || path.matches("collections/[^/]+/(collection-request|manifest|collection-summary)\\.json")

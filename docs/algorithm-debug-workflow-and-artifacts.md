@@ -30,6 +30,11 @@ sequenceDiagram
     C-->>T: "caseId/contextId/analysisId/resultJsonDirectory"
     T-->>L: "ToolResponse 2.0 摘要"
 
+    L->>T: "algorithm_input_capture"
+    T->>C: "定位并复制唯一直接 String input.json"
+    C->>W: "input-analysis.json + algorithm-input.json + Artifact 注册"
+    C-->>L: "比较状态 + ArtifactReference；失败则停止"
+
     alt "问题只是确认 UT 是否存在"
         L->>T: "static_analyze"
         T->>C: "构建当前源码 Method Catalog"
@@ -101,6 +106,18 @@ sequenceDiagram
 
 Case 本身只在 `analysis_begin` 成功后创建。项目准备失败时，不会制造半个 Case。
 
+### 3.1 算法输入前置捕获
+
+每轮 Analysis 在执行 UT 前固定调用 `algorithm_input_capture`。Java 只读取目标测试方法最外层语句中
+直接声明的局部变量：类型必须是 `String` 或 `java.lang.String`，初始化器必须是单个字符串字面量，
+值不区分大小写地以 `input.json` 结尾。它不进入分支、循环、lambda 或 helper，也不解析拼接、常量和
+配置属性。匹配数量不是一个、文件不可读或超过 256 MiB 时返回稳定错误；大模型必须停止，不能自行
+选择路径或继续运行/动态采集。
+
+成功捕获后，LLM 可用返回的 Artifact ID 调用 `artifact_read` 有界读取输入内容，再结合问题决定是否
+执行 UT、静态分析或动态采集。后续同一 Case 的新 Analysis 会重新捕获并比较精确字节；同一 Analysis
+重复调用则返回已有记录，不覆盖文件。
+
 ## 4. UT 结果处理
 
 `run_test` 对所有结果采用同一通用模型，不把失败硬编码成封闭枚举。
@@ -162,7 +179,7 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 | 相对路径 | 生产者 | 作用 |
 |---|---|---|
 | `case.json` | analysis_begin | Case、项目、目标 UT、Adapter 和创建时间 |
-| `interaction.jsonl` | JS DFX Recorder | 真实 Tool/CLI 时间线；不是 Evidence |
+| `interaction.jsonl` | JS DFX Recorder | 可选的真实 Tool/CLI 时间线；OpenCode DFX 启用时应存在，不是 Evidence |
 | `contexts/<contextId>/context.json` | analysis_begin | 本轮 Context 身份和时间 |
 | `contexts/<contextId>/reproduction.json` | 首次普通 Run | 供动态失败比较使用的普通 Run 引用；仅在需要时存在 |
 | `analyses/<analysisId>/analysis-request.json` | analysis_begin | 本轮问题和 Context 关联 |
@@ -170,7 +187,16 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 | `analyses/<analysisId>/method-catalog.json` | static_analyze | 当前源码的有界方法与直接调用边 |
 | `analyses/<analysisId>/plans/<planId>.json` | Plan Tool | 高层 CodePath 或 JDWP 计划 |
 
-### 8.2 普通 Run
+### 8.2 Analysis 输入文件
+
+| 相对路径 | 作用 |
+|---|---|
+| `analyses/<analysisId>/input/input-analysis.json` | 输入变量、源码文件/行、路径类型、上一轮比较状态和 ArtifactReference |
+| `analyses/<analysisId>/input/algorithm-input.json` | 运行前复制的唯一算法输入原始字节；供 `artifact_read` 有界读取和 LLM 分析 |
+
+`FIRST_CAPTURE/UNCHANGED/CHANGED/INCOMPARABLE` 只描述同一 Case 两次成功输入归档的精确字节关系。
+
+### 8.3 普通 Run
 
 | 相对路径 | 作用 |
 |---|---|
@@ -182,7 +208,7 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 | `runs/<runId>/raw/surefire/*.xml` | 本次目标测试的 Surefire 报告 |
 | `runs/<runId>/raw/gantt.json` | 本次捕获的算法 JSON；未产生时不创建 |
 
-### 8.3 Collection 控制与原始文件
+### 8.4 Collection 控制与原始文件
 
 | 相对路径 | 作用 |
 |---|---|
@@ -201,7 +227,7 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 | `collections/<collectionId>/validation/baseline-check.json` | `NOT_COMPARED/MATCHED/CHANGED/INCOMPARABLE` |
 | `collections/<collectionId>/validation/post-processing-failure.json` | 后处理失败诊断；只有失败时存在 |
 
-### 8.4 Derived 和 Evidence
+### 8.5 Derived 和 Evidence
 
 | 相对路径 | 作用 |
 |---|---|
@@ -213,7 +239,7 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 | `evidence/<evidenceId>/evidence-bundle.json` | 确定性事实、校验结论、比较事实和 Artifact 引用 |
 | `evidence/<evidenceId>/sufficiency-evaluation.json` | 覆盖、矛盾、截断和缺失维度判断 |
 
-### 8.5 Artifact 注册
+### 8.6 Artifact 注册
 
 `artifacts/<artifactId>.json` 是注册元数据，不复制原文件内容。它保存：
 
@@ -241,7 +267,7 @@ ArtifactReference。
 ## 10. 如何人工复盘
 
 1. 打开 Case 根目录的 `case.json` 确认目标 UT。
-2. 打开 `interaction.jsonl` 查看 Tool 和 CLI 的真实执行顺序。
+2. 若本 Case 来自启用 DFX 的 OpenCode 会话，打开 `interaction.jsonl` 查看 Tool 和 CLI 的真实执行顺序。
 3. 查看 `analyses/<analysisId>/analysis-request.json` 和 `analysis-result.json`。
 4. 查看普通 Run 的 `run-outcome.json`，按需打开 stdout、Surefire 或 Gantt。
 5. 有 Collection 时先看 `collection-summary.json`、`baseline-check.json` 和 Derived 摘要。

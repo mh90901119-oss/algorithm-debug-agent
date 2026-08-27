@@ -102,6 +102,21 @@ public final class CaseArchiveLayout {
         return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
     }
 
+    /** @return 指定 Analysis 的算法输入归档目录。 */
+    public Path analysisInputRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "input");
+    }
+
+    /** @return 指定 Analysis 的输入定位与一致性控制文档。 */
+    public Path analysisInputCapture(AnalysisId analysisId) {
+        return child(analysisInputRoot(analysisId), "input-analysis.json");
+    }
+
+    /** @return 指定 Analysis 的不可变算法输入副本。 */
+    public Path analysisInputArtifact(AnalysisId analysisId) {
+        return child(analysisInputRoot(analysisId), "algorithm-input.json");
+    }
+
     /** @return 指定 Analysis 的静态方法目录 */
     public Path analysisMethodCatalog(AnalysisId analysisId) {
         return child(analysisRoot(analysisId), "method-catalog.json");

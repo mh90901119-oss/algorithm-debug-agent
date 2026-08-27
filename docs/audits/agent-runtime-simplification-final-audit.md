@@ -225,12 +225,12 @@ Eval 使用 `agent-evals` Node Harness；解释和 Gantt 语义由 LLM 处理，
 
 ## 10. 当前未完成和优化方向
 
-1. 在公司算法上验证 Maven classpath、长 sequence、大 Gantt 和高事件量。
+1. 在目标算法上验证 Maven classpath、长 sequence、大 Gantt 和高事件量。
 2. 改善静态分析对完整 test classpath 的解析，减少 `INCOMPLETE`；当前不需要引入新 AST 框架。
 3. 建立 CodePath 未选方法 Advice 成本和 JDWP 高频命中扰动基线。
 4. 增加多线程场景前，需要定义线程一致性和暂停影响，不在当前单线程目标内。
 5. 自动领域知识文件尚未实现；当前由仓库文档、源码和用户问题共同提供上下文。
 6. Eval 全 Suite 外层时限可按 Case 隔离，避免长动态用例耗尽批次总时限。
 
-这些限制不会阻止当前 Demo 和同类 Maven/JUnit 单 UT 的手动 OpenCode 使用，但公司算法发布前必须
+这些限制不会阻止当前 Demo 和同类 Maven/JUnit 单 UT 的手动 OpenCode 使用，但目标算法发布前必须
 完成前 3 项规模化验收。

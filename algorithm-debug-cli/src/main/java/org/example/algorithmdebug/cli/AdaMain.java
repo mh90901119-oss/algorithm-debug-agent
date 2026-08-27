@@ -170,7 +170,7 @@ public final class AdaMain {
         return new CliCommandExecutor(
                 services.workspace(), services.project(), services.doctor(),
                 services.cases(), services.runs(), services.staticAnalysis(), services.collections(),
-                services.jdwpCollections());
+                services.jdwpCollections(), services.algorithmInputs());
     }
 
     private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
@@ -267,6 +267,14 @@ public final class AdaMain {
             case "CASE_NOT_FOUND" -> "Case was not found";
             case "CONTEXT_NOT_FOUND" -> "Case context was not found";
             case "ANALYSIS_NOT_FOUND" -> "Case analysis was not found";
+            case "ALGORITHM_INPUT_NOT_FOUND" -> "Target UT does not declare one supported algorithm input";
+            case "ALGORITHM_INPUT_EXPRESSION_UNSUPPORTED" -> "Algorithm input path must be a direct String literal";
+            case "MULTIPLE_ALGORITHM_INPUTS_UNSUPPORTED" -> "Target UT declares multiple algorithm inputs";
+            case "ALGORITHM_INPUT_FILE_NOT_FOUND" -> "Configured algorithm input file was not found";
+            case "ALGORITHM_INPUT_NOT_REGULAR_FILE" -> "Configured algorithm input is not a regular file";
+            case "ALGORITHM_INPUT_TOO_LARGE" -> "Algorithm input exceeds the supported size limit";
+            case "ALGORITHM_INPUT_COPY_FAILED" -> "Algorithm input could not be archived";
+            case "ANALYSIS_INPUT_NOT_CAPTURED" -> "Capture the current Analysis algorithm input before running the UT";
             case "ANALYSIS_RESULT_IDENTITY_MISMATCH" -> "Analysis result identity does not match the command";
             case "ANALYSIS_RESULT_NOT_FOUND" -> "Analysis result was not found";
             case "CASE_ARTIFACT_NOT_REGISTERED" -> "Artifact ID is not registered in this case";

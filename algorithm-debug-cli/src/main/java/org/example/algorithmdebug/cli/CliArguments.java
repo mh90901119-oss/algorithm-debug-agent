@@ -98,6 +98,17 @@ public final class CliArguments {
                     new CaseId(options.get("--case-id")),
                     new AnalysisId(options.get("--analysis-id")));
         }
+        if (matches(arguments, "input", "capture")) {
+            Map<String, String> options = options(arguments, 2, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--analysis-id"));
+            return new CliCommand.AlgorithmInputCapture(
+                    path(options.get("--workspace"), "--workspace"),
+                    new ProjectId(options.get("--project-id")),
+                    new CaseId(options.get("--case-id")),
+                    new AnalysisId(options.get("--analysis-id")));
+        }
         if (matches(arguments, "static", "analyze")) {
             Map<String, String> options = options(arguments, 2, Set.of(
                     "--workspace", "--project-id", "--case-id", "--analysis-id"));

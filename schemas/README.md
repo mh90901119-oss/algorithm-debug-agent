@@ -9,6 +9,7 @@
 - `case/case-manifest-v2.schema.json`：Case 的 Project、目标 UT、冻结 Adapter 和初始问题身份。
 - `case/context-record-v2.schema.json`：显式分析版本身份；不包含源码、输入、POM 或环境快照。
 - `case/analysis-request-v1.schema.json`：一次用户问题对应的追加式 Analysis 请求。
+- `case/algorithm-input-capture-v1.schema.json`：目标 UT 第一层唯一算法输入的源码锚点、归档引用和同 Case 多轮字节比较结果。
 - `case/analysis-result-v1.schema.json`：一轮 Analysis 的最终用户回答、分级结论和显式证据引用；不包含模型思维链。
 - `case/artifact-registration-v1.schema.json`：Case 内按唯一 Artifact ID 保存的路径、类型、大小和 SHA-256 注册记录。
 - `case/case-digest-v1.schema.json`：历史 Case Digest v1 格式，仅保留用于版本审计。

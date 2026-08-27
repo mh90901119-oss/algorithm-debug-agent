@@ -34,6 +34,19 @@ class CaseWorkspaceAuditorTest {
     }
 
     @Test
+    void acceptsCaseWithoutOptionalOpenCodeInteractionLog() throws Exception {
+        Fixture fixture = fixture();
+        Files.delete(fixture.caseRoot().resolve("interaction.jsonl"));
+
+        var audit = new CaseWorkspaceAuditor().audit(
+                fixture.workspace(), PROJECT_ID, CASE_ID);
+
+        assertTrue(audit.passed());
+        assertTrue(audit.issues().isEmpty());
+        assertFalse(audit.expectedArtifacts().contains("interaction.jsonl"));
+    }
+
+    @Test
     void reportsCorruptionInvalidLogEmptyDirectoryAndUntrackedFile() throws Exception {
         Fixture fixture = fixture();
         Files.writeString(fixture.gantt(), "{\"changed\":true}");
