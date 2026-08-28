@@ -3,6 +3,7 @@ package org.example.algorithmdebug.codepath;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,7 +31,8 @@ public final class CodePathProcessCollector implements MethodPathCollector {
     private final CodePathCommandFactory commands;
     private final Clock clock;
     private final ExternalProcessRunner processes;
-    private final ObjectMapper mapper = JsonMapper.builder().addModule(new JavaTimeModule())
+    private final ObjectMapper mapper = JsonMapper.builder()
+            .addModule(new JavaTimeModule()).addModule(new Jdk8Module())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).build();
 
     /** 使用系统时钟创建生产 Collector。 */

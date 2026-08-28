@@ -71,6 +71,9 @@ public final class MethodPathNormalizer {
         private final Map<String, MutableMethod> methods = new LinkedHashMap<>();
         private final Map<PathKey, MutablePath> paths = new LinkedHashMap<>();
         private final Deque<OpenCall> stack = new ArrayDeque<>();
+        private final Optional<String> scopeMethodKey;
+        private final List<MutableScopeInvocation> scopeInvocations = new ArrayList<>();
+        private final Deque<MutableScopeInvocation> openScopes = new ArrayDeque<>();
         private final List<MethodPathSummary.PathAnomaly> anomalies = new ArrayList<>();
         private final LinkedHashSet<String> reasons = new LinkedHashSet<>();
         private final SummaryBudget summaryBudget;
@@ -83,6 +86,7 @@ public final class MethodPathNormalizer {
             for (MethodSelector selector : input.plan().selectors()) {
                 exactMethods.put(selector.methodKey(), selector);
             }
+            this.scopeMethodKey = input.plan().scopeMethodKey();
             if (input.collectorTruncated()) reasons.add("COLLECTOR_TRUNCATED");
         }
 
@@ -103,10 +107,36 @@ public final class MethodPathNormalizer {
                 methods.put(methodKey, method);
             }
             method.observe(event, provenance);
+            observeScope(event, methodKey);
             if ("METHOD_ENTER".equals(event.eventType)) {
                 onEnter(event, methodKey, provenance);
             } else {
                 onExit(event, methodKey, provenance);
+            }
+        }
+
+        private void observeScope(Event event, String methodKey) {
+            MutableScopeInvocation current = openScopes.peekLast();
+            if (current != null) {
+                current.observe(event, methodKey);
+            }
+            if ("METHOD_ENTER".equals(event.eventType)
+                    && scopeMethodKey.filter(methodKey::equals).isPresent()) {
+                if (scopeInvocations.size() >= input.budget().maxHits()) {
+                    reasons.add("SCOPE_INVOCATION_BUDGET_EXCEEDED");
+                    return;
+                }
+                MutableScopeInvocation invocation = new MutableScopeInvocation(
+                        scopeInvocations.size() + 1, event.eventId, event.depth);
+                invocation.observe(event, methodKey);
+                scopeInvocations.add(invocation);
+                openScopes.addLast(invocation);
+            } else if ("METHOD_EXIT".equals(event.eventType)
+                    && scopeMethodKey.filter(methodKey::equals).isPresent()
+                    && current != null
+                    && current.startDepth == event.depth) {
+                current.endEventId = event.eventId;
+                openScopes.removeLast();
             }
         }
 
@@ -198,6 +228,7 @@ public final class MethodPathNormalizer {
                     .sorted(Comparator.comparing(MethodPathSummary.PathAnomaly::code)
                             .thenComparingLong(value -> value.provenance().jsonlLine()))
                     .toList();
+            Optional<MethodPathSummary.ScopeSummary> scopeFact = buildScopeSummary();
             boolean partial = !reasons.isEmpty();
             boolean summaryTruncated = input.collectorTruncated()
                     || reasons.stream().anyMatch(value -> value.endsWith("BUDGET_EXCEEDED"));
@@ -207,12 +238,50 @@ public final class MethodPathNormalizer {
                     input.collection().analysisId(), input.collection().runId(),
                     input.collection().planId(), input.collection().collectionId(),
                     input.rawTrace(), methodFacts, pathFacts, anomalyFacts,
-                    summaryTruncated, input.createdAt());
+                    scopeFact, summaryTruncated, input.createdAt());
             long emitted = (long) methodFacts.size() + pathFacts.size() + anomalyFacts.size();
+            if (scopeFact.isPresent()) {
+                emitted += 1L + scopeFact.orElseThrow().invocations().size()
+                        + scopeFact.orElseThrow().pathVariants().size();
+            }
             return new NormalizationResult<>(
                     partial ? NormalizationStatus.PARTIAL : NormalizationStatus.COMPLETE,
                     Optional.of(summary), recordCount, emitted, List.copyOf(reasons),
                     Optional.empty(), "");
+        }
+
+        private Optional<MethodPathSummary.ScopeSummary> buildScopeSummary() {
+            if (scopeMethodKey.isEmpty()) {
+                return Optional.empty();
+            }
+            if (scopeInvocations.isEmpty()) {
+                reasons.add("SCOPE_NOT_OBSERVED");
+            }
+            Map<List<String>, List<MutableScopeInvocation>> grouped = new LinkedHashMap<>();
+            scopeInvocations.stream().filter(MutableScopeInvocation::complete).forEach(invocation ->
+                    grouped.computeIfAbsent(List.copyOf(invocation.methodSequence),
+                            ignored -> new ArrayList<>()).add(invocation));
+            List<MethodPathSummary.PathVariant> variants = new ArrayList<>();
+            int variantNumber = 1;
+            for (Map.Entry<List<String>, List<MutableScopeInvocation>> entry : grouped.entrySet()) {
+                String pathId = "PATH_%03d".formatted(variantNumber++);
+                entry.getValue().forEach(invocation -> invocation.pathId = pathId);
+                variants.add(new MethodPathSummary.PathVariant(
+                        pathId,
+                        entry.getValue().stream().map(value -> value.ordinal).toList(),
+                        entry.getKey()));
+            }
+            List<MethodPathSummary.ScopeInvocation> invocations = scopeInvocations.stream()
+                    .map(MutableScopeInvocation::toFact).toList();
+            int complete = Math.toIntExact(scopeInvocations.stream()
+                    .filter(MutableScopeInvocation::complete).count());
+            MethodPathSummary.ScopeSummary scope = new MethodPathSummary.ScopeSummary(
+                    scopeMethodKey.orElseThrow(), scopeInvocations.size(), complete,
+                    scopeInvocations.size() - complete, invocations, List.copyOf(variants));
+            if (!summaryBudget.reserve(summaryBudget.scopeBytes(scope))) {
+                return Optional.empty();
+            }
+            return Optional.of(scope);
         }
 
         private TraceProvenance provenance(long line, long eventId) {
@@ -272,6 +341,45 @@ public final class MethodPathNormalizer {
         }
     }
 
+    private static final class MutableScopeInvocation {
+        private final int ordinal;
+        private final long startEventId;
+        private final int startDepth;
+        private final List<String> methodSequence = new ArrayList<>();
+        private long endEventId;
+        private int eventCount;
+        private int maxDepth;
+        private String pathId;
+
+        private MutableScopeInvocation(int ordinal, long startEventId, int startDepth) {
+            this.ordinal = ordinal;
+            this.startEventId = startEventId;
+            this.startDepth = startDepth;
+            this.maxDepth = startDepth;
+        }
+
+        private void observe(Event event, String methodKey) {
+            eventCount++;
+            maxDepth = Math.max(maxDepth, event.depth);
+            if ("METHOD_ENTER".equals(event.eventType)) {
+                methodSequence.add(methodKey);
+            }
+        }
+
+        private boolean complete() {
+            return endEventId > 0;
+        }
+
+        private MethodPathSummary.ScopeInvocation toFact() {
+            return new MethodPathSummary.ScopeInvocation(
+                    ordinal, startEventId,
+                    complete() ? Optional.of(endEventId) : Optional.empty(),
+                    eventCount, maxDepth,
+                    complete() ? Optional.of(pathId) : Optional.empty(),
+                    !complete());
+        }
+    }
+
     private record OpenCall(String methodKey, int depth, TraceProvenance provenance) {}
 
     /**
@@ -284,6 +392,7 @@ public final class MethodPathNormalizer {
         private static final long METHOD_OVERHEAD = 320;
         private static final long PATH_OVERHEAD = 320;
         private static final long ANOMALY_OVERHEAD = 256;
+        private static final long SCOPE_OVERHEAD = 512;
 
         private final long maximum;
         private final LinkedHashSet<String> reasons;
@@ -335,6 +444,21 @@ public final class MethodPathNormalizer {
         private long anomalyBytes(String code, String detail) {
             return ANOMALY_OVERHEAD + provenanceBytes
                     + jsonTextBytes(code) + jsonTextBytes(detail);
+        }
+
+        private long scopeBytes(MethodPathSummary.ScopeSummary scope) {
+            long bytes = SCOPE_OVERHEAD + jsonTextBytes(scope.methodKey());
+            for (MethodPathSummary.ScopeInvocation invocation : scope.invocations()) {
+                bytes += 256 + invocation.pathId().map(SummaryBudget::jsonTextBytes).orElse(0L);
+            }
+            for (MethodPathSummary.PathVariant variant : scope.pathVariants()) {
+                bytes += 256 + jsonTextBytes(variant.pathId());
+                for (String methodKey : variant.representativeMethodSequence()) {
+                    bytes += jsonTextBytes(methodKey);
+                }
+                bytes += 16L * variant.invocationOrdinals().size();
+            }
+            return bytes;
         }
 
         private void markExhausted() {

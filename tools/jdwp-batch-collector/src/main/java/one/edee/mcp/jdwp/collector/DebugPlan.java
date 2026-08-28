@@ -75,6 +75,7 @@ public final class DebugPlan {
         public String methodName;
         public String methodDescriptor;
         public int maxHits = 10_000;
+        public List<Integer> captureOnHits = new ArrayList<>();
         public Capture capture = new Capture();
 
         void validate() {
@@ -89,6 +90,20 @@ public final class DebugPlan {
             }
             if (maxHits < 1) {
                 throw new IllegalArgumentException("tracepoint.maxHits must be positive: " + id);
+            }
+            if (captureOnHits == null) {
+                captureOnHits = new ArrayList<>();
+            } else {
+                int previous = 0;
+                for (Integer hit : captureOnHits) {
+                    if (hit == null || hit <= previous || hit > maxHits) {
+                        throw new IllegalArgumentException(
+                            "tracepoint.captureOnHits must be strictly increasing and within maxHits: " + id
+                        );
+                    }
+                    previous = hit;
+                }
+                captureOnHits = new ArrayList<>(captureOnHits);
             }
             if (capture == null) {
                 capture = new Capture();

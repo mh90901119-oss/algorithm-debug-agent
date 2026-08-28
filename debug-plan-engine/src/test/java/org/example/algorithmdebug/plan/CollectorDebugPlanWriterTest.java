@@ -70,6 +70,23 @@ class CollectorDebugPlanWriterTest {
                 writer.write(plan(List.of(first, second)), 50_005));
     }
 
+    @Test
+    void writesSparseCaptureHitOrdinals() throws Exception {
+        SourceAnchor anchor = new SourceAnchor(
+                "fixture.Algorithm", "schedule", "()V",
+                "src/main/java/fixture/Algorithm.java", 10, 20);
+        JdwpTracepointSpec point = new JdwpTracepointSpec(
+                "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 5,
+                List.of(1, 3, 5), JdwpCaptureSpec.stackOnly());
+
+        JsonNode json = MAPPER.readTree(new CollectorDebugPlanWriter().write(
+                plan(List.of(point)), 50_005));
+
+        assertEquals(List.of(1, 3, 5), MAPPER.convertValue(
+                json.path("tracepoints").path(0).path("captureOnHits"),
+                MAPPER.getTypeFactory().constructCollectionType(List.class, Integer.class)));
+    }
+
     private static JdwpCollectionPlan plan() {
         return plan(List.of(point("point-1", 11)));
     }

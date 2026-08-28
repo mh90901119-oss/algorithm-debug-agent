@@ -3,7 +3,7 @@ name: algorithm-debug
 description: Use when a user asks about a specified Java/Maven algorithm UT, including its exception, assertion failure, Gantt result, runtime call path, internal state, or changes across analysis rounds.
 metadata:
   owner: algorithm-debug-agent
-  version: "2.2"
+  version: "2.3"
 ---
 
 # Algorithm Debug Workflow
@@ -90,24 +90,30 @@ Do not repeat a failed collection with the same effective plan. Retry only when 
 a correctable Plan input and the next Plan materially changes that input; otherwise preserve the
 failure diagnostics, report the tool boundary, and stop collecting.
 
-For CodePath, select only the exact `class + method + descriptor` entries needed from the Method
-Catalog. Archive the plan before collecting. For JDWP, first identify one or a few named methods and
-variables, then archive a bounded plan before collecting. A Case may contain multiple plans and
-collections of either type.
+Static analysis is a bounded planning index, not runtime proof. Read `DIRECT` call edges as compiler-
+resolved source relationships. Read `POLYMORPHIC_CANDIDATE` edges only as concrete implementations
+that may receive an interface or abstract dispatch; use CodePath to determine which candidate ran.
+An incomplete Method Catalog narrows planning but cannot prove that no other route exists.
 
-Plan Tool `requestJson` is strict. Use these shapes and do not invent `methods`, `lineRange`,
-`projection`, or other fields:
+For CodePath, select exact `class + method + descriptor` entries from the current Method Catalog.
+Do not target a fixed number of methods. Start with the smallest set that can answer the current path
+question, and expand only when the resulting summary identifies a specific unresolved boundary. When
+a method represents a repeated operation relevant to the question, set it as `scopeMethodKey`; use
+the resulting invocation groups and `PATH_n` variants to compare repeated executions without assuming
+that repeated calls imply repeated bugs. An incomplete scope invocation is missing evidence, not a
+complete path.
 
-```json
-{"planId":"plan-id","selectedMethodKeys":["class#method(descriptor)"],"rationale":"why this path is needed","budget":{"maxEvents":100000,"maxBytes":16777216,"timeoutMillis":300000},"requestedAt":"ISO-8601 timestamp"}
-```
+For JDWP, select current source lines only after identifying a concrete missing runtime value. Use
+`captureOnHits` when a method repeats and only particular invocation ordinals are needed; omit it when
+every hit within `maxHits` is relevant. Sparse selection still creates a brief breakpoint suspension
+on skipped hits, but skips stack/local/object expansion. Prefer small projections and choose additional
+plans only when the previous validated evidence exposes a new, materially different state question.
 
-```json
-{"planId":"plan-id","tracepoints":[{"tracepointId":"point-id","methodKey":"class#method(descriptor)","line":1,"maxHits":3,"capture":{"locals":true,"stack":true,"maxFrames":6,"maxDepth":1,"maxItems":20,"maxStringLength":256}}],"budget":{"maxEvents":100,"maxBytes":16777216,"timeoutMillis":300000,"idleTimeoutMillis":120000},"rationale":"why this state is needed","requestedAt":"ISO-8601 timestamp"}
-```
-
-If plan creation reports a schema or compilation error, correct the supplied JSON from these shapes.
-Do not search the target repository or Agent workspace for request examples.
+The Plan Tools accept structured fields. Supply method keys, optional CodePath scope, tracepoint lines,
+optional sparse hit ordinals, capture intent, and a rationale. The OpenCode Adapter creates plan and
+tracepoint identities, request time, and default budgets. If plan creation reports a validation or
+compilation error, correct only the named structured field; do not construct private Java request
+documents or search the Agent workspace for examples.
 
 For a passing target UT, use dynamic evidence only when collection and validation completed without
 an unusable truncation; Gantt content is archived independently and is not a baseline gate. For a

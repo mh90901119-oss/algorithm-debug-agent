@@ -107,3 +107,22 @@ JDWP 使用 `SUSPEND_EVENT_THREAD`。断点命中时对应线程会短暂停顿�
 - 多线程算法的跨线程一致快照。
 - 自动领域知识生成。
 - Java 侧 Gantt 业务语义解释。
+## 2026-08-28 静态与动态证据优化基线
+
+本节记录结构化静态分析、CodePath Scope 和 JDWP 稀疏命中的已验证基线。它用于后续回归比较，不构成固定业务阈值。
+
+| 能力 | 验证输入 | 已验证结果 |
+|---|---|---|
+| 静态分析 | Demo 目标算法 UT，Maven test classpath | classpath 13 项；33 个方法；48 条调用边；0 条诊断；结果 `COMPLETE` |
+| CodePath Scope | `scheduleWafer` 作为 Scope | 2878 条 Raw 事件；856892 字节；17 个实际执行方法；15/15 次 Scope 调用完整；1 个路径变体；Normalizer `COMPLETE`；Validator `VALID` |
+| JDWP 稀疏命中 | 1 个 Tracepoint，`maxHits=1`，`captureOnHits=[1]` | 命中 1 次；Raw Trace 3 条记录、6938 字节；39 条派生事实；Collector/目标退出码 0；Validator `VALID`；Evidence 可用 |
+
+JDWP 本次对象展开达到深度限制，Normalizer 状态为 `PARTIAL`，原因是 `COLLECTOR_VALUE_LIMIT`。该状态证明预算和截断信息能够传递给 Validator 与 LLM；只有已保留的局部变量、栈帧和值事实可用于确认性结论。
+
+真实 OpenCode Smoke 的确定性审计结果：
+
+- CodePath：Eval 通过，Workspace 50/50 个预期产物存在，Interaction Audit 189 个事件且无问题，无空目录。日志关键词命中的 `testsFailed:0` 是成功摘要字段，不是错误。
+- JDWP：Eval 通过，Workspace 58/58 个预期产物存在，Interaction Audit 99 个事件且无问题，无空目录、无错误日志。
+- 静态分析、CodePath 和 JDWP 均由真实 OpenCode 会话调用已安装的 Custom Tool 完成，不是仅通过 Java 单元测试模拟。
+
+后续比较应关注契约和行为：状态是否正确、证据是否可追溯、截断是否可见、Workspace 是否完整。事件数量和字节数会随目标算法及采集计划变化，不应写成通用固定上限。

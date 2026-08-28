@@ -9,7 +9,7 @@ flowchart LR
     U["用户指定一个 Maven/JUnit UT"] --> O["OpenCode"]
     O --> A["algorithm-debug Custom Agent"]
     A --> L["LLM + Skill"]
-    L --> T["12 个 Custom Tools"]
+    L --> T["13 个 Custom Tools"]
     T --> J["JS Adapter"]
     J --> C["Java CLI / Core"]
     C --> R["Maven / Javac AST / CodePath / JDWP"]
@@ -30,9 +30,11 @@ flowchart LR
 - 通过、异常、断言失败和工具失败的通用结构化结果。
 - 顶层算法 JSON 差分捕获和 Gantt Artifact 归档。
 - 有界 Gantt summary/slice 读取，不做业务语义结论。
-- 当前源码 Javac AST Method Catalog，无 whole-file Source SHA。
-- CodePath 精确方法 Plan、独立运行、Raw/Derived/Validation/Evidence。
-- Agent 自有源码 JDWP Collector、精确 descriptor/line Plan、受限局部变量/字段/栈采集。
+- 当前源码 Javac AST Method Catalog，使用 Maven test classpath，区分编译器确定的 `DIRECT` 边和
+  源码内可解析的 `POLYMORPHIC_CANDIDATE` 边，无 whole-file Source SHA。
+- CodePath 精确方法 Plan、可选 Scope 调用分组、路径变体、独立运行、Raw/Derived/Validation/Evidence。
+- Agent 自有源码 JDWP Collector、精确 descriptor/line Plan、受限局部变量/字段/栈采集，以及
+  `captureOnHits` 稀疏命中快照。
 - 事件数、命中数、深度、字符串、集合项、字节数、超时和 idle timeout 预算。
 - 失败目标结构化指纹 `MATCHED/CHANGED/INCOMPARABLE`。
 - ArtifactReference 唯一文件完整性机制。
@@ -41,6 +43,8 @@ flowchart LR
 - Java CLI 在 `<case>/logs/agent-YYYY-MM-DD.log` 记录英文执行阶段；Case 尚未建立的 CLI 失败写入 `<dfxDirectory>/java/agent-bootstrap-YYYY-MM-DD.log`。日志不进入 ToolResponse，也不作为算法证据。
 - `case_audit` 和 Eval Workspace/Interaction/Expected-Actual 审计。
 - 13 个 OpenCode Custom Tools。
+- CodePath/JDWP Plan Tool 使用结构化意图参数；JS Adapter 生成 Plan/Tracepoint ID、时间和默认预算，
+  不要求大模型构造 Java 请求 JSON。
 - 幂等 OpenCode 安装，不绑定 OpenCode 版本号。
 - 9 个真实 OpenCode Smoke Case。
 
@@ -54,10 +58,10 @@ flowchart LR
 | `case_audit` | 审计 Case 文件、Artifact 和空目录 |
 | `gantt_inspect` | 有界读取已注册 Gantt 的结构 |
 | `run_test` | 运行目标 UT 并归档结果 |
-| `static_analyze` | 构建当前源码 Method Catalog |
-| `codepath_plan_create` | 校验并归档 CodePath Plan |
+| `static_analyze` | 使用 Maven test classpath 构建当前源码 Method Catalog 和直接/多态候选边 |
+| `codepath_plan_create` | 根据结构化方法选择和可选 Scope 校验并归档 CodePath Plan |
 | `codepath_collect` | 独立重跑并采集方法路径 |
-| `jdwp_plan_create` | 校验并归档 JDWP Plan |
+| `jdwp_plan_create` | 根据结构化断点、投影和可选命中序号校验并归档 JDWP Plan |
 | `jdwp_collect` | 独立重跑并采集运行时状态 |
 | `artifact_read` | 按 Artifact ID 校验后有界读取 |
 | `analysis_complete` | 归档最终答案和证据引用 |
@@ -96,8 +100,10 @@ flowchart LR
 
 - 当前不递归追踪 helper、常量、属性、拼接表达式或一个 UT 多个算法输入；这些情况明确停止，由用户调整目标 UT。
 
-- 静态分析目前不注入完整 Maven test classpath，遇到 JUnit、Lombok、生成代码和外部依赖时会保留
-  compiler/unresolved warnings，并将目录标记为 `INCOMPLETE`。
+- 静态分析通过 Maven 解析当前模块 test classpath；解析失败、依赖缺失、生成代码未就绪或编译器仍有
+  unresolved diagnostics 时会保留稳定 warning 并将目录标记为 `INCOMPLETE`，不会伪装成完整调用图。
+- 多态候选仅覆盖当前源码目录中可由 Javac 元素模型确认的具体 override；反射、运行时代理和当前目录外
+  的实现仍需 CodePath 运行证据确认。
 - CodePath 使用动态 Byte Buddy Attach，未来 JDK 默认禁用动态 Agent 加载时需要发布策略调整。
 - 大型目标算法需要用真实规模 UT 测量 CodePath/JDWP 事件量、耗时和截断率，再调整默认预算。
 - OpenCode Tool/Plugin 接口是客户端适配层；迁移到其他 CLI 时复用 Java CLI 和 Workspace，

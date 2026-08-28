@@ -149,6 +149,16 @@
                                                                         "minimum":  1,
                                                                         "maximum":  20
                                                                     },
+                                                        "captureOnHits":  {
+                                                                               "type":  "array",
+                                                                               "maxItems":  20,
+                                                                               "uniqueItems":  true,
+                                                                               "items":  {
+                                                                                              "type":  "integer",
+                                                                                              "minimum":  1,
+                                                                                              "maximum":  20
+                                                                                          }
+                                                                           },
                                                         "capture":  {
                                                                         "$ref":  "#/$defs/capture"
                                                                     }

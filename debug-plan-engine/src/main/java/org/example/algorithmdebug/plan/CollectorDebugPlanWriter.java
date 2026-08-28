@@ -36,7 +36,7 @@ public final class CollectorDebugPlanWriter {
             return new CollectorDebugPlan.Tracepoint(
                     point.tracepointId(), point.sourceAnchor().className(), point.line(),
                     point.sourceAnchor().methodName(), point.sourceAnchor().descriptor(),
-                    point.maxHits(),
+                    point.maxHits(), point.captureOnHits(),
                     new CollectorDebugPlan.Capture(
                             capture.locals(), capture.stack(), capture.maxFrames(),
                             capture.maxDepth(), capture.maxItems(), capture.maxStringLength(),

@@ -1,4 +1,5 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { randomUUID } from "node:crypto"
 import { tmpdir } from "node:os"
 import { isAbsolute, join, relative, resolve } from "node:path"
 
@@ -17,6 +18,8 @@ const MAXIMUM_ARTIFACT_BYTES = 64 * 1024
  *   workspaceDirectory: string,
  *   resultJsonDirectory: string,
  *   temporaryRoot?: string,
+ *   now?: () => Date,
+ *   createId?: (prefix: string) => string,
  *   interactionRecorder?: { beginTool: (identity: object) => object }
  * }} dependencies 可替换的进程与环境依赖
  */
@@ -26,9 +29,11 @@ export function createAlgorithmDebugRuntime({
   resultJsonDirectory,
   temporaryRoot = tmpdir(),
   now = () => new Date(),
+  createId = prefix => `${prefix}-${randomUUID()}`,
   interactionRecorder = NOOP_RECORDER,
 }) {
   if (typeof execute !== "function") throw new TypeError("execute must be a function")
+  if (typeof createId !== "function") throw new TypeError("createId must be a function")
   const workspace = requiredText(workspaceDirectory, "workspaceDirectory")
   const resultDirectory = requiredText(resultJsonDirectory, "resultJsonDirectory")
   const tempRoot = resolve(requiredText(temporaryRoot, "temporaryRoot"))
@@ -187,8 +192,11 @@ export function createAlgorithmDebugRuntime({
         invoke(caseAnalysisCommand(["static", "analyze"], input), context, scope))
     },
     codePathPlanCreate(input, context) {
-      return runObservedTool("codepath_plan_create", input, context, scope =>
-        invokePlan(["plan", "codepath", "create"], input, context, scope))
+      return runObservedTool("codepath_plan_create", input, context, scope => {
+        const requestJson = JSON.stringify(codePathPlanRequest(input, now, createId))
+        return invokePlan(
+          ["plan", "codepath", "create"], input, requestJson, context, scope)
+      })
     },
     codePathCollect(input, context) {
       return runObservedTool("codepath_collect", input, context, async scope =>
@@ -196,8 +204,10 @@ export function createAlgorithmDebugRuntime({
           collectionCommand(["collection", "codepath", "execute"], input), context, scope)))
     },
     jdwpPlanCreate(input, context) {
-      return runObservedTool("jdwp_plan_create", input, context, scope =>
-        invokePlan(["plan", "jdwp", "create"], input, context, scope))
+      return runObservedTool("jdwp_plan_create", input, context, scope => {
+        const requestJson = JSON.stringify(jdwpPlanRequest(input, now, createId))
+        return invokePlan(["plan", "jdwp", "create"], input, requestJson, context, scope)
+      })
     },
     jdwpCollect(input, context) {
       return runObservedTool("jdwp_collect", input, context, async scope =>
@@ -240,7 +250,7 @@ export function createAlgorithmDebugRuntime({
     },
   })
 
-  function invokePlan(commandName, input, context, scope) {
+  function invokePlan(commandName, input, requestJson, context, scope) {
     return invokeWithTextFile({
       command: commandName,
       identity: {
@@ -251,7 +261,7 @@ export function createAlgorithmDebugRuntime({
         "--case-id", requiredText(input.caseId, "caseId"),
         "--analysis-id", requiredText(input.analysisId, "analysisId"),
       ],
-    }, context, "--request-file", "request.json", input.requestJson, REQUEST_LIMIT_BYTES, scope)
+    }, context, "--request-file", "request.json", requestJson, REQUEST_LIMIT_BYTES, scope)
   }
 
   async function runObservedTool(toolName, input, context, operation) {
@@ -337,6 +347,123 @@ function conclusionArray(value) {
       evidenceReferenceIds,
     }
   })
+}
+
+function codePathPlanRequest(input, now, createId) {
+  const selectedMethodKeys = distinctTextArray(
+    input.selectedMethodKeys, "selectedMethodKeys", 100, false)
+  const scopeMethodKey = input.scopeMethodKey === undefined
+    ? undefined : requiredText(input.scopeMethodKey, "scopeMethodKey")
+  if (scopeMethodKey && !selectedMethodKeys.includes(scopeMethodKey)) {
+    throw new TypeError("scopeMethodKey must be included in selectedMethodKeys")
+  }
+  const request = {
+    planId: requiredText(createId("codepath-plan"), "generated codepath planId"),
+    selectedMethodKeys,
+  }
+  if (scopeMethodKey) request.scopeMethodKey = scopeMethodKey
+  request.rationale = requiredText(input.rationale, "rationale")
+  request.budget = { maxEvents: 100_000, maxBytes: 16_777_216, timeoutMillis: 300_000 }
+  request.requestedAt = timestamp(now)
+  return request
+}
+
+function jdwpPlanRequest(input, now, createId) {
+  if (!Array.isArray(input.tracepoints)
+      || input.tracepoints.length < 1 || input.tracepoints.length > 20) {
+    throw new TypeError("tracepoints must contain between 1 and 20 entries")
+  }
+  const tracepoints = input.tracepoints.map((point, index) => {
+    if (!point || typeof point !== "object" || Array.isArray(point)) {
+      throw new TypeError(`tracepoints[${index}] must be an object`)
+    }
+    const maxHits = integerInRange(point.maxHits ?? 3, `tracepoints[${index}].maxHits`, 1, 20)
+    const captureOnHits = integerArray(
+      point.captureOnHits ?? [], `tracepoints[${index}].captureOnHits`, 20)
+    let previous = 0
+    for (const hit of captureOnHits) {
+      if (hit <= previous || hit > maxHits) {
+        throw new RangeError(
+          `tracepoints[${index}].captureOnHits must be strictly increasing and within maxHits`)
+      }
+      previous = hit
+    }
+    const capture = point.capture ?? {}
+    if (!capture || typeof capture !== "object" || Array.isArray(capture)) {
+      throw new TypeError(`tracepoints[${index}].capture must be an object`)
+    }
+    const locals = booleanValue(capture.locals ?? true, `tracepoints[${index}].capture.locals`)
+    const stack = booleanValue(capture.stack ?? true, `tracepoints[${index}].capture.stack`)
+    if (!locals && !stack) {
+      throw new TypeError(`tracepoints[${index}].capture must enable locals or stack`)
+    }
+    return {
+      tracepointId: `tracepoint-${index + 1}`,
+      methodKey: requiredText(point.methodKey, `tracepoints[${index}].methodKey`),
+      line: integerInRange(point.line, `tracepoints[${index}].line`, 1, Number.MAX_SAFE_INTEGER),
+      maxHits,
+      captureOnHits,
+      capture: {
+        locals,
+        stack,
+        maxFrames: integerInRange(
+          capture.maxFrames ?? 8, `tracepoints[${index}].capture.maxFrames`, 1, 64),
+        maxDepth: integerInRange(
+          capture.maxDepth ?? 1, `tracepoints[${index}].capture.maxDepth`, 0, 2),
+        maxItems: integerInRange(
+          capture.maxItems ?? 20, `tracepoints[${index}].capture.maxItems`, 1, 100),
+        maxStringLength: integerInRange(
+          capture.maxStringLength ?? 256,
+          `tracepoints[${index}].capture.maxStringLength`, 16, 1_024),
+        localNames: distinctTextArray(
+          capture.localNames ?? [], `tracepoints[${index}].capture.localNames`, 64, true),
+        fieldPaths: distinctTextArray(
+          capture.fieldPaths ?? [], `tracepoints[${index}].capture.fieldPaths`, 128, true),
+      },
+    }
+  })
+  return {
+    planId: requiredText(createId("jdwp-plan"), "generated jdwp planId"),
+    tracepoints,
+    budget: {
+      maxEvents: 100, maxBytes: 16_777_216, timeoutMillis: 300_000,
+      idleTimeoutMillis: 120_000,
+    },
+    rationale: requiredText(input.rationale, "rationale"),
+    requestedAt: timestamp(now),
+  }
+}
+
+function timestamp(now) {
+  const value = now()
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new TypeError("now must return a valid Date")
+  }
+  return value.toISOString()
+}
+
+function distinctTextArray(value, name, maximum, allowEmpty) {
+  const values = textArray(value, name)
+  if ((!allowEmpty && values.length === 0) || values.length > maximum) {
+    throw new RangeError(`${name} has an invalid number of entries`)
+  }
+  if (new Set(values).size !== values.length) {
+    throw new TypeError(`${name} must not contain duplicates`)
+  }
+  return values
+}
+
+function integerArray(value, name, maximum) {
+  if (!Array.isArray(value) || value.length > maximum) {
+    throw new TypeError(`${name} must be an array with at most ${maximum} entries`)
+  }
+  return value.map((item, index) => integerInRange(
+    item, `${name}[${index}]`, 1, Number.MAX_SAFE_INTEGER))
+}
+
+function booleanValue(value, name) {
+  if (typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`)
+  return value
 }
 
 function textArray(value, name) {

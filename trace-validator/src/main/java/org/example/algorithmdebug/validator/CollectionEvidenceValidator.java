@@ -56,6 +56,7 @@ public final class CollectionEvidenceValidator {
             add(findings, finding("NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
                     "方法路径摘要没有可供分析的方法事实", input.summaryReference()));
         }
+        validateScope(input, findings);
         add(findings, provenanceVerifier.verify(
                 provenances(input.summary()), input.rawReference(), input.rawPath()));
 
@@ -71,6 +72,30 @@ public final class CollectionEvidenceValidator {
                 input.collection().collectionId(), "CODEPATH", status,
                 List.copyOf(findings), dimensions, Optional.of(input.summaryReference()),
                 input.validatedAt());
+    }
+
+    private static void validateScope(
+            MethodPathValidationInput input, List<ValidationFinding> findings) {
+        if (input.plan().scopeMethodKey().isEmpty()) {
+            return;
+        }
+        if (input.summary().scope().isEmpty()) {
+            add(findings, finding("SCOPE_SUMMARY_MISSING", EvidenceValidationStatus.INCONCLUSIVE,
+                    "The configured CodePath scope has no derived summary",
+                    input.summaryReference()));
+            return;
+        }
+        MethodPathSummary.ScopeSummary scope = input.summary().scope().orElseThrow();
+        if (!input.plan().scopeMethodKey().orElseThrow().equals(scope.methodKey())) {
+            add(findings, finding("SCOPE_IDENTITY_MISMATCH", EvidenceValidationStatus.INVALID,
+                    "The derived CodePath scope does not match the archived plan",
+                    input.summaryReference()));
+        } else if (scope.incompleteInvocationCount() > 0) {
+            add(findings, finding("SCOPE_INVOCATION_INCOMPLETE",
+                    EvidenceValidationStatus.INCONCLUSIVE,
+                    "One or more CodePath scope invocations have no matching exit",
+                    input.summaryReference()));
+        }
     }
 
     /** 校验一次 JDWP 采集；只有全部确定性门禁通过时才覆盖 RUNTIME_STATE。 */

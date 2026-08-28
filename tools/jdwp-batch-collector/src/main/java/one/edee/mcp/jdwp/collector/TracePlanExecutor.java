@@ -212,6 +212,14 @@ final class TracePlanExecutor {
             disableTracepoint(tracepointId);
             return;
         }
+        boolean captureSelected = tracepoint.captureOnHits.isEmpty()
+            || tracepoint.captureOnHits.contains(hit);
+        if (!captureSelected) {
+            if (hit >= tracepoint.maxHits) {
+                disableTracepoint(tracepointId);
+            }
+            return;
+        }
 
         ThreadReference thread = event.thread();
         Map<String, Object> data = baseEvent("tracepoint_hit");

@@ -2,6 +2,7 @@ package org.example.algorithmdebug.contracts;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -13,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 class CodePathCollectionPlanJsonTest {
-    private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule())
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .registerModule(new JavaTimeModule()).registerModule(new Jdk8Module())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     @Test void roundTripsExactV2PlanAndAlignsSchema() throws Exception {
         CodePathCollectionPlan plan = plan(); JsonNode json = MAPPER.valueToTree(plan);

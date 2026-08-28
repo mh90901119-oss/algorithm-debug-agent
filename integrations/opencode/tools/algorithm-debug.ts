@@ -95,11 +95,15 @@ export const static_analyze = tool({
 })
 
 export const codepath_plan_create = tool({
-  description: "Validate and archive a method-level CodePath collection plan; this does not collect yet.",
+  description: "Validate and archive a method-level CodePath collection plan from structured method intent; the Adapter supplies plan identity, time, and default budgets.",
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
-    requestJson: tool.schema.string().describe("Strict CodePathPlanRequest JSON based on Method Catalog entries"),
+    selectedMethodKeys: tool.schema.array(tool.schema.string()).min(1).max(100)
+      .describe("Exact class#method(descriptor) keys selected from the current Method Catalog"),
+    scopeMethodKey: tool.schema.string().optional()
+      .describe("Optional selected method whose repeated invocations should be grouped into path variants"),
+    rationale: tool.schema.string().describe("The concrete unresolved runtime-path question"),
   },
   execute: (args, context) => runtime.codePathPlanCreate(args, context),
 })
@@ -114,11 +118,30 @@ export const codepath_collect = tool({
 })
 
 export const jdwp_plan_create = tool({
-  description: "Validate and archive a bounded JDWP plan for named methods or variables; this does not collect yet.",
+  description: "Validate and archive a bounded JDWP plan from structured tracepoint intent; the Adapter supplies identities, time, and default budgets.",
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
-    requestJson: tool.schema.string().describe("Strict JdwpPlanRequest JSON based on current source anchors"),
+    tracepoints: tool.schema.array(tool.schema.object({
+      methodKey: tool.schema.string()
+        .describe("Exact class#method(descriptor) key from the current Method Catalog"),
+      line: tool.schema.number().int().positive()
+        .describe("Current executable source line inside the selected method anchor"),
+      maxHits: tool.schema.number().int().min(1).max(20).default(3),
+      captureOnHits: tool.schema.array(tool.schema.number().int().min(1).max(20)).max(20)
+        .optional().describe("Strictly increasing hit ordinals to snapshot; omit to capture every hit"),
+      capture: tool.schema.object({
+        locals: tool.schema.boolean().default(true),
+        stack: tool.schema.boolean().default(true),
+        maxFrames: tool.schema.number().int().min(1).max(64).default(8),
+        maxDepth: tool.schema.number().int().min(0).max(2).default(1),
+        maxItems: tool.schema.number().int().min(1).max(100).default(20),
+        maxStringLength: tool.schema.number().int().min(16).max(1024).default(256),
+        localNames: tool.schema.array(tool.schema.string()).max(64).default([]),
+        fieldPaths: tool.schema.array(tool.schema.string()).max(128).default([]),
+      }).optional(),
+    })).min(1).max(20),
+    rationale: tool.schema.string().describe("The concrete unresolved runtime-state question"),
   },
   execute: (args, context) => runtime.jdwpPlanCreate(args, context),
 })

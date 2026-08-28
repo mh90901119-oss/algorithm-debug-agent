@@ -16,7 +16,7 @@ class MethodCatalogJsonTest {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     @Test void roundTripsV2WithoutModuleFingerprintOrPackageCensus() throws Exception {
         SourceAnchor anchor = new SourceAnchor("fixture.TargetTest", "runs", "()V", "src/test/java/fixture/TargetTest.java", 1, 2);
-        MethodCatalog catalog = new MethodCatalog(SchemaVersions.METHOD_CATALOG, new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "runs"), List.of(new MethodCatalogEntry("fixture.TargetTest#runs()V", anchor, 0, true)), List.of(), List.of(), SnapshotCompleteness.COMPLETE, 1, 0, Instant.EPOCH);
+        MethodCatalog catalog = new MethodCatalog(SchemaVersions.METHOD_CATALOG, new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "runs"), List.of(new MethodCatalogEntry("fixture.TargetTest#runs()V", anchor, 0, true)), List.of(new MethodCallEdge("fixture.TargetTest#runs()V", "fixture.TargetTest#runs()V", 1, CallResolutionKind.DIRECT)), List.of(), SnapshotCompleteness.COMPLETE, 1, 1, Instant.EPOCH);
         JsonNode json = MAPPER.valueToTree(catalog); assertEquals(catalog, MAPPER.treeToValue(json, MethodCatalog.class));
         assertFalse(json.has("sourceFingerprintSha256")); assertFalse(json.has("packageCensus"));
         JsonNode schema = schema(); Set<String> required = new HashSet<>(); schema.path("required").forEach(v -> required.add(v.asText()));
@@ -27,6 +27,8 @@ class MethodCatalogJsonTest {
         }
         assertEquals("#/$defs/entry", schema.path("properties").path("entries").path("items").path("$ref").asText());
         assertEquals("#/$defs/edge", schema.path("properties").path("edges").path("items").path("$ref").asText());
+        assertEquals("DIRECT", json.path("edges").get(0).path("resolutionKind").textValue());
+        assertFalse(required.contains("resolutionKind"));
         assertFalse(schema.path("$defs").path("entry").path("additionalProperties").asBoolean(true));
         JsonSchemaTestSupport.assertValid(schemaPath(), MAPPER.writeValueAsString(catalog));
     }

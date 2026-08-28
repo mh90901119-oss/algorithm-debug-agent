@@ -127,6 +127,12 @@ public final class JdwpSnapshotNormalizer {
             }
             int hit = requiredPositiveInt(json, "hit", line);
             if (hit > tracepoint.maxHits()) throw invalid(line, "JDWP hit 超过计划上限");
+            if (!tracepoint.captureOnHits().isEmpty()
+                    && !tracepoint.captureOnHits().contains(hit)) {
+                throw new NormalizationException(
+                        "NORMALIZE_EVENT_OUTSIDE_PLAN",
+                        "JDWP 命中序号不属于采集计划", line, null);
+            }
             JsonNode thread = requiredObject(json, "thread", line);
             String threadName = requiredText(thread, "name", 512, line);
             JsonNode location = requiredObject(json, "location", line);

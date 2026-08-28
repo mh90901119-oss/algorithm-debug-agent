@@ -20,6 +20,7 @@ class CodePathPlanReaderTest {
 
         assertEquals("fixture.TargetTest#case1", plan.targetTest().selector());
         assertEquals("fixture.Service#solve()V", plan.selectors().get(0).methodKey());
+        assertEquals("fixture.Service#solve()V", plan.scopeMethodKey());
         assertEquals(100, plan.budget().maxEvents());
         assertEquals(4096, plan.budget().maxBytes());
     }
@@ -47,6 +48,7 @@ class CodePathPlanReaderTest {
                     "methodName":"solve",
                     "descriptor":"()V"
                   }],
+                  "scopeMethodKey":"fixture.Service#solve()V",
                   "budget":{"maxEvents":100,"maxBytes":4096,"timeoutMillis":30000},
                   "rationale":"fixture",
                   "createdAt":"2026-08-25T00:00:00Z"

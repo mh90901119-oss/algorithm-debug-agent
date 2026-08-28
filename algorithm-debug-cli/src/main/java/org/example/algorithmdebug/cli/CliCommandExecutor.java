@@ -233,7 +233,7 @@ public final class CliCommandExecutor {
         byte[] bytes = readBoundedFile(path, "request-file");
         String json = decodeUtf8(bytes, "request-file");
         try {
-            return new ObjectMapper().registerModule(new JavaTimeModule())
+            return requestMapper()
                     .readValue(json, CodePathPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("request-file is not valid CodePathPlanRequest JSON", failure);
@@ -245,7 +245,7 @@ public final class CliCommandExecutor {
         byte[] bytes = readBoundedFile(path, "request-file");
         String json = decodeUtf8(bytes, "request-file");
         try {
-            return new ObjectMapper().registerModule(new JavaTimeModule())
+            return requestMapper()
                     .readValue(json, JdwpPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("request-file is not valid JdwpPlanRequest JSON", failure);
@@ -262,6 +262,12 @@ public final class CliCommandExecutor {
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("result-file is not valid AnalysisResult JSON", failure);
         }
+    }
+
+    private static ObjectMapper requestMapper() {
+        return new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .registerModule(new com.fasterxml.jackson.datatype.jdk8.Jdk8Module());
     }
 
     private static String decodeUtf8(byte[] bytes, String label) {

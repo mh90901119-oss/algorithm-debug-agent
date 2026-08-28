@@ -105,6 +105,40 @@ class CollectionEvidenceValidatorTest {
     }
 
     @Test
+    void incompleteScopeCannotBeValidatedAsCompleteMethodPathEvidence() throws Exception {
+        Fixture fixture = fixture(NormalizationStatus.COMPLETE, ComparisonOutcome.MATCHED);
+        MethodPathValidationInput original = fixture.input();
+        String scopeMethod = "fixture.Algorithm#solve()V";
+        CodePathCollectionPlan scopedPlan = new CodePathCollectionPlan(
+                original.plan().schemaVersion(), original.plan().planId(),
+                original.plan().caseId(), original.plan().contextId(),
+                original.plan().analysisId(), original.plan().targetTest(),
+                original.plan().selectors(), Optional.of(scopeMethod),
+                original.plan().budget(), original.plan().rationale(), original.plan().createdAt());
+        MethodPathSummary old = original.summary();
+        MethodPathSummary scopedSummary = new MethodPathSummary(
+                old.schemaVersion(), old.evidenceId(), old.caseId(), old.contextId(),
+                old.analysisId(), old.runId(), old.planId(), old.collectionId(), old.rawTrace(),
+                old.methods(), old.observedPaths(), old.anomalies(),
+                Optional.of(new MethodPathSummary.ScopeSummary(
+                        scopeMethod, 1, 0, 1,
+                        List.of(new MethodPathSummary.ScopeInvocation(
+                                1, 1, Optional.empty(), 1, 1, Optional.empty(), true)),
+                        List.of())), false, old.createdAt());
+        MethodPathValidationInput input = new MethodPathValidationInput(
+                original.collection(), scopedPlan, original.collectorManifest(),
+                original.normalizationManifest(), scopedSummary, original.baselineCheck(),
+                original.rawReference(), original.rawPath(), original.summaryReference(),
+                original.summaryPath(), original.validatedAt());
+
+        var validation = new CollectionEvidenceValidator().validateMethodPath(input);
+
+        assertEquals(EvidenceValidationStatus.INCONCLUSIVE, validation.status());
+        assertTrue(validation.findings().stream().anyMatch(finding ->
+                "SCOPE_INVOCATION_INCOMPLETE".equals(finding.code())));
+    }
+
+    @Test
     void completeMatchingJdwpCollectionIsValid() throws Exception {
         var validation = new CollectionEvidenceValidator().validateJdwp(
                 jdwpInput(NormalizationStatus.COMPLETE, false, List.of()));

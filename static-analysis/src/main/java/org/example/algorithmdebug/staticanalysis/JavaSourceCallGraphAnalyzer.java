@@ -29,6 +29,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
@@ -36,6 +37,7 @@ import java.util.TreeSet;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
@@ -49,7 +51,9 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
+import org.example.algorithmdebug.contracts.CallResolutionKind;
 import org.example.algorithmdebug.contracts.MethodCallEdge;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
@@ -73,23 +77,38 @@ public final class JavaSourceCallGraphAnalyzer {
      * @throws StaticAnalysisException 编译器不可用、源码不可读、编译阶段超期或目标方法不唯一
      */
     public MethodCatalog analyze(StaticAnalysisRequest request) {
+        return analyze(request, List.of());
+    }
+
+    /** 使用调用方已解析的目标 Maven Test Classpath 进行 javac 符号分析。 */
+    public MethodCatalog analyze(StaticAnalysisRequest request, List<Path> testClasspath) {
+        if (testClasspath == null || testClasspath.stream().anyMatch(path -> path == null)) {
+            throw new IllegalArgumentException("testClasspath must not contain null values");
+        }
         BudgetGuard guard = new BudgetGuard(request);
         Discovery discovery = discoverSources(request, guard);
         if (discovery.sources().isEmpty()) {
             throw new StaticAnalysisException("目标模块没有预算内可分析的 Java 源码");
         }
-        return compileAndAnalyze(request, discovery, guard);
+        return compileAndAnalyze(request, discovery, guard, List.copyOf(testClasspath));
     }
 
     private MethodCatalog compileAndAnalyze(
-            StaticAnalysisRequest request, Discovery discovery, BudgetGuard guard) {
+            StaticAnalysisRequest request, Discovery discovery, BudgetGuard guard,
+            List<Path> testClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             throw new StaticAnalysisException("当前运行时不包含 JDK JavaCompiler");
         }
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
-                diagnostics, null, StandardCharsets.UTF_8)) {
+                diagnostics, Locale.ENGLISH, StandardCharsets.UTF_8)) {
+            if (!testClasspath.isEmpty()) {
+                fileManager.setLocationFromPaths(StandardLocation.CLASS_PATH,
+                        testClasspath.stream()
+                                .map(path -> path.toAbsolutePath().normalize())
+                                .toList());
+            }
             List<JavaFileObject> units = discovery.sources().stream()
                     .map(MemoryJavaSource::new)
                     .map(value -> (JavaFileObject) value)
@@ -110,7 +129,7 @@ public final class JavaSourceCallGraphAnalyzer {
             MethodScan methodScan = collectMethods(
                     request.moduleRoot(), parsed, trees, types, elements,
                     guard);
-            EdgeScan edgeScan = collectEdges(parsed, trees, types, elements, methodScan.methods().keySet(), guard);
+            EdgeScan edgeScan = collectEdges(parsed, trees, types, elements, methodScan, guard);
             return selectReachable(request, discovery, diagnostics, methodScan, edgeScan, guard);
         } catch (IOException exception) {
             throw new StaticAnalysisException("读取 Java 源码失败", exception);
@@ -160,7 +179,7 @@ public final class JavaSourceCallGraphAnalyzer {
                     SourceAnchor anchor = new SourceAnchor(
                             className, executable.getSimpleName().toString(), descriptor,
                             relative, line(unit, start), line(unit, Math.max(start, end - 1)));
-                            method = new MethodModel(key, anchor);
+                    method = new MethodModel(key, anchor, executable, owner);
                         }
                         if (!guard.tryCatalogMethod(packageName, method)) {
                             throw ScanLimitReached.INSTANCE;
@@ -183,8 +202,9 @@ public final class JavaSourceCallGraphAnalyzer {
             Trees trees,
             Types types,
             Elements elements,
-            Set<String> knownMethods,
+            MethodScan methodScan,
             BudgetGuard guard) {
+        Set<String> knownMethods = methodScan.methods().keySet();
         Set<RawEdge> edges = new TreeSet<>(RawEdge.ORDER);
         Set<String> warnings = new TreeSet<>();
         SourcePositions positions = trees.getSourcePositions();
@@ -221,11 +241,37 @@ public final class JavaSourceCallGraphAnalyzer {
                                 throw ScanLimitReached.INSTANCE;
                             }
                             edges.add(new RawEdge(caller, callee,
-                                    line(unit, positions.getStartPosition(unit, node))));
+                                    line(unit, positions.getStartPosition(unit, node)),
+                                    CallResolutionKind.DIRECT));
                         } else if (caller != null && isUnresolved(element)
                                 && warnings.size() < MAX_WARNINGS) {
                             warnings.add(unresolvedWarning(
                                     unit, positions.getStartPosition(unit, node), caller, node.toString()));
+                        }
+                        if (caller != null && element instanceof ExecutableElement declaredTarget
+                                && declaredTarget.getKind() == ElementKind.METHOD
+                                && !declaredTarget.getModifiers().contains(Modifier.STATIC)
+                                && !declaredTarget.getModifiers().contains(Modifier.PRIVATE)
+                                && !declaredTarget.getModifiers().contains(Modifier.FINAL)) {
+                            String declaredKey = keyOf(declaredTarget, types, elements);
+                            int sourceLine = line(unit, positions.getStartPosition(unit, node));
+                            for (MethodModel candidate : methodScan.methods().values().stream()
+                                    .sorted(Comparator.comparing(MethodModel::key))
+                                    .toList()) {
+                                if (candidate.executable().getKind() != ElementKind.METHOD
+                                        || candidate.key().equals(declaredKey)
+                                        || candidate.executable().getModifiers().contains(Modifier.ABSTRACT)
+                                        || !elements.overrides(candidate.executable(), declaredTarget,
+                                                candidate.owner())) {
+                                    continue;
+                                }
+                                if (!guard.tryEdge(caller, candidate.key())) {
+                                    throw ScanLimitReached.INSTANCE;
+                                }
+                                edges.add(new RawEdge(
+                                        caller, candidate.key(), sourceLine,
+                                        CallResolutionKind.POLYMORPHIC_CANDIDATE));
+                            }
                         }
                     }
                 }.scan(unit, null);
@@ -288,7 +334,8 @@ public final class JavaSourceCallGraphAnalyzer {
                 .toList();
         List<MethodCallEdge> edges = edgeScan.edges().stream()
                 .filter(edge -> savedKeys.contains(edge.caller()) && savedKeys.contains(edge.callee()))
-                .map(edge -> new MethodCallEdge(edge.caller(), edge.callee(), edge.line()))
+                .map(edge -> new MethodCallEdge(
+                        edge.caller(), edge.callee(), edge.line(), edge.resolutionKind()))
                 .toList();
 
         boolean compilerErrors = diagnostics.getDiagnostics().stream()
@@ -300,7 +347,8 @@ public final class JavaSourceCallGraphAnalyzer {
         diagnostics.getDiagnostics().stream()
                 .filter(diagnostic -> diagnostic.getKind() == Diagnostic.Kind.ERROR)
                 .limit(50)
-                .map(diagnostic -> "compiler: " + bounded(diagnostic.getMessage(null), 1_900))
+                .map(diagnostic -> "compiler: code=" + bounded(diagnostic.getCode(), 1_800)
+                        + ", line=" + Math.max(0, diagnostic.getLineNumber()))
                 .forEach(warnings::ordinary);
         boolean incomplete = discovery.truncated() || guard.truncated()
                 || !edgeScan.warnings().isEmpty() || compilerErrors;
@@ -521,16 +569,25 @@ public final class JavaSourceCallGraphAnalyzer {
         }
     }
 
-    private record MethodModel(String key, SourceAnchor anchor) {
+    private record MethodModel(
+            String key,
+            SourceAnchor anchor,
+            ExecutableElement executable,
+            TypeElement owner) {
     }
 
     private record MethodScan(Map<String, MethodModel> methods) {
     }
 
-    private record RawEdge(String caller, String callee, int line) {
+    private record RawEdge(
+            String caller,
+            String callee,
+            int line,
+            CallResolutionKind resolutionKind) {
         private static final Comparator<RawEdge> ORDER = Comparator.comparing(RawEdge::caller)
                 .thenComparing(RawEdge::callee)
-                .thenComparingInt(RawEdge::line);
+                .thenComparingInt(RawEdge::line)
+                .thenComparing(RawEdge::resolutionKind);
     }
 
     private record EdgeScan(List<RawEdge> edges, List<String> warnings) {

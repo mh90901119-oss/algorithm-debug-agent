@@ -34,6 +34,13 @@ class MethodPathSummaryJsonTest {
                         "fixture.A#one()V", "fixture.B#two()V",
                         "NEAREST_SELECTED_ANCESTOR", 1, provenance)),
                 List.of(new MethodPathSummary.PathAnomaly("UNBALANCED", "missing exit", provenance)),
+                Optional.of(new MethodPathSummary.ScopeSummary(
+                        "fixture.A#one()V", 1, 1, 0,
+                        List.of(new MethodPathSummary.ScopeInvocation(
+                                1, 1, Optional.of(2L), 2, 1,
+                                Optional.of("PATH_001"), false)),
+                        List.of(new MethodPathSummary.PathVariant(
+                                "PATH_001", List.of(1), List.of("fixture.A#one()V"))))),
                 false, Instant.EPOCH);
 
         Path schema = Path.of(System.getProperty("maven.multiModuleProjectDirectory", ".."),

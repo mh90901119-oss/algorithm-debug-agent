@@ -13,6 +13,7 @@ public record LauncherCodePathPlan(
         String analysisId,
         TargetTest targetTest,
         List<MethodSelector> selectors,
+        String scopeMethodKey,
         Budget budget,
         String rationale,
         Instant createdAt) {
@@ -34,6 +35,12 @@ public record LauncherCodePathPlan(
         if (selectors.stream().anyMatch(selector -> !keys.add(selector.methodKey()))) {
             throw new IllegalArgumentException("Plan selectors must be unique");
         }
+        if (scopeMethodKey != null) {
+            requireText(scopeMethodKey, "scopeMethodKey");
+            if (!keys.contains(scopeMethodKey)) {
+                throw new IllegalArgumentException("scopeMethodKey must belong to selectors");
+            }
+        }
         requireText(rationale, "rationale");
     }
 
@@ -41,7 +48,7 @@ public record LauncherCodePathPlan(
             TargetTest targetTest, List<MethodSelector> selectors, Budget budget) {
         return new LauncherCodePathPlan(
                 "2.0", "plan-1", "case-1", "context-1", "analysis-1",
-                targetTest, selectors, budget, "fixture", Instant.EPOCH);
+                targetTest, selectors, null, budget, "fixture", Instant.EPOCH);
     }
 
     public record TargetTest(String className, String methodName) {

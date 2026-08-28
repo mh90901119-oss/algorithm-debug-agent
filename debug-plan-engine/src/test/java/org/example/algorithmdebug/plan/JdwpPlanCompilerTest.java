@@ -63,6 +63,22 @@ class JdwpPlanCompilerTest {
     }
 
     @Test
+    void preservesSparseCaptureHitsAndRejectsHitsOutsideMaximum() {
+        JdwpTracepointRequest sparse = new JdwpTracepointRequest(
+                "sparse", "fixture.Algorithm#schedule()V", 4, 5,
+                List.of(1, 3, 5), JdwpCaptureSpec.stackOnly());
+
+        JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(
+                catalog(), request(List.of(sparse)), moduleRoot);
+
+        assertEquals(List.of(1, 3, 5), plan.tracepoints().getFirst().captureOnHits());
+        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
+                catalog(), request(List.of(new JdwpTracepointRequest(
+                        "outside", "fixture.Algorithm#schedule()V", 4, 5,
+                        List.of(1, 6), JdwpCaptureSpec.stackOnly()))), moduleRoot));
+    }
+
+    @Test
     void rejectsUnknownMethodDuplicatePointAndLineOutsideMethod() {
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(

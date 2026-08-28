@@ -13,6 +13,7 @@
     "methods": {"type": "array", "maxItems": 200, "items": {"$ref": "#/$defs/method"}},
     "observedPaths": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/path"}},
     "anomalies": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/anomaly"}},
+    "scope": {"oneOf": [{"$ref": "#/$defs/scope"}, {"type": "null"}]},
     "truncated": {"type": "boolean"}, "createdAt": {"type": "string", "format": "date-time"}
   },
   "$defs": {
@@ -53,6 +54,40 @@
         "descendantMethodKey": {"type": "string", "minLength": 1, "maxLength": 2048},
         "relationshipType": {"const": "NEAREST_SELECTED_ANCESTOR"}, "count": {"type": "integer", "minimum": 1},
         "firstObservation": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "scope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["methodKey", "invocationCount", "completeInvocationCount", "incompleteInvocationCount", "invocations", "pathVariants"],
+      "properties": {
+        "methodKey": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "invocationCount": {"type": "integer", "minimum": 0},
+        "completeInvocationCount": {"type": "integer", "minimum": 0},
+        "incompleteInvocationCount": {"type": "integer", "minimum": 0},
+        "invocations": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/scopeInvocation"}},
+        "pathVariants": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/pathVariant"}}
+      }
+    },
+    "scopeInvocation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["ordinal", "startEventId", "endEventId", "eventCount", "maxDepth", "pathId", "truncated"],
+      "properties": {
+        "ordinal": {"type": "integer", "minimum": 1},
+        "startEventId": {"type": "integer", "minimum": 1},
+        "endEventId": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "eventCount": {"type": "integer", "minimum": 1},
+        "maxDepth": {"type": "integer", "minimum": 0},
+        "pathId": {"oneOf": [{"type": "string", "pattern": "^PATH_[0-9]+$"}, {"type": "null"}]},
+        "truncated": {"type": "boolean"}
+      }
+    },
+    "pathVariant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pathId", "invocationOrdinals", "representativeMethodSequence"],
+      "properties": {
+        "pathId": {"type": "string", "pattern": "^PATH_[0-9]+$"},
+        "invocationOrdinals": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {"type": "integer", "minimum": 1}},
+        "representativeMethodSequence": {"type": "array", "minItems": 1, "maxItems": 10000, "items": {"type": "string", "minLength": 1, "maxLength": 2048}}
       }
     },
     "anomaly": {
