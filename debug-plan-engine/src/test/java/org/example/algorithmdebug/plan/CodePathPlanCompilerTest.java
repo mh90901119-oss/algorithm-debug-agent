@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
@@ -70,6 +71,29 @@ class CodePathPlanCompilerTest {
         assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
                 catalog, new CodePathPlanRequest(
                         new PlanId("oversized"), keys, "x".repeat(4_097),
+                        CollectionBudget.defaults(), NOW)));
+    }
+
+    @Test
+    void validatesOptionalScopeAgainstCatalogAndSelectedMethods() {
+        MethodCatalog catalog = catalog(List.of(
+                entry("fixture.TargetTest", "caseUnderTest", "()V", 0),
+                entry("fixture.Algorithm", "solve", "()V", 1)));
+        String target = "fixture.TargetTest#caseUnderTest()V";
+        String scope = "fixture.Algorithm#solve()V";
+
+        CodePathCollectionPlan plan = new CodePathPlanCompiler().compile(catalog,
+                new CodePathPlanRequest(new PlanId("scope-plan"), List.of(target, scope),
+                        Optional.of(scope), "locate repeated paths",
+                        CollectionBudget.defaults(), NOW));
+
+        assertEquals(Optional.of(scope), plan.scopeMethodKey());
+        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
+                catalog, new CodePathPlanRequest(new PlanId("not-selected"), List.of(target),
+                        Optional.of(scope), "invalid scope", CollectionBudget.defaults(), NOW)));
+        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
+                catalog, new CodePathPlanRequest(new PlanId("unknown"), List.of(target),
+                        Optional.of("fixture.Missing#run()V"), "invalid scope",
                         CollectionBudget.defaults(), NOW)));
     }
 

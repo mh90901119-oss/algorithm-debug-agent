@@ -22,6 +22,7 @@ record CollectorDebugPlan(
             String methodName,
             String methodDescriptor,
             int maxHits,
+            List<Integer> captureOnHits,
             Capture capture) {
     }
 

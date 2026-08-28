@@ -30,6 +30,19 @@ test("Agent and Skill assets are valid UTF-8 without forbidden control character
   assert.match(skill, /must not be used as Evidence/u)
 })
 
+test("planning tools expose structured intent instead of raw request JSON", async () => {
+  const [toolSource, runtimeSource, skill] = await Promise.all([
+    readUtf8("integrations/opencode/tools/algorithm-debug.ts"),
+    readUtf8("integrations/opencode/lib/tool-runtime.mjs"),
+    readUtf8("skills/algorithm-debug/SKILL.md"),
+  ])
+
+  assert.doesNotMatch(toolSource, /requestJson/u)
+  assert.doesNotMatch(skill, /requestJson/u)
+  assert.match(runtimeSource, /codePathPlanRequest/u)
+  assert.match(runtimeSource, /jdwpPlanRequest/u)
+})
+
 test("external workspace and ToolResponse validation literals are English", async () => {
   const externalBoundaryFiles = [
     "case-management/src/main/java/org/example/algorithmdebug/casecore/CaseWorkspaceAuditor.java",

@@ -34,6 +34,7 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     execute, workspaceDirectory: "D:/ada-workspace",
     resultJsonDirectory: "D:/algorithm-results", temporaryRoot,
     now: () => new Date("2026-08-19T00:00:00Z"),
+    createId: prefix => `${prefix}-1`,
   })
   const context = { directory: "D:/large-system/algorithm-module" }
 
@@ -50,11 +51,20 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   await runtime.runTest({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.staticAnalyze({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.codePathPlanCreate({
-    caseId: "case-1", analysisId: "analysis-1", requestJson: "{\"planId\":\"cp-1\"}",
+    caseId: "case-1", analysisId: "analysis-1",
+    selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+    scopeMethodKey: "fixture.Algorithm#schedule()V",
+    rationale: "Observe invocation path variants",
   }, context)
   await runtime.codePathCollect({ caseId: "case-1", planId: "cp-1" }, context)
   await runtime.jdwpPlanCreate({
-    caseId: "case-1", analysisId: "analysis-1", requestJson: "{\"planId\":\"jdwp-1\"}",
+    caseId: "case-1", analysisId: "analysis-1",
+    tracepoints: [{
+      methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
+      captureOnHits: [1, 3, 5],
+      capture: { localNames: ["state"], fieldPaths: ["state.current"] },
+    }],
+    rationale: "Observe selected state transitions",
   }, context)
   await runtime.jdwpCollect({ caseId: "case-1", planId: "jdwp-1" }, context)
   await runtime.artifactRead({
@@ -104,7 +114,34 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       "--case-id", "case-1", "--analysis-id", "analysis-1", "--result-file", "<temp>"],
   ])
   assert.deepEqual(temporaryFiles.map(value => value.content), [
-    "why did it fail?", "{\"planId\":\"cp-1\"}", "{\"planId\":\"jdwp-1\"}",
+    "why did it fail?",
+    JSON.stringify({
+      planId: "codepath-plan-1",
+      selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+      scopeMethodKey: "fixture.Algorithm#schedule()V",
+      rationale: "Observe invocation path variants",
+      budget: { maxEvents: 100000, maxBytes: 16777216, timeoutMillis: 300000 },
+      requestedAt: "2026-08-19T00:00:00.000Z",
+    }),
+    JSON.stringify({
+      planId: "jdwp-plan-1",
+      tracepoints: [{
+        tracepointId: "tracepoint-1",
+        methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
+        captureOnHits: [1, 3, 5],
+        capture: {
+          locals: true, stack: true, maxFrames: 8, maxDepth: 1,
+          maxItems: 20, maxStringLength: 256,
+          localNames: ["state"], fieldPaths: ["state.current"],
+        },
+      }],
+      budget: {
+        maxEvents: 100, maxBytes: 16777216, timeoutMillis: 300000,
+        idleTimeoutMillis: 120000,
+      },
+      rationale: "Observe selected state transitions",
+      requestedAt: "2026-08-19T00:00:00.000Z",
+    }),
     JSON.stringify({
       schemaVersion: "1.0", caseId: "case-1", contextId: "context-1",
       analysisId: "analysis-1", finalAnswer: "answer",
@@ -215,7 +252,8 @@ test("removes a temporary request when CLI execution throws", async t => {
   })
 
   const response = await runtime.codePathPlanCreate({
-    caseId: "case-1", analysisId: "analysis-1", requestJson: "{}",
+    caseId: "case-1", analysisId: "analysis-1",
+    selectedMethodKeys: ["fixture.Algorithm#schedule()V"], rationale: "Observe path",
   }, { directory: "D:/module" })
 
   assert.equal(JSON.parse(response).code, "ADA_CLI_EXECUTION_FAILED")
@@ -232,8 +270,29 @@ test("rejects an oversized plan before project preparation", async () => {
   })
 
   await assert.rejects(runtime.codePathPlanCreate({
-    caseId: "case-1", analysisId: "analysis-1", requestJson: "x".repeat(65_537),
+    caseId: "case-1", analysisId: "analysis-1",
+    selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+    rationale: "x".repeat(65_537),
   }, { directory: "D:/module" }), RangeError)
+  assert.equal(calls, 0)
+})
+
+test("rejects invalid sparse JDWP hits before project preparation", async () => {
+  let calls = 0
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async () => { calls += 1; return success({}) },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
+  })
+
+  await assert.rejects(runtime.jdwpPlanCreate({
+    caseId: "case-1", analysisId: "analysis-1",
+    tracepoints: [{
+      methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
+      captureOnHits: [3, 1],
+    }],
+    rationale: "Observe state",
+  }, { directory: "D:/module" }), /captureOnHits/)
   assert.equal(calls, 0)
 })
 

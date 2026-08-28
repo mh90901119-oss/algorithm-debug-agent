@@ -1,5 +1,7 @@
 package org.example.algorithmdebug.contracts;
 
+import java.util.List;
+
 /**
  * 一个与静态源码身份绑定的 JDWP 采集点。
  *
@@ -16,7 +18,19 @@ public record JdwpTracepointSpec(
         SourceAnchor sourceAnchor,
         int line,
         int maxHits,
+        List<Integer> captureOnHits,
         JdwpCaptureSpec capture) {
+
+    /** 兼容未配置稀疏命中选择的既有计划。 */
+    public JdwpTracepointSpec(
+            String tracepointId,
+            String methodKey,
+            SourceAnchor sourceAnchor,
+            int line,
+            int maxHits,
+            JdwpCaptureSpec capture) {
+        this(tracepointId, methodKey, sourceAnchor, line, maxHits, List.of(), capture);
+    }
 
     /** 校验方法身份、行范围、命中预算和捕获规格。 */
     public JdwpTracepointSpec {
@@ -33,6 +47,15 @@ public record JdwpTracepointSpec(
         }
         if (maxHits < 1 || maxHits > 20) {
             throw new IllegalArgumentException("maxHits 必须在 1 到 20 之间");
+        }
+        captureOnHits = captureOnHits == null ? List.of() : List.copyOf(captureOnHits);
+        int previous = 0;
+        for (Integer hit : captureOnHits) {
+            if (hit == null || hit <= previous || hit > maxHits) {
+                throw new IllegalArgumentException(
+                        "captureOnHits 必须严格递增且位于 1 到 maxHits 之间");
+            }
+            previous = hit;
         }
         capture = ContractChecks.requireNonNull(capture, "capture");
     }

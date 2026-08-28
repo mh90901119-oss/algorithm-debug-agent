@@ -279,7 +279,8 @@ public final class ControlPlaneServices {
                     new RunArtifactArchiver(), mavenExecutable, executionLog);
             staticAnalysis = new StaticAnalysisApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                    new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), clock, executionLog);
+                    new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), clock,
+                    mavenExecutable, classpathResolver, executionLog);
             collections = new CollectionApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
                     ids, clock, mavenExecutable, currentJavaExecutable(windows),

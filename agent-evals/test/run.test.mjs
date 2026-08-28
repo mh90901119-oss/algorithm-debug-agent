@@ -30,6 +30,9 @@ test("loads the versioned smoke suite and keeps the target module outside checke
   assert.equal(loopGuard.maxTargetTestExecutions, 1)
   assert.equal(loopGuard.allowCodePath, false)
   assert.equal(suite.cases.find((item) => item.id === "assertion-failure").expectedTestOutcome, "FAILED")
+  const codePath = suite.cases.find((item) => item.id === "codepath-independent")
+  assert.match(codePath.requiredAnswerPatterns.join("|"), /CodePath/u)
+  assert.doesNotMatch(codePath.requiredAnswerPatterns.join("|"), /鏂规硶|杩愯/u)
 })
 
 test("builds a real OpenCode run command from TargetModule and one user-style case question", () => {

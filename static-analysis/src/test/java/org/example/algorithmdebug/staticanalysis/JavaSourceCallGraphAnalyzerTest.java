@@ -13,7 +13,11 @@ import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
 import org.example.algorithmdebug.contracts.AnalysisId;
+import org.example.algorithmdebug.contracts.CallResolutionKind;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodCatalog;
@@ -184,6 +188,88 @@ class JavaSourceCallGraphAnalyzerTest {
     }
 
     @Test
+    void resolvesExternalInvocationFromExplicitTestClasspath() throws IOException {
+        Path dependencyClasses = compileExternalDependency();
+        write("src/test/java/fixture/TargetTest.java", """
+                package fixture;
+                class TargetTest {
+                    void caseUnderTest() { external.Dependency.execute(); }
+                }
+                """);
+
+        MethodCatalog catalog = analyzer().analyze(
+                request(StaticAnalysisBudget.defaults()), List.of(dependencyClasses));
+
+        assertEquals(SnapshotCompleteness.COMPLETE, catalog.completeness());
+        assertTrue(catalog.warnings().stream().noneMatch(value ->
+                value.contains("syntax-level unresolved invocation")));
+    }
+
+    @Test
+    void recordsConcreteOverridesAsPolymorphicCandidates() throws IOException {
+        write("src/test/java/fixture/TargetTest.java", """
+                package fixture;
+                class TargetTest {
+                    void caseUnderTest() { new Service().execute(new FirstStrategy()); }
+                }
+                """);
+        write("src/main/java/fixture/Strategy.java", """
+                package fixture;
+                interface Strategy { void run(); }
+                """);
+        write("src/main/java/fixture/FirstStrategy.java", """
+                package fixture;
+                class FirstStrategy implements Strategy { public void run() { } }
+                """);
+        write("src/main/java/fixture/SecondStrategy.java", """
+                package fixture;
+                class SecondStrategy implements Strategy { public void run() { } }
+                """);
+        write("src/main/java/fixture/Service.java", """
+                package fixture;
+                class Service { void execute(Strategy strategy) { strategy.run(); } }
+                """);
+
+        MethodCatalog catalog = analyzer().analyze(request(StaticAnalysisBudget.defaults()));
+
+        assertTrue(catalog.edges().stream().anyMatch(edge ->
+                edge.callerKey().equals("fixture.Service#execute(Lfixture/Strategy;)V")
+                        && edge.calleeKey().equals("fixture.Strategy#run()V")
+                        && edge.resolutionKind() == CallResolutionKind.DIRECT));
+        assertTrue(catalog.edges().stream().anyMatch(edge ->
+                edge.callerKey().equals("fixture.Service#execute(Lfixture/Strategy;)V")
+                        && edge.calleeKey().equals("fixture.FirstStrategy#run()V")
+                        && edge.resolutionKind() == CallResolutionKind.POLYMORPHIC_CANDIDATE));
+        assertTrue(catalog.edges().stream().anyMatch(edge ->
+                edge.callerKey().equals("fixture.Service#execute(Lfixture/Strategy;)V")
+                        && edge.calleeKey().equals("fixture.SecondStrategy#run()V")
+                        && edge.resolutionKind() == CallResolutionKind.POLYMORPHIC_CANDIDATE));
+    }
+
+    @Test
+    void rendersCompilerDiagnosticsInEnglishRegardlessOfDefaultLocale() throws IOException {
+        write("src/test/java/fixture/TargetTest.java", """
+                package fixture;
+                class TargetTest {
+                    MissingType field;
+                    void caseUnderTest() { }
+                }
+                """);
+        Locale original = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.SIMPLIFIED_CHINESE);
+            MethodCatalog catalog = analyzer().analyze(request(StaticAnalysisBudget.defaults()));
+
+            assertTrue(catalog.warnings().stream().anyMatch(value ->
+                    value.startsWith("compiler: code=compiler.err.")
+                            && value.chars().allMatch(character -> character < 128)),
+                    catalog.warnings()::toString);
+        } finally {
+            Locale.setDefault(original);
+        }
+    }
+
+    @Test
     void methodAndEdgeScansStopAtFirstItemBeyondBudget() throws IOException {
         StringBuilder methods = new StringBuilder();
         StringBuilder calls = new StringBuilder();
@@ -311,5 +397,23 @@ class JavaSourceCallGraphAnalyzerTest {
         Path target = temporaryDirectory.resolve(relativePath);
         Files.createDirectories(target.getParent());
         Files.writeString(target, content);
+    }
+
+    private Path compileExternalDependency() throws IOException {
+        Path source = temporaryDirectory.resolve("dependency-source/external/Dependency.java");
+        Path classes = temporaryDirectory.resolve("dependency-classes");
+        Files.createDirectories(source.getParent());
+        Files.createDirectories(classes);
+        Files.writeString(source, """
+                package external;
+                public final class Dependency {
+                    public static void execute() { }
+                }
+                """);
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        assertTrue(compiler != null, "A JDK compiler is required for this test");
+        assertEquals(0, compiler.run(null, null, null,
+                "-d", classes.toString(), source.toString()));
+        return classes;
     }
 }

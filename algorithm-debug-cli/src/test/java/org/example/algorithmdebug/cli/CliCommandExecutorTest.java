@@ -46,6 +46,7 @@ class CliCommandExecutorTest {
     void codePathRequestFileRejectsUtf16EvenWhenJsonParserCouldDetectIt() throws Exception {
         String json = """
                 {"planId":"plan-1","selectedMethodKeys":["fixture.Test#case1()V"],
+                 "scopeMethodKey":"fixture.Test#case1()V",
                  "rationale":"定位","budget":{"maxEvents":100,"maxBytes":1024,
                  "timeoutMillis":1000},
                  "requestedAt":"2026-08-18T00:00:00Z"}
@@ -53,7 +54,10 @@ class CliCommandExecutorTest {
         Path utf16 = Files.write(
                 temporaryDirectory.resolve("request-utf16.json"),
                 json.getBytes(StandardCharsets.UTF_16LE));
+        Path utf8 = Files.writeString(temporaryDirectory.resolve("request-utf8.json"), json);
 
+        assertEquals("fixture.Test#case1()V",
+                CliCommandExecutor.readPlanRequest(utf8).scopeMethodKey().orElseThrow());
         assertThrows(CliInputException.class, () -> CliCommandExecutor.readPlanRequest(utf16));
     }
 

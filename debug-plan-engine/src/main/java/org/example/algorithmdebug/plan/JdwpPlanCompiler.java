@@ -76,7 +76,7 @@ public final class JdwpPlanCompiler {
         try {
             return new JdwpTracepointSpec(
                     request.tracepointId(), entry.methodKey(), anchor,
-                    request.line(), request.maxHits(), request.capture());
+                    request.line(), request.maxHits(), request.captureOnHits(), request.capture());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException(
                     "JDWP tracepoint 非法 " + request.tracepointId() + ": " + failure.getMessage(),

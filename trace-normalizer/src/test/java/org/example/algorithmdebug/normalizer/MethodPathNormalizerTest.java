@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
@@ -159,6 +160,66 @@ class MethodPathNormalizerTest {
     }
 
     @Test
+    void groupsScopeInvocationsAndIdentifiesAnOutlierPath() throws Exception {
+        Path trace = write("""
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":2,"eventType":"METHOD_ENTER","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":3,"eventType":"METHOD_EXIT","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":4,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":5,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":6,"eventType":"METHOD_ENTER","depth":2,"threadName":"main","className":"fixture.Result","methodName":"commit","descriptor":"()V"}
+                {"eventId":7,"eventType":"METHOD_EXIT","depth":2,"threadName":"main","className":"fixture.Result","methodName":"commit","descriptor":"()V"}
+                {"eventId":8,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":9,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":10,"eventType":"METHOD_ENTER","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":11,"eventType":"METHOD_EXIT","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":12,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                """);
+
+        NormalizationResult<MethodPathSummary> result = normalizer().normalize(input(
+                trace, plan(selectors("solve", "choose", "commit"),
+                        Optional.of("fixture.Algorithm#solve()V")),
+                NormalizationBudget.defaults(), "EXACT_DESCRIPTOR", false));
+
+        assertEquals(NormalizationStatus.COMPLETE, result.status());
+        MethodPathSummary.ScopeSummary scope = result.summary().orElseThrow().scope().orElseThrow();
+        assertEquals(3, scope.invocationCount());
+        assertEquals(3, scope.completeInvocationCount());
+        assertEquals(0, scope.incompleteInvocationCount());
+        assertEquals(2, scope.pathVariants().size());
+        assertEquals(List.of(1, 3), scope.pathVariants().stream()
+                .filter(variant -> variant.representativeMethodSequence().contains(
+                        "fixture.Decision#choose()V"))
+                .findFirst().orElseThrow().invocationOrdinals());
+        assertEquals(List.of(2), scope.pathVariants().stream()
+                .filter(variant -> variant.representativeMethodSequence().contains(
+                        "fixture.Result#commit()V"))
+                .findFirst().orElseThrow().invocationOrdinals());
+    }
+
+    @Test
+    void marksOpenScopeInvocationPartialAtEndOfTrace() throws Exception {
+        Path trace = write("""
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":2,"eventType":"METHOD_ENTER","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":3,"eventType":"METHOD_EXIT","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                """);
+
+        NormalizationResult<MethodPathSummary> result = normalizer().normalize(input(
+                trace, plan(selectors("solve", "choose"),
+                        Optional.of("fixture.Algorithm#solve()V")),
+                NormalizationBudget.defaults(), "EXACT_DESCRIPTOR", false));
+
+        assertEquals(NormalizationStatus.PARTIAL, result.status());
+        MethodPathSummary.ScopeSummary scope = result.summary().orElseThrow().scope().orElseThrow();
+        assertEquals(1, scope.invocationCount());
+        assertEquals(0, scope.completeInvocationCount());
+        assertEquals(1, scope.incompleteInvocationCount());
+        assertTrue(scope.invocations().getFirst().endEventId().isEmpty());
+        assertTrue(scope.invocations().getFirst().pathId().isEmpty());
+    }
+
+    @Test
     void stopsAddingFactsWhenSummaryOutputBudgetIsReached() throws Exception {
         Path trace = write("""
                 {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"thread-with-a-long-stable-name","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
@@ -265,6 +326,14 @@ class MethodPathNormalizerTest {
                         "collections/collection-1/raw/filtered.jsonl",
                         "application/x-ndjson", HASH, bytes),
                 trace, EVIDENCE_ID, budget, collectorTruncated, NOW);
+    }
+
+    private static CodePathCollectionPlan plan(
+            List<MethodSelector> selectors, Optional<String> scopeMethodKey) {
+        return new CodePathCollectionPlan(
+                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
+                ANALYSIS_ID, TARGET, selectors, scopeMethodKey,
+                CollectionBudget.defaults(), "locate repeated paths", NOW);
     }
 
     private static CodePathCollectionPlan plan(List<MethodSelector> selectors) {

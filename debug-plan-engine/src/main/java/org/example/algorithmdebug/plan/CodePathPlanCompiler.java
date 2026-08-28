@@ -4,6 +4,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
@@ -30,6 +31,18 @@ public final class CodePathPlanCompiler {
         if (uniqueKeys.size() != request.selectedMethodKeys().size()) {
             throw new PlanCompilationException("selectedMethodKeys 不得重复");
         }
+        Optional<String> scopeMethodKey = request.scopeMethodKey().map(String::strip);
+        if (scopeMethodKey.isPresent() && scopeMethodKey.orElseThrow().isEmpty()) {
+            throw new PlanCompilationException("scopeMethodKey must not be blank");
+        }
+        if (scopeMethodKey.isPresent() && !entries.containsKey(scopeMethodKey.orElseThrow())) {
+            throw new PlanCompilationException(
+                    "Scope method does not belong to the current MethodCatalog: "
+                            + scopeMethodKey.orElseThrow());
+        }
+        if (scopeMethodKey.isPresent() && !uniqueKeys.contains(scopeMethodKey.orElseThrow())) {
+            throw new PlanCompilationException("Scope method must also be selected");
+        }
         List<MethodSelector> selectors = uniqueKeys.stream().map(key -> {
             MethodCatalogEntry entry = entries.get(key);
             if (entry == null) {
@@ -41,6 +54,7 @@ public final class CodePathPlanCompiler {
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN,
                 request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
-                catalog.targetTest(), selectors, request.budget(), rationale, request.requestedAt());
+                catalog.targetTest(), selectors, scopeMethodKey,
+                request.budget(), rationale, request.requestedAt());
     }
 }

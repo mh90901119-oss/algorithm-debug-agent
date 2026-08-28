@@ -2,6 +2,7 @@ package org.example.algorithmdebug.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,6 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
@@ -25,6 +27,7 @@ import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
@@ -32,6 +35,7 @@ import org.example.algorithmdebug.plan.JdwpPlanRequest;
 import org.example.algorithmdebug.plan.JdwpTracepointRequest;
 import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
 import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
+import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -148,6 +152,27 @@ class StaticAnalysisApplicationServiceTest {
                 service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID));
 
         assertEquals("TARGET_TEST_NOT_FOUND", failure.code());
+    }
+
+    @Test
+    void classpathResolutionFailureArchivesAnIncompleteCatalog() {
+        StaticAnalysisApplicationService service = new StaticAnalysisApplicationService(
+                new ProjectRegistrationRepository(
+                        new BoundedDocumentMapper(), new AtomicDocumentWriter()),
+                new BoundedDocumentMapper(), new AtomicDocumentWriter(),
+                new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(),
+                Clock.fixed(NOW, ZoneOffset.UTC), Optional.of(Path.of("mvn")),
+                (maven, moduleRoot, outputDirectory) -> {
+                    throw new MethodPathCollectionException(
+                            "CLASSPATH_RESOLUTION_FAILED", "fixture failure", null);
+                }, org.example.algorithmdebug.casecore.logging.AgentExecutionLog.disabled());
+
+        service.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        MethodCatalog catalog = archive().requireMethodCatalog(CASE_ID, ANALYSIS_ID);
+
+        assertEquals(SnapshotCompleteness.INCOMPLETE, catalog.completeness());
+        assertTrue(catalog.warnings().stream().anyMatch(value ->
+                value.startsWith("TEST_CLASSPATH_UNAVAILABLE")));
     }
 
     @Test

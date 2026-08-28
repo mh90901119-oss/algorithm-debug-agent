@@ -211,7 +211,7 @@
       "expectedProcessOutcome": "SUCCEEDED",
       "expectedTestOutcome": "PASSED",
       "requiredAnswerPatterns": [
-        "method path|runtime path|鏂规硶璺緞|杩愯璺緞"
+        "CodePath|method path|runtime path|方法路径|运行路径"
       ],
       "forbiddenAnswerPatterns": [],
       "requireAnalysisComplete": true,

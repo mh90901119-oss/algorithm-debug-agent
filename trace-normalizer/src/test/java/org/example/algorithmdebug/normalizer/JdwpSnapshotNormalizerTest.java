@@ -284,6 +284,27 @@ class JdwpSnapshotNormalizerTest {
         assertTrue(result.summary().isEmpty());
     }
 
+    @Test
+    void rejectsSnapshotForHitOrdinalNotSelectedByPlan() throws Exception {
+        Path raw = write(hit(1, "point-1", 2, "\"unexpected-hit\""));
+        SourceAnchor anchor = new SourceAnchor(
+                "fixture.Algorithm", "solve", "()V",
+                "src/main/java/fixture/Algorithm.java", 10, 20);
+        JdwpTracepointSpec point = new JdwpTracepointSpec(
+                "point-1", "fixture.Algorithm#solve()V", anchor, 12, 5,
+                List.of(1, 3, 5), new JdwpCaptureSpec(true, true, 8, 2, 20, 256));
+        JdwpCollectionPlan sparsePlan = new JdwpCollectionPlan(
+                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
+                ANALYSIS_ID, TARGET, List.of(point), JdwpCollectionBudget.defaults(),
+                "定位方法内部状态", NOW);
+
+        NormalizationResult<JdwpSnapshotSummary> result = normalize(
+                raw, sparsePlan, NormalizationBudget.defaults(), false);
+
+        assertEquals(NormalizationStatus.FAILED, result.status());
+        assertEquals("NORMALIZE_EVENT_OUTSIDE_PLAN", result.failureCode().orElseThrow());
+    }
+
     private NormalizationResult<JdwpSnapshotSummary> normalize(
             Path raw,
             JdwpCollectionPlan plan,

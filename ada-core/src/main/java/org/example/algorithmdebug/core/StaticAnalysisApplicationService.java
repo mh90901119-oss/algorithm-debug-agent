@@ -8,7 +8,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
@@ -22,6 +26,7 @@ import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
+import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanCompiler;
@@ -33,6 +38,8 @@ import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisRequest;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
+import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
+import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 
 /** 编排静态方法目录、CodePath 计划和 JDWP 计划，并追加归档到同一 Case。 */
 public final class StaticAnalysisApplicationService {
@@ -44,6 +51,8 @@ public final class StaticAnalysisApplicationService {
     private final JdwpPlanCompiler jdwpCompiler;
     private final Clock clock;
     private final AgentExecutionLog executionLog;
+    private Optional<Path> mavenExecutable = Optional.empty();
+    private Optional<TargetClasspathResolver> classpathResolver = Optional.empty();
 
     /** 注入确定性仓储、分析器、计划编译器和时钟。 */
     public StaticAnalysisApplicationService(
@@ -78,6 +87,26 @@ public final class StaticAnalysisApplicationService {
         this.executionLog = executionLog;
     }
 
+    /** 注入目标 Maven Classpath 解析器；解析失败时静态分析降级但仍归档不完整目录。 */
+    public StaticAnalysisApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            JavaSourceCallGraphAnalyzer analyzer,
+            CodePathPlanCompiler compiler,
+            Clock clock,
+            Optional<Path> mavenExecutable,
+            TargetClasspathResolver classpathResolver,
+            AgentExecutionLog executionLog) {
+        this(registrations, mapper, writer, analyzer, compiler, clock, executionLog);
+        if (mavenExecutable == null
+                || (mavenExecutable.isPresent() && classpathResolver == null)) {
+            throw new IllegalArgumentException("Static analysis classpath dependencies are invalid");
+        }
+        this.mavenExecutable = mavenExecutable;
+        this.classpathResolver = Optional.ofNullable(classpathResolver);
+    }
+
     /** 为已有 Analysis 构建并归档一次静态方法目录，不计算整模块源码指纹。 */
     public ArtifactBackedResult<StaticAnalysisSummary> analyze(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, AnalysisId analysisId) {
@@ -95,9 +124,12 @@ public final class StaticAnalysisApplicationService {
             if (!manifest.projectId().equals(projectId)) {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于指定 Project");
             }
-            MethodCatalog catalog = analyzer.analyze(new StaticAnalysisRequest(
+            StaticAnalysisRequest request = new StaticAnalysisRequest(
                     Path.of(registration.moduleRoot()), manifest.targetTest(), caseId,
-                    context.contextId(), analysisId, StaticAnalysisBudget.defaults(), clock.instant()));
+                    context.contextId(), analysisId, StaticAnalysisBudget.defaults(), clock.instant());
+            MethodCatalog catalog = analyzeWithTargetClasspath(
+                    request, Path.of(registration.moduleRoot()),
+                    layout.projectCases(projectId).resolve(caseId.value()), logContext);
             Path document = archive.createMethodCatalog(catalog);
             ArtifactReference artifact = describeArtifact(
                     layout.projectCases(projectId).resolve(caseId.value()), document,
@@ -109,7 +141,10 @@ public final class StaticAnalysisApplicationService {
                     catalog.completeness(), catalog.entries().size(), catalog.edges().size(),
                     catalog.warnings().size()), artifact);
             executionLog.info(logContext, "StaticAnalysisApplicationService", "STATIC_ANALYSIS_COMPLETED",
-                    catalog.completeness().name(), "Static analysis completed");
+                    catalog.completeness().name(), "Static analysis completed", Map.of(
+                            "methodCount", Integer.toString(catalog.entries().size()),
+                            "edgeCount", Integer.toString(catalog.edges().size()),
+                            "warningCount", Integer.toString(catalog.warnings().size())));
             return result;
         } catch (StaticAnalysisException failure) {
             throw new CaseRunException(failure.code(), "静态方法目录构建失败", failure);
@@ -141,7 +176,9 @@ public final class StaticAnalysisApplicationService {
             archive.registerArtifact(caseId, artifact, clock.instant());
             executionLog.info(logContext.withPlan(plan.planId().value()),
                     "StaticAnalysisApplicationService", "CODEPATH_PLAN_COMPLETED",
-                    "COMPLETED", "CodePath plan was archived");
+                    "COMPLETED", "CodePath plan was archived", Map.of(
+                            "selectorCount", Integer.toString(plan.selectors().size()),
+                            "scopeConfigured", Boolean.toString(plan.scopeMethodKey().isPresent())));
             return new ArtifactBackedResult<>(new CodePathPlanSummary(
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.selectors().size()), artifact);
@@ -186,6 +223,46 @@ public final class StaticAnalysisApplicationService {
         } catch (WorkspaceException failure) {
             throw new CaseRunException("JDWP_PLAN_ARCHIVE_FAILED", "JDWP 计划归档或目录读取失败", failure);
         }
+    }
+
+    private MethodCatalog analyzeWithTargetClasspath(
+            StaticAnalysisRequest request,
+            Path moduleRoot,
+            Path caseDirectory,
+            AgentLogContext logContext) {
+        if (mavenExecutable.isEmpty() || classpathResolver.isEmpty()) {
+            return analyzer.analyze(request);
+        }
+        try {
+            List<Path> entries = classpathResolver.orElseThrow().resolve(
+                            mavenExecutable.orElseThrow(), moduleRoot, caseDirectory)
+                    .stream().map(Path::of).toList();
+            executionLog.info(logContext, "StaticAnalysisApplicationService",
+                    "STATIC_CLASSPATH_RESOLVED", "COMPLETED",
+                    "Target Maven test classpath was resolved", Map.of(
+                            "classpathEntryCount", Integer.toString(entries.size())));
+            return analyzer.analyze(request, entries);
+        } catch (MethodPathCollectionException failure) {
+            executionLog.warn(logContext, "StaticAnalysisApplicationService",
+                    "STATIC_CLASSPATH_UNAVAILABLE", "INCOMPLETE",
+                    "Target Maven test classpath was unavailable", Map.of(
+                            "code", failure.code()));
+            return withClasspathWarning(analyzer.analyze(request), failure.code());
+        }
+    }
+
+    private static MethodCatalog withClasspathWarning(MethodCatalog catalog, String failureCode) {
+        List<String> warnings = new ArrayList<>(1_000);
+        warnings.add("TEST_CLASSPATH_UNAVAILABLE: " + failureCode);
+        catalog.warnings().stream()
+                .filter(value -> !value.startsWith("TEST_CLASSPATH_UNAVAILABLE"))
+                .limit(999)
+                .forEach(warnings::add);
+        return new MethodCatalog(
+                catalog.schemaVersion(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
+                catalog.targetTest(), catalog.entries(), catalog.edges(), List.copyOf(warnings),
+                SnapshotCompleteness.INCOMPLETE, catalog.discoveredMethodCount(),
+                catalog.discoveredEdgeCount(), catalog.createdAt());
     }
 
     private ProjectRegistration requireRegistration(WorkspaceLayout layout, ProjectId projectId) {

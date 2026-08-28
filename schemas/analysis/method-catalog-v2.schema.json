@@ -184,6 +184,12 @@
                                                   "sourceLine":  {
                                                                      "type":  "integer",
                                                                      "minimum":  1
+                                                                 },
+                                                  "resolutionKind":  {
+                                                                         "enum":  [
+                                                                                      "DIRECT",
+                                                                                      "POLYMORPHIC_CANDIDATE"
+                                                                                  ]
                                                                  }
                                               }
                            }
