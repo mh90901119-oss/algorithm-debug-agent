@@ -23,6 +23,7 @@ const runtime = createAlgorithmDebugRuntime({
   interactionRecorder,
   execute: (args: string[], cwd: string) => runAdaCommand(args, cwd, Bun.spawn, {
     executable: configuredLauncher,
+    environment: dfxEnabled ? { ADA_DFX_DIRECTORY: dfxDirectory } : {},
   }),
 })
 

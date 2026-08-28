@@ -227,11 +227,11 @@ public final class CollectionEvidenceValidator {
                     boundedPartialUsable
                             ? EvidenceValidationStatus.VALID
                             : EvidenceValidationStatus.INCONCLUSIVE,
-                    "归一化摘要因预算或上游截断而不完整",
+                    "The normalized summary is incomplete because of a budget or upstream truncation",
                     summaryReference));
         } else if (manifest.status() == NormalizationStatus.FAILED) {
             add(findings, finding("NORMALIZATION_FAILED",
-                    EvidenceValidationStatus.INVALID, "归一化失败",
+                    EvidenceValidationStatus.INVALID, "Normalization failed",
                     summaryReference));
         }
     }

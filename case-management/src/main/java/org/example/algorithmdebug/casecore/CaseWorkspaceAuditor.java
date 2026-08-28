@@ -47,6 +47,7 @@ public final class CaseWorkspaceAuditor {
         checkScopes(root.resolve("runs"), "run-request.json", "RUN", caseId, expected, issues);
         checkScopes(root.resolve("runs"), "run-outcome.json", "RUN", caseId, expected, issues);
         checkLog(root.resolve("interaction.jsonl"), caseId, issues);
+        checkJavaLogs(root.resolve("logs"), caseId, issues);
         int checked = checkArtifacts(root, caseId, expected, issues);
         actual.stream().filter(CaseWorkspaceAuditor::isKnownControlFile).forEach(expected::add);
         Set<String> tracked = new HashSet<>(expected);
@@ -148,6 +149,26 @@ public final class CaseWorkspaceAuditor {
         }
     }
 
+    private static void checkJavaLogs(
+            Path directory, CaseId caseId, List<CaseAuditIssue> issues) {
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) return;
+        try (Stream<Path> files = Files.list(directory)) {
+            for (Path file : files.filter(path -> Files.isRegularFile(
+                    path, LinkOption.NOFOLLOW_LINKS)).toList()) {
+                String name = file.getFileName().toString();
+                if (!name.matches("agent-\\d{4}-\\d{2}-\\d{2}\\.log")) continue;
+                if (Files.size(file) == 0) {
+                    issues.add(issue("JAVA_EXECUTION_LOG_EMPTY", "CASE", caseId.value(),
+                            "JAVA_EXECUTION_LOG", "logs/" + name,
+                            "Java execution log must not be empty"));
+                }
+            }
+        } catch (IOException | SecurityException failure) {
+            issues.add(issue("JAVA_EXECUTION_LOG_READ_FAILED", "CASE", caseId.value(),
+                    "JAVA_EXECUTION_LOG", "logs", "Unable to inspect Java execution logs"));
+        }
+    }
+
     private static void require(Path root, CaseId caseId, String path, String type,
             List<String> expected, List<CaseAuditIssue> issues) {
         expected.add(path);
@@ -164,6 +185,7 @@ public final class CaseWorkspaceAuditor {
     private static boolean isKnownControlFile(String path) {
         return path.equals("case.json")
                 || path.equals("interaction.jsonl")
+                || path.matches("logs/agent-\\d{4}-\\d{2}-\\d{2}\\.log")
                 || path.matches("contexts/[^/]+/(context|reproduction)\\.json")
                 || path.matches("analyses/[^/]+/(analysis-request|analysis-result|method-catalog)\\.json")
                 || path.matches("analyses/[^/]+/input/input-analysis\\.json")

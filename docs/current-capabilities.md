@@ -38,6 +38,7 @@ flowchart LR
 - ArtifactReference 唯一文件完整性机制。
 - Case/Context/Analysis/Run/Collection/Evidence 追加归档。
 - OpenCode DFX 启用时生成可选的 Case-local `interaction.jsonl`；存在即严格校验，缺失不阻断 Java CLI Case。
+- Java CLI 在 `<case>/logs/agent-YYYY-MM-DD.log` 记录英文执行阶段；Case 尚未建立的 CLI 失败写入 `<dfxDirectory>/java/agent-bootstrap-YYYY-MM-DD.log`。日志不进入 ToolResponse，也不作为算法证据。
 - `case_audit` 和 Eval Workspace/Interaction/Expected-Actual 审计。
 - 13 个 OpenCode Custom Tools。
 - 幂等 OpenCode 安装，不绑定 OpenCode 版本号。

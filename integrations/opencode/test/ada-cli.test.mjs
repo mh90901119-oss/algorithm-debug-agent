@@ -37,6 +37,20 @@ test("uses an explicitly configured repository launcher", async () => {
   assert.equal(observed.options.cwd, "D:/target")
 })
 
+test("passes the resolved DFX directory through the internal child environment", async () => {
+  let observed
+  const spawn = (command, options) => {
+    observed = { command, options }
+    return fakeProcess(validSuccess, "", 0)
+  }
+
+  await runAdaCommand(["case", "inspect"], "D:/target", spawn, {
+    environment: { ADA_DFX_DIRECTORY: "D:/diagnostics" },
+  })
+
+  assert.equal(observed.options.env.ADA_DFX_DIRECTORY, "D:/diagnostics")
+})
+
 test("accepts artifact hash case normalized by the Java contract", async () => {
   const response = JSON.stringify({
     schemaVersion: "2.0",

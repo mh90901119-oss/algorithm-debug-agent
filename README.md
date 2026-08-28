@@ -182,3 +182,6 @@ D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke -Case 
 
 当前架构和模块见 [架构索引](docs/architecture/README.md)，最终实施证据见
 [运行时精简最终审计](docs/audits/agent-runtime-simplification-final-audit.md)。
+## Java 执行日志
+
+正常 Java Agent 执行日志位于 `workspace/projects/<projectId>/cases/<caseId>/logs/agent-YYYY-MM-DD.log`，可直接打开查看命令、UT、CodePath 和 JDWP 的执行阶段。Case 创建前的 CLI 失败写入 `config/agent-settings.json` 中 `dfxDirectory` 对应的 `java/agent-bootstrap-YYYY-MM-DD.log`。日志只落盘，不写入 ToolResponse stdout；目标 UT 的原始 stdout/stderr 仍位于对应 Run 或 Collection 的 `raw`/`logs` 目录。

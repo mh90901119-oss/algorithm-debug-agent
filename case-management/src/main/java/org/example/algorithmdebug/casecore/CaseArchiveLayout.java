@@ -9,6 +9,7 @@ import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.EvidenceId;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 
 /** 从受信任的项目 Case 根和不透明 ID 安全派生追加式归档路径。 */
 public final class CaseArchiveLayout {
@@ -45,6 +46,19 @@ public final class CaseArchiveLayout {
     /** @return 当前 Case 根目录 */
     public Path caseRoot() {
         return caseRoot;
+    }
+
+    /** @return 当前 Case 的 Java Agent 执行日志目录。 */
+    public Path logsRoot() {
+        return child(caseRoot, "logs");
+    }
+
+    /** @return 指定日期的 Java Agent 执行日志文件。 */
+    public Path executionLog(LocalDate date) {
+        if (date == null) {
+            throw new IllegalArgumentException("date must not be null");
+        }
+        return child(logsRoot(), "agent-" + date + ".log");
     }
 
     /** @return Case 终态清单 */

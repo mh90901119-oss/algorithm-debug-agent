@@ -59,6 +59,9 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 /** 执行一次显式 Run：先追加请求，再运行一个 UT，最后原子追加结构化结果。 */
 public final class RunApplicationService {
@@ -83,6 +86,7 @@ public final class RunApplicationService {
     private final RunOutcomeAssembler assembler;
     private final TargetFailureFingerprinter failureFingerprinter;
     private final ReproductionComparator reproductionComparator;
+    private final AgentExecutionLog executionLog;
 
     /** 注入项目/归档、Adapter、ID、时钟、执行端口、Artifact 与 Maven 路径。 */
     public RunApplicationService(
@@ -96,7 +100,7 @@ public final class RunApplicationService {
             RunArtifactArchiver artifacts,
             Path mavenExecutable) {
         this(registrations, mapper, writer, adapters, ids, clock, executor, artifacts,
-                Optional.ofNullable(mavenExecutable));
+                Optional.ofNullable(mavenExecutable), AgentExecutionLog.disabled());
     }
 
     /** 注入可缺失的 Maven；缺失时一次 Run 会可靠收尾为 NOT_STARTED。 */
@@ -110,9 +114,24 @@ public final class RunApplicationService {
             TargetTestExecutor executor,
             RunArtifactArchiver artifacts,
             Optional<Path> mavenExecutable) {
+        this(registrations, mapper, writer, adapters, ids, clock, executor, artifacts,
+                mavenExecutable, AgentExecutionLog.disabled());
+    }
+
+    public RunApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            AdapterCatalog adapters,
+            OpaqueIdGenerator ids,
+            Clock clock,
+            TargetTestExecutor executor,
+            RunArtifactArchiver artifacts,
+            Optional<Path> mavenExecutable,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || executor == null || artifacts == null
-                || mavenExecutable == null) {
+                || mavenExecutable == null || executionLog == null) {
             throw new IllegalArgumentException("RunApplicationService 依赖不能为空");
         }
         this.registrations = registrations;
@@ -129,6 +148,7 @@ public final class RunApplicationService {
         this.assembler = new RunOutcomeAssembler();
         this.failureFingerprinter = new TargetFailureFingerprinter();
         this.reproductionComparator = new ReproductionComparator();
+        this.executionLog = executionLog;
     }
 
     /**
@@ -142,6 +162,10 @@ public final class RunApplicationService {
         if (projectId == null || caseId == null || analysisId == null) {
             throw new IllegalArgumentException("run execute 参数不能为空");
         }
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "RunApplicationService", "RUN_EXECUTION_STARTED",
+                "STARTED", "Target test execution started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             ProjectRegistration registration = requireRegistration(layout, projectId);
@@ -153,6 +177,8 @@ public final class RunApplicationService {
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
             ContextRecord context = requireContext(archive, caseId, analysis.contextId());
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+            executionLog.info(logContext, "RunApplicationService", "INPUT_PRECONDITION_VERIFIED",
+                    "VERIFIED", "Algorithm input precondition was verified");
 
             RunId runId = ids.newRunId();
             RunRequest request = new RunRequest(
@@ -160,14 +186,19 @@ public final class RunApplicationService {
                     manifest.targetTest(), "UNINSTRUMENTED", clock.instant());
             try {
                 archive.startRun(request);
+                logContext = logContext.withRun(runId.value());
+                executionLog.info(logContext, "RunApplicationService", "RUN_RECORD_CREATED",
+                        "CREATED", "Run request was archived");
             } catch (WorkspaceException failure) {
                 throw new CaseRunException(failure.code(), "无法创建 RunRequest", failure);
             }
 
             if (mavenExecutable.isEmpty()) {
-                return completeNotStarted(
+                RunOutcomeSummary outcome = completeNotStarted(
                         archive, request, "MAVEN_NOT_FOUND",
                         new IllegalStateException("Maven executable unavailable"));
+                logRunCompleted(logContext, outcome);
+                return outcome;
             }
 
             Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
@@ -179,18 +210,23 @@ public final class RunApplicationService {
                 return completeNotStarted(archive, request, failure.code(), failure);
             }
             try {
-                return executeSelected(archive, request, selection, registration, moduleRoot);
+                return executeSelected(archive, request, selection, registration, moduleRoot, logContext);
             } catch (AdapterException failure) {
-                return completeNotStarted(archive, request, failure.code(), failure);
+                RunOutcomeSummary outcome = completeNotStarted(archive, request, failure.code(), failure);
+                logRunCompleted(logContext, outcome);
+                return outcome;
             } catch (SurefireDiagnosticException failure) {
-                return completeNotStarted(
+                RunOutcomeSummary outcome = completeNotStarted(
                         archive, request, "SUREFIRE_SNAPSHOT_FAILED", failure);
+                logRunCompleted(logContext, outcome);
+                return outcome;
             } catch (HarnessException failure) {
                 if ("HARNESS_PROCESS_START_FAILED".equals(failure.code())) {
                     return completeNotStarted(archive, request, failure.code(), failure);
                 }
                 throw new CaseRunException(
-                        failure.code(), "UT 执行未能形成可信进程结果，Run 保持不完整", failure);
+                        failure.code(), "The UT did not produce a trustworthy process result; the Run remains incomplete",
+                        failure);
             }
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "读取或写入 Case Workspace 失败", failure);
@@ -202,7 +238,8 @@ public final class RunApplicationService {
             RunRequest request,
             AdapterCatalog.AdapterSelection selection,
             ProjectRegistration registration,
-            Path moduleRoot) throws AdapterException, HarnessException, SurefireDiagnosticException {
+            Path moduleRoot,
+            AgentLogContext logContext) throws AdapterException, HarnessException, SurefireDiagnosticException {
         TargetProjectAdapter adapter = selection.adapter();
         TestLaunchSpec spec = adapter.createLaunchSpec(
                 selection.project(), request.targetTest(), RunMode.BASELINE);
@@ -227,6 +264,8 @@ public final class RunApplicationService {
                 resultSource,
                 new JsonResultParser(),
                 raw.resolve("gantt.json"));
+        executionLog.info(logContext, "RunApplicationService", "TARGET_PROCESS_COMPLETED",
+                schedule.run().completion().name(), "Target test process completed");
 
         Optional<AgentFailureDiagnostic> agentFailure = schedule.agentFailure();
         Optional<SurefireTestResult> testResult = Optional.empty();
@@ -297,7 +336,22 @@ public final class RunApplicationService {
                 agentFailure, markerText, references,
                 decision.outcome(), decision.summary());
         complete(archive, outcome);
+        executionLog.info(logContext, "RunApplicationService", "GANTT_CAPTURE_COMPLETED",
+                outcome.ganttOutcome().name(), "Gantt capture was evaluated");
+        executionLog.info(logContext, "RunApplicationService", "RUN_ARTIFACTS_ARCHIVED",
+                "ARCHIVED", "Run artifacts were archived",
+                Map.of("artifactCount", Integer.toString(outcome.artifacts().size())));
+        logRunCompleted(logContext, outcome);
         return outcome;
+    }
+
+    private void logRunCompleted(AgentLogContext context, RunOutcomeSummary outcome) {
+        executionLog.info(context, "RunApplicationService", "RUN_OUTCOME_CLASSIFIED",
+                outcome.testOutcome().name(), "Target test outcome was classified",
+                Map.of("processOutcome", outcome.processOutcome().name(),
+                        "ganttOutcome", outcome.ganttOutcome().name()));
+        executionLog.info(context, "RunApplicationService", "RUN_EXECUTION_COMPLETED",
+                "COMPLETED", "Target test execution completed");
     }
 
     private Optional<RunResultFingerprint> createFingerprint(

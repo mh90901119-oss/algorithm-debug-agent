@@ -60,6 +60,8 @@ import org.example.algorithmdebug.jdwp.JdwpAdapterException;
 import org.example.algorithmdebug.jdwp.JdwpExecutionRequest;
 import org.example.algorithmdebug.jdwp.JdwpExecutionResult;
 import org.example.algorithmdebug.plan.CollectorDebugPlanWriter;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 /** 缂栨帓涓€娆¤拷鍔犲紡 JDWP 閲囬泦銆佸師濮嬩骇鐗╁綊妗ｅ拰鏃犻噰闆?Baseline 涓€鑷存€ф鏌ャ€?*/
 public final class JdwpCollectionApplicationService {
@@ -74,6 +76,7 @@ public final class JdwpCollectionApplicationService {
     private final JdwpToolConfiguration tool;
     private final JdwpCollectionExecutor executor;
     private final JdwpPortProvider ports;
+    private final AgentExecutionLog executionLog;
     private final CollectorDebugPlanWriter collectorPlans = new CollectorDebugPlanWriter();
 
     /** 娉ㄥ叆鍏ㄩ儴鏈哄櫒杈圭晫锛屼互渚跨‘瀹氭€ф祴璇曠鍙ｃ€佽繘绋嬪拰婧愮爜婕傜Щ鍒嗘敮銆?*/
@@ -89,10 +92,27 @@ public final class JdwpCollectionApplicationService {
             JdwpToolConfiguration tool,
             JdwpCollectionExecutor executor,
             JdwpPortProvider ports) {
+        this(registrations, mapper, writer, adapters, ids, clock, mavenExecutable,
+                javaExecutable, tool, executor, ports, AgentExecutionLog.disabled());
+    }
+
+    public JdwpCollectionApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            AdapterCatalog adapters,
+            OpaqueIdGenerator ids,
+            Clock clock,
+            Optional<Path> mavenExecutable,
+            Path javaExecutable,
+            JdwpToolConfiguration tool,
+            JdwpCollectionExecutor executor,
+            JdwpPortProvider ports,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || mavenExecutable == null
                 || javaExecutable == null || tool == null || executor == null
-                || ports == null) {
+                || ports == null || executionLog == null) {
             throw new IllegalArgumentException("JDWP Collection 鐢ㄤ緥渚濊禆涓嶈兘涓虹┖");
         }
         this.registrations = registrations;
@@ -106,11 +126,16 @@ public final class JdwpCollectionApplicationService {
         this.tool = tool;
         this.executor = executor;
         this.ports = ports;
+        this.executionLog = executionLog;
     }
 
     /** 姣忔璋冪敤鍒涘缓鏂扮殑 runId/collectionId锛屼笉瑕嗙洊鍚屼竴 Case 鐨勪换浣曞巻鍙查噰闆嗐€?*/
     public MultiArtifactBackedResult<CollectionExecutionSummary> execute(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, PlanId planId) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withPlan(planId.value());
+        executionLog.info(logContext, "JdwpCollectionApplicationService", "JDWP_COLLECTION_STARTED",
+                "STARTED", "JDWP collection started");
         WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
         var registration = registrations.findById(layout, projectId).orElseThrow(() ->
                 new CaseRunException("PROJECT_NOT_REGISTERED", "椤圭洰灏氭湭鐧昏"));
@@ -131,6 +156,10 @@ public final class JdwpCollectionApplicationService {
                 SchemaVersions.JDWP_COLLECTION_REQUEST, caseId, plan.contextId(), plan.analysisId(),
                 runId, planId, collectionId, plan.targetTest(), "JDWP", clock.instant());
         Path collectionRoot = archive.startJdwpCollection(record);
+        logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
+                .withCollection(collectionId.value());
+        executionLog.info(logContext, "JdwpCollectionApplicationService", "COLLECTION_RECORD_CREATED",
+                "CREATED", "JDWP collection request was archived");
         Instant startedAt = clock.instant();
         CollectionBaselineCheck baseline;
         JdwpCollectionManifest manifest;
@@ -162,6 +191,8 @@ public final class JdwpCollectionApplicationService {
                     plan.budget().maxBytes(), Duration.ofSeconds(30),
                     Duration.ofMillis(plan.budget().timeoutMillis()));
             JdwpExecutionResult result = executor.execute(request);
+            executionLog.info(logContext, "JdwpCollectionApplicationService", "COLLECTOR_COMPLETED",
+                    result.completion().name(), "JDWP target and collector processes completed");
             observedTargetStarted = result.targetStarted();
             observedCollectorStarted = result.collectorStarted();
             observedTargetExitCode = exitCode(result.target());
@@ -171,6 +202,8 @@ public final class JdwpCollectionApplicationService {
             JdwpCollectionCompletion effectiveCompletion = effectiveCompletion(result.completion(), external);
             baseline = checkBaseline(
                     archive, record, effectiveCompletion, capture, collectionRoot, moduleRoot);
+            executionLog.info(logContext, "JdwpCollectionApplicationService", "BASELINE_CHECKED",
+                    baseline.outcome().name(), "JDWP baseline was evaluated");
             archive.createJdwpCollectionBaselineCheck(baseline);
             manifest = successManifest(
                     record, result, effectiveCompletion, external, collectionRoot,
@@ -214,6 +247,10 @@ public final class JdwpCollectionApplicationService {
                         layout.projectCases(projectId), archive, mapper, writer, ids, clock)
                         .processJdwp(record, plan, manifest, baseline)
                 : new CollectionPostProcessingResult(false, List.of());
+        executionLog.info(logContext, "JdwpCollectionApplicationService",
+                "COLLECTION_POST_PROCESSING_COMPLETED",
+                postProcessing.confirmationUsable() ? "USABLE" : "PARTIAL",
+                "JDWP normalization, validation, and evidence processing completed");
         List<ArtifactReference> artifacts = new ArrayList<>(describeArtifacts(
                 caseRoot, collectionRoot, plan, collectionId));
         artifacts.addAll(postProcessing.artifacts());
@@ -229,6 +266,8 @@ public final class JdwpCollectionApplicationService {
                 artifacts.stream().map(ArtifactReference::artifactId).toList());
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
+        executionLog.info(logContext, "JdwpCollectionApplicationService", "COLLECTION_COMPLETED",
+                summary.completion(), "JDWP collection completed");
         return new MultiArtifactBackedResult<>(summary, artifacts);
     }
 

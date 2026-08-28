@@ -124,7 +124,9 @@ class CollectionEvidenceValidatorTest {
         assertEquals(java.util.Set.of(EvidenceDimension.VALIDATION,
                 EvidenceDimension.RUNTIME_STATE), validation.coveredDimensions());
         assertTrue(validation.findings().stream().anyMatch(finding ->
-                "NORMALIZATION_PARTIAL".equals(finding.code())));
+                "NORMALIZATION_PARTIAL".equals(finding.code())
+                        && "The normalized summary is incomplete because of a budget or upstream truncation"
+                        .equals(finding.detail())));
     }
 
     private JdwpValidationInput jdwpInput(
