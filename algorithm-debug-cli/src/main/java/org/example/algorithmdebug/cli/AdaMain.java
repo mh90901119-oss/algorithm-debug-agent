@@ -21,6 +21,9 @@ import org.example.algorithmdebug.codepath.MavenTestClasspathResolver;
 import org.example.algorithmdebug.methodpath.MethodPathCollector;
 import org.example.algorithmdebug.jdwp.JdwpCollectionCoordinator;
 import org.example.algorithmdebug.jdwp.LoopbackPortAllocator;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
+import org.example.algorithmdebug.casecore.logging.JavaExecutionLogRouter;
 
 import java.io.File;
 import java.io.PrintStream;
@@ -31,6 +34,7 @@ import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.stream.Collectors;
 import java.nio.file.Files;
+import java.util.Map;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
 public final class AdaMain {
@@ -42,13 +46,22 @@ public final class AdaMain {
 
     private final CommandExecution execution;
     private final CliResponseWriter responseWriter;
+    private final AgentExecutionLog executionLog;
 
     AdaMain(CommandExecution execution, CliResponseWriter responseWriter) {
-        if (execution == null || responseWriter == null) {
-            throw new IllegalArgumentException("execution and responseWriter must not be null");
+        this(execution, responseWriter, AgentExecutionLog.disabled());
+    }
+
+    AdaMain(
+            CommandExecution execution,
+            CliResponseWriter responseWriter,
+            AgentExecutionLog executionLog) {
+        if (execution == null || responseWriter == null || executionLog == null) {
+            throw new IllegalArgumentException("CLI dependencies must not be null");
         }
         this.execution = execution;
         this.responseWriter = responseWriter;
+        this.executionLog = executionLog;
     }
 
     /** JVM 主入口；退出码由 {@link #run(String[], PrintStream, PrintStream)} 返回。 */
@@ -72,6 +85,9 @@ public final class AdaMain {
         try {
             command = CliArguments.parse(arguments);
         } catch (IllegalArgumentException failure) {
+            executionLog.error(
+                    AgentLogContext.bootstrap(), "AdaMain", "CLI_ARGUMENTS_REJECTED", "REJECTED",
+                    "CLI arguments were rejected", Map.of("code", "CLI_INVALID_ARGUMENTS"), failure);
             responseWriter.write(
                     ToolResponse.failure(
                             "CLI_INVALID_ARGUMENTS",
@@ -80,8 +96,15 @@ public final class AdaMain {
             return EXIT_INVALID_ARGUMENTS;
         }
 
+        AgentLogContext logContext = CliLogContextResolver.before(command);
+        String commandName = CliLogContextResolver.commandName(command);
+        executionLog.info(logContext, "AdaMain", "CLI_INVOCATION_STARTED", "STARTED",
+                "CLI invocation started", Map.of("command", commandName));
         try {
             Object result = execution.execute(command);
+            logContext = CliLogContextResolver.after(command, result);
+            executionLog.info(logContext, "AdaMain", "CLI_INVOCATION_COMPLETED", "COMPLETED",
+                    "CLI invocation completed", Map.of("command", commandName));
             if (result instanceof ArtifactBackedResult<?> artifactBacked) {
                 responseWriter.write(ToolResponse.success(
                         artifactBacked.summary(), List.of(artifactBacked.artifact())), stdout);
@@ -93,6 +116,7 @@ public final class AdaMain {
             }
             return EXIT_SUCCESS;
         } catch (CliInputException failure) {
+            logFailure(logContext, commandName, "CLI_INVALID_ARGUMENTS", failure);
             responseWriter.write(
                     ToolResponse.failure(
                             "CLI_INVALID_ARGUMENTS",
@@ -100,29 +124,33 @@ public final class AdaMain {
                     stdout);
             return EXIT_INVALID_ARGUMENTS;
         } catch (CaseRunException failure) {
+            logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
                     ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (ControlPlaneException failure) {
+            logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
                     ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (StaticAnalysisException failure) {
+            logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
                     ToolResponse.failure(
                             failure.code(), safeDomainMessage(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (PlanCompilationException failure) {
+            logFailure(logContext, commandName, "PLAN_COMPILATION_FAILED", failure);
             responseWriter.write(
                     ToolResponse.failure(
                             "PLAN_COMPILATION_FAILED", safeDomainMessage("PLAN_COMPILATION_FAILED"), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (RuntimeException failure) {
-            stderr.println("INTERNAL_ERROR");
+            logFailure(logContext, commandName, "INTERNAL_ERROR", failure);
             responseWriter.write(
                     ToolResponse.failure("INTERNAL_ERROR", "Internal Agent error", List.of()),
                     stdout);
@@ -131,12 +159,18 @@ public final class AdaMain {
     }
 
     static AdaMain defaultApplication() {
-        CliCommandExecutor executor = defaultExecutor();
-        return new AdaMain(executor::execute, new CliResponseWriter());
+        AgentExecutionLog log = JavaExecutionLogRouter.fromEnvironment(
+                Clock.systemDefaultZone(), System.getenv());
+        CliCommandExecutor executor = defaultExecutor(log);
+        return new AdaMain(executor::execute, new CliResponseWriter(), log);
     }
 
     /** 装配默认 CLI 执行器；保留包级测试缝以验证组合根。 */
     static CliCommandExecutor defaultExecutor() {
+        return defaultExecutor(AgentExecutionLog.disabled());
+    }
+
+    private static CliCommandExecutor defaultExecutor(AgentExecutionLog executionLog) {
         boolean windows = System.getProperty("os.name", "")
                 .toLowerCase(Locale.ROOT)
                 .contains("win");
@@ -166,11 +200,17 @@ public final class AdaMain {
                 codePath.collector(),
                 new MavenTestClasspathResolver(),
                 jdwp.tool(), jdwp.executor(), jdwp.ports(),
-                codePath.doctorProbe(), jdwp.doctorProbe());
+                codePath.doctorProbe(), jdwp.doctorProbe(), executionLog);
         return new CliCommandExecutor(
                 services.workspace(), services.project(), services.doctor(),
                 services.cases(), services.runs(), services.staticAnalysis(), services.collections(),
                 services.jdwpCollections(), services.algorithmInputs());
+    }
+
+    private void logFailure(
+            AgentLogContext context, String command, String code, Throwable failure) {
+        executionLog.error(context, "AdaMain", "CLI_INVOCATION_FAILED", "FAILED",
+                "CLI invocation failed", Map.of("command", command, "code", code), failure);
     }
 
     private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {

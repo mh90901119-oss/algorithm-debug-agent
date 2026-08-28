@@ -26,6 +26,11 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>case-management</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
             <artifactId>adapter-sdk</artifactId>
             <version>${project.version}</version>
         </dependency>

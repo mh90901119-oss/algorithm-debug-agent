@@ -31,6 +31,8 @@ import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisBudget;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisRequest;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 /** 编排静态方法目录、CodePath 计划和 JDWP 计划，并追加归档到同一 Case。 */
 public final class StaticAnalysisApplicationService {
@@ -41,6 +43,7 @@ public final class StaticAnalysisApplicationService {
     private final CodePathPlanCompiler compiler;
     private final JdwpPlanCompiler jdwpCompiler;
     private final Clock clock;
+    private final AgentExecutionLog executionLog;
 
     /** 注入确定性仓储、分析器、计划编译器和时钟。 */
     public StaticAnalysisApplicationService(
@@ -50,8 +53,19 @@ public final class StaticAnalysisApplicationService {
             JavaSourceCallGraphAnalyzer analyzer,
             CodePathPlanCompiler compiler,
             Clock clock) {
+        this(registrations, mapper, writer, analyzer, compiler, clock, AgentExecutionLog.disabled());
+    }
+
+    public StaticAnalysisApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            JavaSourceCallGraphAnalyzer analyzer,
+            CodePathPlanCompiler compiler,
+            Clock clock,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || analyzer == null
-                || compiler == null || clock == null) {
+                || compiler == null || clock == null || executionLog == null) {
             throw new IllegalArgumentException("StaticAnalysisApplicationService 依赖不能为空");
         }
         this.registrations = registrations;
@@ -61,11 +75,16 @@ public final class StaticAnalysisApplicationService {
         this.compiler = compiler;
         this.jdwpCompiler = new JdwpPlanCompiler();
         this.clock = clock;
+        this.executionLog = executionLog;
     }
 
     /** 为已有 Analysis 构建并归档一次静态方法目录，不计算整模块源码指纹。 */
     public ArtifactBackedResult<StaticAnalysisSummary> analyze(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, AnalysisId analysisId) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "StaticAnalysisApplicationService", "STATIC_ANALYSIS_STARTED",
+                "STARTED", "Static analysis started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             ProjectRegistration registration = requireRegistration(layout, projectId);
@@ -85,10 +104,13 @@ public final class StaticAnalysisApplicationService {
                     scopedArtifactId(analysisId.value() + "-method-catalog"),
                     "METHOD_CATALOG", "STATIC_");
             archive.registerArtifact(caseId, artifact, clock.instant());
-            return new ArtifactBackedResult<>(new StaticAnalysisSummary(
+            ArtifactBackedResult<StaticAnalysisSummary> result = new ArtifactBackedResult<>(new StaticAnalysisSummary(
                     catalog.caseId(), catalog.contextId(), catalog.analysisId(),
                     catalog.completeness(), catalog.entries().size(), catalog.edges().size(),
                     catalog.warnings().size()), artifact);
+            executionLog.info(logContext, "StaticAnalysisApplicationService", "STATIC_ANALYSIS_COMPLETED",
+                    catalog.completeness().name(), "Static analysis completed");
+            return result;
         } catch (StaticAnalysisException failure) {
             throw new CaseRunException(failure.code(), "静态方法目录构建失败", failure);
         } catch (WorkspaceException failure) {
@@ -100,6 +122,10 @@ public final class StaticAnalysisApplicationService {
     public ArtifactBackedResult<CodePathPlanSummary> createCodePathPlan(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, AnalysisId analysisId,
             CodePathPlanRequest request) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "StaticAnalysisApplicationService", "CODEPATH_PLAN_STARTED",
+                "STARTED", "CodePath plan compilation started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             requireRegistration(layout, projectId);
@@ -113,6 +139,9 @@ public final class StaticAnalysisApplicationService {
                     scopedArtifactId(analysisId.value() + "-codepath-plan-" + plan.planId().value()),
                     "CODEPATH_PLAN", "PLAN_");
             archive.registerArtifact(caseId, artifact, clock.instant());
+            executionLog.info(logContext.withPlan(plan.planId().value()),
+                    "StaticAnalysisApplicationService", "CODEPATH_PLAN_COMPLETED",
+                    "COMPLETED", "CodePath plan was archived");
             return new ArtifactBackedResult<>(new CodePathPlanSummary(
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.selectors().size()), artifact);
@@ -127,6 +156,10 @@ public final class StaticAnalysisApplicationService {
     public ArtifactBackedResult<JdwpPlanSummary> createJdwpPlan(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, AnalysisId analysisId,
             JdwpPlanRequest request) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "StaticAnalysisApplicationService", "JDWP_PLAN_STARTED",
+                "STARTED", "JDWP plan compilation started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             ProjectRegistration registration = requireRegistration(layout, projectId);
@@ -141,6 +174,9 @@ public final class StaticAnalysisApplicationService {
                     scopedArtifactId(analysisId.value() + "-jdwp-plan-" + plan.planId().value()),
                     "JDWP_PLAN", "JDWP_PLAN_");
             archive.registerArtifact(caseId, artifact, clock.instant());
+            executionLog.info(logContext.withPlan(plan.planId().value()),
+                    "StaticAnalysisApplicationService", "JDWP_PLAN_COMPLETED",
+                    "COMPLETED", "JDWP plan was archived");
             return new ArtifactBackedResult<>(new JdwpPlanSummary(
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),

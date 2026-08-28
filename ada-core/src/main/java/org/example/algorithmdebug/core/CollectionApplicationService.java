@@ -53,6 +53,8 @@ import org.example.algorithmdebug.methodpath.MethodPathCollector;
 import org.example.algorithmdebug.methodpath.MethodPathManifest;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
 import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 /** 缂栨帓涓€娆?CodePath 鍔ㄦ€侀噰闆嗐€丆ase 褰掓。鍜屾棤閲囬泦 Baseline 涓€鑷存€ф鏌ャ€?*/
 public final class CollectionApplicationService {
@@ -66,6 +68,7 @@ public final class CollectionApplicationService {
     private final MethodPathCollector collector;
     private final TargetClasspathResolver classpaths;
     private final Path javaExecutable;
+    private final AgentExecutionLog executionLog;
 
     /** 娉ㄥ叆椤圭洰銆丄dapter銆両D銆佸伐鍏蜂笌澶栭儴杩涚▼閰嶇疆銆?*/
     public CollectionApplicationService(
@@ -79,9 +82,26 @@ public final class CollectionApplicationService {
             Path javaExecutable,
             MethodPathCollector collector,
             TargetClasspathResolver classpaths) {
+        this(registrations, mapper, writer, adapters, ids, clock, mavenExecutable,
+                javaExecutable, collector, classpaths, AgentExecutionLog.disabled());
+    }
+
+    public CollectionApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            AdapterCatalog adapters,
+            OpaqueIdGenerator ids,
+            Clock clock,
+            Optional<Path> mavenExecutable,
+            Path javaExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpaths,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || mavenExecutable == null
-                || javaExecutable == null || collector == null || classpaths == null) {
+                || javaExecutable == null || collector == null || classpaths == null
+                || executionLog == null) {
             throw new IllegalArgumentException("CollectionApplicationService 渚濊禆涓嶈兘涓虹┖");
         }
         this.registrations = registrations; this.mapper = mapper; this.writer = writer;
@@ -89,11 +109,16 @@ public final class CollectionApplicationService {
         this.mavenExecutable = mavenExecutable;
         this.javaExecutable = javaExecutable.toAbsolutePath().normalize();
         this.collector = collector; this.classpaths = classpaths;
+        this.executionLog = executionLog;
     }
 
     /** 姣忔璋冪敤鍒涘缓鏂扮殑 runId/collectionId锛屼笉鑷姩閲嶈瘯鎴栬鐩栥€?*/
     public MultiArtifactBackedResult<CollectionExecutionSummary> executeCodePath(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, PlanId planId) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withPlan(planId.value());
+        executionLog.info(logContext, "CollectionApplicationService", "CODEPATH_COLLECTION_STARTED",
+                "STARTED", "CodePath collection started");
         WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
         ProjectRegistration registration = registrations.findById(layout, projectId).orElseThrow(() ->
                 new CaseRunException("PROJECT_NOT_REGISTERED", "椤圭洰灏氭湭鐧昏"));
@@ -114,6 +139,10 @@ public final class CollectionApplicationService {
                 "1.0", caseId, plan.contextId(), plan.analysisId(), runId, planId,
                 collectionId, plan.targetTest(), "CODEPATH", clock.instant());
         Path collectionRoot = archive.startMethodPathCollection(record);
+        logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
+                .withCollection(collectionId.value());
+        executionLog.info(logContext, "CollectionApplicationService", "COLLECTION_RECORD_CREATED",
+                "CREATED", "CodePath collection request was archived");
         CollectionBaselineCheck baseline;
         MethodPathCollectionResult result = null;
         String stage = "REQUEST_ARCHIVED";
@@ -128,8 +157,12 @@ public final class CollectionApplicationService {
                     caseId, plan.contextId(), plan.analysisId(), runId, plan, collectionId,
                     Path.of(registration.mavenExecutionRoot()), collectionRoot,
                     javaExecutable, classpath, plan.targetTest().selector()));
+            executionLog.info(logContext, "CollectionApplicationService", "LAUNCHER_COMPLETED",
+                    result.manifest().completion().name(), "CodePath launcher completed");
             stage = "PROCESS_COMPLETED";
             baseline = checkBaseline(archive, record, result, capture, moduleRoot);
+            executionLog.info(logContext, "CollectionApplicationService", "BASELINE_CHECKED",
+                    baseline.outcome().name(), "CodePath baseline was evaluated");
             archiveManifest(collectionRoot, result.manifest());
         } catch (MethodPathCollectionException failure) {
             archiveManifest(collectionRoot, failureManifest(
@@ -155,6 +188,10 @@ public final class CollectionApplicationService {
                         layout.projectCases(projectId), archive, mapper, writer, ids, clock)
                         .processCodePath(record, plan, result.manifest(), baseline)
                 : new CollectionPostProcessingResult(false, List.of());
+        executionLog.info(logContext, "CollectionApplicationService",
+                "COLLECTION_POST_PROCESSING_COMPLETED",
+                postProcessing.confirmationUsable() ? "USABLE" : "PARTIAL",
+                "CodePath normalization, validation, and evidence processing completed");
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         List<ArtifactReference> artifacts = new java.util.ArrayList<>(describeArtifacts(
                 caseRoot, collectionRoot, collectionId));
@@ -169,6 +206,8 @@ public final class CollectionApplicationService {
                 artifacts.stream().map(ArtifactReference::artifactId).toList());
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
+        executionLog.info(logContext, "CollectionApplicationService", "COLLECTION_COMPLETED",
+                summary.completion(), "CodePath collection completed");
         return new MultiArtifactBackedResult<>(summary, artifacts);
     }
 

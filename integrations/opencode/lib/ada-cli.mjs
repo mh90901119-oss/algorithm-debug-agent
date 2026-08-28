@@ -7,7 +7,7 @@ const UTF8 = new TextDecoder("utf-8", { fatal: true })
  * @param {string[]} args CLI 参数
  * @param {string} cwd 目标项目目录
  * @param {(command: string[], options: object) => object} spawn 进程启动函数
- * @param {{ timeoutMilliseconds?: number, executable?: string }} [options] Adapter 总运行预算与 CLI 启动器
+ * @param {{ timeoutMilliseconds?: number, executable?: string, environment?: Record<string, string> }} [options] Adapter 总运行预算、CLI 启动器与内部子进程环境
  * @returns {Promise<string>} ToolResponse 2.0 JSON
  */
 export async function runAdaCommand(args, cwd, spawn, options = {}) {
@@ -23,10 +23,21 @@ export async function runAdaCommand(args, cwd, spawn, options = {}) {
   if (typeof executable !== "string" || executable.trim().length === 0) {
     throw new TypeError("executable must be a non-empty string")
   }
+  const environment = options.environment ?? {}
+  if (typeof environment !== "object" || environment === null || Array.isArray(environment)
+      || Object.entries(environment).some(([key, value]) =>
+        typeof key !== "string" || key.length === 0 || typeof value !== "string")) {
+    throw new TypeError("environment must contain string keys and values")
+  }
 
   let process
   try {
-    process = spawn([executable, ...args], { cwd, stdout: "pipe", stderr: "pipe" })
+    process = spawn([executable, ...args], {
+      cwd,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...globalThis.process.env, ...environment },
+    })
   } catch {
     return failure("ADA_CLI_START_FAILED")
   }

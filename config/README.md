@@ -7,7 +7,7 @@ Every path is explicit so users can see and change the defaults. The installer e
 
 - `openCodeConfigDirectory`: OpenCode global configuration directory.
 - `workspaceDirectory`: append-only Case, Run, Collection, Evidence, and Report storage.
-- `dfxDirectory`: fallback diagnostic storage for interactions that fail before a Case identity is available.
+- `dfxDirectory`: fallback diagnostic storage for interactions and Java CLI failures that occur before a Case identity is available. Normal Java execution logs are written under each Case.
 - `evalDirectory`: development-only Eval Harness output storage.
 - `resultJsonDirectory`: business algorithm JSON result directory. Use `${runDate}` for a daily
   `yyyy-MM-dd` directory, for example `D:\\log\\scheduler\\${runDate}\\gant`. A fixed absolute path

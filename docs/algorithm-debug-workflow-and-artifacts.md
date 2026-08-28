@@ -180,6 +180,7 @@ Collection ToolResponse 将内部采集执行标识显示为 `collectorExecution
 |---|---|---|
 | `case.json` | analysis_begin | Case、项目、目标 UT、Adapter 和创建时间 |
 | `interaction.jsonl` | JS DFX Recorder | 可选的真实 Tool/CLI 时间线；OpenCode DFX 启用时应存在，不是 Evidence |
+| `logs/agent-YYYY-MM-DD.log` | Java Agent | Java CLI、输入、UT、静态分析和动态采集的英文执行阶段；用于故障复盘，不是 Evidence |
 | `contexts/<contextId>/context.json` | analysis_begin | 本轮 Context 身份和时间 |
 | `contexts/<contextId>/reproduction.json` | 首次普通 Run | 供动态失败比较使用的普通 Run 引用；仅在需要时存在 |
 | `analyses/<analysisId>/analysis-request.json` | analysis_begin | 本轮问题和 Context 关联 |

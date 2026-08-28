@@ -112,7 +112,7 @@ class AdaMainTest {
         assertFalse(invocation.stderr().contains(secret));
         assertFalse(invocation.stdout().contains("IllegalStateException"));
         assertFalse(invocation.stderr().contains("IllegalStateException"));
-        assertEquals("INTERNAL_ERROR" + System.lineSeparator(), invocation.stderr());
+        assertEquals("", invocation.stderr());
     }
 
     @Test

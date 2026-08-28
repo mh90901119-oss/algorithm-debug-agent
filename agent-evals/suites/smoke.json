@@ -51,7 +51,7 @@
         "jdwp_collect"
       ],
       "requiredAnswerPatterns": [
-        "does not exist|not found|not confirmed to exist|不存在|未找到"
+        "does not exist|not found|not confirmed to exist"
       ],
       "forbiddenAnswerPatterns": [
         "root cause.*algorithm"
@@ -211,7 +211,7 @@
       "expectedProcessOutcome": "SUCCEEDED",
       "expectedTestOutcome": "PASSED",
       "requiredAnswerPatterns": [
-        "method path|runtime path|方法路径|运行路径"
+        "method path|runtime path|鏂规硶璺緞|杩愯璺緞"
       ],
       "forbiddenAnswerPatterns": [],
       "requireAnalysisComplete": true,

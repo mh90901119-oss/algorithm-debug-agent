@@ -24,6 +24,8 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.staticanalysis.AlgorithmInputLocation;
 import org.example.algorithmdebug.staticanalysis.AlgorithmInputLocationException;
 import org.example.algorithmdebug.staticanalysis.JavaTestAlgorithmInputLocator;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 /** 编排目标 UT 单一算法输入的 AST 定位、原子复制、注册和多轮一致性判断。 */
 public final class AlgorithmInputApplicationService {
@@ -35,6 +37,7 @@ public final class AlgorithmInputApplicationService {
     private final AtomicDocumentWriter writer;
     private final JavaTestAlgorithmInputLocator locator;
     private final Clock clock;
+    private final AgentExecutionLog executionLog;
 
     /** 注入确定性项目注册、归档、AST 定位和时间端口。 */
     public AlgorithmInputApplicationService(
@@ -43,8 +46,18 @@ public final class AlgorithmInputApplicationService {
             AtomicDocumentWriter writer,
             JavaTestAlgorithmInputLocator locator,
             Clock clock) {
+        this(registrations, mapper, writer, locator, clock, AgentExecutionLog.disabled());
+    }
+
+    public AlgorithmInputApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            JavaTestAlgorithmInputLocator locator,
+            Clock clock,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null
-                || locator == null || clock == null) {
+                || locator == null || clock == null || executionLog == null) {
             throw new IllegalArgumentException("Algorithm input service dependencies are required");
         }
         this.registrations = registrations;
@@ -52,6 +65,7 @@ public final class AlgorithmInputApplicationService {
         this.writer = writer;
         this.locator = locator;
         this.clock = clock;
+        this.executionLog = executionLog;
     }
 
     /**
@@ -59,6 +73,10 @@ public final class AlgorithmInputApplicationService {
      */
     public ArtifactBackedResult<AlgorithmInputCapture> capture(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, AnalysisId analysisId) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "AlgorithmInputApplicationService",
+                "ALGORITHM_INPUT_CAPTURE_STARTED", "STARTED", "Algorithm input capture started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             ProjectRegistration registration = registrations.findById(layout, projectId).orElseThrow(() ->
@@ -74,11 +92,17 @@ public final class AlgorithmInputApplicationService {
             Optional<AlgorithmInputCapture> existing = archive.findAlgorithmInputCapture(caseId, analysisId);
             if (existing.isPresent()) {
                 AlgorithmInputCapture verified = archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+                executionLog.info(logContext, "AlgorithmInputApplicationService",
+                        "ALGORITHM_INPUT_REUSED", "REUSED", "Existing algorithm input capture was verified");
+                executionLog.info(logContext, "AlgorithmInputApplicationService",
+                        "ALGORITHM_INPUT_CAPTURE_COMPLETED", "COMPLETED", "Algorithm input capture completed");
                 return new ArtifactBackedResult<>(verified, verified.artifact());
             }
 
             Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
             AlgorithmInputLocation location = locator.locate(moduleRoot, manifest.targetTest());
+            executionLog.info(logContext, "AlgorithmInputApplicationService",
+                    "ALGORITHM_INPUT_LOCATED", "LOCATED", "One supported algorithm input was located");
             Path source = location.resolvedPath();
             if (!Files.exists(source, LinkOption.NOFOLLOW_LINKS)) {
                 throw new CaseRunException(
@@ -95,11 +119,16 @@ public final class AlgorithmInputApplicationService {
             }
 
             Path copied = archive.copyAlgorithmInput(caseId, analysisId, source, MAX_INPUT_BYTES);
+            executionLog.info(logContext, "AlgorithmInputApplicationService",
+                    "ALGORITHM_INPUT_COPIED", "ARCHIVED", "Algorithm input was copied into the Case");
             ArtifactReference artifact = new CaseArtifactAccess(layout.projectCases(projectId)).describe(
                     caseId, analysisId.value() + "-algorithm-input", "ALGORITHM_INPUT",
                     "application/json", copied);
             PreviousComparison previous = comparePrevious(
                     archive, caseId, analysisId, artifact.sha256());
+            executionLog.info(logContext, "AlgorithmInputApplicationService",
+                    "ALGORITHM_INPUT_COMPARED", previous.comparison().name(),
+                    "Algorithm input consistency was evaluated");
             archive.registerArtifact(caseId, artifact, clock.instant());
 
             Path normalizedSource = location.sourceFile().toAbsolutePath().normalize();
@@ -114,6 +143,8 @@ public final class AlgorithmInputApplicationService {
                     location.sourceLine(), location.pathKind(), source.getFileName().toString(),
                     previous.comparison(), previous.analysisId(), artifact, clock.instant());
             archive.createAlgorithmInputCapture(capture);
+            executionLog.info(logContext, "AlgorithmInputApplicationService",
+                    "ALGORITHM_INPUT_CAPTURE_COMPLETED", "COMPLETED", "Algorithm input capture completed");
             return new ArtifactBackedResult<>(capture, artifact);
         } catch (AlgorithmInputLocationException failure) {
             throw new CaseRunException(failure.code(), "Algorithm input location failed", failure);

@@ -19,6 +19,7 @@ import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 import org.example.algorithmdebug.contracts.DoctorCheck;
 import org.example.algorithmdebug.contracts.DoctorStatus;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -176,13 +177,35 @@ public final class ControlPlaneServices {
             JdwpPortProvider jdwpPorts,
             ToolDoctorProbe codePathProbe,
             ToolDoctorProbe jdwpProbe) {
+        return create(clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, mavenExecutable, collector, classpathResolver, jdwpTool,
+                jdwpExecutor, jdwpPorts, codePathProbe, jdwpProbe, AgentExecutionLog.disabled());
+    }
+
+    /** CLI 注入统一 Java 文件日志端口。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter> adapters,
+            Optional<Path> mavenExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
+            ToolDoctorProbe codePathProbe,
+            ToolDoctorProbe jdwpProbe,
+            AgentExecutionLog executionLog) {
         if (jdwpTool == null || jdwpExecutor == null || jdwpPorts == null
-                || codePathProbe == null || jdwpProbe == null) {
+                || codePathProbe == null || jdwpProbe == null || executionLog == null) {
             throw new IllegalArgumentException("JDWP 鎺у埗闈㈢粍鍚堟牴渚濊禆涓嶈兘涓虹┖");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
                 List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
-                jdwpTool, jdwpExecutor, jdwpPorts, List.of(codePathProbe, jdwpProbe));
+                jdwpTool, jdwpExecutor, jdwpPorts, List.of(codePathProbe, jdwpProbe), executionLog);
     }
 
     private static ControlPlaneServices createInternal(
@@ -199,6 +222,26 @@ public final class ControlPlaneServices {
             JdwpCollectionExecutor jdwpExecutor,
             JdwpPortProvider jdwpPorts,
             List<ToolDoctorProbe> toolProbes) {
+        return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, mavenExecutable, methodPathCollector, classpathResolver,
+                jdwpTool, jdwpExecutor, jdwpPorts, toolProbes, AgentExecutionLog.disabled());
+    }
+
+    private static ControlPlaneServices createInternal(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter> adapters,
+            Optional<Path> mavenExecutable,
+            MethodPathCollector methodPathCollector,
+            TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
+            List<ToolDoctorProbe> toolProbes,
+            AgentExecutionLog executionLog) {
         if (clock == null || javaFeatureSupplier == null || environment == null
                 || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null) {
             throw new IllegalArgumentException("ControlPlaneServices dependencies must be valid");
@@ -226,26 +269,26 @@ public final class ControlPlaneServices {
             OpaqueIdGenerator ids = new OpaqueIdGenerator();
             cases = new CaseApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                    catalog, ids, clock);
+                    catalog, ids, clock, executionLog);
             algorithmInputs = new AlgorithmInputApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                    new JavaTestAlgorithmInputLocator(), clock);
+                    new JavaTestAlgorithmInputLocator(), clock, executionLog);
             runs = new RunApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                     catalog, ids, clock, new MavenTestExecutor(),
-                    new RunArtifactArchiver(), mavenExecutable);
+                    new RunArtifactArchiver(), mavenExecutable, executionLog);
             staticAnalysis = new StaticAnalysisApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer,
-                    new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), clock);
+                    new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), clock, executionLog);
             collections = new CollectionApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
                     ids, clock, mavenExecutable, currentJavaExecutable(windows),
-                    methodPathCollector, classpathResolver);
+                    methodPathCollector, classpathResolver, executionLog);
             if (jdwpTool != null) {
                 jdwpCollections = new JdwpCollectionApplicationService(
                         new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
                         ids, clock, mavenExecutable, currentJavaExecutable(windows), jdwpTool,
-                        jdwpExecutor, jdwpPorts);
+                        jdwpExecutor, jdwpPorts, executionLog);
             }
         }
         return new ControlPlaneServices(

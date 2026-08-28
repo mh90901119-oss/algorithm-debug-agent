@@ -21,6 +21,8 @@ import org.example.algorithmdebug.contracts.ArtifactTextExcerpt;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -35,6 +37,7 @@ public final class CaseApplicationService {
     private final AdapterCatalog adapters;
     private final OpaqueIdGenerator ids;
     private final Clock clock;
+    private final AgentExecutionLog executionLog;
 
     /** 注入项目登记、归档、Adapter、ID 与时钟端口。 */
     public CaseApplicationService(
@@ -44,8 +47,19 @@ public final class CaseApplicationService {
             AdapterCatalog adapters,
             OpaqueIdGenerator ids,
             Clock clock) {
+        this(registrations, mapper, writer, adapters, ids, clock, AgentExecutionLog.disabled());
+    }
+
+    public CaseApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            AdapterCatalog adapters,
+            OpaqueIdGenerator ids,
+            Clock clock,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || adapters == null
-                || ids == null || clock == null) {
+                || ids == null || clock == null || executionLog == null) {
             throw new IllegalArgumentException("CaseApplicationService 依赖不能为空");
         }
         this.registrations = registrations;
@@ -54,6 +68,7 @@ public final class CaseApplicationService {
         this.adapters = adapters;
         this.ids = ids;
         this.clock = clock;
+        this.executionLog = executionLog;
     }
 
     /**
@@ -84,10 +99,25 @@ public final class CaseApplicationService {
                     new CaseSessionRequest(
                             caseId, projectId, targetTest,
                             selection.adapter().descriptor().adapterId(), question, contextMode));
-            return new CaseOpenResult(
+            CaseOpenResult result = new CaseOpenResult(
                     opened.caseId(), opened.contextId(), opened.analysisId(),
                     opened.caseCreated(), opened.contextCreated(),
                     Optional.ofNullable(registration.resultJsonDirectory()), opened.digest());
+            AgentLogContext logContext = AgentLogContext.forCase(
+                    workspaceRoot, projectId, result.caseId()).withAnalysis(result.analysisId());
+            executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_STARTED",
+                    "STARTED", "Case open processing started");
+            executionLog.info(logContext, "CaseApplicationService",
+                    result.caseCreated() ? "CASE_CREATED" : "CASE_REUSED",
+                    result.caseCreated() ? "CREATED" : "REUSED", "Case identity was resolved");
+            executionLog.info(logContext, "CaseApplicationService",
+                    result.contextCreated() ? "CONTEXT_CREATED" : "CONTEXT_REUSED",
+                    result.contextCreated() ? "CREATED" : "REUSED", "Case context was resolved");
+            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_CREATED",
+                    "CREATED", "Analysis was created");
+            executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_COMPLETED",
+                    "COMPLETED", "Case open processing completed");
+            return result;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "打开 Case 失败", failure);
         }
@@ -98,11 +128,17 @@ public final class CaseApplicationService {
         if (caseId == null) {
             throw new IllegalArgumentException("caseId 不能为空");
         }
+        AgentLogContext logContext = AgentLogContext.forCase(workspaceRoot, projectId, caseId);
+        executionLog.info(logContext, "CaseApplicationService", "CASE_INSPECT_STARTED",
+                "STARTED", "Case inspection started");
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
-            return new CaseDigestReader(archive).read(caseId);
+            CaseDigest result = new CaseDigestReader(archive).read(caseId);
+            executionLog.info(logContext, "CaseApplicationService", "CASE_INSPECT_COMPLETED",
+                    "COMPLETED", "Case inspection completed");
+            return result;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "检查 Case 失败", failure);
         }
@@ -120,10 +156,16 @@ public final class CaseApplicationService {
                     "ANALYSIS_RESULT_IDENTITY_MISMATCH", "Analysis 结果与命令身份不一致");
         }
         try {
+            AgentLogContext logContext = AgentLogContext.forCase(
+                    workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_COMPLETE_STARTED",
+                    "STARTED", "Analysis completion started");
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.completeAnalysis(result);
+            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_COMPLETE_COMPLETED",
+                    "COMPLETED", "Analysis completion was archived");
             return result;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "完成 Analysis 失败", failure);
@@ -134,12 +176,18 @@ public final class CaseApplicationService {
     public ArtifactTextExcerpt readArtifact(
             Path workspaceRoot, ProjectId projectId, CaseId caseId,
             String artifactId, long offsetBytes, int maxBytes) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withArtifact(artifactId);
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
-            return new RegisteredArtifactReader(archive).read(
+            ArtifactTextExcerpt excerpt = new RegisteredArtifactReader(archive).read(
                     caseId, artifactId, offsetBytes, maxBytes);
+            executionLog.info(logContext, "CaseApplicationService",
+                    excerpt.truncated() ? "ARTIFACT_READ_TRUNCATED" : "ARTIFACT_READ_COMPLETED",
+                    excerpt.truncated() ? "PARTIAL" : "COMPLETED", "Artifact excerpt was read");
+            return excerpt;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "读取 Artifact 失败", failure);
         }
