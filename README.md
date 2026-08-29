@@ -185,3 +185,7 @@ D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke -Case 
 ## Java 执行日志
 
 正常 Java Agent 执行日志位于 `workspace/projects/<projectId>/cases/<caseId>/logs/agent-YYYY-MM-DD.log`，可直接打开查看命令、UT、CodePath 和 JDWP 的执行阶段。Case 创建前的 CLI 失败写入 `config/agent-settings.json` 中 `dfxDirectory` 对应的 `java/agent-bootstrap-YYYY-MM-DD.log`。日志只落盘，不写入 ToolResponse stdout；目标 UT 的原始 stdout/stderr 仍位于对应 Run 或 Collection 的 `raw`/`logs` 目录。
+
+OpenCode 已发现 Agent 只代表接入资产安装成功，不代表 Java CLI、Maven、目标 UT 或 Collector 已通过。
+分层定位方法以及修改后何时需要 Build、Install 或重启 OpenCode，见
+[OpenCode Algorithm Debug Agent 调试指南](docs/testing/opencode-agent-debugging.md)。

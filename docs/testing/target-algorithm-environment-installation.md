@@ -351,6 +351,14 @@ Workspace 默认在 `%LOCALAPPDATA%` 中，更换 Agent 源码 ZIP 不会删除�
 - `agent-evals/suites/smoke.json` 是 Smoke Suite 定义，应提交。
 - 不提交 Eval 报告、Workspace Case、DFX 日志、Raw Trace、Gantt 运行副本和临时会话文件。
 
+## 附录：安装成功后的端到端调试
+
+`install-opencode.ps1 -Mode Check` 只验证 OpenCode 能发现安装的 Agent、Skill、Command 和 Custom
+Tools，不会执行 Java CLI、Maven、目标 UT、CodePath 或 JDWP。端到端失败时不要重复安装或直接修改
+目标算法 POM，应先按 [OpenCode Algorithm Debug Agent 调试指南](opencode-agent-debugging.md) 区分
+OpenCode、JS Adapter、Launcher、Java Agent 和 Maven/UT 五层故障，再根据修改类型决定 Build、
+Install 和是否重启 OpenCode。
+
 ## 19. 最简执行清单
 
 ```powershell
