@@ -16,11 +16,11 @@ public final class MethodPathCollectionException extends Exception {
             String code, String message, Throwable cause, boolean processStarted, int exitCode) {
         super(message, cause);
         if (code == null || !code.matches("[A-Z][A-Z0-9_]{2,127}")) {
-            throw new IllegalArgumentException("code 非法");
+            throw new IllegalArgumentException("code is invalid");
         }
         this.code = code;
         if (!processStarted && exitCode != -1) {
-            throw new IllegalArgumentException("未启动进程时 exitCode 必须为 -1");
+            throw new IllegalArgumentException("exitCode must be -1 when the process was not started");
         }
         this.processStarted = processStarted;
         this.exitCode = exitCode;

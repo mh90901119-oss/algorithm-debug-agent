@@ -20,7 +20,7 @@ public record EvidenceFact(
         summary = ContractChecks.requireBoundedText(summary, "summary", 2_048, false);
         artifacts = ContractChecks.immutableList(artifacts, "artifacts");
         if (artifacts.size() > 16) {
-            throw new IllegalArgumentException("单条事实最多引用 16 个 Artifact");
+            throw new IllegalArgumentException("A fact may reference at most 16 Artifacts");
         }
         provenance = ContractChecks.requireNonNull(provenance, "provenance");
     }

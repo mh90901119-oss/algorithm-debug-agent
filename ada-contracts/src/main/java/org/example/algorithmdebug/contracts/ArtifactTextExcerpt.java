@@ -13,13 +13,13 @@ public record ArtifactTextExcerpt(
         artifact = ContractChecks.requireNonNull(artifact, "artifact");
         if (offsetBytes < 0 || nextOffsetBytes < offsetBytes
                 || nextOffsetBytes > artifact.sizeBytes()) {
-            throw new IllegalArgumentException("Artifact excerpt 偏移非法");
+            throw new IllegalArgumentException("Artifact excerpt offsetis invalid");
         }
         if (truncated != (nextOffsetBytes < artifact.sizeBytes())) {
-            throw new IllegalArgumentException("Artifact excerpt truncated 与偏移不一致");
+            throw new IllegalArgumentException("Artifact excerpt truncated does not match offsets");
         }
         if (text == null || text.length() > 65_536) {
-            throw new IllegalArgumentException("text 不能为 null 且长度不能超过 65536");
+            throw new IllegalArgumentException("text must not be null and length must not exceed 65536");
         }
     }
 }

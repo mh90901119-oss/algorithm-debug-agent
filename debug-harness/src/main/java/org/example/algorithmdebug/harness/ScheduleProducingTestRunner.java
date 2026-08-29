@@ -23,7 +23,7 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             OutputStabilityWaiter stabilityWaiter,
             ScheduleResultCapture<T> resultCapture) {
         if (executor == null || snapshotter == null || stabilityWaiter == null || resultCapture == null) {
-            throw new IllegalArgumentException("Runner 依赖不能为空");
+            throw new IllegalArgumentException("Runner dependencies must not be null");
         }
         this.executor = executor;
         this.snapshotter = snapshotter;
@@ -42,7 +42,7 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             Path destination) throws HarnessException {
         if (spec == null || options == null || source == null || parser == null
                 || destination == null) {
-            throw new IllegalArgumentException("运行参数不能为空");
+            throw new IllegalArgumentException("Run arguments must not be null");
         }
         OutputDirectorySnapshot before = snapshotter.snapshot(source);
         RunResult run = executor.execute(spec, options);
@@ -74,7 +74,7 @@ public final class ScheduleProducingTestRunner<T extends ScheduleResultSnapshot>
             ScheduleResultParser<T> parser,
             Path destination) throws HarnessException {
         if (source == null) {
-            throw new IllegalArgumentException("source 不能为空");
+            throw new IllegalArgumentException("source must not be null");
         }
         if (source.isEmpty()) {
             return ScheduleRunResult.absent(executor.execute(spec, options));

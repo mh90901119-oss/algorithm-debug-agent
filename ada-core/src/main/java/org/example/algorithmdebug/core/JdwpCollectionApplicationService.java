@@ -113,7 +113,7 @@ public final class JdwpCollectionApplicationService {
                 || ids == null || clock == null || mavenExecutable == null
                 || javaExecutable == null || tool == null || executor == null
                 || ports == null || executionLog == null) {
-            throw new IllegalArgumentException("JDWP Collection 鐢ㄤ緥渚濊禆涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("JDWP collection use-case dependencies must not be null");
         }
         this.registrations = registrations;
         this.mapper = mapper;
@@ -138,14 +138,14 @@ public final class JdwpCollectionApplicationService {
                 "STARTED", "JDWP collection started");
         WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
         var registration = registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "椤圭洰灏氭湭鐧昏"));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "Project is not registered"));
         CaseArchiveRepository archive = new CaseArchiveRepository(
                 layout.projectCases(projectId), mapper, writer);
         JdwpCollectionPlan plan = archive.requireJdwpPlan(caseId, planId);
         var context = archive.requireContext(caseId, plan.contextId());
         var caseManifest = archive.requireCase(caseId);
         if (!caseManifest.projectId().equals(projectId)) {
-            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 涓嶅睘浜庢寚瀹?Project");
+            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
         }
         Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
         AdapterCatalog.AdapterSelection selection = adapters.select(
@@ -215,13 +215,13 @@ public final class JdwpCollectionApplicationService {
                     -1, -1, startedAt);
             baseline = incomparable(record, "JDWP tool failed before baseline check: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException(failure.code(), "JDWP 閲囬泦澶辫触", failure);
+            throw new CaseRunException(failure.code(), "JDWP collection failed", failure);
         } catch (AdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     "JDWP_LAUNCH_SPEC_FAILED", failure, false, false, -1, -1, startedAt);
             baseline = incomparable(record, "JDWP launch specification failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "鏃犳硶鍒涘缓 JDWP 鍚姩瑙勬牸", failure);
+            throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "Failed to create JDWP launch specification", failure);
         } catch (CaseRunException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     failure.code(), failure, observedTargetStarted, observedCollectorStarted,
@@ -237,7 +237,7 @@ public final class JdwpCollectionApplicationService {
                     observedTargetExitCode, observedCollectorExitCode, startedAt);
             baseline = incomparable(record, "JDWP artifact validation or archive failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP 浜х墿褰掓。澶辫触", failure);
+            throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP artifact archival failed", failure);
         }
 
         Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
@@ -287,7 +287,7 @@ public final class JdwpCollectionApplicationService {
             }
         } catch (WorkspaceException persistenceFailure) {
             throw new CaseRunException(
-                    "JDWP_ARCHIVE_FAILED", "JDWP 澶辫触璇婃柇鏃犳硶瀹夊叏褰掓。", persistenceFailure);
+                    "JDWP_ARCHIVE_FAILED", "JDWP failure diagnostic could not be archived safely", persistenceFailure);
         } finally {
             deleteIfEmpty(collectionRoot.resolve("raw"));
             deleteIfEmpty(collectionRoot.resolve("logs"));
@@ -316,7 +316,7 @@ public final class JdwpCollectionApplicationService {
                 || completion == JdwpCollectionCompletion.TARGET_FAILED)
                 && (!rawPresent || !manifestPresent)) {
             throw new CaseRunException(
-                    "JDWP_MANIFEST_INVALID", "JDWP Collector 鏈敓鎴愬畬鏁?Raw Trace 鍜?Manifest");
+                    "JDWP_MANIFEST_INVALID", "JDWP Collector did not produce a complete Raw Trace and Manifest");
         }
         Path archivedRaw = collectionRoot.resolve("raw/jdwp.jsonl");
         Path archivedManifest = collectionRoot.resolve("raw/collector-manifest.json");
@@ -360,12 +360,12 @@ public final class JdwpCollectionApplicationService {
                     .map(point -> point.tracepointId()).collect(java.util.stream.Collectors.toSet());
             if (!allowed.containsAll(external.hitCounts().keySet())
                     || !allowed.containsAll(external.installedLocations().keySet())) {
-                throw new IllegalArgumentException("Manifest 鍖呭惈璁″垝澶?tracepoint");
+                throw new IllegalArgumentException("Manifest contains a tracepoint outside the plan");
             }
             return external;
         } catch (WorkspaceException | IllegalArgumentException failure) {
             throw new CaseRunException(
-                    "JDWP_MANIFEST_INVALID", "澶栭儴 JDWP Collector Manifest 鏃犳晥", failure);
+                    "JDWP_MANIFEST_INVALID", "External JDWP Collector Manifest is invalid", failure);
         }
     }
 
@@ -587,14 +587,14 @@ public final class JdwpCollectionApplicationService {
         Path normalizedRoot = caseRoot.toAbsolutePath().normalize();
         Path normalized = path.toAbsolutePath().normalize();
         if (!normalized.startsWith(normalizedRoot) || Files.isSymbolicLink(normalized)) {
-            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "JDWP 浜х墿璺緞闈炴硶");
+            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "JDWP artifact path is invalid");
         }
         try {
             artifacts.add(new ArtifactReference(
                     id, type, normalizedRoot.relativize(normalized).toString().replace('\\', '/'),
                     mediaType, existingSha(normalized).orElseThrow(), Files.size(normalized)));
         } catch (IOException failure) {
-            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "鏃犳硶鎻忚堪 JDWP 浜х墿", failure);
+            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "Failed to describe JDWP artifact", failure);
         }
     }
 
@@ -623,7 +623,7 @@ public final class JdwpCollectionApplicationService {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缂哄皯 SHA-256", failure);
+            throw new IllegalStateException("JDK does not provide SHA-256", failure);
         }
     }
 
@@ -656,12 +656,12 @@ public final class JdwpCollectionApplicationService {
                     || completionReason == null || completionReason.isBlank()
                     || eventCount < 0 || capabilities.size() > 32
                     || hitCounts.size() > 20 || installedLocations.size() > 20) {
-                throw new IllegalArgumentException("External JDWP Manifest 瓒呭嚭鏈夌晫濂戠害");
+                throw new IllegalArgumentException("External JDWP Manifest exceeds bounded limits");
             }
             if (hitCounts.values().stream().anyMatch(value -> value == null || value < 0)
                     || installedLocations.values().stream().anyMatch(
                             value -> value == null || value < 0)) {
-                throw new IllegalArgumentException("External JDWP Manifest 璁℃暟鏃犳晥");
+                throw new IllegalArgumentException("External JDWP Manifest counts are invalid");
             }
         }
 

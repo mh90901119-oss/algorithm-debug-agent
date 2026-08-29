@@ -39,8 +39,7 @@ class BoundedDocumentMapperTest {
 
         WorkspaceException failure = assertThrows(WorkspaceException.class, () ->
                 new BoundedDocumentMapper().readJsonArtifact(oversized, Object.class));
-
-        assertTrue(failure.getMessage().contains("超过最大字节数 " + maximum));
+        assertTrue(failure.getMessage().contains("exceeds maximum byte count " + maximum));
     }
 
     private record TimestampFixture(Instant createdAt) {

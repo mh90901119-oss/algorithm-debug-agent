@@ -33,7 +33,7 @@ public record CaseOpenResult(
         if (!caseId.equals(digest.caseId())
                 || !contextId.equals(digest.latestContextId().orElse(null))
                 || !analysisId.equals(digest.latestAnalysisId().orElse(null))) {
-            throw new IllegalArgumentException("CaseOpenResult 与 Digest 身份不一致");
+            throw new IllegalArgumentException("CaseOpenResult does not match Digest identity");
         }
     }
 }

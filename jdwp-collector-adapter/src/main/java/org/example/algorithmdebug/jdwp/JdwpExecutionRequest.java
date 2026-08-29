@@ -47,10 +47,10 @@ public record JdwpExecutionRequest(
     /** 校验运行模式、工具输入、日志隔离和有界超时。 */
     public JdwpExecutionRequest {
         if (targetLaunch == null || targetOptions == null || collectorProcessLimits == null) {
-            throw new IllegalArgumentException("目标启动规格、执行选项和 Collector 限制不能为空");
+            throw new IllegalArgumentException("The target launch specification, execution options, and Collector limits must not be null");
         }
         if (targetLaunch.runMode() != RunMode.JDWP) {
-            throw new IllegalArgumentException("targetLaunch.runMode 必须为 JDWP");
+            throw new IllegalArgumentException("targetLaunch.runMode must be JDWP");
         }
         JdwpTargetCommandFactory.requirePort(port);
         javaExecutable = requireFile(javaExecutable, "javaExecutable");
@@ -59,7 +59,7 @@ public record JdwpExecutionRequest(
         collectorOutputDirectory = requireAbsolute(collectorOutputDirectory, "collectorOutputDirectory");
         if (Files.exists(collectorOutputDirectory.resolve("raw-trace.jsonl"))
                 || Files.exists(collectorOutputDirectory.resolve("collection-manifest.json"))) {
-            throw new IllegalArgumentException("Collector 输出目录不得包含历史 Raw Trace 或 Manifest");
+            throw new IllegalArgumentException("The Collector output directory must not contain a historical Raw Trace or Manifest");
         }
         collectorStdoutLog = requireAbsolute(collectorStdoutLog, "collectorStdoutLog");
         collectorStderrLog = requireAbsolute(collectorStderrLog, "collectorStderrLog");
@@ -67,15 +67,15 @@ public record JdwpExecutionRequest(
                 targetOptions.stdoutLog(), targetOptions.stderrLog(),
                 collectorStdoutLog, collectorStderrLog);
         if (new HashSet<>(logPaths).size() != logPaths.size()) {
-            throw new IllegalArgumentException("目标与 Collector 的四个日志路径必须互不相同");
+            throw new IllegalArgumentException("The four target and Collector log paths must all be distinct");
         }
         if (maximumRawBytes < 1 || maximumRawBytes > 50L * 1024 * 1024) {
-            throw new IllegalArgumentException("maximumRawBytes 必须在 1 到 50 MiB 之间");
+            throw new IllegalArgumentException("maximumRawBytes must be between 1 and 50 MiB");
         }
         requirePositive(targetReadyTimeout, "targetReadyTimeout");
         requirePositive(overallTimeout, "overallTimeout");
         if (targetReadyTimeout.compareTo(overallTimeout) > 0) {
-            throw new IllegalArgumentException("targetReadyTimeout 不能超过 overallTimeout");
+            throw new IllegalArgumentException("targetReadyTimeout must not exceed overallTimeout");
         }
     }
 
@@ -87,14 +87,14 @@ public record JdwpExecutionRequest(
     private static Path requireFile(Path value, String field) {
         Path path = requireAbsolute(value, field);
         if (!Files.isRegularFile(path)) {
-            throw new IllegalArgumentException(field + " 必须是已存在的普通文件: " + path);
+            throw new IllegalArgumentException(field + " must be an existing regular file: " + path);
         }
         return path;
     }
 
     private static Path requireAbsolute(Path value, String field) {
         if (value == null || !value.isAbsolute()) {
-            throw new IllegalArgumentException(field + " 必须是绝对路径");
+            throw new IllegalArgumentException(field + " must be an absolute path");
         }
         return value.normalize();
     }
@@ -102,7 +102,7 @@ public record JdwpExecutionRequest(
     private static void requirePositive(Duration value, String field) {
         if (value == null || value.isZero() || value.isNegative()
                 || value.compareTo(Duration.ofMinutes(20)) > 0) {
-            throw new IllegalArgumentException(field + " 必须在 0 到 20 分钟之间");
+            throw new IllegalArgumentException(field + " must be between 0 and 20 minutes");
         }
     }
 }

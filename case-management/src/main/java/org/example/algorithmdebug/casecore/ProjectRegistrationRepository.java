@@ -28,7 +28,7 @@ public final class ProjectRegistrationRepository {
      */
     public ProjectRegistrationRepository(BoundedDocumentMapper mapper, AtomicDocumentWriter writer) {
         if (mapper == null || writer == null) {
-            throw new IllegalArgumentException("mapper 和 writer 不能为空");
+            throw new IllegalArgumentException("mapper and writer must not be null");
         }
         this.mapper = mapper;
         this.writer = writer;
@@ -62,7 +62,7 @@ public final class ProjectRegistrationRepository {
             return List.of();
         }
         if (!Files.isDirectory(projectsRoot, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("WORKSPACE_PATH_INVALID", "Workspace projects 路径不是目录: " + projectsRoot);
+            throw new WorkspaceException("WORKSPACE_PATH_INVALID", "The Workspace projects path is not a directory: " + projectsRoot);
         }
         List<ProjectRegistration> registrations = new ArrayList<>();
         try (var children = Files.list(projectsRoot)) {
@@ -79,7 +79,7 @@ public final class ProjectRegistrationRepository {
             }
         } catch (IOException | SecurityException failure) {
             throw new WorkspaceException(
-                    "WORKSPACE_PATH_INVALID", "读取 Workspace projects 目录失败: " + projectsRoot, failure);
+                    "WORKSPACE_PATH_INVALID", "Failed to read the Workspace projects directory: " + projectsRoot, failure);
         }
         registrations.sort(Comparator.comparing(registration -> registration.projectId().value()));
         return List.copyOf(registrations);
@@ -111,7 +111,7 @@ public final class ProjectRegistrationRepository {
     /** 原子替换同一 ProjectId 的已有注册配置。 */
     public void replace(WorkspaceLayout layout, ProjectRegistration registration) {
         if (registration == null) {
-            throw new IllegalArgumentException("registration 不能为空");
+            throw new IllegalArgumentException("registration must not be null");
         }
         Path path = requireLayout(layout)
                 .projectWorkspace(registration.projectId())
@@ -119,27 +119,27 @@ public final class ProjectRegistrationRepository {
         try {
             writer.replace(path, mapper.writeJson(registration));
         } catch (WorkspaceException failure) {
-            throw new WorkspaceException("WORKSPACE_WRITE_FAILED", "更新项目注册记录失败: " + path, failure);
+            throw new WorkspaceException("WORKSPACE_WRITE_FAILED", "Failed to update project registration: " + path, failure);
         }
     }
 
     private ProjectRegistration readRegistration(Path path, ProjectId expectedId) {
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("PROJECT_REGISTRATION_INVALID", "项目登记记录不是普通文件: " + path);
+            throw new WorkspaceException("PROJECT_REGISTRATION_INVALID", "Project registration is not a regular file: " + path);
         }
         try {
             ProjectRegistration registration = mapper.readJson(path, ProjectRegistration.class);
             if (!expectedId.equals(registration.projectId())) {
                 throw new WorkspaceException(
                         "PROJECT_REGISTRATION_INVALID",
-                        "project.json 的 projectId 与目录名不一致: " + path);
+                        "project.json projectId does not match the directory name: " + path);
             }
             return registration;
         } catch (WorkspaceException failure) {
             if ("PROJECT_REGISTRATION_INVALID".equals(failure.code())) {
                 throw failure;
             }
-            throw new WorkspaceException("PROJECT_REGISTRATION_INVALID", "项目登记记录无效: " + path, failure);
+            throw new WorkspaceException("PROJECT_REGISTRATION_INVALID", "Project registration is invalid: " + path, failure);
         }
     }
 
@@ -149,14 +149,14 @@ public final class ProjectRegistrationRepository {
         } catch (IllegalArgumentException failure) {
             throw new WorkspaceException(
                     "PROJECT_REGISTRATION_INVALID",
-                    "项目登记目录名不是有效 ProjectId: " + projectDirectory,
+                    "Project registration directory name is not a valid ProjectId: " + projectDirectory,
                     failure);
         }
     }
 
     private static WorkspaceLayout requireLayout(WorkspaceLayout layout) {
         if (layout == null) {
-            throw new IllegalArgumentException("layout 不能为空");
+            throw new IllegalArgumentException("layout must not be null");
         }
         return layout;
     }

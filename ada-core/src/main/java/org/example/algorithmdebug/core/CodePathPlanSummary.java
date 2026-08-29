@@ -16,7 +16,7 @@ public record CodePathPlanSummary(
     public CodePathPlanSummary {
         if (caseId == null || contextId == null || analysisId == null || planId == null
                 || selectorCount < 1 || selectorCount > 50) {
-            throw new IllegalArgumentException("CodePath 计划摘要非法");
+            throw new IllegalArgumentException("CodePath plan summary is invalid");
         }
     }
 }

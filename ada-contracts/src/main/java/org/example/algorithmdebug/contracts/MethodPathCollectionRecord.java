@@ -20,7 +20,7 @@ public record MethodPathCollectionRecord(
     /** 校验版本、身份和 Collector 类型。 */
     public MethodPathCollectionRecord {
         if (!"1.0".equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 MethodPathCollectionRecord 版本");
+            throw new IllegalArgumentException("Unsupported MethodPathCollectionRecord version");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
@@ -32,7 +32,7 @@ public record MethodPathCollectionRecord(
         collectorType = ContractChecks.requireBoundedText(
                 collectorType, "collectorType", 128, false);
         if (!"CODEPATH".equals(collectorType)) {
-            throw new IllegalArgumentException("当前采集记录只支持 CODEPATH");
+            throw new IllegalArgumentException("The current collection record only supports CODEPATH");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }

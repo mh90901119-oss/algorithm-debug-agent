@@ -52,7 +52,7 @@ public final class MavenTestExecutor implements TargetTestExecutor {
     public RunResult execute(TestLaunchSpec spec, MavenExecutionOptions options)
             throws HarnessException {
         if (spec == null || options == null) {
-            throw new IllegalArgumentException("spec 与 options 不能为空");
+            throw new IllegalArgumentException("spec and options must not be null");
         }
         Instant startedAt = clock.instant();
         long startedNanos = nanoTime.getAsLong();
@@ -65,7 +65,7 @@ public final class MavenTestExecutor implements TargetTestExecutor {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_PROCESS_START_FAILED",
-                    "无法启动目标 Maven 进程，测试: " + spec.targetTest().selector(),
+                    "Failed to start target Maven process, test: " + spec.targetTest().selector(),
                     exception);
         }
 
@@ -121,7 +121,7 @@ public final class MavenTestExecutor implements TargetTestExecutor {
             } finally {
                 Thread.currentThread().interrupt();
             }
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待日志归档时被中断", exception);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for log archival", exception);
         } catch (ExecutionException exception) {
             if (process.isAlive()) {
                 supervisor.terminate(process, limits);
@@ -130,7 +130,7 @@ public final class MavenTestExecutor implements TargetTestExecutor {
             if (cause instanceof HarnessException harnessException) {
                 throw harnessException;
             }
-            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "日志归档任务失败", cause);
+            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "The log archival task failed", cause);
         }
     }
 

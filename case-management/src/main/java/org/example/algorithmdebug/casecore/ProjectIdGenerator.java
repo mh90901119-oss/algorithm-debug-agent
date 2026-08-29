@@ -23,7 +23,7 @@ public final class ProjectIdGenerator {
      */
     public ProjectId generate(Path canonicalModuleRoot) {
         if (canonicalModuleRoot == null) {
-            throw new IllegalArgumentException("canonicalModuleRoot 不能为空");
+            throw new IllegalArgumentException("canonicalModuleRoot must not be null");
         }
         Path normalized = canonicalModuleRoot.toAbsolutePath().normalize();
         String hash = sha256(normalized.toString()).substring(0, HASH_LENGTH);
@@ -48,7 +48,7 @@ public final class ProjectIdGenerator {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("Java 运行时不支持 SHA-256", impossible);
+            throw new IllegalStateException("Java runtime does not support SHA-256", impossible);
         }
     }
 }

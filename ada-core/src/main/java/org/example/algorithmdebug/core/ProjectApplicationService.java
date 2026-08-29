@@ -20,7 +20,7 @@ public final class ProjectApplicationService {
      */
     public ProjectApplicationService(ProjectRegistry registry) {
         if (registry == null) {
-            throw new IllegalArgumentException("registry 不能为空");
+            throw new IllegalArgumentException("registry must not be null");
         }
         this.registry = registry;
     }
@@ -49,7 +49,7 @@ public final class ProjectApplicationService {
         try {
             return registry.register(workspace, module, projectId, resultJsonDirectory);
         } catch (WorkspaceException failure) {
-            throw new ControlPlaneException(failure.code(), "项目注册失败", failure);
+            throw new ControlPlaneException(failure.code(), "Project registration failed", failure);
         }
     }
 }

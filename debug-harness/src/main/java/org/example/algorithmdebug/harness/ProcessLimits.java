@@ -38,13 +38,13 @@ public record ProcessLimits(
 
     private static void requireLogBudget(long value, String field) {
         if (value <= 0 || value > MAXIMUM_LOG_BYTES) {
-            throw new IllegalArgumentException(field + " 必须在 1 到 100 MiB 之间");
+            throw new IllegalArgumentException(field + " must be between 1 and 100 MiB");
         }
     }
 
     private static void requireTerminationTimeout(Duration value, String field) {
         if (value == null || value.isNegative() || value.compareTo(MAXIMUM_TERMINATION_TIMEOUT) > 0) {
-            throw new IllegalArgumentException(field + " 必须在 0 到 30 秒之间");
+            throw new IllegalArgumentException(field + " must be between 0 and 30 seconds");
         }
     }
 }

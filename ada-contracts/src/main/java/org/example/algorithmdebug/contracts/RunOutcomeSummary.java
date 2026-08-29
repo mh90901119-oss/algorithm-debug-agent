@@ -27,11 +27,11 @@ public record RunOutcomeSummary(
     public RunOutcomeSummary {
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.RUN_OUTCOME_SUMMARY.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 RunOutcomeSummary schemaVersion: " + schemaVersion);
+            throw new IllegalArgumentException("Unsupported RunOutcomeSummary schemaVersion: " + schemaVersion);
         }
         eventType = ContractChecks.requireNonBlank(eventType, "eventType");
         if (!"TARGET_TEST_RUN_COMPLETED".equals(eventType)) {
-            throw new IllegalArgumentException("不支持的 eventType: " + eventType);
+            throw new IllegalArgumentException("Unsupported eventType: " + eventType);
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
@@ -48,11 +48,11 @@ public record RunOutcomeSummary(
         validateTargetFailure(testOutcome, targetFailure, agentFailure);
         if (ganttOutcome == GanttOutcome.PRESENT
                 && artifacts.stream().noneMatch(RunOutcomeSummary::isGanttArtifact)) {
-            throw new IllegalArgumentException("GanttOutcome.PRESENT 必须包含 GANTT Artifact 引用");
+            throw new IllegalArgumentException("GanttOutcome.PRESENT must contain GANTT Artifact reference");
         }
         if (ganttOutcome != GanttOutcome.PRESENT
                 && artifacts.stream().anyMatch(RunOutcomeSummary::isGanttArtifact)) {
-            throw new IllegalArgumentException(ganttOutcome + " 不得引用完整 GANTT Artifact");
+            throw new IllegalArgumentException(ganttOutcome + " must not reference the complete GANTT Artifact");
         }
     }
 
@@ -61,31 +61,31 @@ public record RunOutcomeSummary(
             Optional<TargetFailureDiagnostic> targetFailure,
             Optional<AgentFailureDiagnostic> agentFailure) {
         if (testOutcome == TestOutcome.PASSED && targetFailure.isPresent()) {
-            throw new IllegalArgumentException("PASSED 不得包含 targetFailure");
+            throw new IllegalArgumentException("PASSED must not contain targetFailure");
         }
         if ((testOutcome == TestOutcome.FAILED || testOutcome == TestOutcome.ERROR)
                 && targetFailure.isEmpty()) {
-            throw new IllegalArgumentException(testOutcome + " 必须包含 targetFailure");
+            throw new IllegalArgumentException(testOutcome + " must contain targetFailure");
         }
         if (testOutcome == TestOutcome.NOT_EXECUTED
                 && targetFailure.isEmpty() && agentFailure.isEmpty()) {
-            throw new IllegalArgumentException("NOT_EXECUTED 必须包含目标或 Agent 诊断");
+            throw new IllegalArgumentException("NOT_EXECUTED must contain a target or Agent diagnostic");
         }
         if (targetFailure.isEmpty()) {
             return;
         }
         FailureCategory category = targetFailure.orElseThrow().category();
         if (testOutcome == TestOutcome.FAILED && category != FailureCategory.TEST_FAILURE) {
-            throw new IllegalArgumentException("FAILED 只接受 TEST_FAILURE 分类");
+            throw new IllegalArgumentException("FAILED only accepts TEST_FAILURE classification");
         }
         if (testOutcome == TestOutcome.ERROR && category != FailureCategory.TEST_ERROR) {
-            throw new IllegalArgumentException("ERROR 只接受 TEST_ERROR 分类");
+            throw new IllegalArgumentException("ERROR only accepts TEST_ERROR classification");
         }
         if (testOutcome == TestOutcome.NOT_EXECUTED
                 && category != FailureCategory.BUILD_FAILURE
                 && category != FailureCategory.TEST_NOT_EXECUTED
                 && category != FailureCategory.UNKNOWN) {
-            throw new IllegalArgumentException("NOT_EXECUTED 的 targetFailure 分类不匹配");
+            throw new IllegalArgumentException("NOT_EXECUTED targetFailure classification does not match");
         }
     }
 

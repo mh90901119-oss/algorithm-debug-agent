@@ -23,7 +23,7 @@ public final class HarnessException extends Exception {
 
     private static String requireText(String value, String field) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " 不能为空");
+            throw new IllegalArgumentException(field + " must not be null");
         }
         return value;
     }

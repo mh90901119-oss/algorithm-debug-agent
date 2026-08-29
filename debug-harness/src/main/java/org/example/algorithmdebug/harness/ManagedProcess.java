@@ -70,7 +70,7 @@ public final class ManagedProcess implements AutoCloseable {
     public ProcessOutputWaitResult awaitOutput(String marker, Duration timeout)
             throws HarnessException {
         if (timeout == null || timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("输出等待 timeout 必须为正数");
+            throw new IllegalArgumentException("Output wait timeout must be positive");
         }
         CompletableFuture<Void> observed = markers.future(marker);
         if (observed.isDone()) {
@@ -86,9 +86,9 @@ public final class ManagedProcess implements AutoCloseable {
             return ProcessOutputWaitResult.TIMED_OUT;
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待进程输出标记时被中断", failure);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for process output marker", failure);
         } catch (ExecutionException failure) {
-            throw new HarnessException("HARNESS_OUTPUT_WAIT_FAILED", "等待进程输出标记失败", failure.getCause());
+            throw new HarnessException("HARNESS_OUTPUT_WAIT_FAILED", "Failed while waiting for process output marker", failure.getCause());
         }
     }
 
@@ -98,7 +98,7 @@ public final class ManagedProcess implements AutoCloseable {
             return completed;
         }
         if (closed) {
-            throw new HarnessException("HARNESS_PROCESS_ALREADY_CLOSED", "受管进程已关闭，无法再次等待");
+            throw new HarnessException("HARNESS_PROCESS_ALREADY_CLOSED", "Managed process is closed and cannot be awaited again");
         }
         try {
             SupervisionResult supervision = supervisor.await(process, timeout, limits);
@@ -143,7 +143,7 @@ public final class ManagedProcess implements AutoCloseable {
             if (process.isAlive()) {
                 supervisor.terminate(process, limits);
             }
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待受管进程日志时被中断", failure);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for managed process logs", failure);
         } catch (ExecutionException failure) {
             if (process.isAlive()) {
                 supervisor.terminate(process, limits);
@@ -152,7 +152,7 @@ public final class ManagedProcess implements AutoCloseable {
             if (cause instanceof HarnessException harness) {
                 throw harness;
             }
-            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "受管进程日志归档失败", cause);
+            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "Managed process log archival failed", cause);
         }
     }
 }

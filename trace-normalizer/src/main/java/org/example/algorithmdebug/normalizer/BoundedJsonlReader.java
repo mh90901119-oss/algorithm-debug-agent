@@ -44,18 +44,18 @@ public final class BoundedJsonlReader {
         validateArguments(input, maxInputBytes, maxRecordBytes, maxRecords, consumer);
         if (!Files.isRegularFile(input, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(input)) {
-            throw failure("NORMALIZE_INPUT_MISSING", "Raw JSONL 不存在或不是普通文件", 0, null);
+            throw failure("NORMALIZE_INPUT_MISSING", "Raw JSONL does not exist or is not a regular file", 0, null);
         }
         try {
             long size = Files.size(input);
             if (size > maxInputBytes) {
-                throw failure("NORMALIZE_INPUT_TOO_LARGE", "Raw JSONL 超过输入字节预算", 0, null);
+                throw failure("NORMALIZE_INPUT_TOO_LARGE", "Raw JSONL exceeds the input byte budget", 0, null);
             }
             stream(input, maxInputBytes, maxRecordBytes, maxRecords, consumer);
         } catch (NormalizationException failure) {
             throw failure;
         } catch (IOException | SecurityException failure) {
-            throw failure("NORMALIZE_INPUT_READ_FAILED", "读取 Raw JSONL 失败", 0, failure);
+            throw failure("NORMALIZE_INPUT_READ_FAILED", "Read Raw JSONL failed", 0, failure);
         }
     }
 
@@ -77,7 +77,7 @@ public final class BoundedJsonlReader {
                 if (inputBytes > maxInputBytes) {
                     throw failure(
                             "NORMALIZE_INPUT_TOO_LARGE",
-                            "Raw JSONL 超过输入字节预算", line, null);
+                            "Raw JSONL exceeds the input byte budget", line, null);
                 }
                 for (int index = 0; index < count; index++) {
                     byte value = readBuffer[index];
@@ -89,7 +89,7 @@ public final class BoundedJsonlReader {
                         if (record.size() >= maxRecordBytes) {
                             throw failure(
                                     "NORMALIZE_RECORD_TOO_LARGE",
-                                    "JSONL 单条记录超过字节预算", line, null);
+                                    "A JSONL record exceeds the byte budget", line, null);
                         }
                         record.write(value);
                     }
@@ -115,21 +115,21 @@ public final class BoundedJsonlReader {
         if (records >= maxRecords) {
             throw failure(
                     "NORMALIZE_RECORD_LIMIT_EXCEEDED",
-                    "JSONL 记录数超过预算", line, null);
+                    "The JSONL record count exceeds the budget", line, null);
         }
         String text = decode(bytes, length, line);
         try {
             JsonNode json = mapper.readTree(text);
             if (json == null || !json.isObject()) {
                 throw failure(
-                        "NORMALIZE_JSON_INVALID", "JSONL 记录必须是 JSON object", line, null);
+                        "NORMALIZE_JSON_INVALID", "A JSONL record must be a JSON object", line, null);
             }
             consumer.accept(line, json);
             return records + 1;
         } catch (NormalizationException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
-            throw failure("NORMALIZE_JSON_INVALID", "JSONL 记录不是有效 JSON", line, failure);
+            throw failure("NORMALIZE_JSON_INVALID", "A JSONL record is not valid JSON", line, failure);
         }
     }
 
@@ -140,7 +140,7 @@ public final class BoundedJsonlReader {
                     .onUnmappableCharacter(CodingErrorAction.REPORT)
                     .decode(ByteBuffer.wrap(bytes, 0, length)).toString();
         } catch (CharacterCodingException failure) {
-            throw failure("NORMALIZE_UTF8_INVALID", "JSONL 记录不是合法 UTF-8", line, failure);
+            throw failure("NORMALIZE_UTF8_INVALID", "A JSONL record is not valid UTF-8", line, failure);
         }
     }
 
@@ -154,7 +154,7 @@ public final class BoundedJsonlReader {
                 || maxInputBytes < 1 || maxInputBytes > NormalizationBudget.MAX_RAW_BYTES
                 || maxRecordBytes < 1 || maxRecordBytes > NormalizationBudget.MAX_RECORD_BYTES
                 || maxRecords < 1 || maxRecords > NormalizationBudget.MAX_RECORDS) {
-            throw new IllegalArgumentException("JSONL Reader 参数或预算非法");
+            throw new IllegalArgumentException("JSONL Reader parameters or budget are invalid");
         }
     }
 

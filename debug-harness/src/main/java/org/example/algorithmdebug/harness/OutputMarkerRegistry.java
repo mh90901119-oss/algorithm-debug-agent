@@ -12,13 +12,13 @@ final class OutputMarkerRegistry {
 
     OutputMarkerRegistry(List<String> requested) {
         if (requested == null || requested.size() > 32) {
-            throw new IllegalArgumentException("输出标记数量必须在 0 到 32 之间");
+            throw new IllegalArgumentException("The output marker count must be between 0 and 32");
         }
         LinkedHashMap<String, MarkerState> checked = new LinkedHashMap<>();
         for (String marker : requested) {
             if (marker == null || marker.isBlank() || marker.length() > 1_024
                     || checked.containsKey(marker)) {
-                throw new IllegalArgumentException("输出标记非法或重复");
+                throw new IllegalArgumentException("Output markers are invalid or duplicated");
             }
             checked.put(marker, new MarkerState(marker.getBytes(StandardCharsets.UTF_8)));
         }
@@ -27,7 +27,7 @@ final class OutputMarkerRegistry {
 
     OutputChunkObserver observer(int streamIndex) {
         if (streamIndex < 0 || streamIndex > 1) {
-            throw new IllegalArgumentException("streamIndex 必须为 0 或 1");
+            throw new IllegalArgumentException("streamIndex must be 0 or 1");
         }
         return (bytes, offset, length) -> markers.values().forEach(
                 marker -> marker.accept(streamIndex, bytes, offset, length));
@@ -36,7 +36,7 @@ final class OutputMarkerRegistry {
     CompletableFuture<Void> future(String marker) {
         MarkerState state = markers.get(marker);
         if (state == null) {
-            throw new IllegalArgumentException("等待的输出标记未在启动时注册");
+            throw new IllegalArgumentException("A pending output marker was not registered at launch");
         }
         return state.observed;
     }

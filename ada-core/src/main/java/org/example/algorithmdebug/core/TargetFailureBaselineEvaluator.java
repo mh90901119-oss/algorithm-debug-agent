@@ -30,7 +30,7 @@ final class TargetFailureBaselineEvaluator {
     private final Clock clock;
 
     TargetFailureBaselineEvaluator(Clock clock) {
-        if (clock == null) throw new IllegalArgumentException("clock 不能为空");
+        if (clock == null) throw new IllegalArgumentException("clock must not be null");
         this.clock = clock;
     }
 
@@ -41,7 +41,7 @@ final class TargetFailureBaselineEvaluator {
             Optional<CapturedScheduleResult<?>> captured)
             throws WorkspaceException, HarnessException, SurefireDiagnosticException {
         if (archive == null || identity == null || moduleRoot == null || captured == null) {
-            throw new IllegalArgumentException("失败 Baseline 参数不能为空");
+            throw new IllegalArgumentException("failed Baseline parameters must not be null");
         }
         Optional<RunResultFingerprint> reference = archive.findReproduction(
                 identity.caseId(), identity.contextId());
@@ -90,7 +90,7 @@ final class TargetFailureBaselineEvaluator {
         Identity {
             if (caseId == null || contextId == null || analysisId == null || runId == null
                     || collectionId == null || targetTest == null) {
-                throw new IllegalArgumentException("失败 Baseline 身份不能为空");
+                throw new IllegalArgumentException("The failed Baseline identity must not be null");
             }
         }
 

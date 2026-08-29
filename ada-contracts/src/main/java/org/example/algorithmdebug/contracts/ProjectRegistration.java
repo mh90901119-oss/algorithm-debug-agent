@@ -41,12 +41,12 @@ public record ProjectRegistration(
     public ProjectRegistration {
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.PROJECT_REGISTRATION.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 ProjectRegistration schemaVersion: " + schemaVersion);
+            throw new IllegalArgumentException("Unsupported ProjectRegistration schemaVersion: " + schemaVersion);
         }
         projectId = ContractChecks.requireNonNull(projectId, "projectId");
         displayName = ContractChecks.requireNonBlank(displayName, "displayName");
         if (displayName.length() > MAX_DISPLAY_NAME_LENGTH) {
-            throw new IllegalArgumentException("displayName 长度不能超过 " + MAX_DISPLAY_NAME_LENGTH);
+            throw new IllegalArgumentException("displayName length must not exceed " + MAX_DISPLAY_NAME_LENGTH);
         }
         repositoryRoot = ContractChecks.requireNonBlank(repositoryRoot, "repositoryRoot");
         moduleRoot = ContractChecks.requireNonBlank(moduleRoot, "moduleRoot");
@@ -54,7 +54,7 @@ public record ProjectRegistration(
         pomPath = ContractChecks.requirePortableRelativePath(pomPath, "pomPath");
         buildTool = ContractChecks.requireNonBlank(buildTool, "buildTool");
         if (!MAVEN.equals(buildTool)) {
-            throw new IllegalArgumentException("当前只支持 MAVEN 构建工具: " + buildTool);
+            throw new IllegalArgumentException("Only the MAVEN build tool is supported: " + buildTool);
         }
         if (resultJsonDirectory != null) {
             resultJsonDirectory = validateResultJsonDirectory(resultJsonDirectory);

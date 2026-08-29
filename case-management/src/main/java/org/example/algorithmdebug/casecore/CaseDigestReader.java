@@ -39,7 +39,7 @@ public final class CaseDigestReader {
     /** @param repository Case 归档读取入口 */
     public CaseDigestReader(CaseArchiveRepository repository) {
         if (repository == null) {
-            throw new IllegalArgumentException("repository 不能为空");
+            throw new IllegalArgumentException("repository must not be null");
         }
         this.repository = repository;
     }
@@ -336,7 +336,7 @@ public final class CaseDigestReader {
         if (warnings.size() > MAX_ITEMS) return;
         warnings.add(new ArchiveWarning(
                 code,
-                "Case 子文档不可用，已保留其他可读取事实",
+                "Case subdocument is unavailable; other readable facts were preserved",
                 layout.caseRoot().relativize(document.toAbsolutePath().normalize())
                         .toString().replace('\\', '/')));
     }

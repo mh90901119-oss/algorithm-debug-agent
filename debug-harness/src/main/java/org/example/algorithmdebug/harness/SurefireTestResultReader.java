@@ -20,7 +20,7 @@ public final class SurefireTestResultReader {
     /** @param diagnosticReader 复用的安全 XML 与失败诊断 Reader */
     public SurefireTestResultReader(SurefireDiagnosticReader diagnosticReader) {
         if (diagnosticReader == null) {
-            throw new IllegalArgumentException("diagnosticReader 不能为空");
+            throw new IllegalArgumentException("diagnosticReader must not be null");
         }
         this.diagnosticReader = diagnosticReader;
     }
@@ -33,11 +33,11 @@ public final class SurefireTestResultReader {
     public Optional<SurefireTestResult> read(List<Path> changedReports, TargetTest targetTest)
             throws SurefireDiagnosticException {
         if (changedReports == null || targetTest == null) {
-            throw new IllegalArgumentException("changedReports 和 targetTest 不能为空");
+            throw new IllegalArgumentException("changedReports and targetTest must not be null");
         }
         List<Path> ordered = changedReports.stream().map(path -> {
             if (path == null) {
-                throw new IllegalArgumentException("changedReports 不得包含 null");
+                throw new IllegalArgumentException("changedReports must not contain null");
             }
             return path.toAbsolutePath().normalize();
         }).filter(path -> SurefireReportSnapshotter.isTargetReport(

@@ -23,14 +23,14 @@ public final class JdwpTargetCommandFactory {
             TestLaunchSpec launch, MavenExecutionOptions options, int port)
             throws HarnessException {
         if (launch == null || options == null) {
-            throw new IllegalArgumentException("launch 与 options 不能为空");
+            throw new IllegalArgumentException("launch and options must not be null");
         }
         if (launch.runMode() != RunMode.JDWP) {
-            throw new IllegalArgumentException("JDWP 目标命令只接受 RunMode.JDWP");
+            throw new IllegalArgumentException("The JDWP target command only accepts RunMode.JDWP");
         }
         requirePort(port);
         if (launch.jvmArguments().stream().anyMatch(JdwpTargetCommandFactory::isJdwpArgument)) {
-            throw new IllegalArgumentException("目标启动规格不得预先声明 JDWP Agent");
+            throw new IllegalArgumentException("The target launch specification must not predeclare a JDWP Agent");
         }
         List<String> arguments = new ArrayList<>(launch.jvmArguments());
         arguments.add(jdwpArgument(port));
@@ -46,7 +46,7 @@ public final class JdwpTargetCommandFactory {
 
     static void requirePort(int port) {
         if (port < 1 || port > 65_535) {
-            throw new IllegalArgumentException("JDWP port 必须在 1 到 65535 之间");
+            throw new IllegalArgumentException("JDWP port must be between 1 and 65535");
         }
     }
 

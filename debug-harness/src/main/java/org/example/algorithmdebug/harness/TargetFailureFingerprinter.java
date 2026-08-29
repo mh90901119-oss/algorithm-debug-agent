@@ -24,7 +24,7 @@ public final class TargetFailureFingerprinter {
      */
     public String sha256(TargetFailureDiagnostic diagnostic) throws HarnessException {
         if (diagnostic == null) {
-            throw new IllegalArgumentException("diagnostic 不能为空");
+            throw new IllegalArgumentException("diagnostic must not be null");
         }
         MessageDigest digest = digest();
         update(digest, PROFILE);
@@ -42,7 +42,7 @@ public final class TargetFailureFingerprinter {
         } catch (NoSuchAlgorithmException failure) {
             throw new HarnessException(
                     "TARGET_FAILURE_FINGERPRINT_FAILED",
-                    "当前 JVM 不支持 SHA-256",
+                    "current JVM does not support SHA-256",
                     failure);
         }
     }

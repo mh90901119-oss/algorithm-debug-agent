@@ -40,20 +40,20 @@ public record JdwpTracepointSpec(
         String expectedKey = sourceAnchor.className() + "#" + sourceAnchor.methodName()
                 + sourceAnchor.descriptor();
         if (!expectedKey.equals(methodKey)) {
-            throw new IllegalArgumentException("methodKey 与 SourceAnchor 方法身份不一致");
+            throw new IllegalArgumentException("methodKey does not match the SourceAnchor method identity");
         }
         if (line < sourceAnchor.startLine() || line > sourceAnchor.endLine()) {
-            throw new IllegalArgumentException("JDWP 断点行不在方法源码范围内");
+            throw new IllegalArgumentException("JDWP breakpoint line is outside the method source range");
         }
         if (maxHits < 1 || maxHits > 20) {
-            throw new IllegalArgumentException("maxHits 必须在 1 到 20 之间");
+            throw new IllegalArgumentException("maxHits must be between 1 and 20");
         }
         captureOnHits = captureOnHits == null ? List.of() : List.copyOf(captureOnHits);
         int previous = 0;
         for (Integer hit : captureOnHits) {
             if (hit == null || hit <= previous || hit > maxHits) {
                 throw new IllegalArgumentException(
-                        "captureOnHits 必须严格递增且位于 1 到 maxHits 之间");
+                        "captureOnHits must be strictly increasing and between 1 to maxHits ");
             }
             previous = hit;
         }

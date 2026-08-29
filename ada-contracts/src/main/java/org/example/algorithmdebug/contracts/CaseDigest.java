@@ -73,16 +73,16 @@ public record CaseDigest(
         if (contextCount < 0 || analysisCount < 0 || runCount < 0
                 || collectionCount < 0 || evidenceCount < 0 || completedAnalysisCount < 0
                 || completedAnalysisCount > analysisCount) {
-            throw new IllegalArgumentException("CaseDigest 计数非法");
+            throw new IllegalArgumentException("CaseDigest counts are invalid");
         }
         if ((contextCount == 0) != latestContextId.isEmpty()
                 || (analysisCount == 0) != latestAnalysisId.isEmpty()) {
-            throw new IllegalArgumentException("CaseDigest latest ID 与计数不一致");
+            throw new IllegalArgumentException("CaseDigest latest ID does not match counts");
         }
         if (recentRuns.size() > 20 || incompleteRuns.size() > 20
                 || recentCollections.size() > 20 || recentEvidence.size() > 20
                 || recentAnalysisResults.size() > 20 || archiveWarnings.size() > 20) {
-            throw new IllegalArgumentException("CaseDigest 列表超过 20 项上限");
+            throw new IllegalArgumentException("CaseDigest list exceeds the 20-entry limit");
         }
     }
 }

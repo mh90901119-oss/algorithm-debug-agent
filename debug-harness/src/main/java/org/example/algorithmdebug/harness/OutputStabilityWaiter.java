@@ -26,7 +26,7 @@ public final class OutputStabilityWaiter {
             Sleeper sleeper,
             LongSupplier nanoTime) {
         if (policy == null || snapshotProvider == null || sleeper == null || nanoTime == null) {
-            throw new IllegalArgumentException("waiter 依赖不能为空");
+            throw new IllegalArgumentException("waiter dependencies must not be null");
         }
         this.policy = policy;
         this.snapshotProvider = snapshotProvider;
@@ -42,7 +42,7 @@ public final class OutputStabilityWaiter {
             OutputDirectorySnapshot before,
             ScheduleResultSource source) throws HarnessException {
         if (before == null || source == null || !before.source().equals(source)) {
-            throw new IllegalArgumentException("before 与 source 必须属于同一结果源");
+            throw new IllegalArgumentException("before and source must belong to the same result source");
         }
         long started = nanoTime.getAsLong();
         long timeoutNanos = policy.timeout().toNanos();
@@ -72,11 +72,11 @@ public final class OutputStabilityWaiter {
         if (!observedChange) {
             throw new HarnessException(
                     "HARNESS_RESULT_NOT_PRODUCED",
-                    "目标 UT 在稳定轮询预算内没有产生结果目录变化");
+                    "The target UT did not change the result directory within the stability polling budget");
         }
         throw new HarnessException(
                 "HARNESS_RESULT_NOT_STABLE",
-                "目标 UT 结果目录在稳定轮询预算内持续变化");
+                "The target UT result directory kept changing throughout the stability polling budget");
     }
 
     private void sleep() throws HarnessException {
@@ -84,7 +84,7 @@ public final class OutputStabilityWaiter {
             sleeper.sleep(policy.pollInterval());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待结果文件稳定时被中断", exception);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for result files to become stable", exception);
         }
     }
 

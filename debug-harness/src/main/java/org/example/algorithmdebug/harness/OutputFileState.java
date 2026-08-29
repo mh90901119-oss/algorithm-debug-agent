@@ -14,11 +14,11 @@ public record OutputFileState(Path relativePath, long sizeBytes, long lastModifi
     /** 校验相对路径和文件元数据。 */
     public OutputFileState {
         if (relativePath == null || relativePath.isAbsolute() || relativePath.normalize().startsWith("..")) {
-            throw new IllegalArgumentException("relativePath 必须是安全相对路径");
+            throw new IllegalArgumentException("relativePath must be a safe relative path");
         }
         relativePath = relativePath.normalize();
         if (sizeBytes < 0 || lastModifiedMillis < 0) {
-            throw new IllegalArgumentException("文件元数据不能为负数");
+            throw new IllegalArgumentException("File metadata values must not be negative");
         }
     }
 }

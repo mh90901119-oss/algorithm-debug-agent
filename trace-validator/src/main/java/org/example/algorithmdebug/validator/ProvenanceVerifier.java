@@ -39,7 +39,7 @@ public final class ProvenanceVerifier {
             Path rawPath) {
         if (provenances == null || rawArtifact == null || rawPath == null
                 || provenances.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("Provenance 校验参数非法");
+            throw new IllegalArgumentException("Provenance validation arguments are invalid");
         }
         Set<Long> requestedLines = new HashSet<>();
         provenances.stream().filter(value -> value.rawArtifact().equals(rawArtifact))
@@ -49,7 +49,7 @@ public final class ProvenanceVerifier {
             observations = readObservations(rawPath, requestedLines);
         } catch (IOException | RuntimeException failure) {
             return List.of(finding(
-                    "PROVENANCE_RAW_READ_FAILED", "无法流式读取 Raw JSONL",
+                    "PROVENANCE_RAW_READ_FAILED", "Failed to stream the Raw JSONL",
                     rawArtifact, Optional.empty()));
         }
         ArrayList<ValidationFinding> findings = new ArrayList<>();
@@ -57,34 +57,34 @@ public final class ProvenanceVerifier {
             if (findings.size() >= MAX_FINDINGS) break;
             if (!provenance.rawArtifact().equals(rawArtifact)) {
                 findings.add(finding(
-                        "PROVENANCE_ARTIFACT_MISMATCH", "事实引用了其他 Raw Artifact",
+                        "PROVENANCE_ARTIFACT_MISMATCH", "The fact refers to a different Raw Artifact",
                         rawArtifact, Optional.of(provenance)));
                 continue;
             }
             Observation observed = observations.get(provenance.jsonlLine());
             if (observed == null) {
                 findings.add(finding(
-                        "PROVENANCE_LINE_OUT_OF_RANGE", "事实引用的 JSONL 行不存在",
+                        "PROVENANCE_LINE_OUT_OF_RANGE", "The JSONL line referenced by the fact does not exist",
                         rawArtifact, Optional.of(provenance)));
                 continue;
             }
             if (observed.invalidJson()) {
                 findings.add(finding(
-                        "PROVENANCE_RAW_JSON_INVALID", "事实引用的 JSONL 行不是有效对象",
+                        "PROVENANCE_RAW_JSON_INVALID", "The JSONL line referenced by the fact is not a valid object",
                         rawArtifact, Optional.of(provenance)));
                 continue;
             }
             if (provenance.eventId().isPresent()
                     && !matches(observed.eventId(), provenance.eventId().orElseThrow())) {
                 findings.add(finding(
-                        "PROVENANCE_EVENT_ID_MISMATCH", "Raw eventId 与事实引用不一致",
+                        "PROVENANCE_EVENT_ID_MISMATCH", "Raw eventId does not match the fact reference",
                         rawArtifact, Optional.of(provenance)));
                 continue;
             }
             if (provenance.sequence().isPresent()
                     && !matches(observed.sequence(), provenance.sequence().orElseThrow())) {
                 findings.add(finding(
-                        "PROVENANCE_SEQUENCE_MISMATCH", "Raw sequence 与事实引用不一致",
+                        "PROVENANCE_SEQUENCE_MISMATCH", "Raw sequence does not match the fact reference",
                         rawArtifact, Optional.of(provenance)));
             }
         }

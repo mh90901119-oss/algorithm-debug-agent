@@ -23,17 +23,17 @@ public record JdwpNormalizationInput(
     public JdwpNormalizationInput {
         if (collection == null || plan == null || rawTrace == null || rawTracePath == null
                 || evidenceId == null || budget == null || createdAt == null) {
-            throw new IllegalArgumentException("JDWP 归一化输入不能为空");
+            throw new IllegalArgumentException("JDWP normalization input must not be null");
         }
         if (!collection.caseId().equals(plan.caseId())
                 || !collection.contextId().equals(plan.contextId())
                 || !collection.analysisId().equals(plan.analysisId())
                 || !collection.planId().equals(plan.planId())
                 || !collection.targetTest().equals(plan.targetTest())) {
-            throw new IllegalArgumentException("Collection 与 JDWP Plan 身份不一致");
+            throw new IllegalArgumentException("Collection does not match JDWP Plan identity");
         }
         if (rawTrace.sizeBytes() > budget.maxRawBytes()) {
-            throw new IllegalArgumentException("JDWP Raw Trace 引用已超过归一化预算");
+            throw new IllegalArgumentException("JDWP Raw Trace references exceed the normalization budget");
         }
         rawTracePath = rawTracePath.toAbsolutePath().normalize();
     }

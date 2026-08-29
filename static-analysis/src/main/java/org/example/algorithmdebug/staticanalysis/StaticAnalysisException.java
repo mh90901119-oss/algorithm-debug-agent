@@ -24,7 +24,7 @@ public final class StaticAnalysisException extends RuntimeException {
     private StaticAnalysisException(String code, String message, Throwable cause) {
         super(message, cause);
         if (code == null || code.isBlank()) {
-            throw new IllegalArgumentException("code 不能为空");
+            throw new IllegalArgumentException("code must not be null");
         }
         this.code = code;
     }

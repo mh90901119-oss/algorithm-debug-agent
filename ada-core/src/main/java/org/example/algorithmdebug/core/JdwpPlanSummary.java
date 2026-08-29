@@ -18,10 +18,10 @@ public record JdwpPlanSummary(
     /** 校验摘要身份和预算计数。 */
     public JdwpPlanSummary {
         if (caseId == null || contextId == null || analysisId == null || planId == null) {
-            throw new IllegalArgumentException("JDWP 计划摘要身份不能为空");
+            throw new IllegalArgumentException("JDWP plan summary identity must not be null");
         }
         if (tracepointCount < 1 || maximumEvents < 1 || maximumBytes < 1) {
-            throw new IllegalArgumentException("JDWP 计划摘要计数必须为正数");
+            throw new IllegalArgumentException("JDWP plan summary count must be positive");
         }
     }
 }

@@ -23,11 +23,11 @@ public record WorkspaceManifest(
     public WorkspaceManifest {
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.WORKSPACE_MANIFEST.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 WorkspaceManifest schemaVersion: " + schemaVersion);
+            throw new IllegalArgumentException("Unsupported WorkspaceManifest schemaVersion: " + schemaVersion);
         }
         kind = ContractChecks.requireNonBlank(kind, "kind");
         if (!KIND.equals(kind)) {
-            throw new IllegalArgumentException("不支持的 Workspace 类型: " + kind);
+            throw new IllegalArgumentException("Unsupported Workspace type: " + kind);
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }

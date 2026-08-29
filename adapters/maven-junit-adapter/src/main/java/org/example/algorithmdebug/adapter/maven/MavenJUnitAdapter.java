@@ -39,17 +39,17 @@ public final class MavenJUnitAdapter implements TargetProjectAdapter {
     @Override
     public ProjectDescriptor inspect(Path projectRoot) throws AdapterException {
         if (projectRoot == null) {
-            throw new AdapterException("ADAPTER_PROJECT_NOT_SUPPORTED", "目标项目路径不能为空");
+            throw new AdapterException("ADAPTER_PROJECT_NOT_SUPPORTED", "The target project path must not be null");
         }
         Path root = projectRoot.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new AdapterException(
-                    "ADAPTER_PROJECT_NOT_SUPPORTED", "目标路径不是项目目录: " + root);
+                    "ADAPTER_PROJECT_NOT_SUPPORTED", "The target path is not a project directory: " + root);
         }
         Path pom = root.resolve("pom.xml");
         if (!Files.isRegularFile(pom)) {
             throw new AdapterException(
-                    "ADAPTER_BUILD_FILE_MISSING", "Maven pom.xml 不存在: " + pom);
+                    "ADAPTER_BUILD_FILE_MISSING", "Maven pom.xml does not exist: " + pom);
         }
         return new ProjectDescriptor(
                 projectId(root), root.getFileName().toString(), root,
@@ -62,10 +62,10 @@ public final class MavenJUnitAdapter implements TargetProjectAdapter {
             TargetTest targetTest,
             RunMode runMode) throws AdapterException {
         if (project == null || targetTest == null || runMode == null) {
-            throw new AdapterException("ADAPTER_LAUNCH_SPEC_INVALID", "启动规范参数不能为空");
+            throw new AdapterException("ADAPTER_LAUNCH_SPEC_INVALID", "Launch specification arguments must not be null");
         }
         if (project.buildTool() != BuildTool.MAVEN) {
-            throw new AdapterException("ADAPTER_PROJECT_NOT_SUPPORTED", "项目构建工具不是 Maven");
+            throw new AdapterException("ADAPTER_PROJECT_NOT_SUPPORTED", "The project build tool is not Maven");
         }
         LinkedHashMap<String, String> properties = new LinkedHashMap<>();
         properties.put("test", targetTest.selector());
@@ -81,7 +81,7 @@ public final class MavenJUnitAdapter implements TargetProjectAdapter {
                     root.toString().replace('\\', '/').getBytes(StandardCharsets.UTF_8));
             return new ProjectId("maven-junit-" + HexFormat.of().formatHex(digest, 0, 6));
         } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException("Java 运行时缺少 SHA-256", impossible);
+            throw new IllegalStateException("The Java runtime does not provide SHA-256", impossible);
         }
     }
 }

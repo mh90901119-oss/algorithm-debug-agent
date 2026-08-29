@@ -26,12 +26,12 @@ public final class WorkspaceLayout {
      */
     public static WorkspaceLayout of(Path root) {
         if (root == null) {
-            throw new IllegalArgumentException("Workspace root 不能为空");
+            throw new IllegalArgumentException("Workspace root must not be null");
         }
         Path normalized = root.toAbsolutePath().normalize();
         if (normalized.getParent() == null) {
             throw new WorkspaceException(
-                    "WORKSPACE_PATH_INVALID", "Workspace root 不能是文件系统根目录: " + normalized);
+                    "WORKSPACE_PATH_INVALID", "Workspace root must not be a file-system root: " + normalized);
         }
         return new WorkspaceLayout(normalized);
     }
@@ -99,26 +99,26 @@ public final class WorkspaceLayout {
 
     private Path resolveWithinRoot(Path relativePath) {
         if (relativePath.isAbsolute()) {
-            throw new IllegalArgumentException("Workspace 子路径必须是相对路径: " + relativePath);
+            throw new IllegalArgumentException("Workspace child path must be relative: " + relativePath);
         }
         Path candidate = root.resolve(relativePath).normalize();
         if (!candidate.startsWith(root)) {
-            throw new IllegalArgumentException("Workspace 子路径越过根目录: " + relativePath);
+            throw new IllegalArgumentException("Workspace child path escapes the root: " + relativePath);
         }
         return candidate;
     }
 
     private static String safeProjectSegment(ProjectId projectId) {
         if (projectId == null) {
-            throw new IllegalArgumentException("projectId 不能为空");
+            throw new IllegalArgumentException("projectId must not be null");
         }
         String value = projectId.value();
         if (value.equals(".") || value.equals("..")
                 || value.contains("/") || value.contains("\\") || value.contains(":")) {
-            throw new IllegalArgumentException("projectId 必须是单一安全路径段");
+            throw new IllegalArgumentException("projectId must be a single safe path segment");
         }
         if (value.codePoints().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException("projectId 不允许包含控制字符");
+            throw new IllegalArgumentException("projectId must not contain control characters");
         }
         return value;
     }

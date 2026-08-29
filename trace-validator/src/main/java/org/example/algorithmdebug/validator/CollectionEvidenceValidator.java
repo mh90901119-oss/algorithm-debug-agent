@@ -43,7 +43,7 @@ public final class CollectionEvidenceValidator {
 
     /** 校验一次 CodePath 采集；只有全部确定性门禁通过时才覆盖 METHOD_PATH。 */
     public CollectionValidation validateMethodPath(MethodPathValidationInput input) {
-        if (input == null) throw new IllegalArgumentException("input 不能为空");
+        if (input == null) throw new IllegalArgumentException("input must not be null");
         ArrayList<ValidationFinding> findings = new ArrayList<>();
         validateIdentity(input, findings);
         add(findings, integrityVerifier.verify(input.rawReference(), input.rawPath()));
@@ -54,7 +54,7 @@ public final class CollectionEvidenceValidator {
         validateBaseline(input.baselineCheck(), input.summaryReference(), findings);
         if (input.summary().methods().isEmpty()) {
             add(findings, finding("NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
-                    "方法路径摘要没有可供分析的方法事实", input.summaryReference()));
+                    "The method-path summary contains no analyzable method facts", input.summaryReference()));
         }
         validateScope(input, findings);
         add(findings, provenanceVerifier.verify(
@@ -100,7 +100,7 @@ public final class CollectionEvidenceValidator {
 
     /** 校验一次 JDWP 采集；只有全部确定性门禁通过时才覆盖 RUNTIME_STATE。 */
     public CollectionValidation validateJdwp(JdwpValidationInput input) {
-        if (input == null) throw new IllegalArgumentException("input 不能为空");
+        if (input == null) throw new IllegalArgumentException("input must not be null");
         ArrayList<ValidationFinding> findings = new ArrayList<>();
         validateJdwpIdentity(input, findings);
         add(findings, integrityVerifier.verify(input.rawReference(), input.rawPath()));
@@ -111,7 +111,7 @@ public final class CollectionEvidenceValidator {
         validateBaseline(input.baselineCheck(), input.summaryReference(), findings);
         if (input.summary().hits().isEmpty()) {
             add(findings, finding("NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
-                    "JDWP 摘要没有可供分析的命中事实", input.summaryReference()));
+                    "The JDWP summary contains no analyzable hit facts", input.summaryReference()));
         }
         add(findings, provenanceVerifier.verify(
                 provenances(input.summary()), input.rawReference(), input.rawPath()));
@@ -171,7 +171,7 @@ public final class CollectionEvidenceValidator {
                 || !normalization.summaryArtifact().orElseThrow().equals(input.summaryReference());
         if (mismatch) add(findings, finding(
                 "COLLECTION_IDENTITY_MISMATCH", EvidenceValidationStatus.INVALID,
-                "Collection、Plan、Manifest、摘要或 Baseline 的身份不一致",
+                "Collection, Plan, Manifest, summaryor Baseline identity does not match",
                 input.summaryReference()));
     }
 
@@ -181,10 +181,10 @@ public final class CollectionEvidenceValidator {
             case SUCCESS, TARGET_FAILED -> { }
             case TRUNCATED, TIMED_OUT -> add(findings, finding(
                     "COLLECTION_INCOMPLETE", EvidenceValidationStatus.INCONCLUSIVE,
-                    "动态采集未完整结束", null));
+                    "Dynamic collection did not complete", null));
             case TOOL_FAILED, AGENT_FAILED -> add(findings, finding(
                     "COLLECTION_FAILED", EvidenceValidationStatus.INVALID,
-                    "Collector 或 Agent 执行失败", null));
+                    "Collector or Agent execution failed", null));
         }
     }
 
@@ -226,7 +226,7 @@ public final class CollectionEvidenceValidator {
                         .equals(input.summaryReference());
         if (mismatch) add(findings, finding(
                 "COLLECTION_IDENTITY_MISMATCH", EvidenceValidationStatus.INVALID,
-                "Collection、Plan、Manifest、摘要或 Baseline 的身份不一致",
+                "Collection, Plan, Manifest, summaryor Baseline identity does not match",
                 input.summaryReference()));
     }
 
@@ -236,10 +236,10 @@ public final class CollectionEvidenceValidator {
             case SUCCESS, TARGET_FAILED -> { }
             case TRUNCATED, TIMED_OUT -> add(findings, finding(
                     "COLLECTION_INCOMPLETE", EvidenceValidationStatus.INCONCLUSIVE,
-                    "动态采集未完整结束", null));
+                    "Dynamic collection did not complete", null));
             case TOOL_FAILED, AGENT_FAILED -> add(findings, finding(
                     "COLLECTION_FAILED", EvidenceValidationStatus.INVALID,
-                    "Collector 或 Agent 执行失败", null));
+                    "Collector or Agent execution failed", null));
         }
     }
 
@@ -267,12 +267,12 @@ public final class CollectionEvidenceValidator {
         if (baseline.outcome() == ComparisonOutcome.CHANGED) {
             add(findings, finding("BASELINE_CHANGED",
                     EvidenceValidationStatus.CONTRADICTED,
-                    "带采集运行与无采集 Baseline 的结果不一致",
+                    "The collected run result does not match the uncollected Baseline",
                     summaryReference));
         } else if (!baseline.evidenceUsable()) {
             add(findings, finding("BASELINE_NOT_CONFIRMED",
                     EvidenceValidationStatus.INCONCLUSIVE,
-                    "尚未确认带采集运行与无采集 Baseline 一致",
+                    "Consistency between the collected run and uncollected Baseline has not been confirmed",
                     summaryReference));
         }
     }

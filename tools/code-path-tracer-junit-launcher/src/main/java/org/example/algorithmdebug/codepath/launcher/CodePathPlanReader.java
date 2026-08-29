@@ -20,7 +20,7 @@ public final class CodePathPlanReader {
     public LauncherCodePathPlan read(Path plan) throws IOException {
         long size = Files.size(plan);
         if (size < 1 || size > MAX_PLAN_BYTES) {
-            throw new IOException("CodePath Plan 大小必须在 1 到 1 MiB 之间");
+            throw new IOException("The CodePath Plan size must be between 1 byte and 1 MiB");
         }
         return mapper.readValue(Files.readAllBytes(plan), LauncherCodePathPlan.class);
     }

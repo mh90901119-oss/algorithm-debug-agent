@@ -19,7 +19,7 @@ public final class EvidenceSufficiencyEvaluator {
     public SufficiencyEvaluation evaluate(
             EvidenceBuildRequest request, EvidenceBundle bundle) {
         if (request == null || bundle == null) {
-            throw new IllegalArgumentException("request 和 bundle 不能为空");
+            throw new IllegalArgumentException("request and bundle must not be null");
         }
         validateIdentity(request, bundle);
         Set<EvidenceDimension> covered = Set.copyOf(bundle.coveredDimensions());
@@ -52,7 +52,7 @@ public final class EvidenceSufficiencyEvaluator {
                 || !request.caseId().equals(bundle.caseId())
                 || !request.contextId().equals(bundle.contextId())
                 || !request.analysisId().equals(bundle.analysisId())) {
-            throw new IllegalArgumentException("Evidence Bundle 身份与构建请求不一致");
+            throw new IllegalArgumentException("The Evidence Bundle identity does not match the build request");
         }
     }
 }

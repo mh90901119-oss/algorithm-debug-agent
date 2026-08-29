@@ -27,10 +27,10 @@ final class ContractChecks {
 
     static String requireNonBlank(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
+            throw new IllegalArgumentException(fieldName + " must not be null");
         }
         if (!value.equals(value.strip())) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含首尾空白");
+            throw new IllegalArgumentException(fieldName + " must not contain leading or trailing whitespace");
         }
         return value;
     }
@@ -38,10 +38,10 @@ final class ContractChecks {
     static String requireOpaqueId(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (checked.length() > MAX_ID_LENGTH) {
-            throw new IllegalArgumentException(fieldName + " 长度不能超过 " + MAX_ID_LENGTH);
+            throw new IllegalArgumentException(fieldName + " length must not exceed " + MAX_ID_LENGTH);
         }
         if (checked.codePoints().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含控制字符");
+            throw new IllegalArgumentException(fieldName + " must not contain control characters");
         }
         return checked;
     }
@@ -49,7 +49,7 @@ final class ContractChecks {
     static String requireJavaQualifiedName(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (!JAVA_QUALIFIED_NAME.matcher(checked).matches()) {
-            throw new IllegalArgumentException(fieldName + " 不是有效的 Java 全限定类名: " + checked);
+            throw new IllegalArgumentException(fieldName + " is not a valid fully qualified Java class name: " + checked);
         }
         return checked;
     }
@@ -57,7 +57,7 @@ final class ContractChecks {
     static String requireJavaMethodName(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (!JAVA_METHOD_NAME.matcher(checked).matches()) {
-            throw new IllegalArgumentException(fieldName + " 不是有效的 Java 方法名: " + checked);
+            throw new IllegalArgumentException(fieldName + " is not a valid Java method name: " + checked);
         }
         return checked;
     }
@@ -65,7 +65,7 @@ final class ContractChecks {
     static String requireJavaPackageName(String value, String fieldName) {
         String checked = requireBoundedText(value, fieldName, 512, false);
         if (!JAVA_PACKAGE_NAME.matcher(checked).matches()) {
-            throw new IllegalArgumentException(fieldName + " 不是有效的 Java package 名: " + checked);
+            throw new IllegalArgumentException(fieldName + " is not a valid Java package name: " + checked);
         }
         return checked;
     }
@@ -73,7 +73,7 @@ final class ContractChecks {
     static String requireJavaExecutableName(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (!"<init>".equals(checked) && !JAVA_METHOD_NAME.matcher(checked).matches()) {
-            throw new IllegalArgumentException(fieldName + " 不是有效的 Java 可执行成员名: " + checked);
+            throw new IllegalArgumentException(fieldName + " is not a valid Java executable member name: " + checked);
         }
         return checked;
     }
@@ -131,13 +131,13 @@ final class ContractChecks {
     }
 
     private static IllegalArgumentException invalidDescriptor(String fieldName) {
-        return new IllegalArgumentException(fieldName + " 不是有效的 JVM 方法描述符");
+        return new IllegalArgumentException(fieldName + " is not a valid JVM method descriptor");
     }
 
     static String requireSha256(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (!SHA256.matcher(checked).matches()) {
-            throw new IllegalArgumentException(fieldName + " 必须是 64 位十六进制 SHA-256");
+            throw new IllegalArgumentException(fieldName + " must be a 64-character hexadecimal SHA-256");
         }
         return checked.toLowerCase(Locale.ROOT);
     }
@@ -145,25 +145,25 @@ final class ContractChecks {
     static String requirePortableRelativePath(String value, String fieldName) {
         String checked = requireNonBlank(value, fieldName);
         if (checked.startsWith("/") || checked.contains("\\") || checked.contains(":")) {
-            throw new IllegalArgumentException(fieldName + " 必须是使用 / 分隔的可移植相对路径");
+            throw new IllegalArgumentException(fieldName + " must be a portable relative path separated by /");
         }
         String[] segments = checked.split("/", -1);
         for (String segment : segments) {
             if (segment.isBlank() || ".".equals(segment) || "..".equals(segment)) {
-                throw new IllegalArgumentException(fieldName + " 包含非法路径段: " + checked);
+                throw new IllegalArgumentException(fieldName + " contains an invalid path segment: " + checked);
             }
         }
         return checked;
     }
 
     static <T> T requireNonNull(T value, String fieldName) {
-        return Objects.requireNonNull(value, fieldName + " 不能为空");
+        return Objects.requireNonNull(value, fieldName + " must not be null");
     }
 
     static <T> List<T> immutableList(List<T> values, String fieldName) {
         requireNonNull(values, fieldName);
         if (values.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含 null");
+            throw new IllegalArgumentException(fieldName + " must not contain null");
         }
         return List.copyOf(values);
     }
@@ -177,14 +177,14 @@ final class ContractChecks {
     static String requireBoundedText(
             String value, String fieldName, int maximumLength, boolean allowEmpty) {
         if (value == null) {
-            throw new IllegalArgumentException(fieldName + " 不能为 null");
+            throw new IllegalArgumentException(fieldName + " must not be null");
         }
         String checked = value.strip();
         if (!allowEmpty && checked.isEmpty()) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
+            throw new IllegalArgumentException(fieldName + " must not be null");
         }
         if (checked.length() > maximumLength) {
-            throw new IllegalArgumentException(fieldName + " 长度不能超过 " + maximumLength);
+            throw new IllegalArgumentException(fieldName + " length must not exceed " + maximumLength);
         }
         return checked;
     }

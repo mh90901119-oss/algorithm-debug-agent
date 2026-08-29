@@ -23,7 +23,7 @@ public record CodePathToolConfiguration(
         if (toolVersion == null || toolVersion.isBlank() || toolVersion.length() > 256
                 || mainClass == null || !mainClass.matches(
                 "[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)+")) {
-            throw new IllegalArgumentException("CodePath 工具版本或主类非法");
+            throw new IllegalArgumentException("The CodePath tool version or main class is invalid");
         }
     }
 
@@ -33,7 +33,7 @@ public record CodePathToolConfiguration(
                 || Files.isSymbolicLink(launcherJar)
                 || !Files.isReadable(launcherJar)) {
             throw new CodePathAdapterException(
-                    "CODEPATH_TOOL_MISSING", "CodePath launcher JAR 不存在", null);
+                    "CODEPATH_TOOL_MISSING", "CodePath launcher JAR does not exist", null);
         }
     }
 
@@ -50,7 +50,7 @@ public record CodePathToolConfiguration(
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
+            throw new IllegalStateException("JDK is missing SHA-256", failure);
         }
     }
 }

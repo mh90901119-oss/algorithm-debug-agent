@@ -31,7 +31,7 @@ public final class CaseArchiveLayout {
      */
     public static CaseArchiveLayout of(Path casesRoot, CaseId caseId) {
         if (casesRoot == null || caseId == null) {
-            throw new IllegalArgumentException("casesRoot 和 caseId 不能为空");
+            throw new IllegalArgumentException("casesRoot and caseId must not be null");
         }
         Path root = casesRoot.toAbsolutePath().normalize();
         Path caseRoot = child(root, safeSegment(caseId.value(), "caseId"));
@@ -264,7 +264,7 @@ public final class CaseArchiveLayout {
     private static Path child(Path parent, String segment) {
         Path result = parent.resolve(segment).normalize();
         if (!result.startsWith(parent) || result.equals(parent)) {
-            throw new IllegalArgumentException("Case 归档路径越界: " + segment);
+            throw new IllegalArgumentException("Case archive path escapes its root: " + segment);
         }
         return result;
     }
@@ -272,10 +272,10 @@ public final class CaseArchiveLayout {
     private static String safeSegment(String value, String field) {
         if (value == null || value.isBlank() || value.equals(".") || value.equals("..")
                 || value.contains("/") || value.contains("\\") || value.contains(":")) {
-            throw new IllegalArgumentException(field + " 必须是单一安全路径段");
+            throw new IllegalArgumentException(field + " must be a single safe path segment");
         }
         if (value.codePoints().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException(field + " 不允许包含控制字符");
+            throw new IllegalArgumentException(field + " must not contain control characters");
         }
         return value;
     }

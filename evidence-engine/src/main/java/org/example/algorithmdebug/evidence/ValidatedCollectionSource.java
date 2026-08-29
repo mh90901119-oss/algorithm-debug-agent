@@ -16,10 +16,10 @@ public record ValidatedCollectionSource(
     /** 校验输入非空且 Artifact 类型明确。 */
     public ValidatedCollectionSource {
         if (validation == null || validationArtifact == null) {
-            throw new IllegalArgumentException("Collection validation source 不能为空");
+            throw new IllegalArgumentException("Collection validation source must not be null");
         }
         if (!"COLLECTION_VALIDATION".equals(validationArtifact.artifactType())) {
-            throw new IllegalArgumentException("validationArtifact 类型必须为 COLLECTION_VALIDATION");
+            throw new IllegalArgumentException("validationArtifact type must be COLLECTION_VALIDATION");
         }
     }
 }

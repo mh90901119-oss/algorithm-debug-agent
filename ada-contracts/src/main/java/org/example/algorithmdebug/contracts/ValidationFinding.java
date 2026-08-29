@@ -17,7 +17,7 @@ public record ValidationFinding(
         status = ContractChecks.requireNonNull(status, "status");
         detail = ContractChecks.requireBoundedText(detail, "detail", 2_048, false);
         artifacts = ContractChecks.immutableList(artifacts, "artifacts");
-        if (artifacts.size() > 16) throw new IllegalArgumentException("artifacts 不能超过 16 项");
+        if (artifacts.size() > 16) throw new IllegalArgumentException("artifacts must not exceed 16 entries");
         provenance = ContractChecks.requireNonNull(provenance, "provenance");
     }
 }

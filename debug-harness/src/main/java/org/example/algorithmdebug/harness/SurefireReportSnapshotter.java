@@ -34,7 +34,7 @@ public final class SurefireReportSnapshotter {
     /** @param maximumReportBytes 单报告内容 Hash 预算；@param maximumReports 目标报告数量预算 */
     public SurefireReportSnapshotter(long maximumReportBytes, int maximumReports) {
         if (maximumReportBytes <= 0 || maximumReports <= 0) {
-            throw new IllegalArgumentException("Surefire 快照预算必须为正数");
+            throw new IllegalArgumentException("The Surefire snapshot budget must be positive");
         }
         this.maximumReportBytes = maximumReportBytes;
         this.maximumReports = maximumReports;
@@ -48,7 +48,7 @@ public final class SurefireReportSnapshotter {
     public SurefireReportSnapshot snapshot(Path reportsDirectory, TargetTest targetTest)
             throws SurefireDiagnosticException {
         if (reportsDirectory == null || targetTest == null) {
-            throw new IllegalArgumentException("reportsDirectory 和 targetTest 不能为空");
+            throw new IllegalArgumentException("reportsDirectory and targetTest must not be null");
         }
         Path root = reportsDirectory.toAbsolutePath().normalize();
         if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS)) {
@@ -63,10 +63,10 @@ public final class SurefireReportSnapshotter {
                     .limit((long) maximumReports + 1)
                     .toList();
         } catch (IOException | SecurityException failure) {
-            throw new SurefireDiagnosticException("无法枚举 Surefire 报告目录", failure);
+            throw new SurefireDiagnosticException("Failed to enumerate the Surefire report directory", failure);
         }
         if (candidates.size() > maximumReports) {
-            throw new SurefireDiagnosticException("目标 Surefire 报告数量超过预算");
+            throw new SurefireDiagnosticException("The target Surefire report count exceeds the budget");
         }
         LinkedHashMap<Path, SurefireReportSnapshot.ReportState> states = new LinkedHashMap<>();
         for (Path candidate : candidates) {
@@ -79,11 +79,11 @@ public final class SurefireReportSnapshotter {
     public List<Path> changedTargetReports(
             SurefireReportSnapshot before, SurefireReportSnapshot after) {
         if (before == null || after == null) {
-            throw new IllegalArgumentException("before 和 after 不能为空");
+            throw new IllegalArgumentException("before and after must not be null");
         }
         if (!before.reportsDirectory().equals(after.reportsDirectory())
                 || !before.targetTest().equals(after.targetTest())) {
-            throw new IllegalArgumentException("Surefire 快照目录或目标 UT 不一致");
+            throw new IllegalArgumentException("The Surefire snapshot directory or target UT does not match");
         }
         List<Path> changed = new ArrayList<>();
         after.reports().entrySet().stream()
@@ -104,7 +104,7 @@ public final class SurefireReportSnapshotter {
             return new SurefireReportSnapshot.ReportState(size, hash(report), false);
         } catch (IOException | SecurityException failure) {
             throw new SurefireDiagnosticException(
-                    "无法读取 Surefire 报告状态: " + report.getFileName(), failure);
+                    "Failed to read the Surefire report status: " + report.getFileName(), failure);
         }
     }
 
@@ -126,7 +126,7 @@ public final class SurefireReportSnapshotter {
         try {
             return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("当前 JVM 不支持 SHA-256", failure);
+            throw new IllegalStateException("current JVM does not support SHA-256", failure);
         }
     }
 

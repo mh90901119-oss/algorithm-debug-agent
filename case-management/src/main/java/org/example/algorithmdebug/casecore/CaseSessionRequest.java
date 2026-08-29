@@ -18,15 +18,15 @@ public record CaseSessionRequest(
     public CaseSessionRequest {
         if (caseId == null || projectId == null || targetTest == null
                 || adapterId == null || question == null || contextMode == null) {
-            throw new IllegalArgumentException("CaseSessionRequest 字段不能为空");
+            throw new IllegalArgumentException("CaseSessionRequest fields must not be null");
         }
         adapterId = adapterId.strip();
         question = question.strip();
         if (adapterId.isEmpty() || adapterId.length() > 512) {
-            throw new IllegalArgumentException("adapterId 不能为空且不能超过 512");
+            throw new IllegalArgumentException("adapterId must not be empty and must not exceed 512");
         }
         if (question.isEmpty() || question.length() > 65_536) {
-            throw new IllegalArgumentException("question 不能为空且不能超过 65536");
+            throw new IllegalArgumentException("question must not be empty and must not exceed 65536");
         }
     }
 }

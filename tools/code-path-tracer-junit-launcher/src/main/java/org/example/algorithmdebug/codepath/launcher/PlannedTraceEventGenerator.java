@@ -58,7 +58,7 @@ final class PlannedTraceEventGenerator {
     String methodName(TraceEvent event) {
         String value = event.getMethodName();
         int separator = value.indexOf(DESCRIPTOR_SEPARATOR);
-        if (separator < 1) throw new IllegalArgumentException("缺少计划方法标记");
+        if (separator < 1) throw new IllegalArgumentException("A planned-method marker is missing");
         return value.substring(0, separator);
     }
 
@@ -66,7 +66,7 @@ final class PlannedTraceEventGenerator {
         String value = event.getMethodName();
         int separator = value.indexOf(DESCRIPTOR_SEPARATOR);
         if (separator < 1 || separator == value.length() - 1) {
-            throw new IllegalArgumentException("缺少 JVM descriptor");
+            throw new IllegalArgumentException("Missing JVM descriptor");
         }
         return value.substring(separator + 1);
     }

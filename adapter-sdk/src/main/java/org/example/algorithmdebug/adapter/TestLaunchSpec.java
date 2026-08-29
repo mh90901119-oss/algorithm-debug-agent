@@ -35,7 +35,7 @@ public record TestLaunchSpec(
         runMode = AdapterChecks.requireNonNull(runMode, "runMode");
         mavenGoals = AdapterChecks.immutableTokens(mavenGoals, "mavenGoals", true);
         if (mavenGoals.isEmpty()) {
-            throw new IllegalArgumentException("mavenGoals 不能为空集合");
+            throw new IllegalArgumentException("mavenGoals must not be an empty collection");
         }
         mavenProperties = AdapterChecks.immutableMavenProperties(mavenProperties);
         jvmArguments = AdapterChecks.immutableTokens(jvmArguments, "jvmArguments", true);

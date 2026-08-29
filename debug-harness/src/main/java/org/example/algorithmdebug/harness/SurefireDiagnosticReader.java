@@ -33,7 +33,7 @@ public final class SurefireDiagnosticReader {
     /** @param maximumReportBytes 单个目标 Surefire XML 允许的最大字节数 */
     public SurefireDiagnosticReader(long maximumReportBytes) {
         if (maximumReportBytes <= 0) {
-            throw new IllegalArgumentException("maximumReportBytes 必须为正数");
+            throw new IllegalArgumentException("maximumReportBytes must be positive");
         }
         this.maximumReportBytes = maximumReportBytes;
     }
@@ -47,14 +47,14 @@ public final class SurefireDiagnosticReader {
     public Optional<TargetFailureDiagnostic> read(Path reportsDirectory, String targetTest)
             throws SurefireDiagnosticException {
         if (reportsDirectory == null || targetTest == null || targetTest.isBlank()) {
-            throw new IllegalArgumentException("reportsDirectory 和 targetTest 不能为空");
+            throw new IllegalArgumentException("reportsDirectory and targetTest must not be null");
         }
         if (!Files.isDirectory(reportsDirectory)) {
             return Optional.empty();
         }
         int separator = targetTest.lastIndexOf('#');
         if (separator <= 0 || separator == targetTest.length() - 1) {
-            throw new IllegalArgumentException("targetTest 必须使用 fully.qualified.Class#method 格式");
+            throw new IllegalArgumentException("targetTest must use the fully.qualified.Class#method format");
         }
         TargetTest target = new TargetTest(
                 targetTest.substring(0, separator), targetTest.substring(separator + 1));
@@ -76,7 +76,7 @@ public final class SurefireDiagnosticReader {
         } catch (SurefireDiagnosticException exception) {
             throw exception;
         } catch (Exception exception) {
-            throw new SurefireDiagnosticException("无法读取 Surefire 报告目录", exception);
+            throw new SurefireDiagnosticException("Failed to read the Surefire report directory", exception);
         }
     }
 
@@ -90,12 +90,12 @@ public final class SurefireDiagnosticReader {
     public Optional<SurefireTestResult> readResult(Path report, TargetTest targetTest)
             throws SurefireDiagnosticException {
         if (report == null || targetTest == null) {
-            throw new IllegalArgumentException("report 和 targetTest 不能为空");
+            throw new IllegalArgumentException("report and targetTest must not be null");
         }
         try {
             if (Files.size(report) > maximumReportBytes) {
                 throw new SurefireDiagnosticException(
-                        "Surefire XML 超过大小上限: " + report.getFileName());
+                        "Surefire XML exceeds the size limit: " + report.getFileName());
             }
             var builder = secureFactory().newDocumentBuilder();
             builder.setErrorHandler(new DefaultHandler() {
@@ -157,7 +157,7 @@ public final class SurefireDiagnosticReader {
             if (exception instanceof SurefireDiagnosticException diagnosticException) {
                 throw diagnosticException;
             }
-            throw new SurefireDiagnosticException("无法安全解析 Surefire XML: " + report.getFileName(), exception);
+            throw new SurefireDiagnosticException("Failed to parse safely Surefire XML: " + report.getFileName(), exception);
         }
     }
 

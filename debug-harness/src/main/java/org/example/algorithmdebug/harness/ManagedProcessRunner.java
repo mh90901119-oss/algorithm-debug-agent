@@ -52,11 +52,11 @@ public final class ManagedProcessRunner {
                 || argv.stream().anyMatch(value -> value == null || value.isBlank())
                 || workingDirectory == null || stdoutPath == null || stderrPath == null
                 || limits == null) {
-            throw new IllegalArgumentException("argv、工作目录和 limits 必须有效");
+            throw new IllegalArgumentException("argv, working directory, and limits must be valid");
         }
         if (stdoutPath.toAbsolutePath().normalize().equals(
                 stderrPath.toAbsolutePath().normalize())) {
-            throw new IllegalArgumentException("stdoutPath 与 stderrPath 不能指向同一文件");
+            throw new IllegalArgumentException("stdoutPath and stderrPath must not reference the same file");
         }
         OutputMarkerRegistry markers = new OutputMarkerRegistry(observedMarkers);
         Path stdout = output.prepare(stdoutPath);
@@ -67,7 +67,7 @@ public final class ManagedProcessRunner {
             builder.directory(workingDirectory.toAbsolutePath().normalize().toFile());
             process = starter.start(builder);
         } catch (IOException failure) {
-            throw new HarnessException("HARNESS_PROCESS_START_FAILED", "无法启动受管外部进程", failure);
+            throw new HarnessException("HARNESS_PROCESS_START_FAILED", "Failed to start managed external process", failure);
         }
         ExecutorService pumps = Executors.newFixedThreadPool(2);
         Future<RunLog> stdoutFuture = pumps.submit(() -> output.capturePrepared(

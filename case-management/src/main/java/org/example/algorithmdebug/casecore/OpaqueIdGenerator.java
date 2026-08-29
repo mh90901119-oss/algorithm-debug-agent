@@ -23,7 +23,7 @@ public final class OpaqueIdGenerator {
     /** @param tokenSupplier 每次返回一个安全单路径段 token */
     public OpaqueIdGenerator(Supplier<String> tokenSupplier) {
         if (tokenSupplier == null) {
-            throw new IllegalArgumentException("tokenSupplier 不能为空");
+            throw new IllegalArgumentException("tokenSupplier must not be null");
         }
         this.tokenSupplier = tokenSupplier;
     }
@@ -62,7 +62,7 @@ public final class OpaqueIdGenerator {
         String token = tokenSupplier.get();
         if (token == null || token.isBlank() || token.length() > 100
                 || token.contains("/") || token.contains("\\") || token.contains(":")) {
-            throw new IllegalStateException("ID token 不安全");
+            throw new IllegalStateException("ID token is unsafe");
         }
         return prefix + "-" + token;
     }

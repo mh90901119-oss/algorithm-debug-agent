@@ -19,15 +19,15 @@ public record MethodCatalogEntry(
         methodKey = ContractChecks.requireBoundedText(methodKey, "methodKey", 1_024, false);
         sourceAnchor = ContractChecks.requireNonNull(sourceAnchor, "sourceAnchor");
         if (distanceFromTarget < 0) {
-            throw new IllegalArgumentException("distanceFromTarget 不能为负数");
+            throw new IllegalArgumentException("distanceFromTarget must not be negative");
         }
         if (targetMethod != (distanceFromTarget == 0)) {
-            throw new IllegalArgumentException("只有目标方法的 distanceFromTarget 可以为 0");
+            throw new IllegalArgumentException("Only the target method may have distanceFromTarget equal to 0");
         }
         String expected = sourceAnchor.className() + "#" + sourceAnchor.methodName()
                 + sourceAnchor.descriptor();
         if (!methodKey.equals(expected)) {
-            throw new IllegalArgumentException("methodKey 与 SourceAnchor 方法身份不一致");
+            throw new IllegalArgumentException("methodKey does not match the SourceAnchor method identity");
         }
     }
 }

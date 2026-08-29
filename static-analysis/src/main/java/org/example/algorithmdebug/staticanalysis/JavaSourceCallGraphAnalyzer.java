@@ -88,7 +88,7 @@ public final class JavaSourceCallGraphAnalyzer {
         BudgetGuard guard = new BudgetGuard(request);
         Discovery discovery = discoverSources(request, guard);
         if (discovery.sources().isEmpty()) {
-            throw new StaticAnalysisException("目标模块没有预算内可分析的 Java 源码");
+            throw new StaticAnalysisException("The target module has no analyzable Java source within the budget");
         }
         return compileAndAnalyze(request, discovery, guard, List.copyOf(testClasspath));
     }
@@ -98,7 +98,7 @@ public final class JavaSourceCallGraphAnalyzer {
             List<Path> testClasspath) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
-            throw new StaticAnalysisException("当前运行时不包含 JDK JavaCompiler");
+            throw new StaticAnalysisException("The current runtime does not include the JDK JavaCompiler");
         }
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
@@ -132,12 +132,12 @@ public final class JavaSourceCallGraphAnalyzer {
             EdgeScan edgeScan = collectEdges(parsed, trees, types, elements, methodScan, guard);
             return selectReachable(request, discovery, diagnostics, methodScan, edgeScan, guard);
         } catch (IOException exception) {
-            throw new StaticAnalysisException("读取 Java 源码失败", exception);
+            throw new StaticAnalysisException("Read Java sourcefailed", exception);
         } catch (RuntimeException exception) {
             if (exception instanceof StaticAnalysisException staticException) {
                 throw staticException;
             }
-            throw new StaticAnalysisException("JDK AST 分析失败", exception);
+            throw new StaticAnalysisException("JDK AST analysis failed", exception);
         }
     }
 
@@ -156,7 +156,7 @@ public final class JavaSourceCallGraphAnalyzer {
                 String packageName = unit.getPackageName() == null
                         ? "" : unit.getPackageName().toString();
                 if (packageName.isBlank()) {
-                    throw new StaticAnalysisException("默认 package 不受静态分析计划支持");
+                    throw new StaticAnalysisException("The default package is not supported by the static analysis plan");
                 }
                 new TreePathScanner<Void, Void>() {
                     @Override
@@ -296,10 +296,10 @@ public final class JavaSourceCallGraphAnalyzer {
                 .map(MethodModel::key).sorted().toList();
         if (targetKeys.isEmpty()) {
             throw new StaticAnalysisException(
-                    "TARGET_TEST_NOT_FOUND", "当前源码中未找到目标 UT 方法");
+                    "TARGET_TEST_NOT_FOUND", "The target UT method was not found in the current source");
         }
         if (targetKeys.size() != 1) {
-            throw new StaticAnalysisException("目标 UT 方法必须唯一，实际匹配数量: " + targetKeys.size());
+            throw new StaticAnalysisException("The target UT method must be unique; actual match count: " + targetKeys.size());
         }
         String targetKey = targetKeys.getFirst();
         Map<String, List<String>> outgoing = new HashMap<>();
@@ -394,7 +394,7 @@ public final class JavaSourceCallGraphAnalyzer {
                     }
                 }
             } catch (IOException exception) {
-                throw new StaticAnalysisException("枚举 Java 源码失败: " + rootName, exception);
+                throw new StaticAnalysisException("Failed to enumerate Java source files: " + rootName, exception);
             }
         }
         List<Path> selected = retained.stream().sorted(order).toList();
@@ -434,7 +434,7 @@ public final class JavaSourceCallGraphAnalyzer {
         try (InputStream input = Files.newInputStream(path)) {
             return input.readNBytes(maximum);
         } catch (IOException exception) {
-            throw new StaticAnalysisException("读取 Java 源码失败: " + path.getFileName(), exception);
+            throw new StaticAnalysisException("Read Java sourcefailed: " + path.getFileName(), exception);
         }
     }
 
@@ -564,7 +564,7 @@ public final class JavaSourceCallGraphAnalyzer {
                         .onUnmappableCharacter(CodingErrorAction.REPORT)
                         .decode(ByteBuffer.wrap(source.content()));
             } catch (CharacterCodingException failure) {
-                throw new IOException("Java 源码不是有效 UTF-8: " + source.path().getFileName(), failure);
+                throw new IOException("The Java source is not valid UTF-8: " + source.path().getFileName(), failure);
             }
         }
     }
@@ -688,8 +688,8 @@ public final class JavaSourceCallGraphAnalyzer {
 
         private StaticAnalysisException cooperativeDeadlineFailure(String phase) {
             return new StaticAnalysisException(
-                    "静态分析协作式 deadline 在 " + phase
-                            + " 阶段超限；进程内 javac 不提供 hard wall-clock timeout");
+                    "The cooperative static-analysis deadline was exceeded during the " + phase
+                            + " phase; in-process javac does not provide a hard wall-clock timeout");
         }
 
         private boolean truncated() {

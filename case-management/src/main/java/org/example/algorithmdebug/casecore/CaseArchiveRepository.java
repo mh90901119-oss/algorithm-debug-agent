@@ -61,13 +61,13 @@ public final class CaseArchiveRepository {
             BoundedDocumentMapper mapper,
             AtomicDocumentWriter writer) {
         if (casesRoot == null || mapper == null || writer == null) {
-            throw new IllegalArgumentException("Case Archive 依赖不能为空");
+            throw new IllegalArgumentException("Case Archive dependencies must not be null");
         }
         this.casesRoot = casesRoot.toAbsolutePath().normalize();
         if (Files.exists(this.casesRoot, LinkOption.NOFOLLOW_LINKS)
                 && !Files.isDirectory(this.casesRoot, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "CASE_ARCHIVE_PATH_INVALID", "项目 Case 根目录不存在或不是普通目录");
+                    "CASE_ARCHIVE_PATH_INVALID", "Project Case root does not exist or is not a directory");
         }
         Path parent = this.casesRoot.getParent();
         if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
@@ -81,7 +81,7 @@ public final class CaseArchiveRepository {
     /** 创建新 Case 目录和不可变身份清单。 */
     public void createCase(CaseManifest manifest) {
         if (manifest == null) {
-            throw new IllegalArgumentException("manifest 不能为空");
+            throw new IllegalArgumentException("manifest must not be null");
         }
         CaseArchiveLayout layout = layout(manifest.caseId());
         try {
@@ -128,7 +128,7 @@ public final class CaseArchiveRepository {
         AnalysisResult checked = requireNonNull(result, "result");
         AnalysisRequest request = requireAnalysis(checked.caseId(), checked.analysisId());
         if (!request.contextId().equals(checked.contextId())) {
-            throw identityMismatch("AnalysisResult 与 AnalysisRequest Context 不一致");
+            throw identityMismatch("AnalysisResult does not match the AnalysisRequest Context");
         }
         checked.referencedRunIds().forEach(id -> requireRunRequest(checked.caseId(), id));
         checked.referencedCollectionIds().forEach(id -> requireCollection(
@@ -147,7 +147,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).analysisResult(analysisId), AnalysisResult.class,
                 "ANALYSIS_RESULT_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
-            throw identityMismatch("AnalysisResult 文档身份与路径不一致");
+            throw identityMismatch("AnalysisResult document identity does not match its path");
         }
         return value;
     }
@@ -164,7 +164,7 @@ public final class CaseArchiveRepository {
                 caseId, checked.artifactId(), checked.artifactType(), checked.mediaType(), file);
         if (!actual.equals(checked)) {
             throw new WorkspaceException(
-                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 注册前内容校验失败");
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact content verification failed before registration");
         }
         Path registrationPath = layout(caseId).artifactRegistration(checked.artifactId());
         if (Files.isRegularFile(registrationPath, LinkOption.NOFOLLOW_LINKS)) {
@@ -175,7 +175,7 @@ public final class CaseArchiveRepository {
             }
             throw new WorkspaceException(
                     "CASE_ARTIFACT_INTEGRITY_MISMATCH",
-                    "相同 Artifact ID 已注册为不同内容");
+                    "The same Artifact ID is already registered with different content");
         }
         CaseArtifactRegistration registration = new CaseArtifactRegistration(
                 SchemaVersions.CASE_ARTIFACT_REGISTRATION, caseId, checked,
@@ -192,7 +192,7 @@ public final class CaseArchiveRepository {
                 CaseArtifactRegistration.class, "CASE_ARTIFACT_NOT_REGISTERED");
         if (!caseId.equals(value.caseId())
                 || !artifactId.equals(value.artifact().artifactId())) {
-            throw identityMismatch("Artifact 注册身份与路径不一致");
+            throw identityMismatch("Artifact registration identity does not match its path");
         }
         return value;
     }
@@ -306,7 +306,7 @@ public final class CaseArchiveRepository {
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
         if (!analysis.contextId().equals(checked.contextId())
                 || !manifest.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("MethodCatalog 与 Case/Context/Analysis 身份不一致");
+            throw identityMismatch("MethodCatalog and Case/Context/Analysis identity does not match");
         }
         Path document = layout(checked.caseId()).analysisMethodCatalog(checked.analysisId());
         try {
@@ -322,17 +322,17 @@ public final class CaseArchiveRepository {
     public MethodCatalog requireMethodCatalog(CaseId caseId, AnalysisId analysisId) {
         Path document = layout(caseId).analysisMethodCatalog(analysisId);
         if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("METHOD_CATALOG_NOT_FOUND", "Case 归档文档不存在");
+            throw new WorkspaceException("METHOD_CATALOG_NOT_FOUND", "The archived Case document does not exist");
         }
         MethodCatalog value;
         try {
             value = mapper.readJsonArtifact(document, MethodCatalog.class);
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "MethodCatalog 归档文档无效", failure);
+                    "CASE_DOCUMENT_INVALID", "The archived MethodCatalog document is invalid", failure);
         }
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
-            throw identityMismatch("MethodCatalog 文档身份与路径不一致");
+            throw identityMismatch("MethodCatalog document identity does not match its path");
         }
         return value;
     }
@@ -343,7 +343,7 @@ public final class CaseArchiveRepository {
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
         if (!catalog.contextId().equals(checked.contextId())
                 || !catalog.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("CodePath 计划与 MethodCatalog 身份不一致");
+            throw identityMismatch("CodePath plan identity does not match MethodCatalog");
         }
         validatePlanSelectors(catalog, checked);
         Path document = layout(checked.caseId()).planDocument(
@@ -364,17 +364,17 @@ public final class CaseArchiveRepository {
         var selectorKeys = new HashSet<String>();
         for (var selector : plan.selectors()) {
             if (!selectorKeys.add(selector.methodKey())) {
-                throw identityMismatch("CodePath 计划包含重复 selector: " + selector.methodKey());
+                throw identityMismatch("CodePath plan contains duplicate selector: " + selector.methodKey());
             }
             var entry = catalogEntries.get(selector.methodKey());
             if (entry == null) {
-                throw identityMismatch("CodePath selector 不属于 MethodCatalog: " + selector.methodKey());
+                throw identityMismatch("CodePath selector does not belong to MethodCatalog: " + selector.methodKey());
             }
             var anchor = entry.sourceAnchor();
             if (!selector.className().equals(anchor.className())
                     || !selector.methodName().equals(anchor.methodName())
                     || !selector.descriptor().equals(anchor.descriptor())) {
-                throw identityMismatch("CodePath selector 与 MethodCatalog SourceAnchor 不一致");
+                throw identityMismatch("The CodePath selector does not match the MethodCatalog SourceAnchor");
             }
         }
     }
@@ -387,7 +387,7 @@ public final class CaseArchiveRepository {
                 "CODEPATH_PLAN_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())
                 || !planId.equals(value.planId())) {
-            throw identityMismatch("CodePath 计划文档身份与路径不一致");
+            throw identityMismatch("CodePath plan document identity does not match its path");
         }
         return value;
     }
@@ -401,14 +401,14 @@ public final class CaseArchiveRepository {
                 .toList();
         if (matches.size() != 1) {
             throw new WorkspaceException(
-                    "CODEPATH_PLAN_NOT_FOUND", "CodePath 计划不存在或 PlanId 在 Analysis 间不唯一");
+                    "CODEPATH_PLAN_NOT_FOUND", "The CodePath plan does not exist or its PlanId is not unique across Analyses");
         }
         String analysisSegment = matches.getFirst().getParent().getParent().getFileName().toString();
         AnalysisId analysisId;
         try {
             analysisId = new AnalysisId(analysisSegment);
         } catch (IllegalArgumentException failure) {
-            throw new WorkspaceException("CASE_DOCUMENT_INVALID", "CodePath 计划路径身份无效", failure);
+            throw new WorkspaceException("CASE_DOCUMENT_INVALID", "CodePath plan path identity is invalid", failure);
         }
         return requireCodePathPlan(caseId, analysisId, planId);
     }
@@ -419,14 +419,14 @@ public final class CaseArchiveRepository {
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
         if (!catalog.contextId().equals(checked.contextId())
                 || !catalog.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("JDWP 计划与 MethodCatalog 身份不一致");
+            throw identityMismatch("JDWP plan identity does not match MethodCatalog");
         }
         var entries = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
         catalog.entries().forEach(entry -> entries.put(entry.methodKey(), entry));
         for (var point : checked.tracepoints()) {
             var entry = entries.get(point.methodKey());
             if (entry == null || !entry.sourceAnchor().equals(point.sourceAnchor())) {
-                throw identityMismatch("JDWP tracepoint 不属于 MethodCatalog 或源码锚点不一致");
+                throw identityMismatch("JDWP tracepoint is outside MethodCatalog or its source anchor does not match");
             }
         }
         Path document = layout(checked.caseId()).planDocument(
@@ -448,7 +448,7 @@ public final class CaseArchiveRepository {
                 "JDWP_PLAN_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())
                 || !planId.equals(value.planId())) {
-            throw identityMismatch("JDWP 计划文档身份与路径不一致");
+            throw identityMismatch("JDWP plan document identity does not match its path");
         }
         return value;
     }
@@ -462,13 +462,13 @@ public final class CaseArchiveRepository {
                 .toList();
         if (matches.size() != 1) {
             throw new WorkspaceException(
-                    "JDWP_PLAN_NOT_FOUND", "JDWP 计划不存在或 PlanId 在 Analysis 间不唯一");
+                    "JDWP_PLAN_NOT_FOUND", "The JDWP plan does not exist or its PlanId is not unique across Analyses");
         }
         String analysisSegment = matches.getFirst().getParent().getParent().getFileName().toString();
         try {
             return requireJdwpPlan(caseId, new AnalysisId(analysisSegment), planId);
         } catch (IllegalArgumentException failure) {
-            throw new WorkspaceException("CASE_DOCUMENT_INVALID", "JDWP 计划路径身份无效", failure);
+            throw new WorkspaceException("CASE_DOCUMENT_INVALID", "JDWP plan path identity is invalid", failure);
         }
     }
 
@@ -484,7 +484,7 @@ public final class CaseArchiveRepository {
         if (!plan.contextId().equals(checked.contextId())
                 || !plan.analysisId().equals(checked.analysisId())
                 || !plan.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("Collection 请求与 CodePath 计划身份不一致");
+            throw identityMismatch("Collection request identity does not match the CodePath plan");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
@@ -506,7 +506,7 @@ public final class CaseArchiveRepository {
                 checked.caseId(), checked.analysisId(), checked.planId());
         if (!plan.contextId().equals(checked.contextId())
                 || !plan.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("JDWP Collection 请求与计划身份不一致");
+            throw identityMismatch("JDWP Collection request identity does not match the plan");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
@@ -528,7 +528,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).collectionRequest(collectionId), JdwpCollectionRecord.class,
                 "COLLECTION_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !collectionId.equals(value.collectionId())) {
-            throw identityMismatch("JDWP Collection 请求文档身份与路径不一致");
+            throw identityMismatch("JDWP Collection request document identity does not match its path");
         }
         return value;
     }
@@ -540,7 +540,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).collectionRequest(collectionId), MethodPathCollectionRecord.class,
                 "COLLECTION_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !collectionId.equals(value.collectionId())) {
-            throw identityMismatch("Collection 请求文档身份与路径不一致");
+            throw identityMismatch("Collection request document identity does not match its path");
         }
         return value;
     }
@@ -553,7 +553,7 @@ public final class CaseArchiveRepository {
         if (!request.contextId().equals(checked.contextId())
                 || !request.analysisId().equals(checked.analysisId())
                 || !request.runId().equals(checked.runId())) {
-            throw identityMismatch("Baseline check 与 Collection 请求身份不一致");
+            throw identityMismatch("Baseline check does not match Collection request identity");
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
@@ -581,7 +581,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).collectionSummary(collectionId),
                 CollectionExecutionSummary.class, "COLLECTION_SUMMARY_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !collectionId.equals(value.collectionId())) {
-            throw identityMismatch("CollectionExecutionSummary 文档身份与路径不一致");
+            throw identityMismatch("CollectionExecutionSummary document identity does not match its path");
         }
         return value;
     }
@@ -594,7 +594,7 @@ public final class CaseArchiveRepository {
         if (!request.contextId().equals(checked.contextId())
                 || !request.analysisId().equals(checked.analysisId())
                 || !request.runId().equals(checked.runId())) {
-            throw identityMismatch("Baseline check 与 JDWP Collection 请求身份不一致");
+            throw identityMismatch("Baseline check does not match JDWP Collection request identity");
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
@@ -613,14 +613,14 @@ public final class CaseArchiveRepository {
         requireContext(checked.caseId(), checked.contextId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
         if (!analysis.contextId().equals(checked.contextId())) {
-            throw identityMismatch("Evidence 请求 Context 与 Analysis 不一致");
+            throw identityMismatch("Evidence request Context does not match Analysis");
         }
         RunRequest run = requireRunRequest(checked.caseId(), checked.runId());
         if (!run.contextId().equals(checked.contextId())) {
-            throw identityMismatch("Evidence 请求 Run 与 Context 不一致");
+            throw identityMismatch("The Evidence request Run does not match its Context");
         }
         if (findRunOutcome(checked.caseId(), checked.runId()).isEmpty()) {
-            throw identityMismatch("Evidence 请求只能引用已完成的 Run");
+            throw identityMismatch("Evidence request may only reference a completed Run");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.evidenceRoot(checked.evidenceId());
@@ -642,7 +642,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).evidenceBuildRequest(evidenceId),
                 EvidenceBuildRequest.class, "EVIDENCE_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !evidenceId.equals(value.evidenceId())) {
-            throw identityMismatch("Evidence 请求身份与路径不一致");
+            throw identityMismatch("The Evidence request identity does not match its path");
         }
         return value;
     }
@@ -711,7 +711,7 @@ public final class CaseArchiveRepository {
                 layout(caseId).evidenceBundle(evidenceId),
                 EvidenceBundle.class, "EVIDENCE_BUNDLE_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !evidenceId.equals(value.evidenceId())) {
-            throw identityMismatch("Evidence Bundle 身份与路径不一致");
+            throw identityMismatch("Evidence Bundle identity does not match its path");
         }
         return value;
     }
@@ -733,11 +733,11 @@ public final class CaseArchiveRepository {
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
         if (!analysis.contextId().equals(checked.contextId())) {
             throw new WorkspaceException(
-                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest Context 与 Analysis 不一致");
+                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest Context does not match Analysis");
         }
         if (!manifest.targetTest().equals(checked.targetTest())) {
             throw new WorkspaceException(
-                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest 目标 UT 与 Case 不一致");
+                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest target UT does not match Case");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
         Path runRoot = layout.runRoot(checked.runId());
@@ -759,7 +759,7 @@ public final class CaseArchiveRepository {
         if (!request.contextId().equals(checked.contextId())
                 || !request.analysisId().equals(checked.analysisId())) {
             throw new WorkspaceException(
-                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunOutcome 与 RunRequest 归属不一致");
+                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunOutcome ownership does not match RunRequest");
         }
         try {
             writer.writeNew(layout(checked.caseId()).runOutcome(checked.runId()), mapper.writeJson(checked));
@@ -795,7 +795,7 @@ public final class CaseArchiveRepository {
         }
         if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "Context reproduction 不是普通文件");
+                    "CASE_DOCUMENT_INVALID", "Context reproduction is not a regular file");
         }
         RunResultFingerprint value = readFingerprint(document);
         validateFingerprintPathIdentity(value, caseId, contextId);
@@ -870,7 +870,7 @@ public final class CaseArchiveRepository {
         ContextRecord value = requireDocument(
                 layout(caseId).contextDocument(contextId), ContextRecord.class, "CONTEXT_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !contextId.equals(value.contextId())) {
-            throw identityMismatch("Context 文档身份与路径不一致");
+            throw identityMismatch("Context document identity does not match its path");
         }
         return value;
     }
@@ -880,7 +880,7 @@ public final class CaseArchiveRepository {
         AnalysisRequest value = requireDocument(
                 layout(caseId).analysisDocument(analysisId), AnalysisRequest.class, "ANALYSIS_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
-            throw identityMismatch("Analysis 文档身份与路径不一致");
+            throw identityMismatch("Analysis document identity does not match its path");
         }
         return value;
     }
@@ -890,7 +890,7 @@ public final class CaseArchiveRepository {
         RunRequest value = requireDocument(
                 layout(caseId).runRequest(runId), RunRequest.class, "RUN_NOT_FOUND");
         if (!caseId.equals(value.caseId()) || !runId.equals(value.runId())) {
-            throw identityMismatch("RunRequest 文档身份与路径不一致");
+            throw identityMismatch("RunRequest document identity does not match its path");
         }
         return value;
     }
@@ -903,7 +903,7 @@ public final class CaseArchiveRepository {
         }
         RunOutcomeSummary value = mapper.readJson(document, RunOutcomeSummary.class);
         if (!caseId.equals(value.caseId()) || !runId.equals(value.runId())) {
-            throw identityMismatch("RunOutcome 文档身份与路径不一致");
+            throw identityMismatch("RunOutcome document identity does not match its path");
         }
         return Optional.of(value);
     }
@@ -962,7 +962,7 @@ public final class CaseArchiveRepository {
                     .sorted().toList();
         } catch (IOException | SecurityException failure) {
             throw new WorkspaceException(
-                    "CASE_ARCHIVE_READ_FAILED", "无法枚举 Case 子目录", failure);
+                    "CASE_ARCHIVE_READ_FAILED", "Failed to enumerate Case subdirectories", failure);
         }
     }
 
@@ -1003,13 +1003,13 @@ public final class CaseArchiveRepository {
         boolean currentEvidence = request.collectionIds().contains(collectionId);
         boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
         if (!currentEvidence && !comparisonEvidence) {
-            throw identityMismatch("派生产物与 Evidence 请求身份或 Collection 角色不一致");
+            throw identityMismatch("Derived artifact does not match Evidence request identity or Collection role");
         }
         if (currentEvidence && !request.contextId().equals(contextId)) {
-            throw identityMismatch("当前 Evidence Collection 必须属于请求 Context");
+            throw identityMismatch("current Evidence Collection must belong to the request Context");
         }
         if (comparisonEvidence && request.contextId().equals(contextId)) {
-            throw identityMismatch("同 Context 历史 Collection 应作为当前证据复用而非比较证据");
+            throw identityMismatch("A historical Collection from the same Context must be reused as current evidence, not comparison evidence");
         }
         boolean matched;
         if ("CODEPATH".equals(collectorType)) {
@@ -1025,10 +1025,10 @@ public final class CaseArchiveRepository {
                     && collection.runId().equals(runId)
                     && collection.planId().equals(planId);
         } else {
-            throw identityMismatch("未知 Collector 类型不能归档派生产物");
+            throw identityMismatch("Unknown Collector type cannot archive derived artifacts");
         }
         if (!matched) {
-            throw identityMismatch("派生产物与原 Collection 的 Context/Analysis/Run/Plan 不一致");
+            throw identityMismatch("Derived artifact does not match the source Collection Context/Analysis/Run/Plan");
         }
     }
 
@@ -1040,7 +1040,7 @@ public final class CaseArchiveRepository {
                 requireJdwpCollection(caseId, collectionId);
             } catch (WorkspaceException jdwpFailure) {
                 throw new WorkspaceException(
-                        "COLLECTION_NOT_FOUND", "AnalysisResult 引用的 Collection 不存在",
+                        "COLLECTION_NOT_FOUND", "The Collection referenced by AnalysisResult does not exist",
                         jdwpFailure);
             }
         }
@@ -1064,7 +1064,7 @@ public final class CaseArchiveRepository {
                     && request.planId().equals(summary.planId());
         }
         if (!matched) {
-            throw identityMismatch("CollectionExecutionSummary 与启动请求身份不一致");
+            throw identityMismatch("CollectionExecutionSummary does not match launch request identity");
         }
     }
 
@@ -1075,19 +1075,19 @@ public final class CaseArchiveRepository {
             EvidenceId evidenceId) {
         EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
         if (!request.contextId().equals(contextId) || !request.analysisId().equals(analysisId)) {
-            throw identityMismatch("Evidence 产物与构建请求身份不一致");
+            throw identityMismatch("Evidence artifact identity does not match build request");
         }
     }
 
     private <T> T requireDocument(Path document, Class<T> type, String missingCode) {
         if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException(missingCode, "Case 归档文档不存在");
+            throw new WorkspaceException(missingCode, "The archived Case document does not exist");
         }
         try {
             return mapper.readJson(document, type);
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "Case 归档文档无效", failure);
+                    "CASE_DOCUMENT_INVALID", "The archived Case document is invalid", failure);
         }
     }
 
@@ -1096,7 +1096,7 @@ public final class CaseArchiveRepository {
             return mapper.readJson(document, RunResultFingerprint.class);
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "RunResultFingerprint 文档无效", failure);
+                    "CASE_DOCUMENT_INVALID", "RunResultFingerprint document is invalid", failure);
         }
     }
 
@@ -1104,20 +1104,20 @@ public final class CaseArchiveRepository {
         Path document = layout(expected.caseId()).runResultFingerprint(expected.runId());
         if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "RUN_RESULT_FINGERPRINT_NOT_FOUND", "Run 结果指纹尚未保存");
+                    "RUN_RESULT_FINGERPRINT_NOT_FOUND", "Run result fingerprint has not been saved");
         }
         RunResultFingerprint persisted = readFingerprint(document);
         validateFingerprintPathIdentity(
                 persisted, expected.caseId(), expected.contextId());
         if (!persisted.equals(expected)) {
-            throw identityMismatch("Context reproduction 与 Run 结果指纹不一致");
+            throw identityMismatch("Context reproduction does not match the Run result fingerprint");
         }
     }
 
     private void validateFingerprintRunIdentity(RunResultFingerprint fingerprint) {
         RunRequest request = requireRunRequest(fingerprint.caseId(), fingerprint.runId());
         if (!request.contextId().equals(fingerprint.contextId())) {
-            throw identityMismatch("RunResultFingerprint Context 与 RunRequest 不一致");
+            throw identityMismatch("RunResultFingerprint Context does not match RunRequest");
         }
     }
 
@@ -1127,7 +1127,7 @@ public final class CaseArchiveRepository {
             ContextId contextId) {
         if (!caseId.equals(fingerprint.caseId())
                 || !contextId.equals(fingerprint.contextId())) {
-            throw identityMismatch("RunResultFingerprint 文档身份与路径不一致");
+            throw identityMismatch("RunResultFingerprint document identity does not match its path");
         }
     }
 
@@ -1136,7 +1136,7 @@ public final class CaseArchiveRepository {
             return new ContextId(directory.getFileName().toString());
         } catch (IllegalArgumentException failure) {
             throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "Context 目录名不是有效 ID", failure);
+                    "CASE_DOCUMENT_INVALID", "Context directory name is not a valid ID", failure);
         }
     }
 
@@ -1146,12 +1146,12 @@ public final class CaseArchiveRepository {
 
     private static WorkspaceException archiveWriteFailure(Throwable failure) {
         return new WorkspaceException(
-                "CASE_ARCHIVE_WRITE_FAILED", "无法安全追加 Case 归档文档", failure);
+                "CASE_ARCHIVE_WRITE_FAILED", "Failed to append safely to the archived Case document", failure);
     }
 
     private static <T> T requireNonNull(T value, String name) {
         if (value == null) {
-            throw new IllegalArgumentException(name + " 不能为空");
+            throw new IllegalArgumentException(name + " must not be null");
         }
         return value;
     }

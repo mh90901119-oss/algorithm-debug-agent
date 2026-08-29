@@ -18,7 +18,7 @@ public record OutputDirectorySnapshot(
     /** 冻结快照内容。 */
     public OutputDirectorySnapshot {
         if (source == null || files == null) {
-            throw new IllegalArgumentException("source 和 files 不能为空");
+            throw new IllegalArgumentException("source and files must not be null");
         }
         files = Map.copyOf(files);
     }
@@ -31,7 +31,7 @@ public record OutputDirectorySnapshot(
      */
     public List<java.nio.file.Path> changedSince(OutputDirectorySnapshot before) {
         if (before == null || !source.equals(before.source())) {
-            throw new IllegalArgumentException("只能比较同一 ScheduleResultSource 的快照");
+            throw new IllegalArgumentException("Only snapshots from the same ScheduleResultSource can be compared");
         }
         return files.entrySet().stream()
                 .filter(entry -> !entry.getValue().equals(before.files().get(entry.getKey())))

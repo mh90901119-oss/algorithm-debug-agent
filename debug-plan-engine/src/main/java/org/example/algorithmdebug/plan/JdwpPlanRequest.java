@@ -19,7 +19,7 @@ public record JdwpPlanRequest(
         planId = Objects.requireNonNull(planId, "planId");
         tracepoints = List.copyOf(Objects.requireNonNull(tracepoints, "tracepoints"));
         if (tracepoints.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException("tracepoints 不允许包含 null");
+            throw new IllegalArgumentException("tracepoints must not contain null");
         }
         budget = Objects.requireNonNull(budget, "budget");
         rationale = Objects.requireNonNull(rationale, "rationale");

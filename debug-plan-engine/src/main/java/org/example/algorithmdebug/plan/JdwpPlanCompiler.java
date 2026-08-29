@@ -33,17 +33,17 @@ public final class JdwpPlanCompiler {
     public JdwpCollectionPlan compile(
             MethodCatalog catalog, JdwpPlanRequest request, Path moduleRoot) {
         if (catalog == null || request == null || moduleRoot == null) {
-            throw new IllegalArgumentException("catalog、request 和 moduleRoot 不能为空");
+            throw new IllegalArgumentException("catalog, request and moduleRoot must not be null");
         }
         if (request.tracepoints().isEmpty() || request.tracepoints().size() > 20) {
-            throw new PlanCompilationException("JDWP 计划必须包含 1 到 20 个 tracepoint");
+            throw new PlanCompilationException("The JDWP plan must contain between 1 and 20 tracepoints");
         }
         Map<String, MethodCatalogEntry> entries = catalog.entries().stream().collect(
                 Collectors.toUnmodifiableMap(MethodCatalogEntry::methodKey, Function.identity()));
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         for (JdwpTracepointRequest point : request.tracepoints()) {
             if (!ids.add(point.tracepointId())) {
-                throw new PlanCompilationException("tracepointId 不得重复: " + point.tracepointId());
+                throw new PlanCompilationException("tracepointId must not be duplicated: " + point.tracepointId());
             }
         }
         Path realRoot = realModuleRoot(moduleRoot);
@@ -58,7 +58,7 @@ public final class JdwpPlanCompiler {
                     catalog.targetTest(), points,
                     request.budget(), request.rationale(), request.requestedAt());
         } catch (IllegalArgumentException failure) {
-            throw new PlanCompilationException("JDWP 计划不满足安全契约: " + failure.getMessage(), failure);
+            throw new PlanCompilationException("The JDWP plan violates the safety contract: " + failure.getMessage(), failure);
         }
     }
 
@@ -69,7 +69,7 @@ public final class JdwpPlanCompiler {
         MethodCatalogEntry entry = entries.get(request.methodKey());
         if (entry == null) {
             throw new PlanCompilationException(
-                    "选择的方法不属于当前 MethodCatalog: " + request.methodKey());
+                    "The selected method does not belong to the current MethodCatalog: " + request.methodKey());
         }
         var anchor = entry.sourceAnchor();
         Path source = resolveSource(realRoot, anchor.sourceRelativePath());
@@ -79,7 +79,7 @@ public final class JdwpPlanCompiler {
                     request.line(), request.maxHits(), request.captureOnHits(), request.capture());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException(
-                    "JDWP tracepoint 非法 " + request.tracepointId() + ": " + failure.getMessage(),
+                    "JDWP tracepoint is invalid " + request.tracepointId() + ": " + failure.getMessage(),
                     failure);
         }
     }
@@ -88,27 +88,27 @@ public final class JdwpPlanCompiler {
         try {
             Path root = moduleRoot.toAbsolutePath().normalize().toRealPath();
             if (!Files.isDirectory(root)) {
-                throw new PlanCompilationException("Maven 模块根目录不是目录: " + moduleRoot);
+                throw new PlanCompilationException("The Maven module root is not a directory: " + moduleRoot);
             }
             return root;
         } catch (IOException failure) {
-            throw new PlanCompilationException("无法解析 Maven 模块根目录: " + moduleRoot, failure);
+            throw new PlanCompilationException("Failed to resolve the Maven module root: " + moduleRoot, failure);
         }
     }
 
     private static Path resolveSource(Path realRoot, String relativePath) {
         Path candidate = realRoot.resolve(relativePath).normalize();
         if (!candidate.startsWith(realRoot)) {
-            throw new PlanCompilationException("源码路径逃逸 Maven 模块: " + relativePath);
+            throw new PlanCompilationException("The source path escapes the Maven module: " + relativePath);
         }
         try {
             Path realSource = candidate.toRealPath();
             if (!realSource.startsWith(realRoot) || !Files.isRegularFile(realSource)) {
-                throw new PlanCompilationException("源码不是模块内普通文件: " + relativePath);
+                throw new PlanCompilationException("The source is not a regular file inside the module: " + relativePath);
             }
             return realSource;
         } catch (IOException failure) {
-            throw new PlanCompilationException("无法读取 JDWP 锚点源码: " + relativePath, failure);
+            throw new PlanCompilationException("Failed to read the JDWP anchor source: " + relativePath, failure);
         }
     }
 

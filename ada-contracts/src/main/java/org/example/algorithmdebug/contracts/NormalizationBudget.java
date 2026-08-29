@@ -51,7 +51,7 @@ public record NormalizationBudget(
 
     private static void bounded(long value, long maximum, String field) {
         if (value < 1 || value > maximum) {
-            throw new IllegalArgumentException(field + " 必须在 1.." + maximum + " 范围内");
+            throw new IllegalArgumentException(field + " must be within 1.." + maximum + " range");
         }
     }
 }

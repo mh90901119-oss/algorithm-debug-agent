@@ -7,7 +7,7 @@ public record CollectionBudget(long maxEvents, long maxBytes, long timeoutMillis
         if (maxEvents < 1 || maxEvents > 1_000_000
                 || maxBytes < 1 || maxBytes > 50L * 1024 * 1024
                 || timeoutMillis < 1 || timeoutMillis > 20 * 60_000L) {
-            throw new IllegalArgumentException("CollectionBudget 超出安全范围");
+            throw new IllegalArgumentException("CollectionBudget is outside the safe range");
         }
     }
 

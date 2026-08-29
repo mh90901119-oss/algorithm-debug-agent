@@ -19,7 +19,7 @@ public final class JsonResultParser implements ScheduleResultParser<JsonResultSn
             return new JsonResultSnapshot("1.0");
         } catch (IOException | RuntimeException failure) {
             throw new AdapterException(
-                    "ADAPTER_RESULT_PARSE_FAILED", "结果文件不是有效的有界 JSON", failure);
+                    "ADAPTER_RESULT_PARSE_FAILED", "Result file is not valid bounded JSON", failure);
         }
     }
 }

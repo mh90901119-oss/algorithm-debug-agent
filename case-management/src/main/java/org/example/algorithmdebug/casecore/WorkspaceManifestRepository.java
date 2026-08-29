@@ -25,7 +25,7 @@ public final class WorkspaceManifestRepository {
      */
     public WorkspaceManifestRepository(BoundedDocumentMapper mapper, AtomicDocumentWriter writer) {
         if (mapper == null || writer == null) {
-            throw new IllegalArgumentException("mapper 和 writer 不能为空");
+            throw new IllegalArgumentException("mapper and writer must not be null");
         }
         this.mapper = mapper;
         this.writer = writer;
@@ -44,7 +44,7 @@ public final class WorkspaceManifestRepository {
         }
         if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 不是普通文件: " + path);
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest is not a regular file: " + path);
         }
         return Optional.of(readManifest(path));
     }
@@ -57,7 +57,7 @@ public final class WorkspaceManifestRepository {
      */
     public void create(WorkspaceLayout layout, WorkspaceManifest manifest) {
         if (manifest == null) {
-            throw new IllegalArgumentException("manifest 不能为空");
+            throw new IllegalArgumentException("manifest must not be null");
         }
         writer.writeNew(manifestPath(layout), mapper.writeYaml(manifest));
     }
@@ -72,12 +72,12 @@ public final class WorkspaceManifestRepository {
     public WorkspaceManifest require(WorkspaceLayout layout) {
         return find(layout).orElseThrow(
                 () -> new WorkspaceException(
-                        "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 不存在: " + manifestPath(layout)));
+                        "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest does not exist: " + manifestPath(layout)));
     }
 
     private static Path manifestPath(WorkspaceLayout layout) {
         if (layout == null) {
-            throw new IllegalArgumentException("layout 不能为空");
+            throw new IllegalArgumentException("layout must not be null");
         }
         return layout.root().resolve(MANIFEST_FILE_NAME).normalize();
     }
@@ -89,28 +89,28 @@ public final class WorkspaceManifestRepository {
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
                     "WORKSPACE_MANIFEST_INVALID",
-                    "Workspace Manifest 无效: " + failure.getMessage(),
+                    "Workspace Manifest is invalid: " + failure.getMessage(),
                     failure);
         }
         if (tree == null || !tree.isObject()) {
-            throw new WorkspaceException("WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 根节点必须是对象");
+            throw new WorkspaceException("WORKSPACE_MANIFEST_INVALID", "Workspace Manifest root must be an object");
         }
         JsonNode schemaVersion = tree.path("schemaVersion");
         if (!schemaVersion.isTextual()) {
             throw new WorkspaceException(
-                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 缺少文本 schemaVersion");
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest is missing a textual schemaVersion");
         }
         if (!SchemaVersions.WORKSPACE_MANIFEST.equals(schemaVersion.textValue())) {
             IllegalArgumentException cause = new IllegalArgumentException(
-                    "不支持的 Workspace Manifest schemaVersion: " + schemaVersion.textValue());
+                    "Unsupported Workspace Manifest schemaVersion: " + schemaVersion.textValue());
             throw new WorkspaceException(
-                    "WORKSPACE_SCHEMA_UNSUPPORTED", "Workspace Manifest Schema 版本不受支持", cause);
+                    "WORKSPACE_SCHEMA_UNSUPPORTED", "Workspace Manifest Schema version is unsupported", cause);
         }
         try {
             return mapper.convertJsonTree(tree, WorkspaceManifest.class);
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
-                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 字段无效", failure);
+                    "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest fields are invalid", failure);
         }
     }
 }

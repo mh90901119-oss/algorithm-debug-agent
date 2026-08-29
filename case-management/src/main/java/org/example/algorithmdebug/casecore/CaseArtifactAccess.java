@@ -15,11 +15,11 @@ public final class CaseArtifactAccess {
 
     /** @param casesRoot 已存在且不为符号链接的项目 Case 根目录 */
     public CaseArtifactAccess(Path casesRoot) {
-        if (casesRoot == null) throw new IllegalArgumentException("casesRoot 不能为空");
+        if (casesRoot == null) throw new IllegalArgumentException("casesRoot must not be null");
         this.casesRoot = casesRoot.toAbsolutePath().normalize();
         if (!Files.isDirectory(this.casesRoot, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(this.casesRoot)) {
-            throw new WorkspaceException("CASE_ARCHIVE_PATH_INVALID", "Case 根目录非法");
+            throw new WorkspaceException("CASE_ARCHIVE_PATH_INVALID", "Case root directory is invalid");
         }
     }
 
@@ -33,26 +33,26 @@ public final class CaseArtifactAccess {
      */
     public Path requireRegularArtifact(CaseId caseId, String relativePath, long maxBytes) {
         if (caseId == null || relativePath == null || maxBytes < 1) {
-            throw new IllegalArgumentException("Artifact 解析参数非法");
+            throw new IllegalArgumentException("Artifact resolution parameters are invalid");
         }
         validateRelativePath(relativePath);
         Path caseRoot = CaseArchiveLayout.of(casesRoot, caseId).caseRoot();
         Path candidate = caseRoot.resolve(relativePath.replace('/', java.io.File.separatorChar))
                 .toAbsolutePath().normalize();
         if (!candidate.startsWith(caseRoot) || candidate.equals(caseRoot)) {
-            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact 路径越界");
+            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact path escapes its root");
         }
         rejectSymbolicComponents(caseRoot, candidate);
         if (!Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("CASE_ARTIFACT_NOT_FOUND", "Artifact 不存在或不是普通文件");
+            throw new WorkspaceException("CASE_ARTIFACT_NOT_FOUND", "The Artifact does not exist or is not a regular file");
         }
         try {
             if (Files.size(candidate) > maxBytes) {
-                throw new WorkspaceException("CASE_ARTIFACT_TOO_LARGE", "Artifact 超过读取预算");
+                throw new WorkspaceException("CASE_ARTIFACT_TOO_LARGE", "Artifact exceeds the read budget");
             }
             return candidate;
         } catch (IOException | SecurityException failure) {
-            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "无法读取 Artifact 元数据", failure);
+            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "Failed to read Artifact metadata", failure);
         }
     }
 
@@ -65,18 +65,18 @@ public final class CaseArtifactAccess {
      */
     public Path requireVerifiedArtifact(CaseId caseId, ArtifactReference reference) {
         if (caseId == null || reference == null) {
-            throw new IllegalArgumentException("Artifact 完整性校验参数非法");
+            throw new IllegalArgumentException("Artifact integrity verification parameters are invalid");
         }
         Path path = requireRegularArtifact(caseId, reference.relativePath(), Long.MAX_VALUE);
         ArtifactIntegrityChecker.Status status = integrityChecker.verify(reference, path).status();
         return switch (status) {
             case VALID -> path;
             case MISSING, NOT_REGULAR -> throw new WorkspaceException(
-                    "CASE_ARTIFACT_NOT_FOUND", "Artifact 不存在或不是普通文件");
+                    "CASE_ARTIFACT_NOT_FOUND", "The Artifact does not exist or is not a regular file");
             case SIZE_MISMATCH, HASH_MISMATCH -> throw new WorkspaceException(
-                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact 与已注册引用不一致");
+                    "CASE_ARTIFACT_INTEGRITY_MISMATCH", "Artifact does not match its registered reference");
             case READ_FAILED -> throw new WorkspaceException(
-                    "CASE_ARTIFACT_READ_FAILED", "无法读取 Artifact 元数据或内容");
+                    "CASE_ARTIFACT_READ_FAILED", "Failed to read Artifact metadata or content");
         };
     }
 
@@ -87,12 +87,12 @@ public final class CaseArtifactAccess {
             String artifactType,
             String mediaType,
             Path path) {
-        if (caseId == null || path == null) throw new IllegalArgumentException("Artifact 描述参数非法");
+        if (caseId == null || path == null) throw new IllegalArgumentException("Artifact description parameters are invalid");
         Path caseRoot = CaseArchiveLayout.of(casesRoot, caseId).caseRoot();
         Path checked = path.toAbsolutePath().normalize();
         if (!checked.startsWith(caseRoot) || checked.equals(caseRoot)
                 || !Files.isRegularFile(checked, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact 不属于指定 Case");
+            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact does not belong to the specified Case");
         }
         rejectSymbolicComponents(caseRoot, checked);
         try {
@@ -101,17 +101,17 @@ public final class CaseArtifactAccess {
                     caseRoot.relativize(checked).toString().replace('\\', '/'),
                     mediaType, integrityChecker.sha256(checked), Files.size(checked));
         } catch (IOException | SecurityException failure) {
-            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "无法描述 Artifact", failure);
+            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "Failed to describe Artifact", failure);
         }
     }
 
     private static void validateRelativePath(String value) {
         if (value.isBlank() || value.startsWith("/") || value.contains("\\") || value.contains(":")) {
-            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact 必须使用可移植相对路径");
+            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact must use a portable relative path");
         }
         for (String segment : value.split("/", -1)) {
             if (segment.isBlank() || ".".equals(segment) || "..".equals(segment)) {
-                throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact 包含非法路径段");
+                throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact contains an invalid path segment");
             }
         }
     }
@@ -119,12 +119,12 @@ public final class CaseArtifactAccess {
     private static void rejectSymbolicComponents(Path root, Path candidate) {
         Path current = root;
         if (Files.isSymbolicLink(current)) {
-            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Case 路径包含符号链接");
+            throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Case path contains a symbolic link");
         }
         for (Path segment : root.relativize(candidate)) {
             current = current.resolve(segment);
             if (Files.isSymbolicLink(current)) {
-                throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact 路径包含符号链接");
+                throw new WorkspaceException("CASE_ARTIFACT_PATH_INVALID", "Artifact path contains a symbolic link");
             }
         }
     }

@@ -9,7 +9,7 @@ import org.example.algorithmdebug.methodpath.MethodPathCollectionRequest;
 public final class CodePathCommandFactory {
     private final String pathSeparator;
     public CodePathCommandFactory(String pathSeparator) {
-        if (pathSeparator == null || pathSeparator.isEmpty()) throw new IllegalArgumentException("pathSeparator 不能为空");
+        if (pathSeparator == null || pathSeparator.isEmpty()) throw new IllegalArgumentException("pathSeparator must not be null");
         this.pathSeparator = pathSeparator;
     }
     /** 传入归档 Plan 和单一 Raw Trace，不传包范围。 */

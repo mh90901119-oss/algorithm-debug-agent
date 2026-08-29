@@ -30,14 +30,14 @@ public final class EvidenceBundleBuilder {
     /** 构建不解释业务语义且不内联 Raw Trace 的证据目录。 */
     public EvidenceBundle build(EvidenceBuildRequest request, EvidenceBuildSources sources) {
         if (request == null || sources == null) {
-            throw new IllegalArgumentException("request 和 sources 不能为空");
+            throw new IllegalArgumentException("request and sources must not be null");
         }
         validateBaseIdentity(request, sources);
         LinkedHashMap<CollectionId, ValidatedCollectionSource> indexed = index(sources.collections());
         List<ValidatedCollectionSource> current = select(
-                request.collectionIds(), indexed, "当前");
+                request.collectionIds(), indexed, "current");
         List<ValidatedCollectionSource> comparison = select(
-                request.comparisonCollectionIds(), indexed, "比较");
+                request.comparisonCollectionIds(), indexed, "comparison");
         validateCollectionContexts(request, current, comparison);
 
         ArrayList<EvidenceFact> facts = new ArrayList<>();
@@ -98,7 +98,7 @@ public final class EvidenceBundleBuilder {
                 request.contextId(), request.analysisId(), facts, List.of(),
                 Set.copyOf(covered), requiredArtifacts, true, request.createdAt());
         if (estimatedBytes(truncated) > request.maxEvidenceBundleBytes()) {
-            throw new IllegalArgumentException("Evidence Bundle 超过 maxEvidenceBundleBytes");
+            throw new IllegalArgumentException("The Evidence Bundle exceeds maxEvidenceBundleBytes");
         }
         return truncated;
     }
@@ -112,13 +112,13 @@ public final class EvidenceBundleBuilder {
                 || !request.runId().equals(outcome.runId())
                 || !request.caseId().equals(context.caseId())
                 || !request.contextId().equals(context.contextId())) {
-            throw new IllegalArgumentException("RunOutcome 或 Context 身份与请求不一致");
+            throw new IllegalArgumentException("RunOutcome or Context identity does not match the request");
         }
         sources.runFingerprint().ifPresent(fingerprint -> {
             if (!request.caseId().equals(fingerprint.caseId())
                     || !request.contextId().equals(fingerprint.contextId())
                     || !outcome.runId().equals(fingerprint.runId())) {
-                throw new IllegalArgumentException("Run fingerprint 身份与请求不一致");
+                throw new IllegalArgumentException("Run fingerprint identity does not match the request");
             }
         });
     }
@@ -128,10 +128,10 @@ public final class EvidenceBundleBuilder {
         try {
             return sources.stream().collect(Collectors.toMap(
                     source -> source.validation().collectionId(), Function.identity(),
-                    (left, right) -> { throw new IllegalArgumentException("Collection source 重复"); },
+                    (left, right) -> { throw new IllegalArgumentException("Collection source duplicate"); },
                     LinkedHashMap::new));
         } catch (IllegalStateException failure) {
-            throw new IllegalArgumentException("Collection source 重复", failure);
+            throw new IllegalArgumentException("Collection source duplicate", failure);
         }
     }
 
@@ -141,7 +141,7 @@ public final class EvidenceBundleBuilder {
             String role) {
         return ids.stream().map(id -> {
             ValidatedCollectionSource source = indexed.get(id);
-            if (source == null) throw new IllegalArgumentException(role + " Collection 不存在: " + id.value());
+            if (source == null) throw new IllegalArgumentException(role + " Collection does not exist: " + id.value());
             return source;
         }).toList();
     }
@@ -154,12 +154,12 @@ public final class EvidenceBundleBuilder {
             CollectionValidation value = source.validation();
             if (!request.caseId().equals(value.caseId())
                     || !request.contextId().equals(value.contextId())) {
-                throw new IllegalArgumentException("当前 Collection 必须属于请求 Case/Context");
+                throw new IllegalArgumentException("current Collection must belong to the request Case/Context");
             }
         }
         for (ValidatedCollectionSource source : comparison) {
             if (!request.caseId().equals(source.validation().caseId())) {
-                throw new IllegalArgumentException("比较 Collection 必须属于请求 Case");
+                throw new IllegalArgumentException("The comparison Collection must belong to the requested Case");
             }
         }
     }
@@ -176,12 +176,12 @@ public final class EvidenceBundleBuilder {
         if (targetObserved) {
             facts.add(fact(ClaimClassification.CONFIRMED_FACT,
                     EvidenceDimension.TARGET_OUTCOME, "TARGET_OUTCOME_OBSERVED",
-                    "目标 UT 运行结果已归档", List.of(sources.runOutcomeArtifact())));
+                    "The target UT run result has been archived", List.of(sources.runOutcomeArtifact())));
             covered.add(EvidenceDimension.TARGET_OUTCOME);
         } else {
             facts.add(fact(ClaimClassification.MISSING_EVIDENCE,
                     EvidenceDimension.TARGET_OUTCOME, "TARGET_OUTCOME_UNAVAILABLE",
-                    "Agent 未获得目标 UT 的可确认运行结果",
+                    "The Agent did not obtain a confirmable target UT run result",
                     List.of(sources.runOutcomeArtifact())));
         }
 
@@ -192,7 +192,7 @@ public final class EvidenceBundleBuilder {
             refs.add(gantt.orElseThrow());
             facts.add(fact(ClaimClassification.CONFIRMED_FACT,
                     EvidenceDimension.SCHEDULE_RESULT, "SCHEDULE_RESULT_ARCHIVED",
-                    "调度结果已作为不可变 Artifact 归档", refs));
+                    "The schedule result has been archived as an immutable Artifact", refs));
             covered.add(EvidenceDimension.SCHEDULE_RESULT);
         }
     }
@@ -204,7 +204,7 @@ public final class EvidenceBundleBuilder {
             case CONTRADICTED -> "COLLECTION_CONTRADICTED";
             case INVALID -> "COLLECTION_INVALID";
         };
-        String summary = validation.collectorType() + " Collection 校验状态为 " + validation.status();
+        String summary = validation.collectorType() + " Collection validation status is " + validation.status();
         ArrayList<EvidenceFact> result = new ArrayList<>();
         result.add(fact(ClaimClassification.VALIDATOR_CONCLUSION,
                 EvidenceDimension.VALIDATION, code, summary,
@@ -228,7 +228,7 @@ public final class EvidenceBundleBuilder {
             LinkedHashMap<String, ArtifactReference> artifacts, ArtifactReference value) {
         ArtifactReference existing = artifacts.putIfAbsent(value.artifactId(), value);
         if (existing != null && !existing.equals(value)) {
-            throw new IllegalArgumentException("Artifact ID 指向了不同内容");
+            throw new IllegalArgumentException("The Artifact ID refers to different content");
         }
     }
 

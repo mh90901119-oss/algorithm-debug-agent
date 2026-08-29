@@ -62,10 +62,10 @@ public final class TraceJsonlSink implements AutoCloseable {
 
     private static void validateBudgets(long maxOutputBytes, long maxEvents) {
         if (maxOutputBytes <= 0 || maxOutputBytes > HARD_MAX_OUTPUT_BYTES) {
-            throw new IllegalArgumentException("maxOutputBytes 超出 Agent 硬边界");
+            throw new IllegalArgumentException("maxOutputBytes exceeds the Agent hard limit");
         }
         if (maxEvents <= 0 || maxEvents > HARD_MAX_EVENTS) {
-            throw new IllegalArgumentException("maxEvents 超出 Agent 硬边界");
+            throw new IllegalArgumentException("maxEvents exceeds the Agent hard limit");
         }
     }
 
@@ -79,7 +79,7 @@ public final class TraceJsonlSink implements AutoCloseable {
         ensureOpen();
         String value = Objects.requireNonNull(jsonLine, "jsonLine");
         if (value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) {
-            throw new IllegalArgumentException("jsonLine 不能包含换行符");
+            throw new IllegalArgumentException("jsonLine must not contain line breaks");
         }
         if (limit != Limit.NONE) {
             return false;
@@ -126,7 +126,7 @@ public final class TraceJsonlSink implements AutoCloseable {
 
     private void ensureOpen() {
         if (closed) {
-            throw new IllegalStateException("TraceJsonlSink 已关闭");
+            throw new IllegalStateException("TraceJsonlSink is closed");
         }
     }
 
@@ -138,7 +138,7 @@ public final class TraceJsonlSink implements AutoCloseable {
         /** 校验计数与预算状态。 */
         public Result {
             if (eventsWritten < 0 || bytesWritten < 0) {
-                throw new IllegalArgumentException("Sink 计数不能为负数");
+                throw new IllegalArgumentException("Sink counts must not be negative");
             }
             Objects.requireNonNull(limit, "limit");
         }

@@ -16,15 +16,15 @@ public record SurefireTestResult(
     /** 校验测试结果与目标失败分类一致，且保留来源报告供归档。 */
     public SurefireTestResult {
         if (outcome == null || targetFailure == null || sourceReport == null) {
-            throw new IllegalArgumentException("SurefireTestResult 字段不能为空");
+            throw new IllegalArgumentException("SurefireTestResult fields must not be null");
         }
         sourceReport = sourceReport.toAbsolutePath().normalize();
         if (outcome == TestOutcome.PASSED && targetFailure.isPresent()) {
-            throw new IllegalArgumentException("PASSED 不得包含目标失败");
+            throw new IllegalArgumentException("PASSED must not contain a target failure");
         }
         if ((outcome == TestOutcome.FAILED || outcome == TestOutcome.ERROR
                 || outcome == TestOutcome.NOT_EXECUTED) && targetFailure.isEmpty()) {
-            throw new IllegalArgumentException(outcome + " 必须包含目标诊断");
+            throw new IllegalArgumentException(outcome + " must contain a target diagnostic");
         }
         targetFailure.ifPresent(failure -> validateCategory(outcome, failure.category()));
     }
@@ -34,7 +34,7 @@ public record SurefireTestResult(
                 || outcome == TestOutcome.ERROR && category != FailureCategory.TEST_ERROR
                 || outcome == TestOutcome.NOT_EXECUTED
                 && category != FailureCategory.TEST_NOT_EXECUTED) {
-            throw new IllegalArgumentException("测试结果与目标失败分类不一致");
+            throw new IllegalArgumentException("The test result does not match the target failure classification");
         }
     }
 }

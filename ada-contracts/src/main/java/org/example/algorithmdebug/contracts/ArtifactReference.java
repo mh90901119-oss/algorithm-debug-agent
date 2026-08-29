@@ -26,7 +26,7 @@ public record ArtifactReference(
         mediaType = ContractChecks.requireNonBlank(mediaType, "mediaType");
         sha256 = ContractChecks.requireSha256(sha256, "sha256");
         if (sizeBytes < 0) {
-            throw new IllegalArgumentException("sizeBytes 不能为负数");
+            throw new IllegalArgumentException("sizeBytes must not be negative");
         }
     }
 }

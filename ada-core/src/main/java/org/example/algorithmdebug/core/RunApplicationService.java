@@ -132,7 +132,7 @@ public final class RunApplicationService {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || executor == null || artifacts == null
                 || mavenExecutable == null || executionLog == null) {
-            throw new IllegalArgumentException("RunApplicationService 依赖不能为空");
+            throw new IllegalArgumentException("RunApplicationService dependencies must not be null");
         }
         this.registrations = registrations;
         this.mapper = mapper;
@@ -160,7 +160,7 @@ public final class RunApplicationService {
             CaseId caseId,
             AnalysisId analysisId) {
         if (projectId == null || caseId == null || analysisId == null) {
-            throw new IllegalArgumentException("run execute 参数不能为空");
+            throw new IllegalArgumentException("run execute parameters must not be null");
         }
         AgentLogContext logContext = AgentLogContext.forCase(
                 workspaceRoot, projectId, caseId).withAnalysis(analysisId);
@@ -172,7 +172,7 @@ public final class RunApplicationService {
             CaseArchiveRepository archive = archive(layout, projectId);
             CaseManifest manifest = requireCase(archive, caseId);
             if (!manifest.projectId().equals(projectId)) {
-                throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于请求项目");
+                throw new CaseRunException("CASE_PROJECT_MISMATCH", "The Case does not belong to the requested project");
             }
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
             ContextRecord context = requireContext(archive, caseId, analysis.contextId());
@@ -190,7 +190,7 @@ public final class RunApplicationService {
                 executionLog.info(logContext, "RunApplicationService", "RUN_RECORD_CREATED",
                         "CREATED", "Run request was archived");
             } catch (WorkspaceException failure) {
-                throw new CaseRunException(failure.code(), "无法创建 RunRequest", failure);
+                throw new CaseRunException(failure.code(), "Failed to create RunRequest", failure);
             }
 
             if (mavenExecutable.isEmpty()) {
@@ -229,7 +229,7 @@ public final class RunApplicationService {
                         failure);
             }
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "读取或写入 Case Workspace 失败", failure);
+            throw new CaseRunException(failure.code(), "Failed to read or write Case Workspace failed", failure);
         }
     }
 
@@ -392,7 +392,7 @@ public final class RunApplicationService {
                     "application/json", MAX_FINGERPRINT_BYTES));
         } catch (WorkspaceException | CaseRunException failure) {
             throw new CaseRunException(
-                    "RUN_FINGERPRINT_WRITE_FAILED", "无法保存或引用 Run 结果指纹", failure);
+                    "RUN_FINGERPRINT_WRITE_FAILED", "Failed to save or reference the Run result fingerprint", failure);
         }
 
         Optional<RunResultFingerprint> sameContext;
@@ -401,7 +401,7 @@ public final class RunApplicationService {
                     fingerprint.caseId(), fingerprint.contextId());
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_INVALID", "当前 Context 参考无效", failure);
+                    "REPRODUCTION_REFERENCE_INVALID", "current Context reference is invalid", failure);
         }
         if (sameContext.isPresent()) {
             return compare(sameContext.orElseThrow(), fingerprint,
@@ -414,7 +414,7 @@ public final class RunApplicationService {
                     fingerprint.caseId(), fingerprint.contextId());
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_INVALID", "旧 Context 参考无效", failure);
+                    "REPRODUCTION_REFERENCE_INVALID", "Previous Context reference is invalid", failure);
         }
 
         RunResultFingerprint established;
@@ -423,10 +423,10 @@ public final class RunApplicationService {
         } catch (WorkspaceException failure) {
             if (isInvalidReferenceFailure(failure)) {
                 throw new CaseRunException(
-                        "REPRODUCTION_REFERENCE_INVALID", "当前 Context 参考无效", failure);
+                        "REPRODUCTION_REFERENCE_INVALID", "current Context reference is invalid", failure);
             }
             throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_WRITE_FAILED", "无法建立当前 Context 参考", failure);
+                    "REPRODUCTION_REFERENCE_WRITE_FAILED", "Failed to create the current Context reference", failure);
         }
         if (!established.equals(fingerprint)) {
             return compare(established, fingerprint,
@@ -451,7 +451,7 @@ public final class RunApplicationService {
             return new ComparisonDecision(result.outcome(), result.summary());
         } catch (RuntimeException failure) {
             throw new CaseRunException(
-                    "RUN_COMPARISON_INCOMPARABLE", "Run 结果指纹无法可信比较", failure);
+                    "RUN_COMPARISON_INCOMPARABLE", "Run result fingerprint cannot be compared reliably", failure);
         }
     }
 
@@ -514,13 +514,13 @@ public final class RunApplicationService {
                     archive.registerArtifact(outcome.caseId(), artifact, clock.instant()));
         } catch (WorkspaceException failure) {
             throw new CaseRunException(
-                    "RUN_ARCHIVE_WRITE_FAILED", "无法写入 RunOutcome", failure);
+                    "RUN_ARCHIVE_WRITE_FAILED", "Failed to write RunOutcome", failure);
         }
     }
 
     private ProjectRegistration requireRegistration(WorkspaceLayout layout, ProjectId projectId) {
         return registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "项目尚未登记: " + projectId.value()));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "Project is not registered: " + projectId.value()));
     }
 
     private CaseArchiveRepository archive(WorkspaceLayout layout, ProjectId projectId) {
@@ -531,7 +531,7 @@ public final class RunApplicationService {
         try {
             return archive.requireCase(caseId);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Case 不存在或无效", failure);
+            throw new CaseRunException(failure.code(), "Case does not exist or is invalid", failure);
         }
     }
 
@@ -540,7 +540,7 @@ public final class RunApplicationService {
         try {
             return archive.requireAnalysis(caseId, analysisId);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Analysis 不存在或无效", failure);
+            throw new CaseRunException(failure.code(), "Analysis does not exist or is invalid", failure);
         }
     }
 
@@ -551,14 +551,14 @@ public final class RunApplicationService {
         try {
             return archive.requireContext(caseId, contextId);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Context 不存在或无效", failure);
+            throw new CaseRunException(failure.code(), "Context does not exist or is invalid", failure);
         }
     }
 
     private static AgentFailureDiagnostic diagnostic(String code, Throwable failure) {
         return new AgentFailureDiagnostic(
                 code,
-                "Agent/Harness 未完成相应步骤；错误码: " + code,
+                "Agent/Harness did not complete the required step; error code: " + code,
                 failure == null ? "" : failure.getClass().getName());
     }
 
@@ -571,7 +571,7 @@ public final class RunApplicationService {
         AgentFailureDiagnostic first = current.orElseThrow();
         return Optional.of(new AgentFailureDiagnostic(
                 "MULTIPLE_AGENT_FAILURES",
-                "多个 Agent 后处理步骤未完成: " + first.code() + "," + next.code(),
+                "Multiple Agent post-processing steps are incomplete: " + first.code() + "," + next.code(),
                 first.exceptionClass().isEmpty() ? next.exceptionClass() : first.exceptionClass()));
     }
 

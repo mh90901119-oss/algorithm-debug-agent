@@ -15,7 +15,7 @@ public record SurefireReportSnapshot(
     /** 校验目录、目标 UT 和不可变报告状态集合。 */
     public SurefireReportSnapshot {
         if (reportsDirectory == null || targetTest == null || reports == null) {
-            throw new IllegalArgumentException("SurefireReportSnapshot 字段不能为空");
+            throw new IllegalArgumentException("SurefireReportSnapshot fields must not be null");
         }
         Path normalizedRoot = reportsDirectory.toAbsolutePath().normalize();
         LinkedHashMap<Path, ReportState> copied = new LinkedHashMap<>();
@@ -23,11 +23,11 @@ public record SurefireReportSnapshot(
             Path path = entry.getKey();
             ReportState state = entry.getValue();
             if (path == null || state == null) {
-                throw new IllegalArgumentException("报告路径和状态不能为空");
+                throw new IllegalArgumentException("reportpath and status must not be null");
             }
             Path normalized = path.toAbsolutePath().normalize();
             if (!normalized.startsWith(normalizedRoot)) {
-                throw new IllegalArgumentException("报告路径必须位于 Surefire 目录内");
+                throw new IllegalArgumentException("The report path must be located inside the Surefire directory");
             }
             copied.put(normalized, state);
         }
@@ -40,13 +40,13 @@ public record SurefireReportSnapshot(
         /** 校验大小与 Hash/预算状态一致。 */
         public ReportState {
             if (sizeBytes < 0 || sha256 == null) {
-                throw new IllegalArgumentException("报告状态非法");
+                throw new IllegalArgumentException("reportstatus is invalid");
             }
             if (overBudget == !sha256.isEmpty()) {
-                throw new IllegalArgumentException("超预算状态与 Hash 不一致");
+                throw new IllegalArgumentException("The over-budget status does not match the hash state");
             }
             if (!sha256.isEmpty() && !sha256.matches("[0-9a-f]{64}")) {
-                throw new IllegalArgumentException("报告 Hash 必须是小写 SHA-256");
+                throw new IllegalArgumentException("report Hash must be a lowercase SHA-256");
             }
         }
     }

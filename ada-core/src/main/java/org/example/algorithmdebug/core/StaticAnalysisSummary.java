@@ -19,7 +19,7 @@ public record StaticAnalysisSummary(
     public StaticAnalysisSummary {
         if (caseId == null || contextId == null || analysisId == null || completeness == null
                 || methodCount < 0 || edgeCount < 0 || warningCount < 0) {
-            throw new IllegalArgumentException("静态分析摘要非法");
+            throw new IllegalArgumentException("Static analysis summary is invalid");
         }
     }
 }

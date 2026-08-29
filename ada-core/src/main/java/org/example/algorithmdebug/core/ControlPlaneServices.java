@@ -105,7 +105,7 @@ public final class ControlPlaneServices {
             List<TargetProjectAdapter> adapters,
             Optional<Path> mavenExecutable) {
         if (adapters == null || mavenExecutable == null) {
-            throw new IllegalArgumentException("瀹屾暣鎺у埗闈㈠繀椤绘彁渚?adapters 鍜?mavenExecutable");
+            throw new IllegalArgumentException("The full control plane requires adapters and mavenExecutable");
         }
         MethodPathCollector unavailableCollector = request -> {
             throw new MethodPathCollectionException(
@@ -154,7 +154,7 @@ public final class ControlPlaneServices {
             ToolDoctorProbe toolProbe) {
         if (adapters == null || mavenExecutable == null || collector == null
                 || classpathResolver == null || toolProbe == null) {
-            throw new IllegalArgumentException("瀹屾暣鎺у埗闈㈢粍鍚堟牴渚濊禆涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("Full control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
                 List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
@@ -201,7 +201,7 @@ public final class ControlPlaneServices {
             AgentExecutionLog executionLog) {
         if (jdwpTool == null || jdwpExecutor == null || jdwpPorts == null
                 || codePathProbe == null || jdwpProbe == null || executionLog == null) {
-            throw new IllegalArgumentException("JDWP 鎺у埗闈㈢粍鍚堟牴渚濊禆涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("JDWP control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
                 List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
@@ -323,7 +323,7 @@ public final class ControlPlaneServices {
     /** @return 瀹屾暣瑁呴厤涓嬬殑 Case 鐢ㄤ緥锛涘熀纭€鎺у埗闈㈣閰嶄笉鎻愪緵 */
     public CaseApplicationService cases() {
         if (cases == null) {
-            throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?Adapter");
+            throw new IllegalStateException("ControlPlaneServices has no configured Adapter");
         }
         return cases;
     }
@@ -339,7 +339,7 @@ public final class ControlPlaneServices {
     /** @return 瀹屾暣瑁呴厤涓嬬殑 Run 鐢ㄤ緥锛涘熀纭€鎺у埗闈㈣閰嶄笉鎻愪緵锛孧aven 鍙湪鎵ц鏃舵姤鍛婄己澶?*/
     public RunApplicationService runs() {
         if (runs == null) {
-            throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?Adapter");
+            throw new IllegalStateException("ControlPlaneServices has no configured Adapter");
         }
         return runs;
     }
@@ -347,7 +347,7 @@ public final class ControlPlaneServices {
     /** @return 闈欐€佸垎鏋愪笌 CodePath 璁″垝鐢ㄤ緥锛涘熀纭€鎺у埗闈㈣閰嶄笉鎻愪緵 */
     public StaticAnalysisApplicationService staticAnalysis() {
         if (staticAnalysis == null) {
-            throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?Adapter");
+            throw new IllegalStateException("ControlPlaneServices has no configured Adapter");
         }
         return staticAnalysis;
     }
@@ -355,7 +355,7 @@ public final class ControlPlaneServices {
     /** @return CodePath/JDWP 鍔ㄦ€侀噰闆嗙敤渚嬶紱鍩虹鎺у埗闈㈣閰嶄笉鎻愪緵 */
     public CollectionApplicationService collections() {
         if (collections == null) {
-            throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?Adapter");
+            throw new IllegalStateException("ControlPlaneServices has no configured Adapter");
         }
         return collections;
     }
@@ -363,7 +363,7 @@ public final class ControlPlaneServices {
     /** @return JDWP 鍔ㄦ€侀噰闆嗙敤渚嬶紱鏈湪缁勫悎鏍归厤缃椂鎷掔粷璁块棶銆?*/
     public JdwpCollectionApplicationService jdwpCollections() {
         if (jdwpCollections == null) {
-            throw new IllegalStateException("褰撳墠 ControlPlaneServices 鏈閰?JDWP Collector");
+            throw new IllegalStateException("ControlPlaneServices has no configured JDWP Collector");
         }
         return jdwpCollections;
     }

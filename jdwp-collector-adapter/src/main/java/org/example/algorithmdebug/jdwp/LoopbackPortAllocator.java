@@ -19,7 +19,7 @@ public final class LoopbackPortAllocator implements JdwpPortAllocator {
             return socket.getLocalPort();
         } catch (IOException failure) {
             throw new JdwpAdapterException(
-                    "JDWP_LOOPBACK_PORT_ALLOCATION_FAILED", "无法分配本地 JDWP 端口", failure);
+                    "JDWP_LOOPBACK_PORT_ALLOCATION_FAILED", "Failed to allocate a local JDWP port", failure);
         }
     }
 }

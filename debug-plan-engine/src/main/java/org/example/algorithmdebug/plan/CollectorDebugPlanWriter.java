@@ -24,10 +24,10 @@ public final class CollectorDebugPlanWriter {
      */
     public byte[] write(JdwpCollectionPlan plan, int port) {
         if (plan == null) {
-            throw new IllegalArgumentException("plan 不能为空");
+            throw new IllegalArgumentException("plan must not be null");
         }
         if (port < 1 || port > 65_535) {
-            throw new PlanCompilationException("JDWP loopback port 必须在 1 到 65535 之间");
+            throw new PlanCompilationException("JDWP loopback port must be between 1 and 65535");
         }
         List<CollectorDebugPlan.Tracepoint> points = plan.tracepoints().stream()
                 .sorted(Comparator.comparing(point -> point.tracepointId()))
@@ -48,7 +48,7 @@ public final class CollectorDebugPlanWriter {
         try {
             return mapper.writeValueAsBytes(document);
         } catch (JsonProcessingException failure) {
-            throw new PlanCompilationException("无法序列化 Collector JDWP Plan", failure);
+            throw new PlanCompilationException("Failed to serialize the Collector JDWP Plan", failure);
         }
     }
 }

@@ -27,7 +27,7 @@ public record MethodPathSummary(
     /** 校验身份、精度和摘要硬上限。 */
     public MethodPathSummary {
         if (!SchemaVersions.METHOD_PATH_SUMMARY.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 MethodPathSummary schemaVersion");
+            throw new IllegalArgumentException("Unsupported MethodPathSummary schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -44,7 +44,7 @@ public record MethodPathSummary(
         if (methods.size() > NormalizationBudget.MAX_METHODS
                 || observedPaths.size() > NormalizationBudget.MAX_RELATIONSHIPS
                 || anomalies.size() > 10_000) {
-            throw new IllegalArgumentException("方法路径摘要超过硬上限");
+            throw new IllegalArgumentException("The method-path summary exceeds the hard limit");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
@@ -77,7 +77,7 @@ public record MethodPathSummary(
         public MethodStatistic {
             methodKey = ContractChecks.requireBoundedText(methodKey, "methodKey", 2_048, false);
             if (enterCount < 0 || exitCount < 0 || minDepth < 0 || maxDepth < minDepth) {
-                throw new IllegalArgumentException("方法统计非法");
+                throw new IllegalArgumentException("Method statistics are invalid");
             }
             firstObservation = ContractChecks.requireNonNull(firstObservation, "firstObservation");
             lastObservation = ContractChecks.requireNonNull(lastObservation, "lastObservation");
@@ -95,9 +95,9 @@ public record MethodPathSummary(
                     descendantMethodKey, "descendantMethodKey", 2_048, false);
             if (!"NEAREST_SELECTED_ANCESTOR".equals(relationshipType)) {
                 throw new IllegalArgumentException(
-                        "CodePath 精确方法 Trace 只能声明 NEAREST_SELECTED_ANCESTOR");
+                        "An exact CodePath method Trace may only declare NEAREST_SELECTED_ANCESTOR");
             }
-            if (count < 1) throw new IllegalArgumentException("count 必须为正数");
+            if (count < 1) throw new IllegalArgumentException("count must be positive");
             firstObservation = ContractChecks.requireNonNull(firstObservation, "firstObservation");
         }
     }

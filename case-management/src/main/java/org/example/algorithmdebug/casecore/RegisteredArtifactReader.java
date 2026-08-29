@@ -22,7 +22,7 @@ public final class RegisteredArtifactReader {
 
     /** @param repository Case 归档与 Artifact 注册入口 */
     public RegisteredArtifactReader(CaseArchiveRepository repository) {
-        if (repository == null) throw new IllegalArgumentException("repository 不能为空");
+        if (repository == null) throw new IllegalArgumentException("repository must not be null");
         this.repository = repository;
         this.access = new CaseArtifactAccess(repository.casesRoot());
     }
@@ -34,12 +34,12 @@ public final class RegisteredArtifactReader {
                 || artifactId.contains("/") || artifactId.contains("\\")
                 || artifactId.contains(":") || offsetBytes < 0
                 || maxBytes < 1 || maxBytes > MAX_EXCERPT_BYTES) {
-            throw new IllegalArgumentException("Artifact 读取参数非法");
+            throw new IllegalArgumentException("Artifact Readparameters are invalid");
         }
         ArtifactReference registered = repository.requireArtifactRegistration(
                 caseId, artifactId).artifact();
         if (offsetBytes > registered.sizeBytes()) {
-            throw new WorkspaceException("CASE_ARTIFACT_OFFSET_INVALID", "Artifact 偏移超过文件大小");
+            throw new WorkspaceException("CASE_ARTIFACT_OFFSET_INVALID", "Artifact offset exceeds file size");
         }
         java.nio.file.Path file = access.requireVerifiedArtifact(caseId, registered);
         int requested = (int) Math.min((long) maxBytes, registered.sizeBytes() - offsetBytes);
@@ -53,7 +53,7 @@ public final class RegisteredArtifactReader {
                 }
             }
         } catch (IOException | SecurityException failure) {
-            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "无法读取 Artifact", failure);
+            throw new WorkspaceException("CASE_ARTIFACT_READ_FAILED", "Failed to read Artifact", failure);
         }
         bytes.flip();
         boolean endOfInput = offsetBytes + requested >= registered.sizeBytes();
@@ -70,12 +70,12 @@ public final class RegisteredArtifactReader {
             }
         } catch (CharacterCodingException failure) {
             throw new WorkspaceException(
-                    "CASE_ARTIFACT_NOT_UTF8", "Artifact 不是可读取的 UTF-8 文本", failure);
+                    "CASE_ARTIFACT_NOT_UTF8", "Artifact is not readable UTF-8 text", failure);
         }
         int consumed = bytes.position();
         if (requested > 0 && consumed == 0) {
             throw new WorkspaceException(
-                    "CASE_ARTIFACT_BUDGET_TOO_SMALL", "读取预算不足以容纳一个 UTF-8 字符");
+                    "CASE_ARTIFACT_BUDGET_TOO_SMALL", "Read budget cannot contain one UTF-8 character");
         }
         chars.flip();
         long next = offsetBytes + consumed;

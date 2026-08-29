@@ -22,7 +22,7 @@ public record CodePathCollectionPlan(
     /** 校验身份、选择器唯一性、硬上限和解释文本。 */
     public CodePathCollectionPlan {
         if (!SchemaVersions.CODEPATH_COLLECTION_PLAN.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 CodePathCollectionPlan schemaVersion");
+            throw new IllegalArgumentException("Unsupported CodePathCollectionPlan schemaVersion");
         }
         planId = ContractChecks.requireNonNull(planId, "planId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -31,11 +31,11 @@ public record CodePathCollectionPlan(
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         selectors = ContractChecks.immutableList(selectors, "selectors");
         if (selectors.isEmpty() || selectors.size() > 50) {
-            throw new IllegalArgumentException("selectors 数量必须在 1 到 50 之间");
+            throw new IllegalArgumentException("selectors count must be between 1 and 50");
         }
         HashSet<String> keys = new HashSet<>();
         if (selectors.stream().anyMatch(selector -> !keys.add(selector.methodKey()))) {
-            throw new IllegalArgumentException("selectors 不得包含重复 methodKey");
+            throw new IllegalArgumentException("selectors must not contain duplicate methodKey");
         }
         scopeMethodKey = scopeMethodKey == null ? Optional.empty() : scopeMethodKey;
         scopeMethodKey = scopeMethodKey.map(value ->

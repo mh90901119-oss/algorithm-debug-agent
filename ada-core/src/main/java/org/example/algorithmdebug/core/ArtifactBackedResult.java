@@ -8,7 +8,7 @@ public record ArtifactBackedResult<T>(T summary, ArtifactReference artifact) {
     /** 校验摘要和引用均存在。 */
     public ArtifactBackedResult {
         if (summary == null || artifact == null) {
-            throw new IllegalArgumentException("summary 和 artifact 不能为空");
+            throw new IllegalArgumentException("summary and artifact must not be null");
         }
     }
 }
