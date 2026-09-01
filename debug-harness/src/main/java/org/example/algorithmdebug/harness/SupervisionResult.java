@@ -10,10 +10,10 @@ record SupervisionResult(
 
     SupervisionResult {
         if (exitCode == null || termination == null) {
-            throw new IllegalArgumentException("监管结果参数不能为空");
+            throw new IllegalArgumentException("Supervision result arguments must not be null");
         }
         if (timedOut != termination.attempted()) {
-            throw new IllegalArgumentException("超时状态必须与清理状态一致");
+            throw new IllegalArgumentException("Timeout status must match cleanup status");
         }
     }
 }

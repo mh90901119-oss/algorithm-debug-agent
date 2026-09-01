@@ -1,5 +1,6 @@
 package one.edee.mcp.jdwp.collector;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import one.edee.mcp.jdwp.core.SnapshotLimits;
 
 import java.util.ArrayList;
@@ -20,7 +21,8 @@ public final class DebugPlan {
     public List<Tracepoint> tracepoints = new ArrayList<>();
 
     public void validate() {
-        if (!"1.0".equals(schemaVersion) && !"2.0".equals(schemaVersion)) {
+        if (!"1.0".equals(schemaVersion) && !"2.0".equals(schemaVersion)
+                && !"3.0".equals(schemaVersion)) {
             throw new IllegalArgumentException("unsupported schemaVersion: " + schemaVersion);
         }
         if (sessionId == null || sessionId.isBlank()) {
@@ -42,7 +44,7 @@ public final class DebugPlan {
         Set<String> ids = new HashSet<>();
         for (Tracepoint tracepoint : tracepoints) {
             tracepoint.validate();
-            if ("2.0".equals(schemaVersion)
+            if (("2.0".equals(schemaVersion) || "3.0".equals(schemaVersion))
                 && (tracepoint.methodDescriptor == null || tracepoint.methodDescriptor.isBlank())) {
                 throw new IllegalArgumentException(
                     "tracepoint.methodDescriptor is required: " + tracepoint.id
@@ -74,8 +76,12 @@ public final class DebugPlan {
         public int line;
         public String methodName;
         public String methodDescriptor;
-        public int maxHits = 10_000;
-        public List<Integer> captureOnHits = new ArrayList<>();
+        @JsonAlias("maxHits")
+        public int maxObservedHits = 10_000;
+        public int maxCapturedHits = 20;
+        @JsonAlias("captureOnHits")
+        public List<Integer> captureOnMatchedHits = new ArrayList<>();
+        public Condition condition;
         public Capture capture = new Capture();
 
         void validate() {
@@ -88,22 +94,34 @@ public final class DebugPlan {
             if (line < 1) {
                 throw new IllegalArgumentException("tracepoint.line must be positive: " + id);
             }
-            if (maxHits < 1) {
-                throw new IllegalArgumentException("tracepoint.maxHits must be positive: " + id);
+            if (maxObservedHits < 1 || maxObservedHits > 10_000) {
+                throw new IllegalArgumentException(
+                    "tracepoint.maxObservedHits must be between 1 and 10000: " + id);
             }
-            if (captureOnHits == null) {
-                captureOnHits = new ArrayList<>();
+            if (maxCapturedHits < 1 || maxCapturedHits > 20) {
+                throw new IllegalArgumentException(
+                    "tracepoint.maxCapturedHits must be between 1 and 20: " + id);
+            }
+            if (captureOnMatchedHits == null) {
+                captureOnMatchedHits = new ArrayList<>();
             } else {
                 int previous = 0;
-                for (Integer hit : captureOnHits) {
-                    if (hit == null || hit <= previous || hit > maxHits) {
+                for (Integer hit : captureOnMatchedHits) {
+                    if (hit == null || hit <= previous || hit > maxObservedHits) {
                         throw new IllegalArgumentException(
-                            "tracepoint.captureOnHits must be strictly increasing and within maxHits: " + id
+                            "tracepoint.captureOnMatchedHits must be strictly increasing and within maxObservedHits: " + id
                         );
                     }
                     previous = hit;
                 }
-                captureOnHits = new ArrayList<>(captureOnHits);
+                if (captureOnMatchedHits.size() > maxCapturedHits) {
+                    throw new IllegalArgumentException(
+                        "tracepoint.captureOnMatchedHits exceeds maxCapturedHits: " + id);
+                }
+                captureOnMatchedHits = new ArrayList<>(captureOnMatchedHits);
+            }
+            if (condition != null) {
+                condition.validate(id);
             }
             if (capture == null) {
                 capture = new Capture();
@@ -148,6 +166,73 @@ public final class DebugPlan {
                 throw new IllegalArgumentException(name + " must contain at most 256 entries: " + tracepointId);
             }
             return new ArrayList<>(result);
+        }
+    }
+
+    public static final class Condition {
+        public String localName;
+        public List<String> fieldPath = new ArrayList<>();
+        public String operator = "EQUALS";
+        public String expectedType;
+        public String expectedValue;
+
+        void validate(String tracepointId) {
+            if (localName == null || !("this".equals(localName)
+                    || localName.matches("[A-Za-z_$][A-Za-z0-9_$]*"))) {
+                throw new IllegalArgumentException(
+                    "condition.localName must be a Java identifier or this: " + tracepointId);
+            }
+            fieldPath = fieldPath == null ? new ArrayList<>() : new ArrayList<>(fieldPath);
+            if (fieldPath.size() > 8 || fieldPath.stream().anyMatch(segment -> segment == null
+                    || !segment.matches("[A-Za-z_$][A-Za-z0-9_$]*"))) {
+                throw new IllegalArgumentException(
+                    "condition.fieldPath must contain at most 8 Java field identifiers: " + tracepointId);
+            }
+            if (!"EQUALS".equals(operator)) {
+                throw new IllegalArgumentException(
+                    "condition.operator must be EQUALS: " + tracepointId);
+            }
+            Set<String> types = Set.of(
+                "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL");
+            if (!types.contains(expectedType)) {
+                throw new IllegalArgumentException(
+                    "condition.expectedType is unsupported: " + tracepointId);
+            }
+            if ("NULL".equals(expectedType)) {
+                if (expectedValue != null && !expectedValue.isBlank()) {
+                    throw new IllegalArgumentException(
+                        "NULL condition must not have expectedValue: " + tracepointId);
+                }
+                expectedValue = null;
+            } else if (expectedValue == null || expectedValue.isBlank()
+                    || expectedValue.length() > 1_024) {
+                throw new IllegalArgumentException(
+                    "condition.expectedValue is invalid: " + tracepointId);
+            }
+            try {
+                switch (expectedType) {
+                    case "LONG" -> Long.parseLong(expectedValue);
+                    case "DOUBLE" -> Double.parseDouble(expectedValue);
+                    case "BOOLEAN" -> {
+                        if (!("true".equals(expectedValue) || "false".equals(expectedValue))) {
+                            throw new IllegalArgumentException(
+                                "condition BOOLEAN value must be true or false: " + tracepointId);
+                        }
+                    }
+                    case "CHAR" -> {
+                        if (expectedValue.codePointCount(0, expectedValue.length()) != 1) {
+                            throw new IllegalArgumentException(
+                                "condition CHAR value must contain one character: " + tracepointId);
+                        }
+                    }
+                    default -> {
+                        // STRING, ENUM and NULL need no additional scalar parsing.
+                    }
+                }
+            } catch (NumberFormatException failure) {
+                throw new IllegalArgumentException(
+                    "condition scalar value is malformed: " + tracepointId, failure);
+            }
         }
     }
 

@@ -24,10 +24,10 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
             OutputDirectorySnapshotter snapshotter,
             long maximumResultBytes) {
         if (snapshotter == null) {
-            throw new IllegalArgumentException("snapshotter 不能为空");
+            throw new IllegalArgumentException("snapshotter must not be null");
         }
         if (maximumResultBytes <= 0) {
-            throw new IllegalArgumentException("maximumResultBytes 必须为正数");
+            throw new IllegalArgumentException("maximumResultBytes must be positive");
         }
         this.snapshotter = snapshotter;
         this.maximumResultBytes = maximumResultBytes;
@@ -42,7 +42,7 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
             ScheduleResultParser<T> parser,
             Path destination) throws HarnessException {
         if (before == null || source == null || parser == null || destination == null) {
-            throw new IllegalArgumentException("捕获参数不能为空");
+            throw new IllegalArgumentException("Capture arguments must not be null");
         }
         OutputDirectorySnapshot after = snapshotter.snapshot(source);
         return capture(before, after, parser, destination);
@@ -57,7 +57,7 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
             ScheduleResultParser<T> parser,
             Path destination) throws HarnessException {
         if (before == null || after == null || parser == null || destination == null) {
-            throw new IllegalArgumentException("捕获参数不能为空");
+            throw new IllegalArgumentException("Capture arguments must not be null");
         }
         List<Path> changed = after.changedSince(before);
         List<ParsedCandidate<T>> valid = new ArrayList<>();
@@ -76,16 +76,18 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
         if (valid.isEmpty()) {
             throw new HarnessException(
                     "HARNESS_RESULT_NOT_PRODUCED",
-                    "本次 UT 运行窗口没有产生可解析的调度结果");
+                    "The current UT run window produced no parseable schedule result");
         }
         if (valid.size() > 1) {
             throw new HarnessException(
                     "HARNESS_RESULT_AMBIGUOUS",
-                    "本次 UT 产生多个可解析调度结果，拒绝猜测: "
+                    "The current UT produced multiple parseable schedule results; refusing to guess: "
                             + valid.stream().map(item -> item.path().toString()).toList());
         }
         ParsedCandidate<T> selected = valid.getFirst();
-        Path captured = copyAtomically(selected.path(), destination);
+        Path captureDirectory = destination.toAbsolutePath().normalize();
+        Path captured = copyAtomically(
+                selected.path(), captureDirectory.resolve(selected.path().getFileName()));
         return new CapturedScheduleResult<>(
                 selected.path(), captured, selected.sizeBytes(), selected.snapshot());
     }
@@ -95,7 +97,7 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
         if (Files.exists(normalized)) {
             throw new HarnessException(
                     "HARNESS_RESULT_COPY_FAILED",
-                    "捕获目标已经存在，禁止覆盖: " + normalized);
+                    "The capture target already exists and cannot be overwritten: " + normalized);
         }
         Path parent = normalized.getParent();
         try {
@@ -115,7 +117,7 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_RESULT_COPY_FAILED",
-                    "无法复制调度结果到不可变 Run 目录: " + normalized,
+                    "Failed to copy the schedule result into the immutable Run directory: " + normalized,
                     exception);
         }
     }

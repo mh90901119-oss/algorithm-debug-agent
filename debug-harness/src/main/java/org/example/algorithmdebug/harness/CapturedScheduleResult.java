@@ -14,10 +14,10 @@ public record CapturedScheduleResult<T extends ScheduleResultSnapshot>(
     /** 校验捕获结果关键字段。 */
     public CapturedScheduleResult {
         if (sourcePath == null || capturedPath == null || snapshot == null) {
-            throw new IllegalArgumentException("路径和 snapshot 不能为空");
+            throw new IllegalArgumentException("path and snapshot must not be null");
         }
         if (sizeBytes < 0) {
-            throw new IllegalArgumentException("sizeBytes 不能为负数");
+            throw new IllegalArgumentException("sizeBytes must not be negative");
         }
     }
 }

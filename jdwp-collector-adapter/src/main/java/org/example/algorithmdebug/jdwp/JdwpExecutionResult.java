@@ -27,16 +27,16 @@ public record JdwpExecutionResult(
     public JdwpExecutionResult {
         JdwpTargetCommandFactory.requirePort(port);
         if (completion == null || target == null || collector == null) {
-            throw new IllegalArgumentException("completion 与进程结果不能为空");
+            throw new IllegalArgumentException("completion and process result must not be null");
         }
         if (targetStarted != target.isPresent() || collectorStarted != collector.isPresent()) {
-            throw new IllegalArgumentException("started 标记必须与进程结果一致");
+            throw new IllegalArgumentException("The started flag must match the process result");
         }
         if (completion == JdwpCollectionCompletion.SUCCESS
                 && (target.stream().anyMatch(result -> result.completion() != RunCompletion.SUCCEEDED)
                 || collector.stream().anyMatch(result -> result.completion() != RunCompletion.SUCCEEDED)
                 || target.isEmpty() || collector.isEmpty())) {
-            throw new IllegalArgumentException("SUCCESS 必须包含两个成功进程结果");
+            throw new IllegalArgumentException("SUCCESS must contain two successful process results");
         }
     }
 }

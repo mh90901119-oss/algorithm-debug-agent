@@ -7,14 +7,16 @@
   "required": [
     "schemaVersion", "collectorVersion", "rawTraceSchemaVersion", "capabilities",
     "sessionId", "target", "plan", "trace", "startedAt", "finishedAt",
-    "completionReason", "eventCount", "hitCounts", "installedLocations"
+    "completionReason", "eventCount", "observedHitCounts", "matchedHitCounts",
+    "capturedHitCounts", "conditionUnavailableCounts", "conditionUnavailableReasons",
+    "installedLocations"
   ],
   "properties": {
     "schemaVersion": {"const": "2.0"},
-    "collectorVersion": {"const": "2.0.0"},
+    "collectorVersion": {"const": "3.0.0"},
     "rawTraceSchemaVersion": {"const": "2.0"},
     "capabilities": {
-      "type": "array", "minItems": 5, "maxItems": 32, "uniqueItems": true,
+      "type": "array", "minItems": 7, "maxItems": 32, "uniqueItems": true,
       "items": {"type": "string", "minLength": 1, "maxLength": 128}
     },
     "sessionId": {"type": "string", "minLength": 1, "maxLength": 1024},
@@ -32,7 +34,17 @@
     "finishedAt": {"type": "string", "format": "date-time"},
     "completionReason": {"type": "string", "minLength": 1, "maxLength": 128},
     "eventCount": {"type": "integer", "minimum": 0},
-    "hitCounts": {"$ref": "#/$defs/counters"},
+    "observedHitCounts": {"$ref": "#/$defs/counters"},
+    "matchedHitCounts": {"$ref": "#/$defs/counters"},
+    "capturedHitCounts": {"$ref": "#/$defs/counters"},
+    "conditionUnavailableCounts": {"$ref": "#/$defs/counters"},
+    "conditionUnavailableReasons": {
+      "type": "object", "maxProperties": 20,
+      "additionalProperties": {
+        "type": "object", "maxProperties": 16,
+        "additionalProperties": {"type": "integer", "minimum": 0}
+      }
+    },
     "installedLocations": {"$ref": "#/$defs/counters"}
   },
   "$defs": {

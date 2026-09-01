@@ -18,12 +18,12 @@ public final class MavenCommandFactory {
     public List<String> create(TestLaunchSpec spec, MavenExecutionOptions options)
             throws HarnessException {
         if (spec == null || options == null) {
-            throw new IllegalArgumentException("spec 与 options 不能为空");
+            throw new IllegalArgumentException("spec and options must not be null");
         }
         if (!spec.jvmArguments().isEmpty() && spec.mavenProperties().containsKey("argLine")) {
             throw new HarnessException(
                     "HARNESS_LAUNCH_SPEC_CONFLICT",
-                    "mavenProperties[argLine] 与 jvmArguments 不能同时声明");
+                    "mavenProperties[argLine] and jvmArguments must not declare both");
         }
         List<String> command = new ArrayList<>();
         command.add(options.mavenExecutable().toString());

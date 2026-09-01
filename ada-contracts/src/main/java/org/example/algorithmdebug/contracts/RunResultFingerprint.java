@@ -26,7 +26,7 @@ public record RunResultFingerprint(
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.RUN_RESULT_FINGERPRINT.equals(schemaVersion)) {
             throw new IllegalArgumentException(
-                    "不支持的 RunResultFingerprint schemaVersion: " + schemaVersion);
+                    "Unsupported RunResultFingerprint schemaVersion: " + schemaVersion);
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");

@@ -141,6 +141,26 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
+    void rejectsAPlanThatReferencesMissingCaseEvidence() {
+        service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        CodePathPlanRequest request = new CodePathPlanRequest(
+                new PlanId("plan-missing-evidence"),
+                List.of("fixture.TargetTest#caseUnderTest()V"),
+                "Verify the observed path",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which path executed?", "One candidate path executed",
+                        List.of(new org.example.algorithmdebug.contracts.EvidenceId("missing-evidence")),
+                        List.of("Observed method entries")),
+                org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service().createCodePathPlan(
+                        workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
+
+        assertEquals("PLAN_EVIDENCE_NOT_FOUND", failure.code());
+    }
+
+    @Test
     void reportsMissingTargetTestWithoutGenericStaticFailure() throws Exception {
         Path targetSource = module.resolve("src/test/java/fixture/TargetTest.java");
         Files.writeString(targetSource, """
@@ -199,18 +219,11 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
-    void mapsInvalidRationaleToPlanCompilationFailure() {
-        service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
-        CodePathPlanRequest request = new CodePathPlanRequest(
+    void rejectsInvalidRationaleAtTheRequestBoundary() {
+        assertThrows(IllegalArgumentException.class, () -> new CodePathPlanRequest(
                 new PlanId("plan-rationale"),
                 List.of("fixture.TargetTest#caseUnderTest()V"), "x".repeat(4_097),
-                org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
-
-        CaseRunException failure = assertThrows(CaseRunException.class, () ->
-                service().createCodePathPlan(
-                        workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
-
-        assertEquals("PLAN_COMPILATION_FAILED", failure.code());
+                org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
     @Test

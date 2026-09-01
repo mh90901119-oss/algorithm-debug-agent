@@ -55,16 +55,29 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
     scopeMethodKey: "fixture.Algorithm#schedule()V",
     rationale: "Observe invocation path variants",
+    questionToAnswer: "Which invocation path executed?",
+    hypothesis: "One path variant was selected",
+    basedOnEvidenceIds: [],
+    expectedObservations: ["Observed method path"],
   }, context)
   await runtime.codePathCollect({ caseId: "case-1", planId: "cp-1" }, context)
   await runtime.jdwpPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
     tracepoints: [{
-      methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
-      captureOnHits: [1, 3, 5],
+      methodKey: "fixture.Algorithm#schedule()V", line: 12,
+      maxObservedHits: 500, maxCapturedHits: 2,
+      captureOnMatchedHits: [1, 2],
+      condition: {
+        localName: "candidate", fieldPath: ["wafer", "id"],
+        expectedType: "STRING", expectedValue: "WAFER-1",
+      },
       capture: { localNames: ["state"], fieldPaths: ["state.current"] },
     }],
     rationale: "Observe selected state transitions",
+    questionToAnswer: "Which state selected the branch?",
+    hypothesis: "The state value selected this branch",
+    basedOnEvidenceIds: ["evidence-1"],
+    expectedObservations: ["Runtime state value"],
   }, context)
   await runtime.jdwpCollect({ caseId: "case-1", planId: "jdwp-1" }, context)
   await runtime.artifactRead({
@@ -120,6 +133,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
       scopeMethodKey: "fixture.Algorithm#schedule()V",
       rationale: "Observe invocation path variants",
+      intent: {
+        questionToAnswer: "Which invocation path executed?",
+        hypothesis: "One path variant was selected",
+        basedOnEvidenceIds: [],
+        expectedObservations: ["Observed method path"],
+      },
       budget: { maxEvents: 100000, maxBytes: 16777216, timeoutMillis: 300000 },
       requestedAt: "2026-08-19T00:00:00.000Z",
     }),
@@ -127,12 +146,17 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       planId: "jdwp-plan-1",
       tracepoints: [{
         tracepointId: "tracepoint-1",
-        methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
-        captureOnHits: [1, 3, 5],
+        methodKey: "fixture.Algorithm#schedule()V", line: 12,
+        maxObservedHits: 500, maxCapturedHits: 2,
+        captureOnMatchedHits: [1, 2],
         capture: {
           locals: true, stack: true, maxFrames: 8, maxDepth: 1,
           maxItems: 20, maxStringLength: 256,
           localNames: ["state"], fieldPaths: ["state.current"],
+        },
+        condition: {
+          localName: "candidate", fieldPath: ["wafer", "id"], operator: "EQUALS",
+          expectedType: "STRING", expectedValue: "WAFER-1",
         },
       }],
       budget: {
@@ -140,6 +164,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         idleTimeoutMillis: 120000,
       },
       rationale: "Observe selected state transitions",
+      intent: {
+        questionToAnswer: "Which state selected the branch?",
+        hypothesis: "The state value selected this branch",
+        basedOnEvidenceIds: ["evidence-1"],
+        expectedObservations: ["Runtime state value"],
+      },
       requestedAt: "2026-08-19T00:00:00.000Z",
     }),
     JSON.stringify({
@@ -292,7 +322,7 @@ test("rejects invalid sparse JDWP hits before project preparation", async () => 
       captureOnHits: [3, 1],
     }],
     rationale: "Observe state",
-  }, { directory: "D:/module" }), /captureOnHits/)
+  }, { directory: "D:/module" }), /captureOnMatchedHits/)
   assert.equal(calls, 0)
 })
 

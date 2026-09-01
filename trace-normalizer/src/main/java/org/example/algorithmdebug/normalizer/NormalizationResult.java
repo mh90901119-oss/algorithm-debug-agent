@@ -19,24 +19,24 @@ public record NormalizationResult<T>(
         if (status == null || summary == null || truncationReasons == null
                 || failureCode == null || failureDetail == null
                 || inputRecordCount < 0 || emittedFactCount < 0) {
-            throw new IllegalArgumentException("NormalizationResult 参数非法");
+            throw new IllegalArgumentException("NormalizationResult parameters are invalid");
         }
         truncationReasons = List.copyOf(truncationReasons);
         if (truncationReasons.stream().anyMatch(value -> value == null || value.isBlank())
                 || truncationReasons.size() > 32 || failureDetail.length() > 2_048) {
-            throw new IllegalArgumentException("NormalizationResult 诊断超限");
+            throw new IllegalArgumentException("The NormalizationResult diagnostic exceeds the limit");
         }
         if (status == NormalizationStatus.COMPLETE
                 && (summary.isEmpty() || !truncationReasons.isEmpty() || failureCode.isPresent())) {
-            throw new IllegalArgumentException("COMPLETE 结果不一致");
+            throw new IllegalArgumentException("COMPLETE result is inconsistent");
         }
         if (status == NormalizationStatus.PARTIAL
                 && (summary.isEmpty() || truncationReasons.isEmpty() || failureCode.isPresent())) {
-            throw new IllegalArgumentException("PARTIAL 结果不一致");
+            throw new IllegalArgumentException("PARTIAL result is inconsistent");
         }
         if (status == NormalizationStatus.FAILED
                 && (summary.isPresent() || failureCode.isEmpty())) {
-            throw new IllegalArgumentException("FAILED 结果不一致");
+            throw new IllegalArgumentException("FAILED result is inconsistent");
         }
     }
 }

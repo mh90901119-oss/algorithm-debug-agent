@@ -22,7 +22,7 @@ public record SufficiencyEvaluation(
     /** 校验集合关系与充分、不足、矛盾状态的一致性。 */
     public SufficiencyEvaluation {
         if (!SchemaVersions.SUFFICIENCY_EVALUATION.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 SufficiencyEvaluation schemaVersion");
+            throw new IllegalArgumentException("Unsupported SufficiencyEvaluation schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -32,7 +32,7 @@ public record SufficiencyEvaluation(
         requiredDimensions = EvidenceBuildRequest.immutableDimensions(
                 requiredDimensions, "requiredDimensions");
         if (requiredDimensions.isEmpty()) {
-            throw new IllegalArgumentException("requiredDimensions 不能为空");
+            throw new IllegalArgumentException("requiredDimensions must not be null");
         }
         coveredDimensions = EvidenceBuildRequest.immutableDimensions(
                 coveredDimensions, "coveredDimensions");
@@ -40,22 +40,22 @@ public record SufficiencyEvaluation(
                 missingDimensions, "missingDimensions");
         contradictions = ContractChecks.immutableBoundedStrings(
                 contradictions, "contradictions", 2_048);
-        if (contradictions.size() > 64) throw new IllegalArgumentException("contradictions 超限");
+        if (contradictions.size() > 64) throw new IllegalArgumentException("contradictions exceeds the limit");
         evaluatedAt = ContractChecks.requireNonNull(evaluatedAt, "evaluatedAt");
         HashSet<EvidenceDimension> expectedMissing = new HashSet<>(requiredDimensions);
         expectedMissing.removeAll(coveredDimensions);
         if (!expectedMissing.equals(missingDimensions)) {
-            throw new IllegalArgumentException("missingDimensions 与要求/覆盖集合不一致");
+            throw new IllegalArgumentException("missingDimensions does not match required/covered dimensions");
         }
         if (status == SufficiencyStatus.SUFFICIENT
                 && (!missingDimensions.isEmpty() || !contradictions.isEmpty())) {
-            throw new IllegalArgumentException("SUFFICIENT 不能有缺口或矛盾");
+            throw new IllegalArgumentException("SUFFICIENT must not contain gaps or contradictions");
         }
         if (status == SufficiencyStatus.INSUFFICIENT && missingDimensions.isEmpty()) {
-            throw new IllegalArgumentException("INSUFFICIENT 必须包含缺失维度");
+            throw new IllegalArgumentException("INSUFFICIENT must contain missing dimensions");
         }
         if (status == SufficiencyStatus.CONTRADICTED && contradictions.isEmpty()) {
-            throw new IllegalArgumentException("CONTRADICTED 必须包含矛盾");
+            throw new IllegalArgumentException("CONTRADICTED must contain contradictions");
         }
     }
 }

@@ -24,20 +24,20 @@ public record CodePathNormalizationInput(
         if (collection == null || plan == null || rawTrace == null || rawTracePath == null
                 || evidenceId == null || budget == null
                 || createdAt == null) {
-            throw new IllegalArgumentException("CodePath 归一化输入不能为空");
+            throw new IllegalArgumentException("CodePath normalization input must not be null");
         }
         if (!collection.caseId().equals(plan.caseId())
                 || !collection.contextId().equals(plan.contextId())
                 || !collection.analysisId().equals(plan.analysisId())
                 || !collection.planId().equals(plan.planId())
                 || !collection.targetTest().equals(plan.targetTest())) {
-            throw new IllegalArgumentException("Collection 与 CodePath Plan 身份不一致");
+            throw new IllegalArgumentException("Collection does not match CodePath Plan identity");
         }
         if (rawTrace.sizeBytes() > budget.maxRawBytes()) {
-            throw new IllegalArgumentException("Raw Trace 引用已超过归一化预算");
+            throw new IllegalArgumentException("Raw Trace references exceed the normalization budget");
         }
         if (budget.maxMethods() < plan.selectors().size()) {
-            throw new IllegalArgumentException("maxMethods 不能小于采集计划中的方法数");
+            throw new IllegalArgumentException("maxMethods must not be less than the method count in the collection plan");
         }
         rawTracePath = rawTracePath.toAbsolutePath().normalize();
     }

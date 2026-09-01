@@ -29,7 +29,7 @@ public final class AtomicDocumentWriter {
 
     AtomicDocumentWriter(MoveOperation moveOperation) {
         if (moveOperation == null) {
-            throw new IllegalArgumentException("moveOperation 不能为空");
+            throw new IllegalArgumentException("moveOperation must not be null");
         }
         this.moveOperation = moveOperation;
     }
@@ -43,7 +43,7 @@ public final class AtomicDocumentWriter {
      */
     public void writeNew(Path target, byte[] content) {
         if (target == null || content == null) {
-            throw new IllegalArgumentException("target 和 content 不能为空");
+            throw new IllegalArgumentException("target and content must not be null");
         }
         writeNew(target, Math.max(1L, content.length), output -> output.write(content));
     }
@@ -57,18 +57,18 @@ public final class AtomicDocumentWriter {
      */
     void writeNew(Path target, long maximumBytes, StreamContentWriter contentWriter) {
         if (target == null || contentWriter == null || maximumBytes < 1) {
-            throw new IllegalArgumentException("target、maximumBytes 和 contentWriter 非法");
+            throw new IllegalArgumentException("target, maximumBytes and contentWriter is invalid");
         }
         Path normalizedTarget = target.toAbsolutePath().normalize();
         Path parent = normalizedTarget.getParent();
         if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "WORKSPACE_PATH_INVALID", "文档父目录不存在或不是普通目录: " + parent);
+                    "WORKSPACE_PATH_INVALID", "The document parent path does not exist or is not a directory: " + parent);
         }
         if (Files.exists(normalizedTarget, LinkOption.NOFOLLOW_LINKS)) {
             FileAlreadyExistsException cause = new FileAlreadyExistsException(normalizedTarget.toString());
             throw new WorkspaceException(
-                    "WORKSPACE_WRITE_FAILED", "拒绝覆盖已有 Workspace 文档: " + normalizedTarget, cause);
+                    "WORKSPACE_WRITE_FAILED", "Refusing to overwrite an existing Workspace document: " + normalizedTarget, cause);
         }
 
         Path temporary = null;
@@ -81,7 +81,7 @@ public final class AtomicDocumentWriter {
         } catch (IOException | SecurityException failure) {
             primaryFailure = failure;
             throw new WorkspaceException(
-                    "WORKSPACE_WRITE_FAILED", "原子创建 Workspace 文档失败: " + normalizedTarget, failure);
+                    "WORKSPACE_WRITE_FAILED", "Failed to atomically create Workspace document: " + normalizedTarget, failure);
         } catch (RuntimeException failure) {
             primaryFailure = failure;
             throw failure;
@@ -95,14 +95,14 @@ public final class AtomicDocumentWriter {
     /** 通过同目录临时文件原子替换一个已存在的控制文档。 */
     public void replace(Path target, byte[] content) {
         if (target == null || content == null) {
-            throw new IllegalArgumentException("target 和 content 不能为空");
+            throw new IllegalArgumentException("target and content must not be null");
         }
         Path normalizedTarget = target.toAbsolutePath().normalize();
         Path parent = normalizedTarget.getParent();
         if (parent == null || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)
                 || !Files.isRegularFile(normalizedTarget, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(
-                    "WORKSPACE_PATH_INVALID", "待替换文档不存在或不是普通文件: " + normalizedTarget);
+                    "WORKSPACE_PATH_INVALID", "Document to replace does not exist or is not a regular file: " + normalizedTarget);
         }
         Path temporary = null;
         Throwable primaryFailure = null;
@@ -114,7 +114,7 @@ public final class AtomicDocumentWriter {
         } catch (IOException | SecurityException failure) {
             primaryFailure = failure;
             throw new WorkspaceException(
-                    "WORKSPACE_WRITE_FAILED", "原子替换 Workspace 文档失败: " + normalizedTarget, failure);
+                    "WORKSPACE_WRITE_FAILED", "Failed to atomically replace Workspace document: " + normalizedTarget, failure);
         } catch (RuntimeException failure) {
             primaryFailure = failure;
             throw failure;
@@ -147,7 +147,7 @@ public final class AtomicDocumentWriter {
                 return;
             }
             throw new WorkspaceException(
-                    "WORKSPACE_WRITE_FAILED", "清理 Workspace 临时文档失败: " + temporary, cleanupFailure);
+                    "WORKSPACE_WRITE_FAILED", "Failed to clean up temporary Workspace document: " + temporary, cleanupFailure);
         }
     }
 
@@ -185,7 +185,7 @@ public final class AtomicDocumentWriter {
                 throw new IndexOutOfBoundsException();
             }
             if (written + length > maximumBytes) {
-                throw new IOException("流式 Artifact 超过最大字节数 " + maximumBytes);
+                throw new IOException("Streaming Artifact exceeds maximum byte count " + maximumBytes);
             }
             ByteBuffer buffer = ByteBuffer.wrap(bytes, offset, length);
             while (buffer.hasRemaining()) {

@@ -32,7 +32,7 @@ public final class JdwpSnapshotNormalizer {
 
     JdwpSnapshotNormalizer(BoundedJsonlReader reader, JdwpValueFlattener valueFlattener) {
         if (reader == null || valueFlattener == null) {
-            throw new IllegalArgumentException("JDWP Normalizer 依赖不能为空");
+            throw new IllegalArgumentException("JDWP Normalizer dependencies must not be null");
         }
         this.reader = reader;
         this.valueFlattener = valueFlattener;
@@ -45,7 +45,7 @@ public final class JdwpSnapshotNormalizer {
      * @return 通用运行时摘要或结构化失败
      */
     public NormalizationResult<JdwpSnapshotSummary> normalize(JdwpNormalizationInput input) {
-        if (input == null) throw new IllegalArgumentException("input 不能为空");
+        if (input == null) throw new IllegalArgumentException("input must not be null");
         Accumulator accumulator = null;
         try {
             accumulator = new Accumulator(input, valueFlattener);
@@ -104,7 +104,7 @@ public final class JdwpSnapshotNormalizer {
             String eventType = requiredText(json, "eventType", 64, line);
             if (LIFECYCLE_EVENTS.contains(eventType)) return;
             if (!"tracepoint_hit".equals(eventType)) {
-                throw invalid(line, "未知 JDWP eventType: " + eventType);
+                throw invalid(line, "Unknown JDWP eventType: " + eventType);
             }
             onHit(json, line, sequence);
         }
@@ -123,15 +123,30 @@ public final class JdwpSnapshotNormalizer {
             if (tracepoint == null) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "JDWP 命中不属于采集计划", line, null);
+                        "The JDWP hit does not belong to the collection plan", line, null);
             }
             int hit = requiredPositiveInt(json, "hit", line);
-            if (hit > tracepoint.maxHits()) throw invalid(line, "JDWP hit 超过计划上限");
-            if (!tracepoint.captureOnHits().isEmpty()
-                    && !tracepoint.captureOnHits().contains(hit)) {
+            int observedHit = json.has("observedHit")
+                    ? requiredPositiveInt(json, "observedHit", line) : hit;
+            int matchedHit = json.has("matchedHit")
+                    ? requiredPositiveInt(json, "matchedHit", line) : hit;
+            int capturedHit = json.has("capturedHit")
+                    ? requiredPositiveInt(json, "capturedHit", line) : matchedHit;
+            if (observedHit > tracepoint.maxObservedHits()) {
+                throw invalid(line, "The JDWP observed hit exceeds the plan limit");
+            }
+            if (capturedHit > tracepoint.maxCapturedHits()) {
+                throw invalid(line, "The JDWP captured hit exceeds the plan limit");
+            }
+            if (!tracepoint.captureOnMatchedHits().isEmpty()
+                    && !tracepoint.captureOnMatchedHits().contains(matchedHit)) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "JDWP 命中序号不属于采集计划", line, null);
+                        "The JDWP hit sequence does not belong to the collection plan", line, null);
+            }
+            if (tracepoint.condition() != null
+                    && !"MATCHED".equals(json.path("conditionResult").asText())) {
+                throw invalid(line, "The conditional JDWP snapshot is not marked MATCHED");
             }
             JsonNode thread = requiredObject(json, "thread", line);
             String threadName = requiredText(thread, "name", 512, line);
@@ -153,11 +168,11 @@ public final class JdwpSnapshotNormalizer {
                             .equals(tracepoint.sourceAnchor().descriptor()))) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "JDWP location 与采集计划不一致", line, null);
+                        "JDWP location does not match the collection plan", line, null);
             }
             JsonNode framesNode = json.get("frames");
             if (framesNode == null || !framesNode.isArray()) {
-                throw invalid(line, "JDWP 命中缺少 frames array");
+                throw invalid(line, "The JDWP hit is missing a frames array");
             }
             if (hits.size() >= input.budget().maxHits()) {
                 reasons.add("HIT_BUDGET_EXCEEDED");
@@ -177,7 +192,7 @@ public final class JdwpSnapshotNormalizer {
             if (!tracepoint.capture().locals() && !roots.isEmpty()) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "JDWP Raw 包含计划未请求的 locals/this", line, null);
+                        "The JDWP Raw Trace contains locals/this values not requested by the plan", line, null);
             }
             int remainingFacts = Math.max(0, input.budget().maxValueFacts() - valueFactCount);
             JdwpValueFlattener.Result flattened = flattener.flatten(
@@ -214,9 +229,9 @@ public final class JdwpSnapshotNormalizer {
             java.util.HashSet<Integer> indexes = new java.util.HashSet<>();
             for (int index = 0; index < Math.min(maximum, frames.size()); index++) {
                 JsonNode frame = frames.get(index);
-                if (!frame.isObject()) throw invalid(line, "JDWP frame 必须为 object");
+                if (!frame.isObject()) throw invalid(line, "JDWP frame must be object");
                 int frameIndex = requiredNonNegativeInt(frame, "index", line);
-                if (!indexes.add(frameIndex)) throw invalid(line, "JDWP frame index 重复");
+                if (!indexes.add(frameIndex)) throw invalid(line, "JDWP frame index duplicate");
                 Optional<String> descriptor = optionalText(
                         frame, "methodDescriptor", 2_048, line);
                 Optional<Long> codeIndex = optionalNonNegativeLong(frame, "codeIndex", line);
@@ -325,7 +340,7 @@ public final class JdwpSnapshotNormalizer {
             if (reserved > maximum) {
                 throw new NormalizationException(
                         "NORMALIZE_OUTPUT_BUDGET_TOO_SMALL",
-                        "摘要预算不足以保存证据身份和原始产物引用", 0, null);
+                        "The summary budget cannot preserve the evidence identity and raw artifact references", 0, null);
             }
         }
 
@@ -398,7 +413,7 @@ public final class JdwpSnapshotNormalizer {
     private static String requireVersion(JsonNode json, long line) {
         String version = requiredText(json, "schemaVersion", 32, line);
         if (!"1.0".equals(version) && !"2.0".equals(version)) {
-            throw invalid(line, "不支持的 JDWP Raw schemaVersion");
+            throw invalid(line, "Unsupported JDWP Raw schemaVersion");
         }
         return version;
     }
@@ -430,13 +445,13 @@ public final class JdwpSnapshotNormalizer {
             Instant.parse(value);
         } catch (DateTimeParseException failure) {
             throw new NormalizationException(
-                    "NORMALIZE_SCHEMA_UNSUPPORTED", "JDWP timestamp 非法", line, failure);
+                    "NORMALIZE_SCHEMA_UNSUPPORTED", "JDWP timestamp is invalid", line, failure);
         }
     }
 
     private static JsonNode requiredObject(JsonNode json, String field, long line) {
         JsonNode value = json.get(field);
-        if (value == null || !value.isObject()) throw invalid(line, field + " 非法");
+        if (value == null || !value.isObject()) throw invalid(line, field + " is invalid");
         return value;
     }
 
@@ -444,7 +459,7 @@ public final class JdwpSnapshotNormalizer {
         JsonNode value = json.get(field);
         if (value == null || !value.isTextual() || value.textValue().isBlank()
                 || value.textValue().length() > maximum) {
-            throw invalid(line, field + " 非法");
+            throw invalid(line, field + " is invalid");
         }
         return value.textValue();
     }
@@ -453,14 +468,14 @@ public final class JdwpSnapshotNormalizer {
         JsonNode value = json.get(field);
         if (value == null || !value.isIntegralNumber()
                 || !value.canConvertToLong() || value.longValue() < 1) {
-            throw invalid(line, field + " 非法");
+            throw invalid(line, field + " is invalid");
         }
         return value.longValue();
     }
 
     private static int requiredPositiveInt(JsonNode json, String field, long line) {
         long value = requiredPositiveLong(json, field, line);
-        if (value > Integer.MAX_VALUE) throw invalid(line, field + " 超限");
+        if (value > Integer.MAX_VALUE) throw invalid(line, field + " exceeds the limit");
         return (int) value;
     }
 
@@ -468,7 +483,7 @@ public final class JdwpSnapshotNormalizer {
         JsonNode value = json.get(field);
         if (value == null || !value.isIntegralNumber()
                 || !value.canConvertToInt() || value.intValue() < 0) {
-            throw invalid(line, field + " 非法");
+            throw invalid(line, field + " is invalid");
         }
         return value.intValue();
     }
@@ -481,7 +496,7 @@ public final class JdwpSnapshotNormalizer {
         JsonNode value = json.get(field);
         if (value == null || !value.isIntegralNumber()
                 || !value.canConvertToInt() || value.intValue() < -1) {
-            throw invalid(line, field + " 非法");
+            throw invalid(line, field + " is invalid");
         }
         return value.intValue();
     }

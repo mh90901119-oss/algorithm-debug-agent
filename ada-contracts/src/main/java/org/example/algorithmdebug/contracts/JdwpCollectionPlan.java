@@ -15,12 +15,13 @@ public record JdwpCollectionPlan(
         List<JdwpTracepointSpec> tracepoints,
         JdwpCollectionBudget budget,
         String rationale,
+        InvestigationIntent intent,
         Instant createdAt) {
 
     /** 校验身份、采集点唯一性及 locals 的保守限制。 */
     public JdwpCollectionPlan {
         if (!SchemaVersions.JDWP_COLLECTION_PLAN.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 JdwpCollectionPlan schemaVersion");
+            throw new IllegalArgumentException("Unsupported JdwpCollectionPlan schemaVersion");
         }
         planId = ContractChecks.requireNonNull(planId, "planId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -29,19 +30,36 @@ public record JdwpCollectionPlan(
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         tracepoints = ContractChecks.immutableList(tracepoints, "tracepoints");
         if (tracepoints.isEmpty() || tracepoints.size() > 20) {
-            throw new IllegalArgumentException("tracepoints 数量必须在 1 到 20 之间");
+            throw new IllegalArgumentException("tracepoints count must be between 1 and 20");
         }
         HashSet<String> ids = new HashSet<>();
         if (tracepoints.stream().anyMatch(point -> !ids.add(point.tracepointId()))) {
-            throw new IllegalArgumentException("tracepointId 不得重复");
+            throw new IllegalArgumentException("tracepointId must not be duplicated");
         }
         long localsPoints = tracepoints.stream().filter(point -> point.capture().locals()).count();
         if (localsPoints > 5 || tracepoints.stream().anyMatch(point ->
-                point.capture().locals() && point.maxHits() > 5)) {
-            throw new IllegalArgumentException("locals 采集超出保守范围");
+                point.capture().locals() && point.maxCapturedHits() > 5)) {
+            throw new IllegalArgumentException("locals collection is outside the conservative range");
         }
         budget = ContractChecks.requireNonNull(budget, "budget");
         rationale = ContractChecks.requireBoundedText(rationale, "rationale", 4_096, false);
+        intent = intent == null ? InvestigationIntent.legacy(rationale) : intent;
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
+    }
+
+    /** 兼容缺少结构化调查意图的历史 v2 Plan。 */
+    public JdwpCollectionPlan(
+            String schemaVersion,
+            PlanId planId,
+            CaseId caseId,
+            ContextId contextId,
+            AnalysisId analysisId,
+            TargetTest targetTest,
+            List<JdwpTracepointSpec> tracepoints,
+            JdwpCollectionBudget budget,
+            String rationale,
+            Instant createdAt) {
+        this(schemaVersion, planId, caseId, contextId, analysisId, targetTest,
+                tracepoints, budget, rationale, InvestigationIntent.legacy(rationale), createdAt);
     }
 }

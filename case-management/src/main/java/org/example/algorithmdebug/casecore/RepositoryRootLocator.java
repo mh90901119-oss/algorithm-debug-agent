@@ -16,12 +16,12 @@ public final class RepositoryRootLocator {
      */
     public Path locate(Path moduleRoot) {
         if (moduleRoot == null) {
-            throw new IllegalArgumentException("moduleRoot 不能为空");
+            throw new IllegalArgumentException("moduleRoot must not be null");
         }
         try {
             Path canonicalModule = moduleRoot.toRealPath();
             if (!Files.isDirectory(canonicalModule, LinkOption.NOFOLLOW_LINKS)) {
-                throw new WorkspaceException("算法模块路径不是目录: " + canonicalModule);
+                throw new WorkspaceException("Algorithm module path is not a directory: " + canonicalModule);
             }
             for (Path current = canonicalModule; current != null; current = current.getParent()) {
                 Path marker = current.resolve(".git");
@@ -32,7 +32,7 @@ public final class RepositoryRootLocator {
             }
             return canonicalModule;
         } catch (IOException | SecurityException failure) {
-            throw new WorkspaceException("无法规范化算法模块路径: " + moduleRoot, failure);
+            throw new WorkspaceException("Failed to normalize algorithm module path: " + moduleRoot, failure);
         }
     }
 }

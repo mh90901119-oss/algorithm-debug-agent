@@ -18,7 +18,7 @@ public record JdwpCollectionRecord(
     /** 校验版本、执行身份和固定 Collector 类型。 */
     public JdwpCollectionRecord {
         if (!SchemaVersions.JDWP_COLLECTION_REQUEST.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 JdwpCollectionRecord schemaVersion");
+            throw new IllegalArgumentException("Unsupported JdwpCollectionRecord schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");
@@ -28,7 +28,7 @@ public record JdwpCollectionRecord(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         if (!"JDWP".equals(collectorType)) {
-            throw new IllegalArgumentException("collectorType 必须为 JDWP");
+            throw new IllegalArgumentException("collectorType must be JDWP");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }

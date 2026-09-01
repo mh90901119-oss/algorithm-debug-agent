@@ -21,7 +21,7 @@ public final class ProcessSupervisor {
     SupervisionResult await(Process process, Duration timeout, ProcessLimits limits)
             throws HarnessException {
         if (process == null || timeout == null || timeout.isZero() || timeout.isNegative() || limits == null) {
-            throw new IllegalArgumentException("process、正超时和 limits 不能为空");
+            throw new IllegalArgumentException("process, positive timeout, and limits must not be null");
         }
         try {
             if (process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
@@ -36,7 +36,7 @@ public final class ProcessSupervisor {
             } finally {
                 Thread.currentThread().interrupt();
             }
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待目标进程时被中断", exception);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for the target process", exception);
         }
 
         TerminationReport termination = terminate(process, limits);
@@ -69,7 +69,7 @@ public final class ProcessSupervisor {
         if (!survivors.isEmpty()) {
             throw new HarnessException(
                     "HARNESS_PROCESS_TREE_CLEANUP_FAILED",
-                    "终止预算结束后仍有目标进程存活，PID: " + survivors);
+                    "Target processes remain alive after the termination budget expired; PIDs: " + survivors);
         }
         return report;
     }

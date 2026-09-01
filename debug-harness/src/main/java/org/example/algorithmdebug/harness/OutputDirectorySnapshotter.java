@@ -20,7 +20,7 @@ public final class OutputDirectorySnapshotter {
      */
     public OutputDirectorySnapshotter(int maximumFiles) {
         if (maximumFiles <= 0) {
-            throw new IllegalArgumentException("maximumFiles 必须为正数");
+            throw new IllegalArgumentException("maximumFiles must be positive");
         }
         this.maximumFiles = maximumFiles;
     }
@@ -28,14 +28,14 @@ public final class OutputDirectorySnapshotter {
     /** 创建结果目录快照；UT 尚未创建目录时返回空快照。 */
     public OutputDirectorySnapshot snapshot(ScheduleResultSource source) throws HarnessException {
         if (source == null) {
-            throw new IllegalArgumentException("source 不能为空");
+            throw new IllegalArgumentException("source must not be null");
         }
         Path root = source.outputDirectory();
         if (!Files.exists(root)) {
             return new OutputDirectorySnapshot(source, Map.of());
         }
         if (!Files.isDirectory(root)) {
-            throw new HarnessException("HARNESS_RESULT_SOURCE_MISSING", "结果源不是目录: " + root);
+            throw new HarnessException("HARNESS_RESULT_SOURCE_MISSING", "The result source is not a directory: " + root);
         }
         int depth = source.recursive() ? Integer.MAX_VALUE : 1;
         Map<Path, OutputFileState> states = new LinkedHashMap<>();
@@ -44,7 +44,7 @@ public final class OutputDirectorySnapshotter {
                 if (states.size() >= maximumFiles) {
                     throw new HarnessException(
                             "HARNESS_RESULT_SOURCE_TOO_LARGE",
-                            "结果目录文件数超过上限 " + maximumFiles + ": " + root);
+                            "The result directory file count exceeds the limit: " + maximumFiles + ": " + root);
                 }
                 BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
                 Path relative = root.relativize(path).normalize();
@@ -57,7 +57,7 @@ public final class OutputDirectorySnapshotter {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_RESULT_SOURCE_READ_FAILED",
-                    "无法扫描结果目录: " + root,
+                    "Failed to scan the result directory: " + root,
                     exception);
         }
     }

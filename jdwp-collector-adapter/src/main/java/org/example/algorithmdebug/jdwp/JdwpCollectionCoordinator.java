@@ -66,7 +66,7 @@ public final class JdwpCollectionCoordinator {
      */
     public JdwpExecutionResult execute(JdwpExecutionRequest request) throws JdwpAdapterException {
         if (request == null) {
-            throw new IllegalArgumentException("request 不能为空");
+            throw new IllegalArgumentException("request must not be null");
         }
         verifyCollectorPlanEndpoint(request);
         int port = request.port();
@@ -121,7 +121,7 @@ public final class JdwpCollectionCoordinator {
         } catch (Exception failure) {
             JdwpAdapterException wrapped = new JdwpAdapterException(
                     errorCode(phase, failure),
-                    "JDWP 双进程协调失败", failure, targetStarted, collectorStarted);
+                    "JDWP dual-process coordination failed", failure, targetStarted, collectorStarted);
             if (failure instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -183,14 +183,14 @@ public final class JdwpCollectionCoordinator {
                     || !plan.path("resumeOnAttach").asBoolean(false)) {
                 throw new JdwpAdapterException(
                         "JDWP_COLLECTOR_PLAN_ENDPOINT_MISMATCH",
-                        "Collector Plan 必须使用本次执行的 loopback 端口并启用 resumeOnAttach",
+                        "The Collector Plan must use the loopback port for this execution and enable resumeOnAttach",
                         null);
             }
         } catch (JdwpAdapterException failure) {
             throw failure;
         } catch (IOException failure) {
             throw new JdwpAdapterException(
-                    "JDWP_COLLECTOR_PLAN_INVALID", "无法读取 Collector Plan", failure);
+                    "JDWP_COLLECTOR_PLAN_INVALID", "Failed to read Collector Plan", failure);
         }
     }
 

@@ -24,7 +24,7 @@ final class ProjectResultSource {
     /** 使用给定时钟解析本次 UT 的实际结果目录，便于确定性测试日期分区。 */
     static Optional<ScheduleResultSource> from(ProjectRegistration registration, Clock clock) {
         if (registration == null) {
-            throw new IllegalArgumentException("registration 不能为空");
+            throw new IllegalArgumentException("registration must not be null");
         }
         if (clock == null) {
             throw new IllegalArgumentException("clock must not be null");

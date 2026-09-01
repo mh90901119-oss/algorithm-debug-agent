@@ -19,7 +19,7 @@ public final class AdapterCatalog {
     /** @param adapters 装配层已发现的无状态 Adapter 列表 */
     public AdapterCatalog(List<TargetProjectAdapter> adapters) {
         if (adapters == null || adapters.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("adapters 不能为空且不得包含 null");
+            throw new IllegalArgumentException("adapters must not be empty and must not contain null");
         }
         List<TargetProjectAdapter> sorted = adapters.stream()
                 .sorted(Comparator.comparing(adapter -> adapter.descriptor().adapterId()))
@@ -28,7 +28,7 @@ public final class AdapterCatalog {
         for (TargetProjectAdapter adapter : sorted) {
             if (!ids.add(adapter.descriptor().adapterId())) {
                 throw new IllegalArgumentException(
-                        "Adapter ID 重复: " + adapter.descriptor().adapterId());
+                        "Adapter ID duplicate: " + adapter.descriptor().adapterId());
             }
         }
         this.adapters = List.copyOf(sorted);
@@ -39,19 +39,19 @@ public final class AdapterCatalog {
      */
     public AdapterSelection select(Path projectRoot, Optional<String> requestedAdapterId) {
         if (projectRoot == null || requestedAdapterId == null) {
-            throw new IllegalArgumentException("projectRoot 和 requestedAdapterId 不能为空");
+            throw new IllegalArgumentException("projectRoot and requestedAdapterId must not be null");
         }
         Path root = projectRoot.toAbsolutePath().normalize();
         if (requestedAdapterId.isPresent()) {
             String requested = requestedAdapterId.orElseThrow().strip();
             if (requested.isEmpty()) {
-                throw new IllegalArgumentException("requestedAdapterId 不能为空字符串");
+                throw new IllegalArgumentException("requestedAdapterId must not be blank");
             }
             TargetProjectAdapter adapter = adapters.stream()
                     .filter(candidate -> candidate.descriptor().adapterId().equals(requested))
                     .findFirst()
                     .orElseThrow(() -> new CaseRunException(
-                            "ADAPTER_NOT_FOUND", "未找到指定 Adapter: " + requested));
+                            "ADAPTER_NOT_FOUND", "The requested Adapter was not found: " + requested));
             return inspect(adapter, root);
         }
 
@@ -64,12 +64,12 @@ public final class AdapterCatalog {
             }
         }
         if (matches.isEmpty()) {
-            throw new CaseRunException("ADAPTER_NOT_FOUND", "没有 Adapter 支持已登记算法模块");
+            throw new CaseRunException("ADAPTER_NOT_FOUND", "No Adapter supports the registered algorithm module");
         }
         if (matches.size() > 1) {
             throw new CaseRunException(
                     "ADAPTER_AMBIGUOUS",
-                    "多个 Adapter 支持算法模块: " + matches.stream()
+                    "Multiple Adapters support the algorithm module: " + matches.stream()
                             .map(value -> value.adapter().descriptor().adapterId()).toList());
         }
         return matches.getFirst();
@@ -84,7 +84,7 @@ public final class AdapterCatalog {
         try {
             return new AdapterSelection(adapter, adapter.inspect(root));
         } catch (AdapterException failure) {
-            throw new CaseRunException(failure.code(), "指定 Adapter 不支持算法模块", failure);
+            throw new CaseRunException(failure.code(), "The requested Adapter does not support the algorithm module", failure);
         }
     }
 
@@ -95,7 +95,7 @@ public final class AdapterCatalog {
         /** 校验选择结果完整。 */
         public AdapterSelection {
             if (adapter == null || project == null) {
-                throw new IllegalArgumentException("AdapterSelection 字段不能为空");
+                throw new IllegalArgumentException("AdapterSelection fields must not be null");
             }
         }
     }

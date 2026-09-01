@@ -8,7 +8,7 @@ public record JsonResultSnapshot(String schemaVersion)
 
     public JsonResultSnapshot {
         if (!"1.0".equals(schemaVersion)) {
-            throw new IllegalArgumentException("JSON 结果快照无效");
+            throw new IllegalArgumentException("JSON result snapshot is invalid");
         }
     }
 }

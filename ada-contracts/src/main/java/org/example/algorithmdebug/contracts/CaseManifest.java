@@ -37,7 +37,7 @@ public record CaseManifest(
     static String requireVersion(String actual, String expected, String type) {
         String checked = ContractChecks.requireNonBlank(actual, "schemaVersion");
         if (!expected.equals(checked)) {
-            throw new IllegalArgumentException("不支持的 " + type + " schemaVersion: " + checked);
+            throw new IllegalArgumentException("Unsupported " + type + " schemaVersion: " + checked);
         }
         return checked;
     }

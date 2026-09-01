@@ -64,6 +64,7 @@ class RealJdwpCollectorSmokeTest {
         assertTrue(events.stream().anyMatch(event ->
                 "tracepoint_hit".equals(event.path("eventType").asText())
                         && "compute-entry".equals(event.path("tracepointId").asText())
+                        && "MATCHED".equals(event.path("conditionResult").asText())
                         && "(I)I".equals(event.path("location").path("methodDescriptor").asText())
                         && event.path("location").path("codeIndex").isIntegralNumber()));
         assertTrue(Files.isRegularFile(
@@ -136,7 +137,16 @@ class RealJdwpCollectorSmokeTest {
                     "line": %d,
                     "methodName": "compute",
                     "methodDescriptor": "(I)I",
-                    "maxHits": 1,
+                    "maxObservedHits": 1,
+                    "maxCapturedHits": 1,
+                    "captureOnMatchedHits": [1],
+                    "condition": {
+                      "localName": "value",
+                      "fieldPath": [],
+                      "operator": "EQUALS",
+                      "expectedType": "LONG",
+                      "expectedValue": "21"
+                    },
                     "capture": {
                       "locals": false,
                       "stack": true,

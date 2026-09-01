@@ -18,14 +18,14 @@ public record OutputStabilityPolicy(
     public OutputStabilityPolicy {
         if (pollInterval == null || pollInterval.compareTo(Duration.ofMillis(1)) < 0
                 || pollInterval.compareTo(Duration.ofSeconds(5)) > 0) {
-            throw new IllegalArgumentException("pollInterval 必须在 1 毫秒到 5 秒之间");
+            throw new IllegalArgumentException("pollInterval must be between 1 millisecond and 5 seconds");
         }
         if (timeout == null || timeout.compareTo(pollInterval) <= 0
                 || timeout.compareTo(Duration.ofSeconds(60)) > 0) {
-            throw new IllegalArgumentException("timeout 必须大于 pollInterval 且不超过 60 秒");
+            throw new IllegalArgumentException("timeout must be greater than pollInterval and no more than 60 seconds");
         }
         if (requiredStableObservations < 2 || requiredStableObservations > 5) {
-            throw new IllegalArgumentException("requiredStableObservations 必须在 2 到 5 之间");
+            throw new IllegalArgumentException("requiredStableObservations must be between 2 and 5");
         }
     }
 

@@ -36,7 +36,7 @@ public record MethodPathCollectionRequest(
         collectionId = Objects.requireNonNull(collectionId, "collectionId");
         if (!plan.caseId().equals(caseId) || !plan.contextId().equals(contextId)
                 || !plan.analysisId().equals(analysisId)) {
-            throw new IllegalArgumentException("采集请求身份与 CodePath 计划不一致");
+            throw new IllegalArgumentException("The collection request identity does not match the CodePath plan");
         }
         moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot").toAbsolutePath().normalize();
         collectionDirectory = Objects.requireNonNull(collectionDirectory, "collectionDirectory")
@@ -45,11 +45,11 @@ public record MethodPathCollectionRequest(
         targetClasspath = List.copyOf(Objects.requireNonNull(targetClasspath, "targetClasspath"));
         if (targetClasspath.isEmpty() || targetClasspath.size() > 10_000
                 || targetClasspath.stream().anyMatch(value -> value == null || value.isBlank())) {
-            throw new IllegalArgumentException("targetClasspath 非法");
+            throw new IllegalArgumentException("targetClasspath is invalid");
         }
         if (targetTestSelector == null || targetTestSelector.isBlank()
                 || targetTestSelector.length() > 1_024 || !targetTestSelector.contains("#")) {
-            throw new IllegalArgumentException("targetTestSelector 非法");
+            throw new IllegalArgumentException("targetTestSelector is invalid");
         }
     }
 }

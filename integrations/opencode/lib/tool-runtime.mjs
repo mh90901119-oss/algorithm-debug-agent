@@ -363,6 +363,7 @@ function codePathPlanRequest(input, now, createId) {
   }
   if (scopeMethodKey) request.scopeMethodKey = scopeMethodKey
   request.rationale = requiredText(input.rationale, "rationale")
+  request.intent = investigationIntent(input)
   request.budget = { maxEvents: 100_000, maxBytes: 16_777_216, timeoutMillis: 300_000 }
   request.requestedAt = timestamp(now)
   return request
@@ -377,16 +378,26 @@ function jdwpPlanRequest(input, now, createId) {
     if (!point || typeof point !== "object" || Array.isArray(point)) {
       throw new TypeError(`tracepoints[${index}] must be an object`)
     }
-    const maxHits = integerInRange(point.maxHits ?? 3, `tracepoints[${index}].maxHits`, 1, 20)
-    const captureOnHits = integerArray(
-      point.captureOnHits ?? [], `tracepoints[${index}].captureOnHits`, 20)
+    const maxObservedHits = integerInRange(
+      point.maxObservedHits ?? point.maxHits ?? 100,
+      `tracepoints[${index}].maxObservedHits`, 1, 10_000)
+    const captureOnMatchedHits = integerArray(
+      point.captureOnMatchedHits ?? point.captureOnHits ?? [],
+      `tracepoints[${index}].captureOnMatchedHits`, 20)
+    const maxCapturedHits = integerInRange(
+      point.maxCapturedHits ?? (captureOnMatchedHits.length || 3),
+      `tracepoints[${index}].maxCapturedHits`, 1, 20)
     let previous = 0
-    for (const hit of captureOnHits) {
-      if (hit <= previous || hit > maxHits) {
+    for (const hit of captureOnMatchedHits) {
+      if (hit <= previous || hit > maxObservedHits) {
         throw new RangeError(
-          `tracepoints[${index}].captureOnHits must be strictly increasing and within maxHits`)
+          `tracepoints[${index}].captureOnMatchedHits must be strictly increasing and within maxObservedHits`)
       }
       previous = hit
+    }
+    if (captureOnMatchedHits.length > maxCapturedHits) {
+      throw new RangeError(
+        `tracepoints[${index}].captureOnMatchedHits exceeds maxCapturedHits`)
     }
     const capture = point.capture ?? {}
     if (!capture || typeof capture !== "object" || Array.isArray(capture)) {
@@ -397,12 +408,13 @@ function jdwpPlanRequest(input, now, createId) {
     if (!locals && !stack) {
       throw new TypeError(`tracepoints[${index}].capture must enable locals or stack`)
     }
-    return {
+    const tracepoint = {
       tracepointId: `tracepoint-${index + 1}`,
       methodKey: requiredText(point.methodKey, `tracepoints[${index}].methodKey`),
       line: integerInRange(point.line, `tracepoints[${index}].line`, 1, Number.MAX_SAFE_INTEGER),
-      maxHits,
-      captureOnHits,
+      maxObservedHits,
+      maxCapturedHits,
+      captureOnMatchedHits,
       capture: {
         locals,
         stack,
@@ -421,6 +433,32 @@ function jdwpPlanRequest(input, now, createId) {
           capture.fieldPaths ?? [], `tracepoints[${index}].capture.fieldPaths`, 128, true),
       },
     }
+    if (point.condition !== undefined) {
+      const condition = point.condition
+      if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
+        throw new TypeError(`tracepoints[${index}].condition must be an object`)
+      }
+      const expectedType = requiredText(
+        condition.expectedType, `tracepoints[${index}].condition.expectedType`)
+      if (!["STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL"]
+        .includes(expectedType)) {
+        throw new TypeError(`tracepoints[${index}].condition.expectedType is unsupported`)
+      }
+      tracepoint.condition = {
+        localName: requiredText(
+          condition.localName, `tracepoints[${index}].condition.localName`),
+        fieldPath: distinctTextArray(
+          condition.fieldPath ?? [], `tracepoints[${index}].condition.fieldPath`, 8, true),
+        operator: condition.operator ?? "EQUALS",
+        expectedType,
+        expectedValue: expectedType === "NULL" ? null : requiredText(
+          condition.expectedValue, `tracepoints[${index}].condition.expectedValue`),
+      }
+      if (tracepoint.condition.operator !== "EQUALS") {
+        throw new TypeError(`tracepoints[${index}].condition.operator must be EQUALS`)
+      }
+    }
+    return tracepoint
   })
   return {
     planId: requiredText(createId("jdwp-plan"), "generated jdwp planId"),
@@ -430,7 +468,21 @@ function jdwpPlanRequest(input, now, createId) {
       idleTimeoutMillis: 120_000,
     },
     rationale: requiredText(input.rationale, "rationale"),
+    intent: investigationIntent(input),
     requestedAt: timestamp(now),
+  }
+}
+
+function investigationIntent(input) {
+  const rationale = requiredText(input.rationale, "rationale")
+  return {
+    questionToAnswer: requiredText(
+      input.questionToAnswer ?? rationale, "questionToAnswer"),
+    hypothesis: requiredText(input.hypothesis ?? rationale, "hypothesis"),
+    basedOnEvidenceIds: distinctTextArray(
+      input.basedOnEvidenceIds ?? [], "basedOnEvidenceIds", 20, true),
+    expectedObservations: distinctTextArray(
+      input.expectedObservations ?? [rationale], "expectedObservations", 20, false),
   }
 }
 

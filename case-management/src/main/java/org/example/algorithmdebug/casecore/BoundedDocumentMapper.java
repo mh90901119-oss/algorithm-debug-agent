@@ -56,7 +56,7 @@ public final class BoundedDocumentMapper {
 
     <T> T readYaml(byte[] content, Class<T> type) {
         if (content == null || type == null) {
-            throw new IllegalArgumentException("content 和 type 不能为空");
+            throw new IllegalArgumentException("content and type must not be null");
         }
         try {
             ensureWithinLimit(content.length);
@@ -64,7 +64,7 @@ public final class BoundedDocumentMapper {
         } catch (WorkspaceException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
-            throw new WorkspaceException("解析内置 YAML Workspace 文档失败", failure);
+            throw new WorkspaceException("Failed to parse built-in YAML Workspace document", failure);
         }
     }
 
@@ -103,7 +103,7 @@ public final class BoundedDocumentMapper {
     /** 从独立的大型 Artifact 通道流式读取 JSON；不适用于面向 LLM 的单次读取。 */
     public <T> T readJsonArtifact(Path path, Class<T> type) {
         if (path == null || type == null) {
-            throw new IllegalArgumentException("path 和 type 不能为空");
+            throw new IllegalArgumentException("path and type must not be null");
         }
         try {
             long size = Files.size(path);
@@ -115,14 +115,14 @@ public final class BoundedDocumentMapper {
         } catch (WorkspaceException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
-            throw new WorkspaceException("读取大型 JSON Artifact 失败: " + path, failure);
+            throw new WorkspaceException("Failed to read large JSON Artifact: " + path, failure);
         }
     }
 
     /** 将对象直接流式序列化到大型 Artifact 输出流，不创建完整 JSON 字节数组。 */
     void writeJsonArtifact(OutputStream output, Object value) throws IOException {
         if (output == null || value == null) {
-            throw new IllegalArgumentException("output 和 value 不能为空");
+            throw new IllegalArgumentException("output and value must not be null");
         }
         try (var generator = jsonMapper.getFactory().createGenerator(output)) {
             generator.disable(com.fasterxml.jackson.core.JsonGenerator.Feature.AUTO_CLOSE_TARGET);
@@ -132,18 +132,18 @@ public final class BoundedDocumentMapper {
 
     <T> T convertJsonTree(JsonNode tree, Class<T> type) {
         if (tree == null || type == null) {
-            throw new IllegalArgumentException("tree 和 type 不能为空");
+            throw new IllegalArgumentException("tree and type must not be null");
         }
         try {
             return jsonMapper.treeToValue(tree, type);
         } catch (IOException | RuntimeException failure) {
-            throw new WorkspaceException("转换 Workspace JSON 树失败", failure);
+            throw new WorkspaceException("Failed to convert Workspace JSON tree", failure);
         }
     }
 
     private static <T> T read(Path path, Class<T> type, ObjectMapper mapper, String format) {
         if (path == null || type == null) {
-            throw new IllegalArgumentException("path 和 type 不能为空");
+            throw new IllegalArgumentException("path and type must not be null");
         }
         try {
             byte[] content = readBounded(path);
@@ -151,13 +151,13 @@ public final class BoundedDocumentMapper {
         } catch (WorkspaceException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
-            throw new WorkspaceException("读取 " + format + " Workspace 文档失败: " + path, failure);
+            throw new WorkspaceException("Read " + format + " Workspace document failed: " + path, failure);
         }
     }
 
     private static byte[] write(Object value, ObjectMapper mapper, String format) {
         if (value == null) {
-            throw new IllegalArgumentException("value 不能为空");
+            throw new IllegalArgumentException("value must not be null");
         }
         try {
             byte[] content = mapper.writeValueAsBytes(value);
@@ -166,7 +166,7 @@ public final class BoundedDocumentMapper {
         } catch (WorkspaceException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
-            throw new WorkspaceException("序列化 " + format + " Workspace 文档失败", failure);
+            throw new WorkspaceException("Failed to serialize " + format + " Workspace document failed", failure);
         }
     }
 
@@ -190,14 +190,14 @@ public final class BoundedDocumentMapper {
     private static void ensureWithinLimit(long size) {
         if (size > MAX_DOCUMENT_BYTES) {
             throw new WorkspaceException(
-                    "Workspace 控制文档超过最大字节数 " + MAX_DOCUMENT_BYTES + ": " + size);
+                    "Workspace control document exceeds maximum byte count " + MAX_DOCUMENT_BYTES + ": " + size);
         }
     }
 
     private static void ensureArtifactWithinLimit(long size) {
         if (size > MAX_JSON_ARTIFACT_BYTES) {
             throw new WorkspaceException(
-                    "JSON Artifact 超过最大字节数 " + MAX_JSON_ARTIFACT_BYTES + ": " + size);
+                    "JSON Artifact exceeds maximum byte count " + MAX_JSON_ARTIFACT_BYTES + ": " + size);
         }
     }
 
@@ -232,7 +232,7 @@ public final class BoundedDocumentMapper {
         private void account(int count) throws IOException {
             readBytes += count;
             if (readBytes > maximumBytes) {
-                throw new IOException("JSON Artifact 流超过最大字节数 " + maximumBytes);
+                throw new IOException("JSON Artifact stream exceeds maximum byte count " + maximumBytes);
             }
         }
 

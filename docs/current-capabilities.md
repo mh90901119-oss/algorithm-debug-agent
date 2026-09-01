@@ -1,111 +1,61 @@
 # 当前能力与边界
 
-本文是当前实现事实，不包含未来占位模块。
+更新日期：2026-09-01。
 
-## 1. 当前产品链路
+## 已实现
 
-```mermaid
-flowchart LR
-    U["用户指定一个 Maven/JUnit UT"] --> O["OpenCode"]
-    O --> A["algorithm-debug Custom Agent"]
-    A --> L["LLM + Skill"]
-    L --> T["13 个 Custom Tools"]
-    T --> J["JS Adapter"]
-    J --> C["Java CLI / Core"]
-    C --> R["Maven / Javac AST / CodePath / JDWP"]
-    C --> W["Case Workspace"]
-    W --> T
-    T --> L
-    L --> O
-    E["Agent Eval Harness"] -. "外部回归，不参与普通回答" .-> O
-```
+### OpenCode 集成
 
-大模型负责规划和解释。Java 负责确定性执行、归档、预算、解析、校验和审计。没有回答后的在线二次模型审计。
+- 安装 `algorithm-debug` Agent、Skill、Command 和一个包含 13 个能力的 Custom Tool。
+- 不绑定 OpenCode 版本号；安装和检查阶段以 Agent、Skill、Tool 的实际发现结果判断兼容性。
+- JS Adapter 将 Tool 请求转换为 `bin/ada.cmd` 的 Java CLI 调用，并将结构化结果返回 LLM。
+- Case 内交互写入 `interaction.jsonl`；Java 日志写入 Case 的 `logs/`。
 
-## 2. 已实现
+### Case 与算法输入
 
-- 目标 UT 第一层唯一 `String` 字面量 `*input.json` 的确定性定位、256 MiB 有界复制、Artifact 注册和多轮变化比较。
+- 根据规范化的目标算法模块路径生成稳定 `projectId`。
+- 同一个目标 UT 可在同一 Case 下追加多个 `analysisId`、Run、Collection 和 Evidence。
+- 只分析 UT 第一层源码中的 `String` 字面量或可确定拼接值。
+- 唯一输入必须以 `input.json` 或 `input_.json` 结尾；零个、多个、无法解析或文件不存在时停止并返回结构化错误。
+- 首次捕获按原名复制到 `case/input/`，注册 Artifact；后续分析复用并校验内容未变化。
 
-- 任意合法 Maven/JUnit 单方法目标执行。
-- 通过、异常、断言失败和工具失败的通用结构化结果。
-- 顶层算法 JSON 差分捕获和 Gantt Artifact 归档。
-- 有界 Gantt summary/slice 读取，不做业务语义结论。
-- 当前源码 Javac AST Method Catalog，使用 Maven test classpath，区分编译器确定的 `DIRECT` 边和
-  源码内可解析的 `POLYMORPHIC_CANDIDATE` 边，无 whole-file Source SHA。
-- CodePath 精确方法 Plan、可选 Scope 调用分组、路径变体、独立运行、Raw/Derived/Validation/Evidence。
-- Agent 自有源码 JDWP Collector、精确 descriptor/line Plan、受限局部变量/字段/栈采集，以及
-  `captureOnHits` 稀疏命中快照。
-- 事件数、命中数、深度、字符串、集合项、字节数、超时和 idle timeout 预算。
-- 失败目标结构化指纹 `MATCHED/CHANGED/INCOMPARABLE`。
-- ArtifactReference 唯一文件完整性机制。
-- Case/Context/Analysis/Run/Collection/Evidence 追加归档。
-- OpenCode DFX 启用时生成可选的 Case-local `interaction.jsonl`；存在即严格校验，缺失不阻断 Java CLI Case。
-- Java CLI 在 `<case>/logs/agent-YYYY-MM-DD.log` 记录英文执行阶段；Case 尚未建立的 CLI 失败写入 `<dfxDirectory>/java/agent-bootstrap-YYYY-MM-DD.log`。日志不进入 ToolResponse，也不作为算法证据。
-- `case_audit` 和 Eval Workspace/Interaction/Expected-Actual 审计。
-- 13 个 OpenCode Custom Tools。
-- CodePath/JDWP Plan Tool 使用结构化意图参数；JS Adapter 生成 Plan/Tracepoint ID、时间和默认预算，
-  不要求大模型构造 Java 请求 JSON。
-- 幂等 OpenCode 安装，不绑定 OpenCode 版本号。
-- 9 个真实 OpenCode Smoke Case。
+### UT 与 Gantt
 
-## 3. OpenCode Tools
+- 通过 Maven Surefire 精确执行一个 JUnit 5 类或方法，捕获退出码、stdout、stderr 和 Surefire 结果。
+- 目标 UT 不存在时明确返回，不强行采集。
+- 目标代码异常与断言失败均保留结构化失败指纹；Agent/环境故障不会伪装成算法结论。
+- 成功的普通 Run 从 `resultJsonDirectory` 捕获本次新增或变化的 JSON，保留原名并注册 Artifact。
+- `${runDate}` 支持 `yyyy-MM-dd` 日期目录。
+- 动态采集 Run 不捕获 Gantt；成功 Gantt 不做跨运行 SHA 一致性门禁。
 
-| Tool | 作用 |
-|---|---|
-| `analysis_begin` | 初始化项目、Case、Context 和 Analysis |
-| `algorithm_input_capture` | 定位、复制并登记当前 Analysis 的唯一算法输入；失败时阻止运行和动态计划 |
-| `case_inspect` | 返回 Case 的有界近期摘要 |
-| `case_audit` | 审计 Case 文件、Artifact 和空目录 |
-| `gantt_inspect` | 有界读取已注册 Gantt 的结构 |
-| `run_test` | 运行目标 UT 并归档结果 |
-| `static_analyze` | 使用 Maven test classpath 构建当前源码 Method Catalog 和直接/多态候选边 |
-| `codepath_plan_create` | 根据结构化方法选择和可选 Scope 校验并归档 CodePath Plan |
-| `codepath_collect` | 独立重跑并采集方法路径 |
-| `jdwp_plan_create` | 根据结构化断点、投影和可选命中序号校验并归档 JDWP Plan |
-| `jdwp_collect` | 独立重跑并采集运行时状态 |
-| `artifact_read` | 按 Artifact ID 校验后有界读取 |
-| `analysis_complete` | 归档最终答案和证据引用 |
+### 静态和动态证据
 
-## 4. 当前模块
+- 静态分析生成当前源码的方法目录、调用边和未解析边界；产物有界，不声称等价于完整 Maven test classpath 的全程序调用图。
+- CodePath 采集方法进入/退出和调用路径，适合验证真实分派与执行顺序。
+- JDWP Collector 由 Agent 仓源码维护，支持断点、栈帧、局部变量、`this`、有界字段展开和结构化值路径条件。
+- JDWP 分别限制观察命中、条件匹配和实际快照数量，并报告预算或不可用原因。
+- 每个动态 Plan 必须携带 `questionToAnswer`、`hypothesis`、`expectedObservations` 和 `basedOnEvidenceIds`。
+- Raw Trace 只读保存；Normalizer、Validator 与 Evidence Engine 确定性地产生摘要、校验和证据充分性结果。
 
-18 个根 Maven 模块都有生产或测试职责。不存在空的 `agent-evaluation`、`explanation-reporter`、
-`gantt-analysis` 或 `knowledge-engine` 模块。Eval 是 Node 外部 Harness；Gantt 读取复用
-`debug-harness`；解释和可选领域知识属于 Skill/LLM。
+### Eval
 
-模块逐项说明见
-[模块详细设计](architecture/algorithm-debug-agent-module-detailed-design-v1.md)。
+- Harness 启动真实 OpenCode 会话并解析 JSONL Tool Trace。
+- 确定性 Grader 检查 Tool 顺序、调用次数、归档产物、Plan 意图、Evidence 谱系、条件化 JDWP 和答案模式。
+- Smoke Suite 共 10 个 Case，包括成功、输入异常、算法异常、断言失败、工具失败、静态分析、CodePath、JDWP、完整性和跨实体因果场景。
 
-## 5. 保留的 SHA
+## 有意保留的边界
 
-| 机制 | 必要性 |
-|---|---|
-| Artifact SHA-256 | 防止注册后文件被替换、截断或篡改 |
-| 算法输入字节比较 | 复用 Artifact SHA 判断同一 Case 相邻成功捕获的输入是否完全一致；不是源码、Gantt 或正确性门禁 |
-| 失败事实 SHA-256 | 判断动态失败是否仍是同一个目标失败 |
-| projectId/DFX/Eval 内部 Hash | 稳定 ID、脱敏和评测可比性，不是业务证据门禁 |
+- 当前只支持一个 UT 对应一个算法输入文件。
+- Java 工具不解释 Gantt 业务语义；`gantt_inspect` 只提供有界 JSON 结构访问，因果解释由 LLM 完成。
+- 静态分析基于源码与可解析类型信息；复杂反射、运行时生成和外部依赖分派可能标记为未解析，需要 CodePath/JDWP 验证。
+- JDWP 条件只能读取命中栈顶帧中可见的局部变量、`this` 及其有界实例字段路径；不执行任意表达式或方法。
+- 动态证据受超时、命中、对象深度、字节数和事件数预算约束。超限返回 `PARTIAL` 或明确原因，不伪装为完整证据。
+- 领域术语与策略知识不内置在 Java Collector。用户可通过 OpenCode 上下文或额外 Skill 提供知识，且必须与运行证据区分。
+- Agent 不修改目标算法生产源码，不接管生产调度决策。
 
-已删除 Plan、Raw Trace、Source、POM、成功 Gantt 和 Collector JAR 的重复 SHA 门禁。
+## 当前可靠性原则
 
-## 6. 当前没有
-
-- 多 Maven 模块跨 Reactor 完整调用图。
-- 在线生产设备连接或生产调度决策。
-- 自动修改算法生产源码进行插桩。
-- Gantt 业务语义硬编码、字段级业务 Diff 或根因规则引擎。
-- 自动生成目标算法领域知识库。
-- 独立 MCP Server。
-- 自动保证 LLM 结论绝对正确。
-
-## 7. 需要继续优化
-
-- 当前不递归追踪 helper、常量、属性、拼接表达式或一个 UT 多个算法输入；这些情况明确停止，由用户调整目标 UT。
-
-- 静态分析通过 Maven 解析当前模块 test classpath；解析失败、依赖缺失、生成代码未就绪或编译器仍有
-  unresolved diagnostics 时会保留稳定 warning 并将目录标记为 `INCOMPLETE`，不会伪装成完整调用图。
-- 多态候选仅覆盖当前源码目录中可由 Javac 元素模型确认的具体 override；反射、运行时代理和当前目录外
-  的实现仍需 CodePath 运行证据确认。
-- CodePath 使用动态 Byte Buddy Attach，未来 JDK 默认禁用动态 Agent 加载时需要发布策略调整。
-- 大型目标算法需要用真实规模 UT 测量 CodePath/JDWP 事件量、耗时和截断率，再调整默认预算。
-- OpenCode Tool/Plugin 接口是客户端适配层；迁移到其他 CLI 时复用 Java CLI 和 Workspace，
-  重新实现薄适配器与 DFX hook。
-- LLM 具有非确定性；新增问题类型时应增加 Eval Case，而不是增加业务硬编码分类。
+- Artifact SHA 只验证已注册文件读取期间未被替换或损坏，不证明业务结果相同。
+- 失败 UT 的动态复现只比较结构化失败指纹；`MATCHED` 可确认同类失败，`CHANGED/INCOMPARABLE` 仅作为线索。
+- 确认性结论必须通过 Evidence Sufficiency 检查；证据截断、冲突或缺失必须显式呈现。
+- Case 审计拒绝缺失控制文件、无效 Artifact、非法交互日志、未跟踪文件和空目录。

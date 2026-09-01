@@ -30,7 +30,7 @@ public final class MavenExecutableLocator {
             String pathSeparator,
             boolean windows) {
         if (environment == null || pathSeparator == null || pathSeparator.isEmpty()) {
-            throw new IllegalArgumentException("environment 和 pathSeparator 不能为空");
+            throw new IllegalArgumentException("environment and pathSeparator must not be null");
         }
         this.environment = supportedEnvironment(environment, windows);
         this.pathSeparator = pathSeparator;
@@ -45,7 +45,7 @@ public final class MavenExecutableLocator {
      */
     public Optional<Path> locate(Optional<Path> explicit) {
         if (explicit == null) {
-            throw new IllegalArgumentException("explicit 不能为空");
+            throw new IllegalArgumentException("explicit must not be null");
         }
         if (explicit.isPresent()) {
             return usable(explicit.orElseThrow());

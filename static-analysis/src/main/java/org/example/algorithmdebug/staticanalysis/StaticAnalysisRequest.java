@@ -23,7 +23,7 @@ public record StaticAnalysisRequest(
     public StaticAnalysisRequest {
         moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot").toAbsolutePath().normalize();
         if (!Files.isDirectory(moduleRoot) || Files.isSymbolicLink(moduleRoot)) {
-            throw new IllegalArgumentException("moduleRoot 必须是非符号链接目录");
+            throw new IllegalArgumentException("moduleRoot must be a directory without symbolic links");
         }
         targetTest = Objects.requireNonNull(targetTest, "targetTest");
         caseId = Objects.requireNonNull(caseId, "caseId");

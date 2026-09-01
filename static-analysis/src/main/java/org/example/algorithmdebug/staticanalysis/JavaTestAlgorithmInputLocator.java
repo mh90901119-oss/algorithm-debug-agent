@@ -103,7 +103,7 @@ public final class JavaTestAlgorithmInputLocator {
                 }
                 Tree initializer = variable.getInitializer();
                 if (initializer instanceof LiteralTree literal && literal.getValue() instanceof String value) {
-                    if (value.toLowerCase(Locale.ROOT).endsWith("input.json")) {
+                if (hasSupportedInputSuffix(value)) {
                         if (isDirectLiteral(sourceText, match.unit(), initializer, positions)) {
                             Candidate candidate = candidate(
                                     module, source, match.unit(), variable, value, positions);
@@ -112,8 +112,7 @@ public final class JavaTestAlgorithmInputLocator {
                             unsupported = true;
                         }
                     }
-                } else if (initializer != null
-                        && initializer.toString().toLowerCase(Locale.ROOT).contains("input.json")) {
+            } else if (initializer != null && hasSupportedInputSuffix(initializer.toString())) {
                     unsupported = true;
                 }
             }
@@ -124,7 +123,7 @@ public final class JavaTestAlgorithmInputLocator {
         }
         if (distinct.isEmpty()) {
             throw failure("ALGORITHM_INPUT_NOT_FOUND",
-                    "Target UT has no first-level String literal ending with input.json");
+                    "Target UT has no first-level String literal ending with input.json or input_.json");
         }
         if (distinct.size() != 1) {
             throw failure("MULTIPLE_ALGORITHM_INPUTS_UNSUPPORTED",
@@ -188,6 +187,11 @@ public final class JavaTestAlgorithmInputLocator {
             }
         }
         return false;
+    }
+
+    private static boolean hasSupportedInputSuffix(String value) {
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return normalized.endsWith("input.json") || normalized.endsWith("input_.json");
     }
 
     private static AlgorithmInputLocationException failure(String code, String message) {

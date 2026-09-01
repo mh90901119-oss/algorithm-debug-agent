@@ -37,7 +37,7 @@ final class CatalogJsonSizeBudget {
         attemptedUpperBoundBytes = upperBoundBytes;
         if (upperBoundBytes > maximumBytes) {
             throw new StaticAnalysisException(
-                    "maxCatalogBytes 无法容纳 MethodCatalog 固定字段和最坏 warning 预留: "
+                    "maxCatalogBytes cannot hold the MethodCatalog fixed fields and worst-case warning reserve: "
                             + maximumBytes);
         }
     }

@@ -25,23 +25,23 @@ public record ScheduleRunResult<T extends ScheduleResultSnapshot>(
         if (run == null || ganttOutcome == null || scheduleResult == null
                 || agentFailure == null || agentFailureCause == null
                 || changedOutputCandidates == null) {
-            throw new IllegalArgumentException("ScheduleRunResult 字段不能为空");
+            throw new IllegalArgumentException("ScheduleRunResult fields must not be null");
         }
         changedOutputCandidates = List.copyOf(changedOutputCandidates);
         if (ganttOutcome == GanttOutcome.PRESENT
                 && (scheduleResult.isEmpty() || agentFailure.isPresent()
                 || agentFailureCause.isPresent())) {
-            throw new IllegalArgumentException("PRESENT 必须包含调度结果且不能包含采集失败");
+            throw new IllegalArgumentException("PRESENT must contain a schedule result and must not contain a collection failure");
         }
         if (ganttOutcome == GanttOutcome.ABSENT
                 && (scheduleResult.isPresent() || agentFailure.isPresent()
                 || agentFailureCause.isPresent())) {
-            throw new IllegalArgumentException("ABSENT 不能包含调度结果或采集失败");
+            throw new IllegalArgumentException("ABSENT must not contain a schedule result or collection failure");
         }
         if (ganttOutcome == GanttOutcome.INCOMPLETE
                 && (scheduleResult.isPresent() || agentFailure.isEmpty()
                 || agentFailureCause.isEmpty())) {
-            throw new IllegalArgumentException("INCOMPLETE 必须包含采集失败/cause 且不能包含完整调度结果");
+            throw new IllegalArgumentException("INCOMPLETE must contain a collection failure/cause and must not contain a complete schedule result");
         }
     }
 
@@ -67,7 +67,7 @@ public record ScheduleRunResult<T extends ScheduleResultSnapshot>(
             Throwable cause,
             List<Path> changedOutputCandidates) {
         if (cause == null) {
-            throw new IllegalArgumentException("cause 不能为空");
+            throw new IllegalArgumentException("cause must not be null");
         }
         return new ScheduleRunResult<>(run, GanttOutcome.INCOMPLETE, Optional.empty(),
                 Optional.of(new AgentFailureDiagnostic(
@@ -80,13 +80,13 @@ public record ScheduleRunResult<T extends ScheduleResultSnapshot>(
     public static <T extends ScheduleResultSnapshot> ScheduleRunResult<T> incomplete(
             RunResult run, HarnessException failure, List<Path> changedOutputCandidates) {
         if (failure == null) {
-            throw new IllegalArgumentException("failure 不能为空");
+            throw new IllegalArgumentException("failure must not be null");
         }
         Throwable cause = failure.getCause() == null ? failure : failure.getCause();
         return incomplete(run, failure.code(), cause, changedOutputCandidates);
     }
 
     private static String safeMessage(String code) {
-        return "Gantt 采集未完成，详见 Agent 日志；错误码: " + code;
+        return "Gantt capture did not complete; see the Agent log. Error code: " + code;
     }
 }

@@ -28,11 +28,11 @@ public record LauncherSummary(
         if (testsFound < 0 || testsSucceeded < 0 || testsAborted < 0 || testsFailed < 0
                 || testsSucceeded + testsAborted + testsFailed > testsFound
                 || eventsWritten < 0 || bytesWritten < 0) {
-            throw new IllegalArgumentException("Launcher Summary 计数不能为负数");
+            throw new IllegalArgumentException("Launcher Summary counts must not be negative");
         }
         detail = Objects.requireNonNull(detail, "detail");
         if (detail.length() > 2_048) {
-            throw new IllegalArgumentException("Launcher Summary detail 超长");
+            throw new IllegalArgumentException("Launcher Summary detail is too long");
         }
     }
 
@@ -51,19 +51,19 @@ public record LauncherSummary(
         try {
             return LINE_PREFIX + JSON.writeValueAsString(this);
         } catch (JsonProcessingException failure) {
-            throw new IllegalStateException("无法序列化 Launcher Summary", failure);
+            throw new IllegalStateException("Failed to serialize the Launcher Summary", failure);
         }
     }
 
     /** 解析父进程捕获到的结构化行。 */
     public static LauncherSummary parseStructuredLine(String line) {
         if (line == null || !line.startsWith(LINE_PREFIX)) {
-            throw new IllegalArgumentException("不是 CodePath Launcher Summary");
+            throw new IllegalArgumentException("The value is not a CodePath Launcher Summary");
         }
         try {
             return JSON.readValue(line.substring(LINE_PREFIX.length()), LauncherSummary.class);
         } catch (JsonProcessingException failure) {
-            throw new IllegalArgumentException("CodePath Launcher Summary JSON 非法", failure);
+            throw new IllegalArgumentException("CodePath Launcher Summary JSON is invalid", failure);
         }
     }
 }

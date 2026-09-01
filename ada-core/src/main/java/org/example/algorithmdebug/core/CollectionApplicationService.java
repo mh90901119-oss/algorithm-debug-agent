@@ -102,7 +102,7 @@ public final class CollectionApplicationService {
                 || ids == null || clock == null || mavenExecutable == null
                 || javaExecutable == null || collector == null || classpaths == null
                 || executionLog == null) {
-            throw new IllegalArgumentException("CollectionApplicationService 渚濊禆涓嶈兘涓虹┖");
+            throw new IllegalArgumentException("CollectionApplicationService dependencies must not be null");
         }
         this.registrations = registrations; this.mapper = mapper; this.writer = writer;
         this.adapters = adapters; this.ids = ids; this.clock = clock;
@@ -121,14 +121,14 @@ public final class CollectionApplicationService {
                 "STARTED", "CodePath collection started");
         WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
         ProjectRegistration registration = registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "椤圭洰灏氭湭鐧昏"));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "Project is not registered"));
         CaseArchiveRepository archive = new CaseArchiveRepository(
                 layout.projectCases(projectId), mapper, writer);
         var plan = archive.requireCodePathPlan(caseId, planId);
         var context = archive.requireContext(caseId, plan.contextId());
         var caseManifest = archive.requireCase(caseId);
         if (!caseManifest.projectId().equals(projectId)) {
-            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 涓嶅睘浜庢寚瀹?Project");
+            throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
         }
         Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
         AdapterCatalog.AdapterSelection selection = adapters.select(
@@ -171,7 +171,7 @@ public final class CollectionApplicationService {
                     failure.processStarted(), failure.exitCode(), startedAt));
             baseline = incomparable(record, "Collection failed before baseline check: " + failure.code());
             archive.createCollectionBaselineCheck(baseline);
-            throw new CaseRunException(failure.code(), "CodePath 閲囬泦澶辫触", failure);
+            throw new CaseRunException(failure.code(), "CodePath collection failed", failure);
         } catch (CaseRunException failure) {
             archiveManifest(collectionRoot, failureManifest(
                     collectionRoot, record, plan, CollectionCompletion.AGENT_FAILED,
@@ -235,8 +235,6 @@ public final class CollectionApplicationService {
                 collectionId.value() + "-raw", "CODEPATH_RAW", "application/x-ndjson");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("derived/method-path.jsonl"),
                 collectionId.value() + "-trace", "METHOD_PATH_TRACE", "application/x-ndjson");
-        addArtifact(artifacts, caseRoot, collectionRoot.resolve("raw/gantt.json"),
-                collectionId.value() + "-gantt", "GANTT_RAW", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("validation/baseline-check.json"),
                 collectionId.value() + "-baseline", "COLLECTION_BASELINE", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("logs/stdout.log"),
@@ -259,7 +257,7 @@ public final class CollectionApplicationService {
         Path normalizedRoot = caseRoot.toAbsolutePath().normalize();
         Path normalized = path.toAbsolutePath().normalize();
         if (!normalized.startsWith(normalizedRoot) || Files.isSymbolicLink(normalized)) {
-            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "閲囬泦浜х墿璺緞闈炴硶");
+            throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "Collection artifact path is invalid");
         }
         try {
             artifacts.add(new ArtifactReference(
@@ -267,7 +265,7 @@ public final class CollectionApplicationService {
                     mediaType, existingSha(normalized).orElseThrow(), Files.size(normalized)));
         } catch (IOException failure) {
             throw new CaseRunException(
-                    "COLLECTION_ARTIFACT_INVALID", "鏃犳硶鎻忚堪閲囬泦浜х墿", failure);
+                    "COLLECTION_ARTIFACT_INVALID", "Failed to describe collection artifact", failure);
         }
     }
 
@@ -347,7 +345,7 @@ public final class CollectionApplicationService {
             }
             return Optional.of(HexFormat.of().formatHex(digest.digest()));
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缂哄皯 SHA-256", failure);
+            throw new IllegalStateException("JDK does not provide SHA-256", failure);
         } catch (IOException failure) {
             return Optional.empty();
         }
@@ -357,7 +355,7 @@ public final class CollectionApplicationService {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缂哄皯 SHA-256", failure);
+            throw new IllegalStateException("JDK does not provide SHA-256", failure);
         }
     }
 
@@ -393,13 +391,7 @@ public final class CollectionApplicationService {
         }
         try {
             if (completion == org.example.algorithmdebug.methodpath.CollectionCompletion.TARGET_FAILED) {
-                return checkTargetFailureBaseline(
-                        archive, record, captureContext, moduleRoot,
-                        result.request().collectionDirectory());
-            }
-            if (captureContext.isPresent()) {
-                capture(captureContext.orElseThrow(),
-                        result.request().collectionDirectory().resolve("raw/gantt.json"));
+                return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
             var reference = archive.findLatestCompletedRun(
                     record.caseId(), record.contextId(), record.analysisId());
@@ -413,7 +405,7 @@ public final class CollectionApplicationService {
                     "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
                     Optional.of(reference.orElseThrow().runId()), true,
-                    "Successful dynamic run; Gantt content is archived but is not an evidence gate",
+                    "Successful dynamic run; Gantt is not copied or used as an evidence gate",
                     clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "Dynamic result capture failed: "
@@ -423,35 +415,11 @@ public final class CollectionApplicationService {
     private CollectionBaselineCheck checkTargetFailureBaseline(
             CaseArchiveRepository archive,
             MethodPathCollectionRecord record,
-            Optional<CaptureContext> captureContext,
-            Path moduleRoot,
-            Path collectionRoot)
+            Path moduleRoot)
             throws WorkspaceException, HarnessException, SurefireDiagnosticException {
-        Optional<CapturedScheduleResult<?>> captured = captureChangedOutput(captureContext,
-                collectionRoot.resolve("raw/gantt.json"));
         return new TargetFailureBaselineEvaluator(clock).evaluate(
                 archive, TargetFailureBaselineEvaluator.Identity.from(record),
-                moduleRoot, captured);
-    }
-
-    private Optional<CapturedScheduleResult<?>> captureChangedOutput(
-            Optional<CaptureContext> context,
-            Path destination) throws HarnessException {
-        if (context.isEmpty()) return Optional.empty();
-        CaptureContext value = context.orElseThrow();
-        if (value.snapshotter().snapshot(value.source()).equals(value.before())) {
-            return Optional.empty();
-        }
-        return Optional.of(capture(value, destination));
-    }
-
-    private CapturedScheduleResult<?> capture(CaptureContext context, Path destination)
-            throws HarnessException {
-        OutputDirectorySnapshot after = new OutputStabilityWaiter(
-                context.snapshotter(), OutputStabilityPolicy.defaults())
-                .awaitStable(context.before(), context.source());
-        return new ScheduleResultCapture<JsonResultSnapshot>(context.snapshotter(), 64L * 1024 * 1024)
-                .capture(context.before(), after, new JsonResultParser(), destination);
+                moduleRoot, Optional.empty());
     }
 
     private CollectionBaselineCheck incomparable(MethodPathCollectionRecord record, String summary) {

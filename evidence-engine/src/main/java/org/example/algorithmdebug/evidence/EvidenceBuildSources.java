@@ -33,13 +33,13 @@ public record EvidenceBuildSources(
                 || contextRecord == null || contextArtifact == null
                 || runFingerprint == null || runFingerprintArtifact == null
                 || collections == null || collections.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("Evidence build sources 不能为空");
+            throw new IllegalArgumentException("Evidence build sources must not be null");
         }
         if (runFingerprint.isPresent() != runFingerprintArtifact.isPresent()) {
-            throw new IllegalArgumentException("Run fingerprint 与 Artifact 必须同时存在");
+            throw new IllegalArgumentException("Run fingerprint and Artifact must both be present");
         }
         if (collections.size() > 32) {
-            throw new IllegalArgumentException("Collection sources 不能超过 32 项");
+            throw new IllegalArgumentException("Collection sources must not exceed 32 entries");
         }
         collections = List.copyOf(collections);
     }

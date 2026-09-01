@@ -20,7 +20,7 @@ public record CodePathLauncherSummary(
                 || testsFound < 0 || testsSucceeded < 0 || testsAborted < 0 || testsFailed < 0
                 || testsSucceeded + testsAborted + testsFailed > testsFound
                 || eventsWritten < 0 || bytesWritten < 0 || detail == null || detail.length() > 2_048) {
-            throw new IllegalArgumentException("CodePath Launcher Summary 非法");
+            throw new IllegalArgumentException("CodePath Launcher Summary is invalid");
         }
     }
 

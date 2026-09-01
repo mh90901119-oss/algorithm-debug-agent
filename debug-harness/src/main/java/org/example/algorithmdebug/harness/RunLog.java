@@ -19,14 +19,14 @@ public record RunLog(
     /** 校验路径和计数不变量。 */
     public RunLog {
         if (path == null || !path.isAbsolute()) {
-            throw new IllegalArgumentException("path 必须是绝对路径");
+            throw new IllegalArgumentException("path must be an absolute path");
         }
         path = path.normalize();
         if (capturedBytes < 0 || discardedBytes < 0) {
-            throw new IllegalArgumentException("日志字节计数不能为负数");
+            throw new IllegalArgumentException("Log byte counts must not be negative");
         }
         if (truncated != (discardedBytes > 0)) {
-            throw new IllegalArgumentException("truncated 必须与 discardedBytes 保持一致");
+            throw new IllegalArgumentException("truncated must match discardedBytes");
         }
     }
 }

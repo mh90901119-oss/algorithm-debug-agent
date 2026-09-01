@@ -25,7 +25,7 @@ public record CollectionValidation(
     /** 校验身份、状态、Finding 和可覆盖维度。 */
     public CollectionValidation {
         if (!SchemaVersions.COLLECTION_VALIDATION.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 CollectionValidation schemaVersion");
+            throw new IllegalArgumentException("Unsupported CollectionValidation schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -36,11 +36,11 @@ public record CollectionValidation(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         collectorType = ContractChecks.requireBoundedText(collectorType, "collectorType", 32, false);
         if (!List.of("CODEPATH", "JDWP").contains(collectorType)) {
-            throw new IllegalArgumentException("collectorType 非法");
+            throw new IllegalArgumentException("collectorType is invalid");
         }
         status = ContractChecks.requireNonNull(status, "status");
         findings = ContractChecks.immutableList(findings, "findings");
-        if (findings.size() > 128) throw new IllegalArgumentException("findings 不能超过 128 项");
+        if (findings.size() > 128) throw new IllegalArgumentException("findings must not exceed 128 entries");
         coveredDimensions = EvidenceBuildRequest.immutableDimensions(
                 coveredDimensions, "coveredDimensions");
         summaryArtifact = ContractChecks.requireNonNull(summaryArtifact, "summaryArtifact");
@@ -48,12 +48,12 @@ public record CollectionValidation(
         EvidenceDimension dynamic = "CODEPATH".equals(collectorType)
                 ? EvidenceDimension.METHOD_PATH : EvidenceDimension.RUNTIME_STATE;
         if (status != EvidenceValidationStatus.VALID && coveredDimensions.contains(dynamic)) {
-            throw new IllegalArgumentException("非 VALID Collection 不能覆盖动态证据维度");
+            throw new IllegalArgumentException("A non-VALID Collection must not cover dynamic evidence dimensions");
         }
         if (status == EvidenceValidationStatus.VALID
                 && (!coveredDimensions.contains(EvidenceDimension.VALIDATION)
                 || !coveredDimensions.contains(dynamic) || summaryArtifact.isEmpty())) {
-            throw new IllegalArgumentException("VALID Collection 必须覆盖验证和对应动态维度");
+            throw new IllegalArgumentException("VALID Collection must cover validation and the corresponding dynamic dimension");
         }
     }
 }

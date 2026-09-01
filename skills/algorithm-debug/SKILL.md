@@ -1,189 +1,154 @@
 ---
 name: algorithm-debug
-description: Use when a user asks about a specified Java/Maven algorithm UT, including its exception, assertion failure, Gantt result, runtime call path, internal state, or changes across analysis rounds.
+description: Use when a user asks about one specified Java/Maven algorithm UT, its exception or assertion failure, its Gantt result, runtime call path, internal state, or causal behavior across analysis rounds.
 metadata:
   owner: algorithm-debug-agent
-  version: "2.3"
+  version: "2.4"
 ---
 
 # Algorithm Debug Workflow
 
-Debug one specified Java/Maven UT through immutable, bounded evidence. Let the model decide which
-evidence is needed; let the Agent execute, validate, archive, and reference deterministic facts.
+Use immutable, bounded evidence to debug one specified Java/Maven algorithm UT. The LLM chooses the
+next evidence gap and explains causality. The Agent executes, validates, archives, and references
+deterministic facts. Do not encode target-algorithm business semantics in tools.
 
-## Case and analysis rules
+## Case identity
 
-- Treat one user problem about one target UT as one Case. Start a different Case for a different UT
-  unless the user explicitly requests a cross-UT comparison.
-- Call `algorithm-debug_analysis_begin` for every new question. Pass the prior `caseId` for a
-  follow-up; omit it for a new Case.
-- Immediately call `algorithm-debug_algorithm_input_capture` for the returned `caseId` and
-  `analysisId`. This deterministic step inspects only first-level declarations in the target test
-  method and accepts exactly one direct `String` or `java.lang.String` literal whose value ends with
-  `input.json`. If the Tool reports a missing target, no input, a computed expression, multiple
-  inputs, a missing file, or an invalid file, report that boundary and stop before running or
-  collecting the UT. Never choose one input on the user's behalf.
-- Read the returned `ALGORITHM_INPUT` Artifact through bounded `artifact_read` calls before deciding
-  the first execution or collection action. The input is planning context and immutable evidence;
-  its SHA proves only exact input bytes. If comparison is `CHANGED`, do not reuse older
-  input-dependent Run or Collection evidence as current evidence and run the UT again. If comparison
-  is `INCOMPARABLE`, state that historical input reuse is unsafe.
-- Reuse the current Context by default. Use `contextMode=new` only when the user or model already
-  knows that the target source, UT, or input was deliberately changed. Never scan the repository or
-  infer a new Context only because Gantt output changed.
-- For a new analysis that depends on the current execution, run the target UT once before choosing
-  Static, CodePath, or JDWP evidence. A follow-up that is already answered by immutable Case evidence
-  does not require another run.
-- If the user's question is whether a named target UT exists and current source discovery confirms it
-  does not, report that fact and stop. Do not manufacture a Run, Gantt expectation, CodePath
-  collection, or JDWP collection for a non-existent target.
-- Do not ask the user for a Workspace, registry path, or `projectId`; tools prepare them automatically.
-- Do not ask the user for an algorithm result directory and do not infer one from the question.
-  `analysis_begin.resultJsonDirectory` reports the installed Agent setting. When present,
-  continue normally and never pass the path back to `run_test`.
+- One problem about one target UT is one Case. Pass the prior `caseId` for a follow-up; omit it for a
+  new Case. Use a new Context only after a deliberate source, UT, or input change.
+- Call `algorithm-debug_analysis_begin` for every user question. If the named UT does not exist,
+  report that fact and stop.
+- Do not ask for Workspace, `projectId`, result directory, or tool JAR paths. Installed settings and
+  project registration resolve them.
+- Reuse immutable Runs, Collections, Evidence, and Artifacts. A new analysis adds an `analysisId`; it
+  never overwrites prior evidence.
 
-## Evidence loop
+## 1. Capture and read the algorithm input
 
-| Evidence gap | Tool action |
-|---|---|
-| Current Analysis input is not captured | Run `algorithm-debug_algorithm_input_capture` and inspect its Artifact |
-| Current execution facts are missing | Run `algorithm-debug_run_test` once |
-| Prior facts may already answer | Use `algorithm-debug_case_inspect` |
-| Relevant methods are unknown | Use `algorithm-debug_static_analyze` |
-| Runtime call path is needed | Create a CodePath plan, then collect it |
-| Named method state is needed | Create a JDWP plan, then collect it |
-| Raw detail is needed | Read a bounded Artifact excerpt by ID |
+Immediately call `algorithm-debug_algorithm_input_capture`. It accepts exactly one first-level
+`String` literal in the target test method whose value ends case-insensitively with `input.json` or
+`input_.json`. Zero, multiple, computed, missing, invalid, or changed inputs are hard boundaries:
+report the concrete Tool result and stop before running or collecting.
 
-First decide only whether the Agent/tool chain executed correctly. If it did, every target UT result
-is evidence, regardless of process exit code or test success. Do not force target failures into a
-closed classifier. Instead, read the facts actually present: executed-test identity/count, exit code,
-timeout/termination, exception type/message/cause chain/stack, assertion expected/actual values,
-stdout/stderr excerpts, and captured JSON artifacts. Missing input, algorithm exceptions, assertion
-failures, setup errors, process termination, and previously unseen failure forms are examples, not an
-exhaustive enum.
+The Agent archives the input once per Case at `input/<original-file-name>`. Later analyses verify and
+reuse that Artifact; they do not create renamed copies. Read the registered `ALGORITHM_INPUT`
+Artifact through bounded `artifact_read` calls before choosing runtime evidence. Its SHA verifies
+exact bytes and reuse only; it is not a business conclusion.
 
-If the Agent/tool chain itself failed, report that boundary and do not invent a target diagnosis. If
-the target UT failed, explain the earliest causally sufficient target fact and stop analyzing later
-algorithm stages that could not have executed. A failed UT may still contain a valid JSON result; a
-successful UT may produce no JSON when no result directory is configured or no JSON file changed.
-When a result directory is configured but no JSON is captured, state only that no JSON was captured
-from the configured directory. Do not declare the path incorrect and do not scan or guess another path.
-When `analysis_begin.resultJsonDirectory` is absent and the user's question requires an algorithm JSON
-result, record that configuration as `MISSING_EVIDENCE`; do not repeatedly ask for a path during the
-analysis. UT logs, Surefire facts, Static, CodePath and JDWP remain available when applicable.
+Extract only question-relevant planning facts from the JSON input, such as involved entities,
+remaining steps, candidate resources, flags, limits, and relationships. Treat these as input facts,
+not proof that a runtime branch executed.
 
-After each evidence step, ask whether the user's concrete question is already answerable. If yes,
-complete the analysis. If not, choose only the single most valuable next action: a bounded artifact
-excerpt, Static analysis, CodePath collection, or JDWP collection. Unknown failure shapes remain raw
-evidence for model analysis; never convert them into `OTHER` or reject them because they were not
-predefined.
+## 2. Execute the target UT once
 
-Dynamic collection is not a general confidence booster. Do not use CodePath or JDWP when a failed
-Run already provides the exception class, normalized message, first relevant business stack frame,
-and current source is sufficient to explain the throw condition. Use dynamic evidence only when the
-user explicitly asks for an actual runtime path/state, or when one named runtime value would
-distinguish two concrete source-level explanations that remain plausible. For an assertion failure,
-expected/actual values plus the relevant current source are normally sufficient. Do not reread the
-same Artifact range, and do not delegate this workflow to a general subagent or task.
+Call `algorithm-debug_run_test` when the current analysis needs fresh execution. First distinguish an
+Agent/tool failure from a target UT result. A target exception, assertion failure, timeout, or nonzero
+exit is still valid evidence; an Agent/tool failure is not a target diagnosis.
 
-Do not repeat a failed collection with the same effective plan. Retry only when the Tool error names
-a correctable Plan input and the next Plan materially changes that input; otherwise preserve the
-failure diagnostics, report the tool boundary, and stop collecting.
+Read the actual Run facts: executed test identity/count, exit code, termination, exception chain,
+first relevant target stack frame, assertion expected/actual values, stdout/stderr excerpts, and
+registered JSON Artifacts. Do not force failures into a closed enum. Explain the earliest causally
+sufficient failure and do not analyze algorithm stages that could not have executed.
 
-Static analysis is a bounded planning index, not runtime proof. Read `DIRECT` call edges as compiler-
-resolved source relationships. Read `POLYMORPHIC_CANDIDATE` edges only as concrete implementations
-that may receive an interface or abstract dispatch; use CodePath to determine which candidate ran.
-An incomplete Method Catalog narrows planning but cannot prove that no other route exists.
+One uninstrumented Run captures at most the newly produced Gantt JSON using its original file name.
+CodePath and JDWP reruns never copy Gantt output and never use Gantt SHA as a gate. For a large Gantt,
+use `gantt_inspect` summary and bounded slices; the Tool exposes structure and values, while the LLM
+owns semantic interpretation.
 
-For CodePath, select exact `class + method + descriptor` entries from the current Method Catalog.
-Do not target a fixed number of methods. Start with the smallest set that can answer the current path
-question, and expand only when the resulting summary identifies a specific unresolved boundary. When
-a method represents a repeated operation relevant to the question, set it as `scopeMethodKey`; use
-the resulting invocation groups and `PATH_n` variants to compare repeated executions without assuming
-that repeated calls imply repeated bugs. An incomplete scope invocation is missing evidence, not a
-complete path.
+## 3. Build causal hypotheses from input and source
 
-For JDWP, select current source lines only after identifying a concrete missing runtime value. Use
-`captureOnHits` when a method repeats and only particular invocation ordinals are needed; omit it when
-every hit within `maxHits` is relevant. Sparse selection still creates a brief breakpoint suspension
-on skipped hits, but skips stack/local/object expansion. Prefer small projections and choose additional
-plans only when the previous validated evidence exposes a new, materially different state question.
+Call `algorithm-debug_static_analyze` when relevant current methods and dispatch boundaries are not
+already known. The Method Catalog is a bounded planning index, not runtime proof:
 
-The Plan Tools accept structured fields. Supply method keys, optional CodePath scope, tracepoint lines,
-optional sparse hit ordinals, capture intent, and a rationale. The OpenCode Adapter creates plan and
-tracepoint identities, request time, and default budgets. If plan creation reports a validation or
-compilation error, correct only the named structured field; do not construct private Java request
-documents or search the Agent workspace for examples.
+- `DIRECT` is a compiler-resolved source relationship.
+- `POLYMORPHIC_CANDIDATE` is a possible implementation, not proof that it ran.
+- An incomplete catalog narrows planning but cannot prove route absence.
 
-For a passing target UT, use dynamic evidence only when collection and validation completed without
-an unusable truncation; Gantt content is archived independently and is not a baseline gate. For a
-failing target UT, `MATCHED` means the collection rerun reproduced the same structured target
-failure. `CHANGED` means it reproduced a different failure, not that the collector caused the change.
-Do not use that runtime state to confirm the original failure.
+Combine the user-observed Gantt symptom, algorithm-input facts, current source conditions, and prior
+validated evidence. Write one or more explicit causal hypotheses from upstream causes to the visible
+result. Do not assume the entity named by the user caused its own symptom; inspect competing entities,
+earlier steps, shared resources, configuration flags, and policy dispatch when the input/source make
+them plausible.
 
-Read summaries before raw artifacts. For `artifact_read`, pass an `artifactIds` value returned by a
-Run or Collection summary; a Case-relative path is provenance, not an Artifact ID. Request only the
-excerpt needed for the current evidence gap; never load all logs, traces, or historical artifacts.
-For a large registered Gantt, call `gantt_inspect` with `summary` first and then bounded `slice`
-requests. It returns JSON structure and raw fields only; the LLM remains responsible for semantics.
+For every dynamic Plan supply:
 
-## Optional planning knowledge
+- `questionToAnswer`: one concrete unresolved question.
+- `hypothesis`: the explanation to verify or reject.
+- `basedOnEvidenceIds`: only prior Evidence IDs from the same Case.
+- `expectedObservations`: observations that distinguish the hypothesis.
 
-Domain reference files are planning hints, not evidence. When the target is the Wafer Demo, use
-`references/wafer-demo-v1.md` when it is available or explicitly attached. Use it only to narrow the
-first candidate methods and variables. Always run `static_analyze` to resolve current Method Catalog
-keys, descriptors and current source lines before creating CodePath or JDWP plans. Confirm every
-runtime statement through validated Collection/Evidence; never promote reference content directly to
-`CONFIRMED_FACT`.
+The Agent rejects missing or cross-Case Evidence lineage. Do not create a Plan merely to increase
+confidence; create it only when its expected observation can change the conclusion.
 
-## DFX interaction log boundary
+## 4. Collect only discriminating runtime evidence
 
-Each successfully created Case may contain `interaction.jsonl` in its Case root. This diagnostic file
-shows the actual Custom Tool and internal Java CLI order for manual troubleshooting. It may contain
-safe Run, Plan, Collection, Evidence, and Artifact IDs that help locate the corresponding immutable
-Case artifacts.
+Choose one smallest next action after each evidence step. There is no fixed number of rounds,
+methods, tracepoints, or collections.
 
-The DFX file must not be used as Evidence, must not be cited by `analysis_complete`, and must not be
-promoted to any confirmed conclusion. It does not contain hidden reasoning, full questions, answers,
-Tool payloads, stdout/stderr, algorithm JSON, or JDWP values. If Case creation fails before a Case ID
-exists, the installation's configured DFX directory may contain an `unassigned` fallback log.
+Use CodePath when the unresolved question is which implementation or path executed. Select exact
+`class#method(descriptor)` keys from the current Method Catalog. Use `scopeMethodKey` for a repeated
+operation whose invocation groups/path variants matter. Expand only across a specific unresolved
+boundary exposed by the previous validated summary.
 
-## JDWP evidence rules
+Use JDWP when the unresolved question is a named runtime value at a current executable source line.
+CodePath and JDWP are independent; do not require one before the other. Prefer focused `localNames`
+and `fieldPaths` projections.
 
-- JDWP and CodePath are independent evidence tools. Do not run CodePath first unless the question
-  actually needs a runtime call path before selecting JDWP locations.
-- Build JDWP plans only from current Method Catalog anchors. Preserve exact class, method,
-  descriptor and current source line; never guess overloaded methods by name alone.
-- Prefer `localNames` and `fieldPaths` for focused collection. Empty projections mean bounded default
-  capture, not unlimited object expansion.
-- Treat missing descriptors, code indexes, Collector capability mismatch, truncation, absent local
-  variable tables, or a changed target-failure fingerprint as `MISSING_EVIDENCE`; do not promote such data to a
-  confirmed root cause.
-- Use normalized Summary/Evidence for reasoning. Read bounded Raw Trace excerpts only when the
-  normalized evidence cannot answer the concrete question.
+For a repeated method, use a generic `condition` when an entity or state can identify relevant
+invocations:
 
-## Answer contract
+- `localName`: top-frame local/parameter name or `this`.
+- `fieldPath`: at most eight instance fields; no getter, method, array index, or collection scan.
+- `operator`: `EQUALS`.
+- `expectedType`: `STRING`, `LONG`, `DOUBLE`, `BOOLEAN`, `CHAR`, `ENUM`, or `NULL`.
+- `expectedValue`: typed scalar text, omitted only for `NULL`.
 
-Label material claims as `CONFIRMED_FACT`, `VALIDATOR_CONCLUSION`, `SOURCE_INFERENCE`,
-`LLM_HYPOTHESIS`, or `MISSING_EVIDENCE`. Cite relevant Case, Context, Analysis, Run, Collection,
-Evidence, and Artifact IDs near each claim.
+Set `maxObservedHits` high enough to encounter the relevant invocation but no higher than needed.
+Set `maxCapturedHits` to the small number of full snapshots required. Use
+`captureOnMatchedHits` only when specific matched ordinals matter. Non-matching observations briefly
+suspend only the event thread and skip full stack/local/object expansion.
 
-Before replying, call `algorithm-debug_analysis_complete` with the current Case, Context and Analysis
-IDs plus the final answer, graded conclusions, explicit evidence references, and remaining evidence
-gaps. The Tool adds the strict `AnalysisResult` schema version and completion time. Never store hidden
-reasoning in the result. If completion rejects the payload, use its concrete message and the current
-Case digest to correct the same payload once. Never open another Analysis or submit a dummy result to
-work around a completion error; after one failed correction, report the completion failure honestly.
-Before `analysis_complete`, call `case_audit`. Do not silently ignore missing controls, invalid
-Artifact registrations, integrity mismatches, invalid interaction JSONL, or empty Case directories.
+Read the Collector/Agent Manifest counters as separate facts: `observed` is breakpoint encounters,
+`matched` passed the condition, `captured` produced full snapshots, and `unavailable` means the
+condition could not be evaluated. Read bounded unavailable-reason details before changing a Plan.
+Never treat zero captured snapshots as proof that the expected state never existed when the Plan was
+truncated or condition evaluation was unavailable.
 
-For completion fields, use only target Run IDs from `recentRuns`, Collection IDs from
-`recentCollections`, Evidence IDs from `recentEvidence`, and registered Artifact IDs from
-`artifactIds`. Collection responses label their internal execution provenance as
-`collectorExecutionRunId`; never put that value in `referencedRunIds`.
+After a Collection, read normalized Summary/Evidence first. Read Raw Trace only for a specific detail
+missing from normalized evidence. Do not repeat an effective Plan unchanged. A later Plan must answer
+a materially different question or change a field named by deterministic validation.
 
-## analysis_complete 证据引用契约
+## Evidence sufficiency and iteration
 
-- CONFIRMED_FACT、VALIDATOR_CONCLUSION 和 SOURCE_INFERENCE 的 evidenceReferenceIds 必须至少包含一个已注册 Evidence、Artifact 或事实 ID。
-- LLM_HYPOTHESIS 和 MISSING_EVIDENCE 可以使用空引用，但必须在 statement 中明确不确定性或缺失内容。
-- 提交前逐条检查 conclusions；不得依赖 CLI 拒绝后再读取 Agent 源码修正。
+After every step ask whether the concrete user question is answerable. If yes, stop collecting. If
+not, state the missing causal link and choose one next action: bounded Artifact read, Static analysis,
+CodePath, or JDWP. New evidence may reject the current hypothesis or reveal another entity; create a
+new incremental Plan that cites the prior Evidence instead of restarting the Case.
+
+For a failing target UT, dynamic evidence confirms the same failure only when its structured failure
+fingerprint is `MATCHED`. `CHANGED` or `INCOMPARABLE` is a clue or missing evidence, not confirmation.
+For a passing UT, Gantt remains an independently archived result and is not compared as a collection
+baseline.
+
+Classify claims as `CONFIRMED_FACT`, `VALIDATOR_CONCLUSION`, `SOURCE_INFERENCE`,
+`LLM_HYPOTHESIS`, or `MISSING_EVIDENCE`. Confirmed, validator, and source-inference claims require
+explicit Evidence references. Input facts and source control-flow implications must not be promoted
+to observed runtime facts.
+
+## DFX boundary
+
+`interaction.jsonl` and the Case execution log show Tool/CLI/stage order and safe identifiers for
+manual troubleshooting. They must not be used as Evidence or cited as a root-cause fact. They contain
+no hidden reasoning. If Case creation fails, the configured DFX directory may contain an `unassigned`
+fallback log.
+
+## Completion
+
+Call `algorithm-debug_case_audit`. Do not ignore missing controls, invalid Artifact registrations,
+integrity mismatches, malformed interaction JSONL, or empty Case directories.
+
+Then call `algorithm-debug_analysis_complete` once with the current Case/Context/Analysis IDs, final
+answer, graded conclusions, referenced target Run IDs, Collection IDs, Evidence IDs, Artifact IDs,
+and remaining evidence gaps. `collectorExecutionRunId` is collector provenance and must not be placed
+in `referencedRunIds`. If completion rejects the payload, correct the same Analysis payload once;
+never open a replacement Analysis or submit a dummy result.

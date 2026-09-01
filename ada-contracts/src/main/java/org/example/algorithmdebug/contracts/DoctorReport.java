@@ -23,17 +23,17 @@ public record DoctorReport(
     public DoctorReport {
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.DOCTOR_REPORT.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 DoctorReport schemaVersion: " + schemaVersion);
+            throw new IllegalArgumentException("Unsupported DoctorReport schemaVersion: " + schemaVersion);
         }
         overallStatus = ContractChecks.requireNonNull(overallStatus, "overallStatus");
         checks = ContractChecks.immutableList(checks, "checks");
         if (checks.size() > MAX_CHECKS) {
-            throw new IllegalArgumentException("checks 数量不能超过 " + MAX_CHECKS);
+            throw new IllegalArgumentException("checks count must not exceed " + MAX_CHECKS);
         }
         DoctorStatus derivedStatus = deriveStatus(checks);
         if (overallStatus != derivedStatus) {
             throw new IllegalArgumentException(
-                    "overallStatus 与 checks 不一致，期望 " + derivedStatus + "，实际 " + overallStatus);
+                    "overallStatus does not match checks, expected " + derivedStatus + ", actual " + overallStatus);
         }
     }
 

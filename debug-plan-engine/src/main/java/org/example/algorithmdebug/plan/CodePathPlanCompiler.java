@@ -20,16 +20,16 @@ public final class CodePathPlanCompiler {
     public CodePathCollectionPlan compile(MethodCatalog catalog, CodePathPlanRequest request) {
         String rationale = request.rationale().strip();
         if (rationale.isEmpty() || rationale.length() > 4_096) {
-            throw new PlanCompilationException("CodePath 计划 rationale 必须在 1 到 4096 字符之间");
+            throw new PlanCompilationException("The CodePath plan rationale must contain between 1 and 4096 characters");
         }
         if (request.selectedMethodKeys().isEmpty() || request.selectedMethodKeys().size() > 50) {
-            throw new PlanCompilationException("CodePath 计划必须选择 1 到 50 个方法");
+            throw new PlanCompilationException("The CodePath plan must select between 1 and 50 methods");
         }
         Map<String, MethodCatalogEntry> entries = catalog.entries().stream().collect(
                 Collectors.toMap(MethodCatalogEntry::methodKey, Function.identity()));
         LinkedHashSet<String> uniqueKeys = new LinkedHashSet<>(request.selectedMethodKeys());
         if (uniqueKeys.size() != request.selectedMethodKeys().size()) {
-            throw new PlanCompilationException("selectedMethodKeys 不得重复");
+            throw new PlanCompilationException("selectedMethodKeys must not be duplicated");
         }
         Optional<String> scopeMethodKey = request.scopeMethodKey().map(String::strip);
         if (scopeMethodKey.isPresent() && scopeMethodKey.orElseThrow().isEmpty()) {
@@ -46,7 +46,7 @@ public final class CodePathPlanCompiler {
         List<MethodSelector> selectors = uniqueKeys.stream().map(key -> {
             MethodCatalogEntry entry = entries.get(key);
             if (entry == null) {
-                throw new PlanCompilationException("选择的方法不属于当前 MethodCatalog: " + key);
+                throw new PlanCompilationException("The selected method does not belong to the current MethodCatalog: " + key);
             }
             var anchor = entry.sourceAnchor();
             return new MethodSelector(key, anchor.className(), anchor.methodName(), anchor.descriptor());
@@ -55,6 +55,6 @@ public final class CodePathPlanCompiler {
                 SchemaVersions.CODEPATH_COLLECTION_PLAN,
                 request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
                 catalog.targetTest(), selectors, scopeMethodKey,
-                request.budget(), rationale, request.requestedAt());
+                request.budget(), rationale, request.intent(), request.requestedAt());
     }
 }

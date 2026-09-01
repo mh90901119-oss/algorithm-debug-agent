@@ -22,11 +22,11 @@ public record TargetFailureDiagnostic(
 
     private static String checkedText(String value, String field) {
         if (value == null) {
-            throw new IllegalArgumentException(field + " 不能为 null");
+            throw new IllegalArgumentException(field + " must not be null");
         }
         String normalized = value.strip();
         if (normalized.length() > 8192) {
-            throw new IllegalArgumentException(field + " 长度不能超过 8192");
+            throw new IllegalArgumentException(field + " length must not exceed 8192");
         }
         return normalized;
     }

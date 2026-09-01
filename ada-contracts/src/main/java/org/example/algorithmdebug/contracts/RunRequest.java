@@ -35,7 +35,7 @@ public record RunRequest(
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         executionMode = ContractChecks.requireNonBlank(executionMode, "executionMode");
         if (!"UNINSTRUMENTED".equals(executionMode)) {
-            throw new IllegalArgumentException("当前仅支持 UNINSTRUMENTED 执行模式");
+            throw new IllegalArgumentException("Only UNINSTRUMENTED execution mode is supported");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }

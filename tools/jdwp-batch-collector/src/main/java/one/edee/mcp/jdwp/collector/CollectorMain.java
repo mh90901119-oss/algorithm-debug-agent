@@ -18,7 +18,7 @@ import java.util.Map;
  * Agent-owned JDWP Collector 命令行入口；不依赖 Spring、MCP 或目标算法代码。
  */
 public final class CollectorMain {
-    static final String COLLECTOR_VERSION = "2.0.0";
+    static final String COLLECTOR_VERSION = "3.0.0";
     static final String RAW_TRACE_SCHEMA_VERSION = "2.0";
 
     private CollectorMain() {
@@ -67,7 +67,9 @@ public final class CollectorMain {
             "code-index",
             "typed-values",
             "bounded-projection",
-            "tracepoint-request-group"
+            "tracepoint-request-group",
+            "conditional-frame-values",
+            "separate-hit-counters"
         ));
         data.put("sessionId", plan.sessionId);
         data.put("target", Map.of("host", plan.target.host, "port", plan.target.port));
@@ -77,7 +79,11 @@ public final class CollectorMain {
         data.put("finishedAt", Instant.now().toString());
         data.put("completionReason", result.completionReason());
         data.put("eventCount", result.eventCount());
-        data.put("hitCounts", result.hitCounts());
+        data.put("observedHitCounts", result.observedHitCounts());
+        data.put("matchedHitCounts", result.matchedHitCounts());
+        data.put("capturedHitCounts", result.capturedHitCounts());
+        data.put("conditionUnavailableCounts", result.conditionUnavailableCounts());
+        data.put("conditionUnavailableReasons", result.conditionUnavailableReasons());
         data.put("installedLocations", result.installedLocations());
         mapper.writeValue(manifestTemporary.toFile(), data);
         Files.move(

@@ -28,7 +28,7 @@ public final class CaseSessionService {
             OpaqueIdGenerator ids,
             Clock clock) {
         if (repository == null || digestReader == null || ids == null || clock == null) {
-            throw new IllegalArgumentException("CaseSessionService 依赖不能为空");
+            throw new IllegalArgumentException("CaseSessionService dependencies must not be null");
         }
         this.repository = repository;
         this.digestReader = digestReader;
@@ -39,7 +39,7 @@ public final class CaseSessionService {
     /** 新建或续接 Case，并为本次问题创建 Analysis；该方法不访问目标 Workspace。 */
     public CaseOpenResult open(CaseSessionRequest request) {
         if (request == null) {
-            throw new IllegalArgumentException("request 不能为空");
+            throw new IllegalArgumentException("request must not be null");
         }
         Instant now = clock.instant();
         boolean caseCreated = request.caseId().isEmpty();
@@ -62,7 +62,7 @@ public final class CaseSessionService {
                     SchemaVersions.CONTEXT_RECORD, caseId, contextId, now));
         } else {
             contextId = previous.orElseThrow(() -> new WorkspaceException(
-                    "CONTEXT_NOT_FOUND", "已有 Case 没有可复用的 Context"));
+                    "CONTEXT_NOT_FOUND", "The existing Case has no reusable Context"));
         }
 
         AnalysisId analysisId = ids.newAnalysisId();
@@ -77,13 +77,13 @@ public final class CaseSessionService {
 
     private static void validateExistingCase(CaseManifest manifest, CaseSessionRequest request) {
         if (!manifest.projectId().equals(request.projectId())) {
-            throw new WorkspaceException("CASE_PROJECT_MISMATCH", "已有 Case 属于另一个项目");
+            throw new WorkspaceException("CASE_PROJECT_MISMATCH", "The existing Case belongs to another project");
         }
         if (!manifest.targetTest().equals(request.targetTest())) {
-            throw new WorkspaceException("CASE_TARGET_TEST_MISMATCH", "已有 Case 属于另一个目标 UT");
+            throw new WorkspaceException("CASE_TARGET_TEST_MISMATCH", "The existing Case belongs to another target UT");
         }
         if (!manifest.adapterId().equals(request.adapterId())) {
-            throw new WorkspaceException("CASE_ADAPTER_MISMATCH", "已有 Case 属于另一个 Adapter");
+            throw new WorkspaceException("CASE_ADAPTER_MISMATCH", "The existing Case belongs to another Adapter");
         }
     }
 }

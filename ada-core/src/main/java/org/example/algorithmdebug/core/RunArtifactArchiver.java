@@ -27,7 +27,7 @@ public final class RunArtifactArchiver {
         Path root = normalizedRoot(runRoot);
         Path file = artifact == null ? null : artifact.toAbsolutePath().normalize();
         if (file == null || !file.startsWith(root) || file.equals(root)) {
-            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact 不在 Run 目录内");
+            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact is outside the Run directory");
         }
         return describe(root, file, artifactId, artifactType, mediaType, maximumBytes);
     }
@@ -44,16 +44,16 @@ public final class RunArtifactArchiver {
         Path root = normalizedRoot(runRoot);
         if (source == null || relativeDestination == null || relativeDestination.isAbsolute()
                 || relativeDestination.normalize().startsWith("..")) {
-            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact 复制路径非法");
+            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact copy path is invalid");
         }
         Path from = source.toAbsolutePath().normalize();
         Path destination = root.resolve(relativeDestination).normalize();
         if (!destination.startsWith(root) || destination.equals(root)) {
-            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact 复制路径越界");
+            throw new CaseRunException("RUN_ARTIFACT_PATH_INVALID", "Artifact copy path escapes its root");
         }
         if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS)) {
             throw new CaseRunException(
-                    "RUN_ARTIFACT_ALREADY_EXISTS", "拒绝覆盖已有 Run Artifact");
+                    "RUN_ARTIFACT_ALREADY_EXISTS", "Refusing to overwrite an existing Run Artifact");
         }
         requireReadable(from, maximumBytes);
         try {
@@ -66,7 +66,7 @@ public final class RunArtifactArchiver {
                 } catch (AtomicMoveNotSupportedException failure) {
                     throw new CaseRunException(
                             "RUN_ARTIFACT_ATOMIC_MOVE_UNSUPPORTED",
-                            "文件系统不支持安全提交 Artifact", failure);
+                            "File system does not support safe Artifact commit", failure);
                 }
             } finally {
                 Files.deleteIfExists(temporary);
@@ -74,7 +74,7 @@ public final class RunArtifactArchiver {
         } catch (CaseRunException failure) {
             throw failure;
         } catch (IOException | SecurityException failure) {
-            throw new CaseRunException("RUN_ARTIFACT_WRITE_FAILED", "无法归档 Run Artifact", failure);
+            throw new CaseRunException("RUN_ARTIFACT_WRITE_FAILED", "Failed to archive Run Artifact", failure);
         }
         return describe(root, destination, artifactId, artifactType, mediaType, maximumBytes);
     }
@@ -92,28 +92,28 @@ public final class RunArtifactArchiver {
                     artifactId, artifactType, portable(root.relativize(file)), mediaType,
                     sha256(file), size);
         } catch (IOException | SecurityException failure) {
-            throw new CaseRunException("RUN_ARTIFACT_READ_FAILED", "无法校验 Run Artifact", failure);
+            throw new CaseRunException("RUN_ARTIFACT_READ_FAILED", "Failed to verify Run Artifact", failure);
         }
     }
 
     private static long requireReadable(Path file, long maximumBytes) {
         if (maximumBytes <= 0 || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
-            throw new CaseRunException("RUN_ARTIFACT_INVALID", "Artifact 不是可读普通文件");
+            throw new CaseRunException("RUN_ARTIFACT_INVALID", "Artifact is not a readable regular file");
         }
         try {
             long size = Files.size(file);
             if (size > maximumBytes) {
-                throw new CaseRunException("RUN_ARTIFACT_TOO_LARGE", "Artifact 超过大小预算");
+                throw new CaseRunException("RUN_ARTIFACT_TOO_LARGE", "Artifact exceeds the size budget");
             }
             return size;
         } catch (IOException | SecurityException failure) {
-            throw new CaseRunException("RUN_ARTIFACT_READ_FAILED", "无法读取 Artifact 状态", failure);
+            throw new CaseRunException("RUN_ARTIFACT_READ_FAILED", "Failed to read Artifact status", failure);
         }
     }
 
     private static Path normalizedRoot(Path root) {
         if (root == null) {
-            throw new IllegalArgumentException("runRoot 不能为空");
+            throw new IllegalArgumentException("runRoot must not be null");
         }
         return root.toAbsolutePath().normalize();
     }
@@ -123,7 +123,7 @@ public final class RunArtifactArchiver {
         try {
             digest = MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("当前 JVM 不支持 SHA-256", failure);
+            throw new IllegalStateException("current JVM does not support SHA-256", failure);
         }
         try (InputStream input = Files.newInputStream(file)) {
             byte[] buffer = new byte[8_192];

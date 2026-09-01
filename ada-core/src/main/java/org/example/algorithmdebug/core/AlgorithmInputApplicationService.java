@@ -118,18 +118,39 @@ public final class AlgorithmInputApplicationService {
                         "ALGORITHM_INPUT_TOO_LARGE", "Algorithm input exceeds the 256 MiB limit");
             }
 
-            Path copied = archive.copyAlgorithmInput(caseId, analysisId, source, MAX_INPUT_BYTES);
-            executionLog.info(logContext, "AlgorithmInputApplicationService",
-                    "ALGORITHM_INPUT_COPIED", "ARCHIVED", "Algorithm input was copied into the Case");
-            ArtifactReference artifact = new CaseArtifactAccess(layout.projectCases(projectId)).describe(
-                    caseId, analysisId.value() + "-algorithm-input", "ALGORITHM_INPUT",
-                    "application/json", copied);
-            PreviousComparison previous = comparePrevious(
-                    archive, caseId, analysisId, artifact.sha256());
-            executionLog.info(logContext, "AlgorithmInputApplicationService",
-                    "ALGORITHM_INPUT_COMPARED", previous.comparison().name(),
-                    "Algorithm input consistency was evaluated");
-            archive.registerArtifact(caseId, artifact, clock.instant());
+            Optional<AlgorithmInputCapture> previousCapture =
+                    archive.findLatestAlgorithmInputCaptureBefore(caseId, analysisId);
+            ArtifactReference artifact;
+            AlgorithmInputComparison comparison;
+            Optional<AnalysisId> previousAnalysisId;
+            CaseArtifactAccess artifactAccess = new CaseArtifactAccess(layout.projectCases(projectId));
+            if (previousCapture.isPresent()) {
+                AlgorithmInputCapture verified = archive.requireVerifiedAlgorithmInputCapture(
+                        caseId, previousCapture.orElseThrow().analysisId());
+                Path archivedInput = artifactAccess.requireVerifiedArtifact(caseId, verified.artifact());
+                if (!verified.fileName().equals(source.getFileName().toString())
+                        || !sameContent(source, archivedInput)) {
+                    throw new CaseRunException(
+                            "ALGORITHM_INPUT_CHANGED",
+                            "Algorithm input changed after the Case input was captured");
+                }
+                artifact = verified.artifact();
+                comparison = AlgorithmInputComparison.UNCHANGED;
+                previousAnalysisId = Optional.of(verified.analysisId());
+                executionLog.info(logContext, "AlgorithmInputApplicationService",
+                        "ALGORITHM_INPUT_REUSED", "REUSED",
+                        "Case algorithm input Artifact was verified and reused");
+            } else {
+                Path copied = archive.copyAlgorithmInput(caseId, analysisId, source, MAX_INPUT_BYTES);
+                executionLog.info(logContext, "AlgorithmInputApplicationService",
+                        "ALGORITHM_INPUT_COPIED", "ARCHIVED",
+                        "Algorithm input was copied into the Case");
+                artifact = artifactAccess.describe(
+                        caseId, "algorithm-input", "ALGORITHM_INPUT", "application/json", copied);
+                archive.registerArtifact(caseId, artifact, clock.instant());
+                comparison = AlgorithmInputComparison.FIRST_CAPTURE;
+                previousAnalysisId = Optional.empty();
+            }
 
             Path normalizedSource = location.sourceFile().toAbsolutePath().normalize();
             if (!normalizedSource.startsWith(moduleRoot)) {
@@ -141,7 +162,7 @@ public final class AlgorithmInputApplicationService {
                     manifest.targetTest(), location.variableName(),
                     moduleRoot.relativize(normalizedSource).toString().replace('\\', '/'),
                     location.sourceLine(), location.pathKind(), source.getFileName().toString(),
-                    previous.comparison(), previous.analysisId(), artifact, clock.instant());
+                    comparison, previousAnalysisId, artifact, clock.instant());
             archive.createAlgorithmInputCapture(capture);
             executionLog.info(logContext, "AlgorithmInputApplicationService",
                     "ALGORITHM_INPUT_CAPTURE_COMPLETED", "COMPLETED", "Algorithm input capture completed");
@@ -153,28 +174,12 @@ public final class AlgorithmInputApplicationService {
         }
     }
 
-    private static PreviousComparison comparePrevious(
-            CaseArchiveRepository archive, CaseId caseId, AnalysisId analysisId, String currentSha) {
-        Optional<AlgorithmInputCapture> previous = archive.findLatestAlgorithmInputCaptureBefore(
-                caseId, analysisId);
-        if (previous.isEmpty()) {
-            return new PreviousComparison(
-                    AlgorithmInputComparison.FIRST_CAPTURE, Optional.empty());
-        }
-        AnalysisId previousId = previous.orElseThrow().analysisId();
-        if (currentSha == null) {
-            return new PreviousComparison(
-                    AlgorithmInputComparison.INCOMPARABLE, Optional.of(previousId));
-        }
+    private static boolean sameContent(Path source, Path archived) {
         try {
-            AlgorithmInputCapture verified = archive.requireVerifiedAlgorithmInputCapture(
-                    caseId, previousId);
-            AlgorithmInputComparison comparison = currentSha.equals(verified.artifact().sha256())
-                    ? AlgorithmInputComparison.UNCHANGED : AlgorithmInputComparison.CHANGED;
-            return new PreviousComparison(comparison, Optional.of(previousId));
-        } catch (WorkspaceException failure) {
-            return new PreviousComparison(
-                    AlgorithmInputComparison.INCOMPARABLE, Optional.of(previousId));
+            return Files.mismatch(source, archived) == -1L;
+        } catch (IOException | SecurityException failure) {
+            throw new CaseRunException(
+                    "ALGORITHM_INPUT_COPY_FAILED", "Unable to compare algorithm input", failure);
         }
     }
 
@@ -187,6 +192,4 @@ public final class AlgorithmInputApplicationService {
         }
     }
 
-    private record PreviousComparison(
-            AlgorithmInputComparison comparison, Optional<AnalysisId> analysisId) { }
 }

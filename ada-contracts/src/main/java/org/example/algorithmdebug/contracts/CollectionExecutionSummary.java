@@ -34,14 +34,14 @@ public record CollectionExecutionSummary(
         artifactRelativePaths = ContractChecks.immutableBoundedStrings(
                 artifactRelativePaths, "artifactRelativePaths", 1_024);
         if (artifactRelativePaths.size() > 32) {
-            throw new IllegalArgumentException("artifactRelativePaths 不能超过 32 项");
+            throw new IllegalArgumentException("artifactRelativePaths must not exceed 32 entries");
         }
         artifactRelativePaths.forEach(path ->
                 ContractChecks.requirePortableRelativePath(path, "artifactRelativePath"));
         artifactIds = artifactIds == null ? List.of()
                 : ContractChecks.immutableNonBlankStrings(artifactIds, "artifactIds");
         if (artifactIds.size() > 32) {
-            throw new IllegalArgumentException("artifactIds 不能超过 32 项");
+            throw new IllegalArgumentException("artifactIds must not exceed 32 entries");
         }
         artifactIds.forEach(id -> ContractChecks.requireOpaqueId(id, "artifactId"));
     }

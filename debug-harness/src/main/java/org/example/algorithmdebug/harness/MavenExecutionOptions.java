@@ -21,21 +21,21 @@ public record MavenExecutionOptions(
     public MavenExecutionOptions {
         mavenExecutable = requireAbsolute(mavenExecutable, "mavenExecutable");
         if (!Files.isRegularFile(mavenExecutable)) {
-            throw new IllegalArgumentException("mavenExecutable 必须是已存在的普通文件: " + mavenExecutable);
+            throw new IllegalArgumentException("mavenExecutable must be an existing regular file: " + mavenExecutable);
         }
         stdoutLog = requireAbsolute(stdoutLog, "stdoutLog");
         stderrLog = requireAbsolute(stderrLog, "stderrLog");
         if (stdoutLog.equals(stderrLog)) {
-            throw new IllegalArgumentException("stdoutLog 与 stderrLog 必须是不同文件");
+            throw new IllegalArgumentException("stdoutLog and stderrLog must be different files");
         }
         if (processLimits == null) {
-            throw new IllegalArgumentException("processLimits 不能为空");
+            throw new IllegalArgumentException("processLimits must not be null");
         }
     }
 
     private static Path requireAbsolute(Path value, String field) {
         if (value == null || !value.isAbsolute()) {
-            throw new IllegalArgumentException(field + " 必须是绝对路径");
+            throw new IllegalArgumentException(field + " must be an absolute path");
         }
         return value.normalize();
     }

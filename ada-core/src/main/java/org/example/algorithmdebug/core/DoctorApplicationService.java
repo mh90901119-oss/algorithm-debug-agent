@@ -53,14 +53,14 @@ public final class DoctorApplicationService {
             WorkspaceManifestRepository manifestRepository,
             List<ToolDoctorProbe> toolProbes) {
         if (javaFeatureSupplier == null || mavenLocator == null || manifestRepository == null) {
-            throw new IllegalArgumentException("DoctorApplicationService 依赖不能为空");
+            throw new IllegalArgumentException("DoctorApplicationService dependencies must not be null");
         }
         this.javaFeatureSupplier = javaFeatureSupplier;
         this.mavenLocator = mavenLocator;
         this.manifestRepository = manifestRepository;
         this.toolProbes = List.copyOf(java.util.Objects.requireNonNull(toolProbes, "toolProbes"));
         if (this.toolProbes.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("toolProbes 不能包含 null");
+            throw new IllegalArgumentException("toolProbes must not contain null");
         }
     }
 
@@ -77,7 +77,7 @@ public final class DoctorApplicationService {
             Optional<Path> module,
             Optional<Path> explicitMaven) {
         if (workspace == null || module == null || explicitMaven == null) {
-            throw new IllegalArgumentException("workspace、module 和 explicitMaven 不能为空");
+            throw new IllegalArgumentException("workspace, module and explicitMaven must not be null");
         }
         Optional<WorkspaceLayout> layout = safeWorkspaceLayout(workspace);
         List<DoctorCheck> checks = new ArrayList<>(5 + toolProbes.size());
@@ -97,9 +97,9 @@ public final class DoctorApplicationService {
             DoctorCheck check = probe.check();
             return check != null
                     ? check
-                    : fail("tool", "TOOL_DIAGNOSTIC_FAILED", "工具诊断未返回结果");
+                    : fail("tool", "TOOL_DIAGNOSTIC_FAILED", "Tool diagnostic returned no result");
         } catch (RuntimeException failure) {
-            return fail("tool", "TOOL_DIAGNOSTIC_FAILED", "工具诊断执行失败");
+            return fail("tool", "TOOL_DIAGNOSTIC_FAILED", "Tool diagnostic execution failed");
         }
     }
 
@@ -111,9 +111,9 @@ public final class DoctorApplicationService {
             }
             return fail(
                     "java", "JAVA_VERSION_UNSUPPORTED",
-                    "需要 Java " + REQUIRED_JAVA_FEATURE + "，当前 feature " + feature);
+                    "Requires Java " + REQUIRED_JAVA_FEATURE + ", current feature " + feature);
         } catch (RuntimeException failure) {
-            return fail("java", "JAVA_VERSION_UNSUPPORTED", "无法读取 Java feature 版本");
+            return fail("java", "JAVA_VERSION_UNSUPPORTED", "Failed to read the Java feature version");
         }
     }
 
@@ -121,28 +121,28 @@ public final class DoctorApplicationService {
         try {
             Optional<Path> located = mavenLocator.locate(explicitMaven);
             return located.isPresent()
-                    ? pass("maven", "MAVEN_OK", "已找到 Maven 可执行文件")
-                    : fail("maven", "MAVEN_NOT_FOUND", "未找到 Maven 可执行文件");
+                    ? pass("maven", "MAVEN_OK", "Maven executable was found")
+                    : fail("maven", "MAVEN_NOT_FOUND", "Maven executable was not found");
         } catch (RuntimeException failure) {
-            return fail("maven", "MAVEN_NOT_FOUND", "Maven 可执行文件检查失败");
+            return fail("maven", "MAVEN_NOT_FOUND", "Maven executable check failed");
         }
     }
 
     private DoctorCheck checkWorkspaceManifest(Optional<WorkspaceLayout> layout) {
         if (layout.isEmpty()) {
-            return fail("workspace", "WORKSPACE_PATH_INVALID", "Workspace 路径无效");
+            return fail("workspace", "WORKSPACE_PATH_INVALID", "Workspace path is invalid");
         }
         try {
             manifestRepository.require(layout.orElseThrow());
-            return pass("workspace", "WORKSPACE_OK", "Workspace Manifest 有效");
+            return pass("workspace", "WORKSPACE_OK", "Workspace Manifest is valid");
         } catch (RuntimeException failure) {
-            return fail("workspace", "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest 缺失或无效");
+            return fail("workspace", "WORKSPACE_MANIFEST_INVALID", "Workspace Manifest is missing or invalid");
         }
     }
 
     private DoctorCheck checkWorkspaceWrite(Optional<WorkspaceLayout> layout) {
         if (layout.isEmpty()) {
-            return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace 路径不可写");
+            return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace path is not writable");
         }
         Path probe = null;
         try {
@@ -153,9 +153,9 @@ public final class DoctorApplicationService {
             probe = Files.createTempFile(workspaceRoot, ".doctor-", ".tmp");
             Files.delete(probe);
             probe = null;
-            return pass("workspace-write", "WORKSPACE_WRITE_OK", "Workspace 写入探针通过");
+            return pass("workspace-write", "WORKSPACE_WRITE_OK", "Workspace write probe passed");
         } catch (IOException | SecurityException failure) {
-            return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace 写入探针失败");
+            return fail("workspace-write", "WORKSPACE_WRITE_FAILED", "Workspace write probe failed");
         } finally {
             if (probe != null) {
                 try {
@@ -169,17 +169,17 @@ public final class DoctorApplicationService {
 
     private DoctorCheck checkProject(Optional<Path> module) {
         if (module.isEmpty()) {
-            return pass("project", "PROJECT_NOT_REQUESTED", "未请求项目检查");
+            return pass("project", "PROJECT_NOT_REQUESTED", "Project check was not requested");
         }
         try {
             Path canonical = module.orElseThrow().toRealPath();
             if (!Files.isDirectory(canonical, LinkOption.NOFOLLOW_LINKS)
                     || !Files.isRegularFile(canonical.resolve("pom.xml"), LinkOption.NOFOLLOW_LINKS)) {
-                return fail("project", "PROJECT_NOT_MAVEN", "项目不是可独立运行的 Maven 模块");
+                return fail("project", "PROJECT_NOT_MAVEN", "Project is not a standalone Maven module");
             }
-            return pass("project", "PROJECT_OK", "项目 Maven 模块检查通过");
+            return pass("project", "PROJECT_OK", "Project Maven module check passed");
         } catch (IOException | SecurityException failure) {
-            return fail("project", "PROJECT_NOT_MAVEN", "项目 Maven 模块检查失败");
+            return fail("project", "PROJECT_NOT_MAVEN", "Project Maven module check failed");
         }
     }
 

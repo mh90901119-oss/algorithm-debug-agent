@@ -34,6 +34,8 @@ class JdwpCollectionJsonTest {
 
         byte[] json = MAPPER.writeValueAsBytes(plan);
         assertEquals(plan, MAPPER.readValue(json, JdwpCollectionPlan.class));
+        assertEquals("Which state selected the branch?",
+                MAPPER.readTree(json).path("intent").path("questionToAnswer").asText());
 
         JsonNode schema = schema("jdwp-plan-v2.schema.json");
         assertFalse(schema.path("additionalProperties").asBoolean(true));
@@ -96,7 +98,8 @@ class JdwpCollectionJsonTest {
                 "jdwp-batch-collector", "1.0.0",
                 JdwpCollectionCompletion.SUCCESS, "vm_death", JdwpCollectionStage.BASELINE_CHECKED,
                 true, true, 0, 0, false, false, 1, 128,
-                Map.of("point-1", 1), Map.of("point-1", 1),
+                Map.of("point-1", 2), Map.of("point-1", 1), Map.of("point-1", 1),
+                Map.of("point-1", 0), Map.of("point-1", 1),
                 Optional.empty(), "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log",
@@ -121,7 +124,11 @@ class JdwpCollectionJsonTest {
                 List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
                         JdwpCaptureSpec.stackOnly())),
-                JdwpCollectionBudget.defaults(), "采集关键决策位置",
+                JdwpCollectionBudget.defaults(), "Capture the key decision state",
+                new InvestigationIntent(
+                        "Which state selected the branch?",
+                        "The selected flag may enable this branch",
+                        List.of(), List.of("Runtime flag value")),
                 Instant.parse("2026-08-18T00:00:00Z"));
     }
 

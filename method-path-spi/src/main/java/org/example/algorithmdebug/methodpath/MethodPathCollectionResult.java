@@ -21,12 +21,12 @@ public record MethodPathCollectionResult(
                 || !manifest.collectionId().equals(request.collectionId())
                 || !manifest.planId().equals(request.plan().planId())
                 || !manifest.runId().equals(request.runId())) {
-            throw new IllegalArgumentException("MethodPath 结果身份与请求不一致");
+            throw new IllegalArgumentException("MethodPath result identity does not match the request");
         }
     }
     private static Path inside(Path root, Path value, String name) {
         Path checked = Objects.requireNonNull(value, name).toAbsolutePath().normalize();
-        if (!checked.startsWith(root) || checked.equals(root)) throw new IllegalArgumentException(name + " 越过 Collection 目录");
+        if (!checked.startsWith(root) || checked.equals(root)) throw new IllegalArgumentException(name + " escapes the Collection directory");
         return checked;
     }
 }

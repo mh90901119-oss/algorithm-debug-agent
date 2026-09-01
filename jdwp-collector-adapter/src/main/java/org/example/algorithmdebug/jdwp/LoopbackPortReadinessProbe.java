@@ -25,11 +25,11 @@ final class LoopbackPortReadinessProbe {
     ProcessOutputWaitResult await(ManagedProcess target, int port, Duration timeout)
             throws HarnessException {
         if (target == null) {
-            throw new IllegalArgumentException("target 不能为空");
+            throw new IllegalArgumentException("target must not be null");
         }
         JdwpTargetCommandFactory.requirePort(port);
         if (timeout == null || timeout.isZero() || timeout.isNegative()) {
-            throw new IllegalArgumentException("JDWP 就绪等待 timeout 必须为正数");
+            throw new IllegalArgumentException("The JDWP readiness timeout must be positive");
         }
         long timeoutNanos = timeout.toNanos();
         long now = System.nanoTime();
@@ -49,7 +49,7 @@ final class LoopbackPortReadinessProbe {
             } catch (InterruptedException failure) {
                 Thread.currentThread().interrupt();
                 throw new HarnessException(
-                        "HARNESS_RUN_INTERRUPTED", "等待 JDWP loopback 端口就绪时被中断", failure);
+                        "HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for the JDWP loopback port to become ready", failure);
             }
         }
         return ProcessOutputWaitResult.PROCESS_EXITED;
@@ -64,7 +64,7 @@ final class LoopbackPortReadinessProbe {
             return true;
         } catch (IOException failure) {
             throw new HarnessException(
-                    "HARNESS_LOOPBACK_PROBE_FAILED", "无法探测 JDWP loopback 端口是否就绪", failure);
+                    "HARNESS_LOOPBACK_PROBE_FAILED", "Failed to probe JDWP loopback port readiness", failure);
         }
     }
 }

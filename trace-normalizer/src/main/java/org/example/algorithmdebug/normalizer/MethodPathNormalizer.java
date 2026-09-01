@@ -31,7 +31,7 @@ public final class MethodPathNormalizer {
     }
 
     MethodPathNormalizer(BoundedJsonlReader reader) {
-        if (reader == null) throw new IllegalArgumentException("reader 不能为空");
+        if (reader == null) throw new IllegalArgumentException("reader must not be null");
         this.reader = reader;
     }
 
@@ -42,7 +42,7 @@ public final class MethodPathNormalizer {
      * @return 通用摘要或结构化失败
      */
     public NormalizationResult<MethodPathSummary> normalize(CodePathNormalizationInput input) {
-        if (input == null) throw new IllegalArgumentException("input 不能为空");
+        if (input == null) throw new IllegalArgumentException("input must not be null");
         Accumulator accumulator = null;
         try {
             accumulator = new Accumulator(input);
@@ -145,7 +145,7 @@ public final class MethodPathNormalizer {
             if (!exactMethods.containsKey(exact)) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "CodePath 事件不属于计划方法", line, null);
+                        "The CodePath event does not belong to a planned method", line, null);
             }
             return exact;
         }
@@ -416,7 +416,7 @@ public final class MethodPathNormalizer {
             if (reserved > maximum) {
                 throw new NormalizationException(
                         "NORMALIZE_OUTPUT_BUDGET_TOO_SMALL",
-                        "摘要预算不足以保存证据身份和原始产物引用", 0, null);
+                        "The summary budget cannot preserve the evidence identity and raw artifact references", 0, null);
             }
         }
 
@@ -509,7 +509,7 @@ public final class MethodPathNormalizer {
             String descriptor = requiredText(json, "descriptor", 512, line);
             if (eventId < 1 || depth < 0 || depth > 1_000_000
                     || !("METHOD_ENTER".equals(eventType) || "METHOD_EXIT".equals(eventType))) {
-                throw invalid(line, "CodePath 事件字段非法");
+                throw invalid(line, "The CodePath event fields are invalid");
             }
             return new Event(eventId, eventType, depth,
                     className, methodName, descriptor);
@@ -517,13 +517,13 @@ public final class MethodPathNormalizer {
 
         private static long requiredLong(JsonNode json, String field, long line) {
             JsonNode value = json.get(field);
-            if (value == null || !value.isIntegralNumber()) throw invalid(line, field + " 非法");
+            if (value == null || !value.isIntegralNumber()) throw invalid(line, field + " is invalid");
             return value.longValue();
         }
 
         private static int requiredInt(JsonNode json, String field, long line) {
             long value = requiredLong(json, field, line);
-            if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) throw invalid(line, field + " 超限");
+            if (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) throw invalid(line, field + " exceeds the limit");
             return (int) value;
         }
 
@@ -531,7 +531,7 @@ public final class MethodPathNormalizer {
             JsonNode value = json.get(field);
             if (value == null || !value.isTextual() || value.textValue().isBlank()
                     || value.textValue().length() > max) {
-                throw invalid(line, field + " 非法");
+                throw invalid(line, field + " is invalid");
             }
             return value.textValue();
         }

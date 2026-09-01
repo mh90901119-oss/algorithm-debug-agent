@@ -50,7 +50,7 @@ public final class ExternalProcessRunner {
             ProcessLimits limits) throws HarnessException {
         if (argv == null || argv.isEmpty() || argv.stream().anyMatch(value -> value == null || value.isBlank())
                 || workingDirectory == null || timeout == null || limits == null) {
-            throw new IllegalArgumentException("外部进程 argv、工作目录、超时和预算不能为空");
+            throw new IllegalArgumentException("External process argv, working directory, timeout, and budget must not be null");
         }
         Instant startedAt = clock.instant();
         long startNanos = nanoTime.getAsLong();
@@ -62,7 +62,7 @@ public final class ExternalProcessRunner {
             builder.directory(workingDirectory.toAbsolutePath().normalize().toFile());
             process = starter.start(builder);
         } catch (IOException failure) {
-            throw new HarnessException("HARNESS_PROCESS_START_FAILED", "无法启动外部进程", failure);
+            throw new HarnessException("HARNESS_PROCESS_START_FAILED", "Failed to start external process", failure);
         }
         ExecutorService pumps = Executors.newFixedThreadPool(2);
         Future<RunLog> stdoutFuture = pumps.submit(() -> output.capturePrepared(
@@ -97,7 +97,7 @@ public final class ExternalProcessRunner {
             } finally {
                 Thread.currentThread().interrupt();
             }
-            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "等待外部进程日志时被中断", failure);
+            throw new HarnessException("HARNESS_RUN_INTERRUPTED", "Interrupted while waiting for external process logs", failure);
         } catch (ExecutionException failure) {
             if (process.isAlive()) {
                 supervisor.terminate(process, limits);
@@ -106,7 +106,7 @@ public final class ExternalProcessRunner {
             if (cause instanceof HarnessException harness) {
                 throw harness;
             }
-            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "外部进程日志归档失败", cause);
+            throw new HarnessException("HARNESS_LOG_CAPTURE_FAILED", "External process log archival failed", cause);
         }
     }
 }

@@ -24,7 +24,7 @@ public record JdwpSnapshotSummary(
     public JdwpSnapshotSummary {
         if (!SchemaVersions.JDWP_SNAPSHOT_SUMMARY.equals(schemaVersion)
                 && !SchemaVersions.JDWP_SNAPSHOT_SUMMARY_V1.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 JdwpSnapshotSummary schemaVersion");
+            throw new IllegalArgumentException("Unsupported JdwpSnapshotSummary schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -37,7 +37,7 @@ public record JdwpSnapshotSummary(
         hits = ContractChecks.immutableList(hits, "hits");
         limits = ContractChecks.immutableList(limits, "limits");
         if (hits.size() > NormalizationBudget.MAX_HITS || limits.size() > 1_024) {
-            throw new IllegalArgumentException("JDWP 摘要条目超过硬上限");
+            throw new IllegalArgumentException("JDWP summary entries exceed the hard limit");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
@@ -58,7 +58,7 @@ public record JdwpSnapshotSummary(
 
         public TracepointHit {
             tracepointId = ContractChecks.requireOpaqueId(tracepointId, "tracepointId");
-            if (hit < 1) throw new IllegalArgumentException("hit 必须为正数");
+            if (hit < 1) throw new IllegalArgumentException("hit must be positive");
             threadName = ContractChecks.requireBoundedText(threadName, "threadName", 512, false);
             location = ContractChecks.requireBoundedText(location, "location", 1_024, false);
             methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
@@ -72,7 +72,7 @@ public record JdwpSnapshotSummary(
             values = ContractChecks.immutableList(values, "values");
             if (frames.size() > NormalizationBudget.MAX_FRAMES_PER_HIT
                     || values.size() > NormalizationBudget.MAX_VALUE_FACTS) {
-                throw new IllegalArgumentException("命中摘要超过硬上限");
+                throw new IllegalArgumentException("Hit summaries exceed the hard limit");
             }
             provenance = ContractChecks.requireNonNull(provenance, "provenance");
         }
@@ -93,7 +93,7 @@ public record JdwpSnapshotSummary(
         }
 
         public StackFrame {
-            if (index < 0 || line < -1) throw new IllegalArgumentException("frame 位置非法");
+            if (index < 0 || line < -1) throw new IllegalArgumentException("frame position is invalid");
             className = ContractChecks.requireBoundedText(className, "className", 1_024, false);
             methodName = ContractChecks.requireBoundedText(methodName, "methodName", 512, false);
             methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
@@ -122,7 +122,7 @@ public record JdwpSnapshotSummary(
             collectorMarkers = ContractChecks.immutableBoundedStrings(
                     collectorMarkers, "collectorMarkers", 256);
             if (collectorMarkers.size() > 16) {
-                throw new IllegalArgumentException("collectorMarkers 不能超过 16 项");
+                throw new IllegalArgumentException("collectorMarkers must not exceed 16 entries");
             }
             provenance = ContractChecks.requireNonNull(provenance, "provenance");
         }

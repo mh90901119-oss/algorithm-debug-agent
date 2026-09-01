@@ -186,6 +186,55 @@ export function gradeCase(evalCase, trace, runtime) {
         `Expected collection completion ${evalCase.expectedCollectionCompletion}, observed ${completions.join(",") || "none"}`,
       )
     }
+    if (evalCase.requireAllCollectionsSuccessful
+        && completions.some((completion) => completion !== evalCase.expectedCollectionCompletion)) {
+      correctnessFailures.push(
+        `Every collection must complete as ${evalCase.expectedCollectionCompletion}; observed ${completions.join(",") || "none"}`,
+      )
+    }
+  }
+
+  const planCalls = trace.toolCalls.filter((call) =>
+    call.name === "codepath_plan_create" || call.name === "jdwp_plan_create")
+  if (evalCase.requirePlanIntent) {
+    for (const call of planCalls) {
+      const input = call.input ?? {}
+      for (const field of ["questionToAnswer", "hypothesis"]) {
+        if (typeof input[field] !== "string" || input[field].trim() === "") {
+          correctnessFailures.push(`${call.name} is missing structured intent field ${field}`)
+        }
+      }
+      if (!Array.isArray(input.expectedObservations) || input.expectedObservations.length === 0) {
+        correctnessFailures.push(`${call.name} is missing expectedObservations`)
+      }
+      const references = Array.isArray(input.basedOnEvidenceIds) ? input.basedOnEvidenceIds : []
+      if (references.length < (evalCase.minimumPlanEvidenceReferences ?? 0)) {
+        evidenceFailures.push(
+          `${call.name} plan evidence lineage has ${references.length} references; expected at least ${evalCase.minimumPlanEvidenceReferences}`,
+        )
+      }
+    }
+    if (planCalls.length === 0) {
+      correctnessFailures.push("Structured Plan intent was required but no Plan was created")
+    }
+  }
+
+  if (evalCase.requireJdwpCondition) {
+    const jdwpPlans = trace.toolCalls.filter((call) => call.name === "jdwp_plan_create")
+    const conditionalPoints = jdwpPlans.flatMap((call) =>
+      Array.isArray(call.input?.tracepoints) ? call.input.tracepoints : [])
+      .filter((point) => point?.condition
+        && Number.isInteger(point.maxObservedHits)
+        && Number.isInteger(point.maxCapturedHits))
+    if (conditionalPoints.length === 0) {
+      correctnessFailures.push("A bounded JDWP condition was required but none was planned")
+    }
+    for (const pattern of evalCase.requiredJdwpConditionValuePatterns ?? []) {
+      const values = conditionalPoints.map((point) => point.condition.expectedValue ?? "")
+      if (!values.some((value) => new RegExp(pattern, "iu").test(value))) {
+        correctnessFailures.push(`No JDWP condition value matches required pattern: ${pattern}`)
+      }
+    }
   }
 
   const completion = trace.analysisCompletion

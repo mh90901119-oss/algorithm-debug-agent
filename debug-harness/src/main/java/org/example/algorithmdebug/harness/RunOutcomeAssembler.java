@@ -48,21 +48,21 @@ public final class RunOutcomeAssembler {
         if (request == null || run == null || surefireResult == null || ganttOutcome == null
                 || agentFailure == null || boundedMavenOutput == null || artifacts == null
                 || comparisonOutcome == null || comparisonSummary == null) {
-            throw new IllegalArgumentException("RunOutcomeAssembler 参数不能为空");
+            throw new IllegalArgumentException("RunOutcomeAssembler parameters must not be null");
         }
         if (boundedMavenOutput.length() > MAX_MARKER_TEXT) {
-            throw new IllegalArgumentException("Maven 阶段标记文本超过 64 KiB 预算");
+            throw new IllegalArgumentException("The Maven phase marker text exceeds the 64 KiB budget");
         }
         if (run.isEmpty() && surefireResult.isPresent()) {
-            throw new IllegalArgumentException("进程未启动时不能包含本次 Surefire 事实");
+            throw new IllegalArgumentException("Surefire facts for the current run must be absent when the process was not started");
         }
         if (run.isEmpty() && agentFailure.isEmpty()) {
-            throw new IllegalArgumentException("进程未启动时必须包含 Agent 诊断");
+            throw new IllegalArgumentException("An Agent diagnostic is required when the process was not started");
         }
         comparisonSummary = comparisonSummary.strip();
         if (comparisonSummary.isEmpty()
                 || comparisonSummary.length() > MAX_COMPARISON_SUMMARY) {
-            throw new IllegalArgumentException("比较摘要必须为非空且不超过 2 KiB");
+            throw new IllegalArgumentException("The comparison summary must be non-blank and no larger than 2 KiB");
         }
 
         ProcessOutcome processOutcome = processOutcome(run);

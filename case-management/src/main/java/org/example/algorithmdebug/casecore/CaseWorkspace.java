@@ -19,7 +19,7 @@ public final class CaseWorkspace {
     /** 创建或打开 Case 根目录；子目录仅在写入真实产物时创建。 */
     public static CaseWorkspace create(Path casesRoot, CaseId caseId) throws IOException {
         if (casesRoot == null || caseId == null) {
-            throw new IllegalArgumentException("casesRoot 和 caseId 不能为空");
+            throw new IllegalArgumentException("casesRoot and caseId must not be null");
         }
         String segment = safeSegment(caseId.value(), "caseId");
         Path root = casesRoot.toAbsolutePath().normalize().resolve(segment).normalize();
@@ -30,7 +30,7 @@ public final class CaseWorkspace {
     /** 为一次运行创建不可复用的独立目录。 */
     public Path createRun(RunId runId) throws IOException {
         if (runId == null) {
-            throw new IllegalArgumentException("runId 不能为空");
+            throw new IllegalArgumentException("runId must not be null");
         }
         Path runs = Files.createDirectories(caseRoot.resolve("runs"));
         Path run = runs.resolve(safeSegment(runId.value(), "runId"));
@@ -44,7 +44,7 @@ public final class CaseWorkspace {
 
     private static String safeSegment(String value, String field) {
         if (value.contains("/") || value.contains("\\") || value.equals(".") || value.equals("..")) {
-            throw new IllegalArgumentException(field + " 不能包含路径分隔符");
+            throw new IllegalArgumentException(field + " must not contain path separators");
         }
         return value;
     }

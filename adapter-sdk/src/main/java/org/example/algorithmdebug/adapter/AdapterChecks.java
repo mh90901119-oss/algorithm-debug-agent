@@ -20,13 +20,13 @@ final class AdapterChecks {
 
     static String requireNonBlank(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " 不能为空");
+            throw new IllegalArgumentException(fieldName + " must not be null");
         }
         if (!value.equals(value.strip())) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含首尾空白");
+            throw new IllegalArgumentException(fieldName + " must not contain leading or trailing whitespace");
         }
         if (value.codePoints().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含控制字符");
+            throw new IllegalArgumentException(fieldName + " must not contain control characters");
         }
         return value;
     }
@@ -34,19 +34,19 @@ final class AdapterChecks {
     static String requireAdapterId(String value) {
         String checked = requireNonBlank(value, "adapterId");
         if (!ADAPTER_ID.matcher(checked).matches()) {
-            throw new IllegalArgumentException("adapterId 必须是 3 到 64 位小写字母、数字或连字符");
+            throw new IllegalArgumentException("adapterId must contain 3 to 64 lowercase letters, digits, or hyphens");
         }
         return checked;
     }
 
     static <T> T requireNonNull(T value, String fieldName) {
-        return Objects.requireNonNull(value, fieldName + " 不能为空");
+        return Objects.requireNonNull(value, fieldName + " must not be null");
     }
 
     static <T> Set<T> immutableSet(Set<T> values, String fieldName) {
         requireNonNull(values, fieldName);
         if (values.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException(fieldName + " 不允许包含 null");
+            throw new IllegalArgumentException(fieldName + " must not contain null");
         }
         return Set.copyOf(values);
     }
@@ -56,7 +56,7 @@ final class AdapterChecks {
         for (String value : values) {
             String checked = requireNonBlank(value, fieldName + " item");
             if (rejectWhitespace && checked.codePoints().anyMatch(Character::isWhitespace)) {
-                throw new IllegalArgumentException(fieldName + " 的单个参数不允许包含空白: " + checked);
+                throw new IllegalArgumentException(fieldName + " argument must not contain whitespace: " + checked);
             }
         }
         return List.copyOf(values);
@@ -68,7 +68,7 @@ final class AdapterChecks {
         properties.forEach((key, value) -> {
             String checkedKey = requireNonBlank(key, "mavenProperties key");
             if (!MAVEN_PROPERTY_KEY.matcher(checkedKey).matches()) {
-                throw new IllegalArgumentException("非法 Maven property key: " + checkedKey);
+                throw new IllegalArgumentException("is invalid Maven property key: " + checkedKey);
             }
             copied.put(checkedKey, requireNonNull(value, "mavenProperties value"));
         });
@@ -78,7 +78,7 @@ final class AdapterChecks {
     static Duration requirePositiveDuration(Duration duration, String fieldName) {
         requireNonNull(duration, fieldName);
         if (duration.isZero() || duration.isNegative()) {
-            throw new IllegalArgumentException(fieldName + " 必须大于零");
+            throw new IllegalArgumentException(fieldName + " must be greater than zero");
         }
         return duration;
     }

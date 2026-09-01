@@ -60,7 +60,7 @@ public final class CaseApplicationService {
             AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || adapters == null
                 || ids == null || clock == null || executionLog == null) {
-            throw new IllegalArgumentException("CaseApplicationService 依赖不能为空");
+            throw new IllegalArgumentException("CaseApplicationService dependencies must not be null");
         }
         this.registrations = registrations;
         this.mapper = mapper;
@@ -86,7 +86,7 @@ public final class CaseApplicationService {
             ContextMode contextMode) {
         if (targetTest == null || question == null || caseId == null || adapterId == null
                 || contextMode == null) {
-            throw new IllegalArgumentException("Case open 参数不能为空");
+            throw new IllegalArgumentException("Case open parameters must not be null");
         }
         try {
             WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
@@ -119,14 +119,14 @@ public final class CaseApplicationService {
                     "COMPLETED", "Case open processing completed");
             return result;
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "打开 Case 失败", failure);
+            throw new CaseRunException(failure.code(), "Failed to open Case", failure);
         }
     }
 
     /** 从不可变子文档重建一个 Case 的有界摘要，不执行 Maven。 */
     public CaseDigest inspect(Path workspaceRoot, ProjectId projectId, CaseId caseId) {
         if (caseId == null) {
-            throw new IllegalArgumentException("caseId 不能为空");
+            throw new IllegalArgumentException("caseId must not be null");
         }
         AgentLogContext logContext = AgentLogContext.forCase(workspaceRoot, projectId, caseId);
         executionLog.info(logContext, "CaseApplicationService", "CASE_INSPECT_STARTED",
@@ -140,7 +140,7 @@ public final class CaseApplicationService {
                     "COMPLETED", "Case inspection completed");
             return result;
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "检查 Case 失败", failure);
+            throw new CaseRunException(failure.code(), "Failed to inspect Case", failure);
         }
     }
 
@@ -149,11 +149,11 @@ public final class CaseApplicationService {
             Path workspaceRoot, ProjectId projectId, CaseId caseId,
             AnalysisId analysisId, AnalysisResult result) {
         if (caseId == null || analysisId == null || result == null) {
-            throw new IllegalArgumentException("analysis complete 参数不能为空");
+            throw new IllegalArgumentException("analysis complete parameters must not be null");
         }
         if (!caseId.equals(result.caseId()) || !analysisId.equals(result.analysisId())) {
             throw new CaseRunException(
-                    "ANALYSIS_RESULT_IDENTITY_MISMATCH", "Analysis 结果与命令身份不一致");
+                    "ANALYSIS_RESULT_IDENTITY_MISMATCH", "The Analysis result does not match the command identity");
         }
         try {
             AgentLogContext logContext = AgentLogContext.forCase(
@@ -168,7 +168,7 @@ public final class CaseApplicationService {
                     "COMPLETED", "Analysis completion was archived");
             return result;
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "完成 Analysis 失败", failure);
+            throw new CaseRunException(failure.code(), "Failed to complete Analysis", failure);
         }
     }
 
@@ -189,16 +189,16 @@ public final class CaseApplicationService {
                     excerpt.truncated() ? "PARTIAL" : "COMPLETED", "Artifact excerpt was read");
             return excerpt;
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "读取 Artifact 失败", failure);
+            throw new CaseRunException(failure.code(), "Read Artifact failed", failure);
         }
     }
 
     private ProjectRegistration requireRegistration(WorkspaceLayout layout, ProjectId projectId) {
         if (projectId == null) {
-            throw new IllegalArgumentException("projectId 不能为空");
+            throw new IllegalArgumentException("projectId must not be null");
         }
         return registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "项目尚未登记: " + projectId.value()));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "Project is not registered: " + projectId.value()));
     }
 
     private CaseArchiveRepository archive(WorkspaceLayout layout, ProjectId projectId) {

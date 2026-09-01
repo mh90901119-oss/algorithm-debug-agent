@@ -34,12 +34,12 @@ public record TraceProvenance(
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         rawArtifact = ContractChecks.requireNonNull(rawArtifact, "rawArtifact");
         if (jsonlLine < 1) {
-            throw new IllegalArgumentException("jsonlLine 必须从 1 开始");
+            throw new IllegalArgumentException("jsonlLine must start at 1");
         }
         eventId = positiveOptional(eventId, "eventId");
         sequence = positiveOptional(sequence, "sequence");
         if (eventId.isPresent() && sequence.isPresent()) {
-            throw new IllegalArgumentException("同一来源不能同时包含 eventId 和 sequence");
+            throw new IllegalArgumentException("The same source must not contain both eventId and sequence");
         }
         observationKind = ContractChecks.requireBoundedText(
                 observationKind, "observationKind", 64, false);
@@ -49,7 +49,7 @@ public record TraceProvenance(
         Optional<Long> checked = ContractChecks.requireNonNull(value, field);
         checked.ifPresent(number -> {
             if (number < 0) {
-                throw new IllegalArgumentException(field + " 不能为负数");
+                throw new IllegalArgumentException(field + " must not be negative");
             }
         });
         return checked;

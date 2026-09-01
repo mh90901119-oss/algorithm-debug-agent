@@ -24,31 +24,37 @@ public final class CollectorDebugPlanWriter {
      */
     public byte[] write(JdwpCollectionPlan plan, int port) {
         if (plan == null) {
-            throw new IllegalArgumentException("plan 不能为空");
+            throw new IllegalArgumentException("plan must not be null");
         }
         if (port < 1 || port > 65_535) {
-            throw new PlanCompilationException("JDWP loopback port 必须在 1 到 65535 之间");
+            throw new PlanCompilationException("JDWP loopback port must be between 1 and 65535");
         }
         List<CollectorDebugPlan.Tracepoint> points = plan.tracepoints().stream()
                 .sorted(Comparator.comparing(point -> point.tracepointId()))
                 .map(point -> {
             var capture = point.capture();
+            var condition = point.condition();
             return new CollectorDebugPlan.Tracepoint(
                     point.tracepointId(), point.sourceAnchor().className(), point.line(),
                     point.sourceAnchor().methodName(), point.sourceAnchor().descriptor(),
-                    point.maxHits(), point.captureOnHits(),
+                    point.maxObservedHits(), point.maxCapturedHits(),
+                    point.captureOnMatchedHits(), condition == null ? null
+                    : new CollectorDebugPlan.Condition(
+                            condition.localName(), condition.fieldPath(),
+                            condition.operator().name(), condition.expectedType().name(),
+                            condition.expectedValue()),
                     new CollectorDebugPlan.Capture(
                             capture.locals(), capture.stack(), capture.maxFrames(),
                             capture.maxDepth(), capture.maxItems(), capture.maxStringLength(),
                             capture.localNames(), capture.fieldPaths()));
                 }).toList();
         CollectorDebugPlan document = new CollectorDebugPlan(
-                "2.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
+                "3.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
                 true, plan.budget().idleTimeoutMillis(), plan.budget().maxEvents(), points);
         try {
             return mapper.writeValueAsBytes(document);
         } catch (JsonProcessingException failure) {
-            throw new PlanCompilationException("无法序列化 Collector JDWP Plan", failure);
+            throw new PlanCompilationException("Failed to serialize the Collector JDWP Plan", failure);
         }
     }
 }

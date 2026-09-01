@@ -26,7 +26,7 @@ public record ProjectDescriptor(
         displayName = AdapterChecks.requireNonBlank(displayName, "displayName");
         projectRoot = AdapterChecks.requireNonNull(projectRoot, "projectRoot");
         if (!projectRoot.isAbsolute()) {
-            throw new IllegalArgumentException("projectRoot 必须是绝对路径");
+            throw new IllegalArgumentException("projectRoot must be an absolute path");
         }
         projectRoot = projectRoot.normalize();
         buildTool = AdapterChecks.requireNonNull(buildTool, "buildTool");
@@ -35,7 +35,7 @@ public record ProjectDescriptor(
                 ? buildFile.normalize()
                 : projectRoot.resolve(buildFile).normalize();
         if (!buildFile.startsWith(projectRoot) || buildFile.equals(projectRoot)) {
-            throw new IllegalArgumentException("buildFile 必须位于 projectRoot 内部");
+            throw new IllegalArgumentException("buildFile must be located inside projectRoot");
         }
     }
 }

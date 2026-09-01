@@ -18,7 +18,7 @@ public record WorkspaceInitializationResult(
         schemaVersion = ContractChecks.requireNonBlank(schemaVersion, "schemaVersion");
         if (!SchemaVersions.WORKSPACE_MANIFEST.equals(schemaVersion)) {
             throw new IllegalArgumentException(
-                    "不支持的 WorkspaceInitializationResult schemaVersion: " + schemaVersion);
+                    "Unsupported WorkspaceInitializationResult schemaVersion: " + schemaVersion);
         }
     }
 }

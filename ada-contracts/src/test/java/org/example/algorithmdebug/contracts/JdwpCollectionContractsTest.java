@@ -98,9 +98,9 @@ class JdwpCollectionContractsTest {
                 "logs/collector-stdout.log", "logs/collector-stderr.log", NOW, NOW);
         hits.clear();
 
-        assertEquals(Map.of("point-1", 2), manifest.hitCounts());
+        assertEquals(Map.of("point-1", 2), manifest.observedHitCounts());
         assertThrows(UnsupportedOperationException.class, () ->
-                manifest.hitCounts().put("point-2", 1));
+                manifest.observedHitCounts().put("point-2", 1));
     }
 
     @Test

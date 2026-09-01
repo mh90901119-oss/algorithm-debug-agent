@@ -75,7 +75,7 @@ public final class StaticAnalysisApplicationService {
             AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || analyzer == null
                 || compiler == null || clock == null || executionLog == null) {
-            throw new IllegalArgumentException("StaticAnalysisApplicationService 依赖不能为空");
+            throw new IllegalArgumentException("StaticAnalysisApplicationService dependencies must not be null");
         }
         this.registrations = registrations;
         this.mapper = mapper;
@@ -122,7 +122,7 @@ public final class StaticAnalysisApplicationService {
             var context = archive.requireContext(caseId, analysis.contextId());
             var manifest = archive.requireCase(caseId);
             if (!manifest.projectId().equals(projectId)) {
-                throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case 不属于指定 Project");
+                throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
             }
             StaticAnalysisRequest request = new StaticAnalysisRequest(
                     Path.of(registration.moduleRoot()), manifest.targetTest(), caseId,
@@ -147,9 +147,9 @@ public final class StaticAnalysisApplicationService {
                             "warningCount", Integer.toString(catalog.warnings().size())));
             return result;
         } catch (StaticAnalysisException failure) {
-            throw new CaseRunException(failure.code(), "静态方法目录构建失败", failure);
+            throw new CaseRunException(failure.code(), "Static method catalog build failed", failure);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException("STATIC_ARCHIVE_FAILED", "静态方法目录归档或读取失败", failure);
+            throw new CaseRunException("STATIC_ARCHIVE_FAILED", "Static method catalog archival or read failed", failure);
         }
     }
 
@@ -166,6 +166,7 @@ public final class StaticAnalysisApplicationService {
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+            requireEvidenceLineage(archive, caseId, request.intent());
             CodePathCollectionPlan plan = compiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request);
             Path document = archive.createCodePathPlan(plan);
@@ -183,9 +184,9 @@ public final class StaticAnalysisApplicationService {
                     plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
                     plan.selectors().size()), artifact);
         } catch (PlanCompilationException failure) {
-            throw new CaseRunException("PLAN_COMPILATION_FAILED", "CodePath 计划编译失败", failure);
+            throw new CaseRunException("PLAN_COMPILATION_FAILED", "CodePath plan compilation failed", failure);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException("PLAN_ARCHIVE_FAILED", "CodePath 计划归档或目录读取失败", failure);
+            throw new CaseRunException("PLAN_ARCHIVE_FAILED", "CodePath plan archival or catalog read failed", failure);
         }
     }
 
@@ -202,6 +203,7 @@ public final class StaticAnalysisApplicationService {
             ProjectRegistration registration = requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+            requireEvidenceLineage(archive, caseId, request.intent());
             var plan = jdwpCompiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request,
                     Path.of(registration.moduleRoot()));
@@ -219,9 +221,9 @@ public final class StaticAnalysisApplicationService {
                     plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),
                     artifact);
         } catch (PlanCompilationException failure) {
-            throw new CaseRunException("JDWP_PLAN_COMPILATION_FAILED", "JDWP 计划编译失败", failure);
+            throw new CaseRunException("JDWP_PLAN_COMPILATION_FAILED", "JDWP plan compilation failed", failure);
         } catch (WorkspaceException failure) {
-            throw new CaseRunException("JDWP_PLAN_ARCHIVE_FAILED", "JDWP 计划归档或目录读取失败", failure);
+            throw new CaseRunException("JDWP_PLAN_ARCHIVE_FAILED", "JDWP plan archival or catalog read failed", failure);
         }
     }
 
@@ -265,9 +267,25 @@ public final class StaticAnalysisApplicationService {
                 catalog.discoveredEdgeCount(), catalog.createdAt());
     }
 
+    private static void requireEvidenceLineage(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            org.example.algorithmdebug.contracts.InvestigationIntent intent) {
+        for (var evidenceId : intent.basedOnEvidenceIds()) {
+            try {
+                archive.requireEvidenceBundle(caseId, evidenceId);
+            } catch (WorkspaceException failure) {
+                throw new CaseRunException(
+                        "PLAN_EVIDENCE_NOT_FOUND",
+                        "Plan references Evidence that is not available in the current Case",
+                        failure);
+            }
+        }
+    }
+
     private ProjectRegistration requireRegistration(WorkspaceLayout layout, ProjectId projectId) {
         return registrations.findById(layout, projectId).orElseThrow(() ->
-                new CaseRunException("PROJECT_NOT_REGISTERED", "项目尚未登记: " + projectId.value()));
+                new CaseRunException("PROJECT_NOT_REGISTERED", "Project is not registered: " + projectId.value()));
     }
 
     private CaseArchiveRepository archive(WorkspaceLayout layout, ProjectId projectId) {
@@ -281,7 +299,7 @@ public final class StaticAnalysisApplicationService {
         if (!normalizedDocument.startsWith(normalizedRoot)
                 || !Files.isRegularFile(normalizedDocument, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(normalizedDocument)) {
-            throw new CaseRunException(errorPrefix + "ARTIFACT_REFERENCE_FAILED", "归档产物路径无效");
+            throw new CaseRunException(errorPrefix + "ARTIFACT_REFERENCE_FAILED", "Archived artifact path is invalid");
         }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -298,7 +316,7 @@ public final class StaticAnalysisApplicationService {
                     artifactId, artifactType, relativePath, "application/json",
                     HexFormat.of().formatHex(digest.digest()), Files.size(normalizedDocument));
         } catch (IOException | NoSuchAlgorithmException failure) {
-            throw new CaseRunException(errorPrefix + "ARTIFACT_REFERENCE_FAILED", "无法校验归档产物", failure);
+            throw new CaseRunException(errorPrefix + "ARTIFACT_REFERENCE_FAILED", "Failed to verify the archived artifact", failure);
         }
     }
 
@@ -311,7 +329,7 @@ public final class StaticAnalysisApplicationService {
             return "artifact-" + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(candidate.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK 缺少 SHA-256", failure);
+            throw new IllegalStateException("JDK is missing SHA-256", failure);
         }
     }
 }

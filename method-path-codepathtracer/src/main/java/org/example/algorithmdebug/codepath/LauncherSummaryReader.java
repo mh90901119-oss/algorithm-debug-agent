@@ -23,20 +23,20 @@ public final class LauncherSummaryReader {
                 }
                 if (found != null) {
                     throw new CodePathAdapterException(
-                            "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "Launcher Summary 重复", null);
+                            "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "Launcher Summary duplicate", null);
                 }
                 found = line.substring(PREFIX.length());
             }
             if (found == null) {
                 throw new CodePathAdapterException(
-                        "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "Launcher Summary 缺失", null);
+                        "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "The Launcher Summary is missing", null);
             }
             return mapper.readValue(found, CodePathLauncherSummary.class);
         } catch (CodePathAdapterException failure) {
             throw failure;
         } catch (IOException | RuntimeException failure) {
             throw new CodePathAdapterException(
-                    "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "Launcher Summary 无法解析", failure);
+                    "CODEPATH_LAUNCHER_PROTOCOL_INVALID", "Launcher Summary Failed to parse", failure);
         }
     }
 }

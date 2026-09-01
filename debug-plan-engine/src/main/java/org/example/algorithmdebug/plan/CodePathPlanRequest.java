@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.example.algorithmdebug.contracts.CollectionBudget;
+import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.PlanId;
 
 /** 大模型选择关键方法后交给确定性编译器的有界请求。 */
@@ -13,6 +14,7 @@ public record CodePathPlanRequest(
         List<String> selectedMethodKeys,
         Optional<String> scopeMethodKey,
         String rationale,
+        InvestigationIntent intent,
         CollectionBudget budget,
         Instant requestedAt) {
 
@@ -22,6 +24,7 @@ public record CodePathPlanRequest(
         selectedMethodKeys = List.copyOf(Objects.requireNonNull(selectedMethodKeys, "selectedMethodKeys"));
         scopeMethodKey = scopeMethodKey == null ? Optional.empty() : scopeMethodKey;
         rationale = Objects.requireNonNull(rationale, "rationale");
+        intent = intent == null ? InvestigationIntent.legacy(rationale) : intent;
         budget = Objects.requireNonNull(budget, "budget");
         requestedAt = Objects.requireNonNull(requestedAt, "requestedAt");
     }
@@ -30,9 +33,33 @@ public record CodePathPlanRequest(
     public CodePathPlanRequest(
             PlanId planId,
             List<String> selectedMethodKeys,
+            Optional<String> scopeMethodKey,
             String rationale,
             CollectionBudget budget,
             Instant requestedAt) {
-        this(planId, selectedMethodKeys, Optional.empty(), rationale, budget, requestedAt);
+        this(planId, selectedMethodKeys, scopeMethodKey, rationale,
+                InvestigationIntent.legacy(rationale), budget, requestedAt);
+    }
+
+    /** 创建没有 Scope、但包含结构化调查意图的新请求。 */
+    public CodePathPlanRequest(
+            PlanId planId,
+            List<String> selectedMethodKeys,
+            String rationale,
+            InvestigationIntent intent,
+            CollectionBudget budget,
+            Instant requestedAt) {
+        this(planId, selectedMethodKeys, Optional.empty(), rationale, intent, budget, requestedAt);
+    }
+
+    /** 兼容没有 Scope 和结构化调查意图的旧 Tool 与测试调用。 */
+    public CodePathPlanRequest(
+            PlanId planId,
+            List<String> selectedMethodKeys,
+            String rationale,
+            CollectionBudget budget,
+            Instant requestedAt) {
+        this(planId, selectedMethodKeys, Optional.empty(), rationale,
+                InvestigationIntent.legacy(rationale), budget, requestedAt);
     }
 }

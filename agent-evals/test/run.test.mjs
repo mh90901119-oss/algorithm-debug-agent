@@ -10,7 +10,7 @@ test("loads the versioned smoke suite and keeps the target module outside checke
 
   assert.doesNotThrow(() => validateSuite(suite))
   assert.equal(suite.schemaVersion, "1.0")
-  assert.equal(suite.cases.length, 9)
+  assert.equal(suite.cases.length, 10)
   assert.equal(Object.hasOwn(suite, "targetModule"), false)
   assert.equal(suite.cases.every((item) => Object.hasOwn(item, "targetModule") === false), true)
   const missingInput = suite.cases.find((item) => item.id === "missing-input")
@@ -32,6 +32,12 @@ test("loads the versioned smoke suite and keeps the target module outside checke
   assert.equal(suite.cases.find((item) => item.id === "assertion-failure").expectedTestOutcome, "FAILED")
   const codePath = suite.cases.find((item) => item.id === "codepath-independent")
   assert.match(codePath.requiredAnswerPatterns.join("|"), /CodePath/u)
+  const causal = suite.cases.find((item) => item.id === "cross-wafer-causal")
+  assert.equal(causal.requirePlanIntent, true)
+  assert.equal(causal.requireJdwpCondition, true)
+  assert.equal(causal.minimumPlanEvidenceReferences, 1)
+  assert.equal(causal.requiredTools.includes("codepath_collect"), true)
+  assert.equal(causal.requiredTools.includes("jdwp_collect"), true)
   assert.doesNotMatch(codePath.requiredAnswerPatterns.join("|"), /鏂规硶|杩愯/u)
 })
 

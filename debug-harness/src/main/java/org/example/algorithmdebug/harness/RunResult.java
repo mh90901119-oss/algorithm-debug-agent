@@ -32,25 +32,25 @@ public record RunResult(
     public RunResult {
         if (completion == null || exitCode == null || startedAt == null || finishedAt == null
                 || elapsed == null || stdout == null || stderr == null || termination == null) {
-            throw new IllegalArgumentException("RunResult 参数不能为空");
+            throw new IllegalArgumentException("RunResult parameters must not be null");
         }
         if (finishedAt.isBefore(startedAt) || elapsed.isNegative() || rootProcessId <= 0) {
-            throw new IllegalArgumentException("RunResult 时间或 PID 非法");
+            throw new IllegalArgumentException("RunResult time or PID is invalid");
         }
         switch (completion) {
             case SUCCEEDED -> {
                 if (exitCode.isEmpty() || exitCode.getAsInt() != 0 || termination.attempted()) {
-                    throw new IllegalArgumentException("SUCCEEDED 必须具有退出码 0 且未触发清理");
+                    throw new IllegalArgumentException("SUCCEEDED requires exit code 0 and no cleanup");
                 }
             }
             case FAILED -> {
                 if (exitCode.isEmpty() || exitCode.getAsInt() == 0 || termination.attempted()) {
-                    throw new IllegalArgumentException("FAILED 必须具有非零退出码且未触发清理");
+                    throw new IllegalArgumentException("FAILED must have a non-zero exit code without cleanup");
                 }
             }
             case TIMED_OUT -> {
                 if (!termination.attempted()) {
-                    throw new IllegalArgumentException("TIMED_OUT 必须记录进程树清理");
+                    throw new IllegalArgumentException("TIMED_OUT must record process-tree cleanup");
                 }
             }
         }

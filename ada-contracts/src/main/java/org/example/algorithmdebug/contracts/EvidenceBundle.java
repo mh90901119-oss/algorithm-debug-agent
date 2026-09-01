@@ -21,7 +21,7 @@ public record EvidenceBundle(
     /** 校验身份、事实来源分类和有界集合。 */
     public EvidenceBundle {
         if (!SchemaVersions.EVIDENCE_BUNDLE.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 EvidenceBundle schemaVersion");
+            throw new IllegalArgumentException("Unsupported EvidenceBundle schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -35,7 +35,7 @@ public record EvidenceBundle(
                 coveredDimensions, "coveredDimensions");
         artifacts = ContractChecks.immutableList(artifacts, "artifacts");
         if (artifacts.size() > 128) {
-            throw new IllegalArgumentException("artifacts 不能超过 128 项");
+            throw new IllegalArgumentException("artifacts must not exceed 128 entries");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
@@ -43,7 +43,7 @@ public record EvidenceBundle(
     private static List<EvidenceFact> boundedFacts(List<EvidenceFact> values, String field) {
         List<EvidenceFact> copied = ContractChecks.immutableList(values, field);
         if (copied.size() > 1_024) {
-            throw new IllegalArgumentException(field + " 不能超过 1024 项");
+            throw new IllegalArgumentException(field + " must not exceed 1024 entries");
         }
         return copied;
     }
@@ -51,7 +51,7 @@ public record EvidenceBundle(
     private static void requireDeterministicClassification(EvidenceFact fact) {
         if (fact.classification() == ClaimClassification.SOURCE_INFERENCE
                 || fact.classification() == ClaimClassification.LLM_HYPOTHESIS) {
-            throw new IllegalArgumentException("P4 确定性 Bundle 不接受模型推断分类");
+            throw new IllegalArgumentException("A deterministic P4 Bundle does not accept model-inferred classifications");
         }
     }
 }

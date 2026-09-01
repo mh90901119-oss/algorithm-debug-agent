@@ -24,7 +24,10 @@
                      "truncated",
                      "eventCount",
                      "rawBytes",
-                     "hitCounts",
+                     "observedHitCounts",
+                     "matchedHitCounts",
+                     "capturedHitCounts",
+                     "conditionUnavailableCounts",
                      "installedLocations",
                      "agentFailure",
                      "rawTraceRelativePath",
@@ -118,7 +121,16 @@
                                         "type":  "integer",
                                         "minimum":  0
                                     },
-                       "hitCounts":  {
+                       "observedHitCounts":  {
+                                         "$ref":  "#/$defs/counters"
+                                     },
+                       "matchedHitCounts":  {
+                                         "$ref":  "#/$defs/counters"
+                                     },
+                       "capturedHitCounts":  {
+                                         "$ref":  "#/$defs/counters"
+                                     },
+                       "conditionUnavailableCounts":  {
                                          "$ref":  "#/$defs/counters"
                                      },
                        "installedLocations":  {

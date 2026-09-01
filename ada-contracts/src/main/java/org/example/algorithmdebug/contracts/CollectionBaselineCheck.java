@@ -20,7 +20,7 @@ public record CollectionBaselineCheck(
     /** 校验确认性证据只可能来自 MATCHED 检查。 */
     public CollectionBaselineCheck {
         if (!"1.0".equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 CollectionBaselineCheck 版本");
+            throw new IllegalArgumentException("Unsupported CollectionBaselineCheck version");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         contextId = ContractChecks.requireNonNull(contextId, "contextId");

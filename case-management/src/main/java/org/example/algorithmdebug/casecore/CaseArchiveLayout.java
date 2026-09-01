@@ -31,7 +31,7 @@ public final class CaseArchiveLayout {
      */
     public static CaseArchiveLayout of(Path casesRoot, CaseId caseId) {
         if (casesRoot == null || caseId == null) {
-            throw new IllegalArgumentException("casesRoot 和 caseId 不能为空");
+            throw new IllegalArgumentException("casesRoot and caseId must not be null");
         }
         Path root = casesRoot.toAbsolutePath().normalize();
         Path caseRoot = child(root, safeSegment(caseId.value(), "caseId"));
@@ -116,6 +116,16 @@ public final class CaseArchiveLayout {
         return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
     }
 
+    /** @return 当前 Case 唯一算法输入快照目录。 */
+    public Path caseInputRoot() {
+        return child(caseRoot, "input");
+    }
+
+    /** @return 使用源文件 basename 保存的 Case 唯一算法输入。 */
+    public Path caseInputArtifact(String fileName) {
+        return child(caseInputRoot(), safeSegment(fileName, "fileName"));
+    }
+
     /** @return 指定 Analysis 的算法输入归档目录。 */
     public Path analysisInputRoot(AnalysisId analysisId) {
         return child(analysisRoot(analysisId), "input");
@@ -124,11 +134,6 @@ public final class CaseArchiveLayout {
     /** @return 指定 Analysis 的输入定位与一致性控制文档。 */
     public Path analysisInputCapture(AnalysisId analysisId) {
         return child(analysisInputRoot(analysisId), "input-analysis.json");
-    }
-
-    /** @return 指定 Analysis 的不可变算法输入副本。 */
-    public Path analysisInputArtifact(AnalysisId analysisId) {
-        return child(analysisInputRoot(analysisId), "algorithm-input.json");
     }
 
     /** @return 指定 Analysis 的静态方法目录 */
@@ -264,7 +269,7 @@ public final class CaseArchiveLayout {
     private static Path child(Path parent, String segment) {
         Path result = parent.resolve(segment).normalize();
         if (!result.startsWith(parent) || result.equals(parent)) {
-            throw new IllegalArgumentException("Case 归档路径越界: " + segment);
+            throw new IllegalArgumentException("Case archive path escapes its root: " + segment);
         }
         return result;
     }
@@ -272,10 +277,10 @@ public final class CaseArchiveLayout {
     private static String safeSegment(String value, String field) {
         if (value == null || value.isBlank() || value.equals(".") || value.equals("..")
                 || value.contains("/") || value.contains("\\") || value.contains(":")) {
-            throw new IllegalArgumentException(field + " 必须是单一安全路径段");
+            throw new IllegalArgumentException(field + " must be a single safe path segment");
         }
         if (value.codePoints().anyMatch(Character::isISOControl)) {
-            throw new IllegalArgumentException(field + " 不允许包含控制字符");
+            throw new IllegalArgumentException(field + " must not contain control characters");
         }
         return value;
     }

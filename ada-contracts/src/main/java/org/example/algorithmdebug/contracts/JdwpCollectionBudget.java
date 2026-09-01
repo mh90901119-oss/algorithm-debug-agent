@@ -20,7 +20,7 @@ public record JdwpCollectionBudget(
                 || maxBytes < 1 || maxBytes > 50L * 1024 * 1024
                 || timeoutMillis < 1_000 || timeoutMillis > 20 * 60_000L
                 || idleTimeoutMillis < 1_000 || idleTimeoutMillis > timeoutMillis) {
-            throw new IllegalArgumentException("JdwpCollectionBudget 超出安全范围");
+            throw new IllegalArgumentException("JdwpCollectionBudget is outside the safe range");
         }
     }
 

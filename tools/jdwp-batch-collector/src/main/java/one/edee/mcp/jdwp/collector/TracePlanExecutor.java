@@ -43,7 +43,12 @@ final class TracePlanExecutor {
     private final JsonlTraceWriter writer;
     private final AtomicLong sequence = new AtomicLong();
     private final Map<String, DebugPlan.Tracepoint> tracepointsById;
-    private final Map<String, Integer> hitCounts = new HashMap<>();
+    private final StackFrameConditionEvaluator conditionEvaluator = new StackFrameConditionEvaluator();
+    private final Map<String, Integer> observedHitCounts = new HashMap<>();
+    private final Map<String, Integer> matchedHitCounts = new HashMap<>();
+    private final Map<String, Integer> capturedHitCounts = new HashMap<>();
+    private final Map<String, Integer> conditionUnavailableCounts = new HashMap<>();
+    private final Map<String, Map<String, Integer>> conditionUnavailableReasons = new HashMap<>();
     private final Map<String, Integer> installedCounts = new HashMap<>();
     private final Map<String, List<BreakpointRequest>> requestsByTracepoint = new HashMap<>();
     private final Set<String> installedLocations = new HashSet<>();
@@ -121,7 +126,11 @@ final class TracePlanExecutor {
         return new CollectionResult(
             completion,
             sequence.get(),
-            Map.copyOf(hitCounts),
+            Map.copyOf(observedHitCounts),
+            Map.copyOf(matchedHitCounts),
+            Map.copyOf(capturedHitCounts),
+            Map.copyOf(conditionUnavailableCounts),
+            immutableNestedCounters(conditionUnavailableReasons),
             Map.copyOf(installedCounts)
         );
     }
@@ -207,24 +216,49 @@ final class TracePlanExecutor {
         if (tracepoint == null) {
             return;
         }
-        int hit = hitCounts.merge(tracepointId, 1, Integer::sum);
-        if (hit > tracepoint.maxHits) {
+        int observedHit = observedHitCounts.merge(tracepointId, 1, Integer::sum);
+        if (observedHit > tracepoint.maxObservedHits) {
             disableTracepoint(tracepointId);
             return;
         }
-        boolean captureSelected = tracepoint.captureOnHits.isEmpty()
-            || tracepoint.captureOnHits.contains(hit);
-        if (!captureSelected) {
-            if (hit >= tracepoint.maxHits) {
-                disableTracepoint(tracepointId);
-            }
+        StackFrameConditionEvaluator.Evaluation evaluation = tracepoint.condition == null
+            ? StackFrameConditionEvaluator.Evaluation.matched()
+            : conditionEvaluator.evaluate(event.thread(), tracepoint.condition);
+        if (evaluation.status() == StackFrameConditionEvaluator.Status.UNAVAILABLE) {
+            conditionUnavailableCounts.merge(tracepointId, 1, Integer::sum);
+            conditionUnavailableReasons.computeIfAbsent(tracepointId, ignored -> new HashMap<>())
+                .merge(evaluation.reason(), 1, Integer::sum);
+            disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
             return;
         }
+        if (evaluation.status() == StackFrameConditionEvaluator.Status.NOT_MATCHED) {
+            disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
+            return;
+        }
+        int matchedHit = matchedHitCounts.merge(tracepointId, 1, Integer::sum);
+        boolean captureSelected = tracepoint.captureOnMatchedHits.isEmpty()
+            || tracepoint.captureOnMatchedHits.contains(matchedHit);
+        if (!captureSelected) {
+            disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
+            return;
+        }
+        int capturedHit = capturedHitCounts.getOrDefault(tracepointId, 0);
+        if (capturedHit >= tracepoint.maxCapturedHits) {
+            disableTracepoint(tracepointId);
+            return;
+        }
+        capturedHit = capturedHitCounts.merge(tracepointId, 1, Integer::sum);
 
         ThreadReference thread = event.thread();
         Map<String, Object> data = baseEvent("tracepoint_hit");
         data.put("tracepointId", tracepointId);
-        data.put("hit", hit);
+        data.put("hit", observedHit);
+        data.put("observedHit", observedHit);
+        data.put("matchedHit", matchedHit);
+        data.put("capturedHit", capturedHit);
+        if (tracepoint.condition != null) {
+            data.put("conditionResult", "MATCHED");
+        }
         data.put("thread", Map.of("id", thread.uniqueID(), "name", thread.name()));
         data.put("location", Map.of(
             "className", event.location().declaringType().name(),
@@ -247,7 +281,15 @@ final class TracePlanExecutor {
             ));
         }
         writer.write(data);
-        if (hit >= tracepoint.maxHits) {
+        if (observedHit >= tracepoint.maxObservedHits
+                || capturedHit >= tracepoint.maxCapturedHits) {
+            disableTracepoint(tracepointId);
+        }
+    }
+
+    private void disableAtObservationLimit(
+            String tracepointId, int observedHit, int maxObservedHits) {
+        if (observedHit >= maxObservedHits) {
             disableTracepoint(tracepointId);
         }
     }
@@ -282,10 +324,21 @@ final class TracePlanExecutor {
         }
     }
 
+    private static Map<String, Map<String, Integer>> immutableNestedCounters(
+            Map<String, Map<String, Integer>> values) {
+        Map<String, Map<String, Integer>> copied = new LinkedHashMap<>();
+        values.forEach((key, counters) -> copied.put(key, Map.copyOf(counters)));
+        return Map.copyOf(copied);
+    }
+
     record CollectionResult(
         String completionReason,
         long eventCount,
-        Map<String, Integer> hitCounts,
+        Map<String, Integer> observedHitCounts,
+        Map<String, Integer> matchedHitCounts,
+        Map<String, Integer> capturedHitCounts,
+        Map<String, Integer> conditionUnavailableCounts,
+        Map<String, Map<String, Integer>> conditionUnavailableReasons,
         Map<String, Integer> installedLocations
     ) {
     }

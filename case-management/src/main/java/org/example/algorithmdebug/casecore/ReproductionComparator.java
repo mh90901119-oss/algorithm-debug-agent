@@ -28,10 +28,10 @@ public final class ReproductionComparator {
             RunResultFingerprint current,
             Scope scope) {
         if (reference == null || current == null || scope == null) {
-            throw new IllegalArgumentException("比较参数不能为空");
+            throw new IllegalArgumentException("Comparison arguments must not be null");
         }
         if (!reference.caseId().equals(current.caseId())) {
-            throw new IllegalArgumentException("不同 Case 的 RunResultFingerprint 不得比较");
+            throw new IllegalArgumentException("RunResultFingerprints from different Cases must not be compared");
         }
 
         List<String> changed = new ArrayList<>(1);
@@ -47,7 +47,7 @@ public final class ReproductionComparator {
                 + "; referenceRunId=" + reference.runId().value()
                 + "; changedDimensions=" + dimensions;
         if (summary.length() > 2_048) {
-            throw new IllegalStateException("比较摘要超过 2 KiB 上限");
+            throw new IllegalStateException("Comparison summary exceeds the 2 KiB limit");
         }
         return new Result(outcome, summary, changed);
     }
@@ -61,7 +61,7 @@ public final class ReproductionComparator {
         /** 防止调用方修改变化维度。 */
         public Result {
             if (outcome == null || summary == null || changedDimensions == null) {
-                throw new IllegalArgumentException("比较结果字段不能为空");
+                throw new IllegalArgumentException("Comparison result fields must not be null");
             }
             changedDimensions = List.copyOf(changedDimensions);
         }

@@ -15,6 +15,7 @@ import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
+import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.PlanId;
@@ -60,6 +61,7 @@ class JdwpPlanCompilerTest {
                 plan.tracepoints().stream().map(point -> point.tracepointId()).toList());
         assertEquals(serviceAnchor, plan.tracepoints().getFirst().sourceAnchor());
         assertEquals("fixture.Algorithm#schedule()V", plan.tracepoints().getFirst().methodKey());
+        assertEquals("Which state selected the branch?", plan.intent().questionToAnswer());
     }
 
     @Test
@@ -71,7 +73,8 @@ class JdwpPlanCompilerTest {
         JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(sparse)), moduleRoot);
 
-        assertEquals(List.of(1, 3, 5), plan.tracepoints().getFirst().captureOnHits());
+        assertEquals(List.of(1, 3, 5),
+                plan.tracepoints().getFirst().captureOnMatchedHits());
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(
                         "outside", "fixture.Algorithm#schedule()V", 4, 5,
@@ -111,7 +114,11 @@ class JdwpPlanCompilerTest {
     private JdwpPlanRequest request(List<JdwpTracepointRequest> points) {
         return new JdwpPlanRequest(
                 new PlanId("plan-1"), points, JdwpCollectionBudget.defaults(),
-                "检查调度决策变量", NOW);
+                "Inspect the decision state",
+                new InvestigationIntent(
+                        "Which state selected the branch?", "A runtime flag selected it",
+                        List.of(), List.of("Runtime flag value")),
+                NOW);
     }
 
     private JdwpTracepointRequest point(String id, int line) {

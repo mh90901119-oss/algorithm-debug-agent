@@ -16,6 +16,9 @@ import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
 import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
+import org.example.algorithmdebug.contracts.JdwpConditionOperator;
+import org.example.algorithmdebug.contracts.JdwpScalarType;
+import org.example.algorithmdebug.contracts.JdwpValueCondition;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SourceAnchor;
@@ -38,7 +41,7 @@ class CollectorDebugPlanWriterTest {
         assertEquals(120_000, root.path("idleTimeoutMillis").asLong());
         assertEquals(100, root.path("maxEvents").asInt());
         JsonNode point = root.path("tracepoints").path(0);
-        assertEquals("2.0", root.path("schemaVersion").asText());
+        assertEquals("3.0", root.path("schemaVersion").asText());
         assertEquals("fixture.Algorithm", point.path("className").asText());
         assertEquals("schedule", point.path("methodName").asText());
         assertEquals("()V", point.path("methodDescriptor").asText());
@@ -83,8 +86,31 @@ class CollectorDebugPlanWriterTest {
                 plan(List.of(point)), 50_005));
 
         assertEquals(List.of(1, 3, 5), MAPPER.convertValue(
-                json.path("tracepoints").path(0).path("captureOnHits"),
+                json.path("tracepoints").path(0).path("captureOnMatchedHits"),
                 MAPPER.getTypeFactory().constructCollectionType(List.class, Integer.class)));
+    }
+
+    @Test
+    void writesConditionalObservationAndCaptureBudgets() throws Exception {
+        SourceAnchor anchor = new SourceAnchor(
+                "fixture.Algorithm", "schedule", "()V",
+                "src/main/java/fixture/Algorithm.java", 10, 20);
+        JdwpTracepointSpec point = new JdwpTracepointSpec(
+                "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
+                500, 2, List.of(1, 2),
+                new JdwpValueCondition(
+                        "candidate", List.of("wafer", "id"),
+                        JdwpConditionOperator.EQUALS, JdwpScalarType.STRING, "WAFER-1"),
+                JdwpCaptureSpec.stackOnly());
+
+        JsonNode json = MAPPER.readTree(new CollectorDebugPlanWriter().write(
+                plan(List.of(point)), 50_005));
+        JsonNode written = json.path("tracepoints").path(0);
+
+        assertEquals(500, written.path("maxObservedHits").asInt());
+        assertEquals(2, written.path("maxCapturedHits").asInt());
+        assertEquals("candidate", written.path("condition").path("localName").asText());
+        assertEquals("WAFER-1", written.path("condition").path("expectedValue").asText());
     }
 
     private static JdwpCollectionPlan plan() {

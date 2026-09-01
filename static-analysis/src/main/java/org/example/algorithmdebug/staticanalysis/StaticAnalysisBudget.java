@@ -39,7 +39,7 @@ public record StaticAnalysisBudget(
                 || maxCatalogBytes < MIN_CATALOG_BYTES
                 || maxCatalogBytes > MAX_CATALOG_BYTES
                 || timeoutMillis < 1 || timeoutMillis > HARD_MAX_TIMEOUT_MILLIS) {
-            throw new IllegalArgumentException("静态分析预算超出允许范围");
+            throw new IllegalArgumentException("The static-analysis budget is outside the allowed range");
         }
     }
 

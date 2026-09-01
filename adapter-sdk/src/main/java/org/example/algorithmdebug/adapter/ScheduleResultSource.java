@@ -17,7 +17,7 @@ public record ScheduleResultSource(Path outputDirectory, boolean recursive) {
     public ScheduleResultSource {
         outputDirectory = AdapterChecks.requireNonNull(outputDirectory, "outputDirectory");
         if (!outputDirectory.isAbsolute()) {
-            throw new IllegalArgumentException("outputDirectory 必须是绝对路径");
+            throw new IllegalArgumentException("outputDirectory must be an absolute path");
         }
         outputDirectory = outputDirectory.normalize();
     }

@@ -27,7 +27,7 @@ final class JdwpValueFlattener {
             NormalizationBudget budget,
             int remainingValueFacts) {
         if (roots == null || provenance == null || budget == null || remainingValueFacts < 0) {
-            throw new IllegalArgumentException("JDWP 值归一化参数非法");
+            throw new IllegalArgumentException("JDWP value-normalization arguments are invalid");
         }
         ArrayList<JdwpSnapshotSummary.ValueFact> facts = new ArrayList<>();
         ArrayList<JdwpSnapshotSummary.CollectorLimitFact> limits = new ArrayList<>();
@@ -202,7 +202,7 @@ final class JdwpValueFlattener {
     record RootValue(String path, JsonNode value) {
         RootValue {
             if (path == null || path.isBlank() || value == null) {
-                throw new IllegalArgumentException("JDWP 根值非法");
+                throw new IllegalArgumentException("The JDWP root value is invalid");
             }
         }
     }

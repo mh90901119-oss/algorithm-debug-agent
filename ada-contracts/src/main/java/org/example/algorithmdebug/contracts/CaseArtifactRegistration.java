@@ -12,7 +12,7 @@ public record CaseArtifactRegistration(
     /** 校验版本、Case 身份、引用和时间。 */
     public CaseArtifactRegistration {
         if (!SchemaVersions.CASE_ARTIFACT_REGISTRATION.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 CaseArtifactRegistration schemaVersion");
+            throw new IllegalArgumentException("Unsupported CaseArtifactRegistration schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
         artifact = ContractChecks.requireNonNull(artifact, "artifact");

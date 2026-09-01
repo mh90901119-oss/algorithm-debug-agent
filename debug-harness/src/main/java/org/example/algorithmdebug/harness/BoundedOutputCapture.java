@@ -22,7 +22,7 @@ public final class BoundedOutputCapture {
     public RunLog capture(InputStream input, Path destination, long maximumBytes)
             throws HarnessException {
         if (input == null || destination == null || maximumBytes <= 0) {
-            throw new IllegalArgumentException("input、destination 和 maximumBytes 必须有效");
+            throw new IllegalArgumentException("input, destination and maximumBytes must be valid");
         }
         Path normalized = prepare(destination);
         return capturePrepared(input, normalized, maximumBytes);
@@ -31,7 +31,7 @@ public final class BoundedOutputCapture {
     /** 在目标进程启动前原子创建空日志，确保冲突不会产生外部副作用。 */
     Path prepare(Path destination) throws HarnessException {
         if (destination == null) {
-            throw new IllegalArgumentException("destination 不能为空");
+            throw new IllegalArgumentException("destination must not be null");
         }
         Path normalized = destination.toAbsolutePath().normalize();
         try {
@@ -41,7 +41,7 @@ public final class BoundedOutputCapture {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_LOG_OPEN_FAILED",
-                    "无法创建不可覆盖日志: " + normalized,
+                    "Failed to create non-overwriting log: " + normalized,
                     exception);
         }
     }
@@ -59,10 +59,10 @@ public final class BoundedOutputCapture {
             long maximumBytes,
             OutputChunkObserver observer) throws HarnessException {
         if (input == null || destination == null || maximumBytes <= 0) {
-            throw new IllegalArgumentException("input、destination 和 maximumBytes 必须有效");
+            throw new IllegalArgumentException("input, destination and maximumBytes must be valid");
         }
         if (observer == null) {
-            throw new IllegalArgumentException("observer 不能为空");
+            throw new IllegalArgumentException("observer must not be null");
         }
         Path normalized = destination.toAbsolutePath().normalize();
         OutputStream output;
@@ -71,7 +71,7 @@ public final class BoundedOutputCapture {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_LOG_OPEN_FAILED",
-                    "无法打开已准备的日志: " + normalized,
+                    "Failed to open prepared log: " + normalized,
                     exception);
         }
 
@@ -97,7 +97,7 @@ public final class BoundedOutputCapture {
         } catch (IOException exception) {
             throw new HarnessException(
                     "HARNESS_LOG_CAPTURE_FAILED",
-                    "无法完整排空并归档进程日志: " + normalized,
+                    "Failed to fully drain and archive process log: " + normalized,
                     exception);
         }
     }

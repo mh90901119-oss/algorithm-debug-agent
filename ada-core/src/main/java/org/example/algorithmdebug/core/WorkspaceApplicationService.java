@@ -18,7 +18,7 @@ public final class WorkspaceApplicationService {
      */
     public WorkspaceApplicationService(WorkspaceInitializer initializer) {
         if (initializer == null) {
-            throw new IllegalArgumentException("initializer 不能为空");
+            throw new IllegalArgumentException("initializer must not be null");
         }
         this.initializer = initializer;
     }
@@ -33,7 +33,7 @@ public final class WorkspaceApplicationService {
         try {
             return initializer.initialize(root);
         } catch (WorkspaceException failure) {
-            throw new ControlPlaneException(failure.code(), "Workspace 初始化失败", failure);
+            throw new ControlPlaneException(failure.code(), "Workspace initialization failed", failure);
         }
     }
 }

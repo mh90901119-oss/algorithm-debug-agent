@@ -10,7 +10,7 @@ record CollectionPostProcessingResult(
 
     CollectionPostProcessingResult {
         if (artifacts == null || artifacts.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("后处理 Artifact 不能为空");
+            throw new IllegalArgumentException("Post-processing Artifact must not be null");
         }
         artifacts = List.copyOf(artifacts);
     }

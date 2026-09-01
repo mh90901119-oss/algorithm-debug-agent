@@ -11,7 +11,16 @@
     "line": __LINE__,
     "methodName": "inspect",
     "methodDescriptor": "(I)I",
-    "maxHits": 1,
+    "maxObservedHits": 1,
+    "maxCapturedHits": 1,
+    "captureOnMatchedHits": [1],
+    "condition": {
+      "localName": "marker",
+      "fieldPath": [],
+      "operator": "EQUALS",
+      "expectedType": "LONG",
+      "expectedValue": "42"
+    },
     "capture": {
       "locals": true,
       "stack": true,

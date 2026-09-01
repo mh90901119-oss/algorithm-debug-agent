@@ -24,7 +24,7 @@ public record MethodCallEdge(
         calleeKey = ContractChecks.requireBoundedText(calleeKey, "calleeKey", 1_024, false);
         resolutionKind = resolutionKind == null ? CallResolutionKind.DIRECT : resolutionKind;
         if (sourceLine < 1) {
-            throw new IllegalArgumentException("sourceLine 必须为正数");
+            throw new IllegalArgumentException("sourceLine must be positive");
         }
     }
 }

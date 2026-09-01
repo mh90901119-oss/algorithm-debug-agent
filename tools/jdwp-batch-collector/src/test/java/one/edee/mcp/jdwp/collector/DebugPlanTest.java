@@ -36,15 +36,28 @@ class DebugPlanTest {
     @Test
     void validatesSparseCaptureHitOrdinals() {
         DebugPlan plan = validPlan();
-        plan.tracepoints.getFirst().maxHits = 5;
-        plan.tracepoints.getFirst().captureOnHits = new ArrayList<>(List.of(1, 3, 5));
+        plan.tracepoints.getFirst().maxObservedHits = 5;
+        plan.tracepoints.getFirst().maxCapturedHits = 3;
+        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 3, 5));
 
         assertDoesNotThrow(plan::validate);
-        assertEquals(List.of(1, 3, 5), plan.tracepoints.getFirst().captureOnHits);
+        assertEquals(List.of(1, 3, 5), plan.tracepoints.getFirst().captureOnMatchedHits);
 
-        plan.tracepoints.getFirst().captureOnHits = new ArrayList<>(List.of(1, 1));
+        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 1));
         assertThrows(IllegalArgumentException.class, plan::validate);
-        plan.tracepoints.getFirst().captureOnHits = new ArrayList<>(List.of(1, 6));
+        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 6));
+        assertThrows(IllegalArgumentException.class, plan::validate);
+    }
+
+    @Test
+    void rejectsMalformedTypedConditionBeforeAttaching() {
+        DebugPlan plan = validPlan();
+        DebugPlan.Condition condition = new DebugPlan.Condition();
+        condition.localName = "waferNumber";
+        condition.expectedType = "LONG";
+        condition.expectedValue = "not-a-number";
+        plan.tracepoints.getFirst().condition = condition;
+
         assertThrows(IllegalArgumentException.class, plan::validate);
     }
 

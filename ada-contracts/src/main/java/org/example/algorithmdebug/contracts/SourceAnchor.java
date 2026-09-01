@@ -27,7 +27,7 @@ public record SourceAnchor(
         sourceRelativePath = ContractChecks.requirePortableRelativePath(
                 sourceRelativePath, "sourceRelativePath");
         if (startLine < 1 || endLine < startLine) {
-            throw new IllegalArgumentException("SourceAnchor 行范围非法");
+            throw new IllegalArgumentException("SourceAnchor line range is invalid");
         }
     }
 }

@@ -23,7 +23,7 @@ public record EvidenceBuildRequest(
     /** 校验身份、Collection 角色、要求维度和输出预算。 */
     public EvidenceBuildRequest {
         if (!SchemaVersions.EVIDENCE_BUILD_REQUEST.equals(schemaVersion)) {
-            throw new IllegalArgumentException("不支持的 EvidenceBuildRequest schemaVersion");
+            throw new IllegalArgumentException("Unsupported EvidenceBuildRequest schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
@@ -35,17 +35,17 @@ public record EvidenceBuildRequest(
         HashSet<CollectionId> overlap = new HashSet<>(collectionIds);
         overlap.retainAll(comparisonCollectionIds);
         if (!overlap.isEmpty()) {
-            throw new IllegalArgumentException("同一 Collection 不能同时作为当前证据和比较证据");
+            throw new IllegalArgumentException("The same Collection must not be both current and comparison evidence");
         }
         requiredDimensions = immutableDimensions(requiredDimensions, "requiredDimensions");
         if (requiredDimensions.isEmpty()) {
-            throw new IllegalArgumentException("requiredDimensions 不能为空");
+            throw new IllegalArgumentException("requiredDimensions must not be null");
         }
         if (maxSummaryBytes < 1 || maxSummaryBytes > NormalizationBudget.MAX_SUMMARY_BYTES) {
-            throw new IllegalArgumentException("maxSummaryBytes 超出 P4 硬上限");
+            throw new IllegalArgumentException("maxSummaryBytes exceeds the P4 hard limit");
         }
         if (maxEvidenceBundleBytes < 1 || maxEvidenceBundleBytes > 1024L * 1024) {
-            throw new IllegalArgumentException("maxEvidenceBundleBytes 超出 P4 硬上限");
+            throw new IllegalArgumentException("maxEvidenceBundleBytes exceeds the P4 hard limit");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
@@ -53,7 +53,7 @@ public record EvidenceBuildRequest(
     private static List<CollectionId> boundedIds(List<CollectionId> values, String field) {
         List<CollectionId> copied = ContractChecks.immutableList(values, field);
         if (copied.size() > 16 || new HashSet<>(copied).size() != copied.size()) {
-            throw new IllegalArgumentException(field + " 数量或唯一性非法");
+            throw new IllegalArgumentException(field + " count or uniqueness is invalid");
         }
         return copied;
     }
@@ -62,7 +62,7 @@ public record EvidenceBuildRequest(
             Set<EvidenceDimension> values, String field) {
         ContractChecks.requireNonNull(values, field);
         if (values.stream().anyMatch(java.util.Objects::isNull) || values.size() > 7) {
-            throw new IllegalArgumentException(field + " 非法");
+            throw new IllegalArgumentException(field + " is invalid");
         }
         return Set.copyOf(values);
     }

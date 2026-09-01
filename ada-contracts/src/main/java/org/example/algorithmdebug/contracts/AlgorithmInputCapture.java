@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * 一轮 Analysis 的算法输入定位和不可变归档结果。
+ * 一轮 Analysis 的算法输入定位结果和当前 Case 唯一不可变输入引用。
  *
  * <p>该契约只保存模块内源码锚点和输入文件名，不保存目标机器绝对路径。输入内容身份由
  * {@link ArtifactReference#sha256()} 表示；该 SHA 只用于输入复用判断，不证明算法结论。</p>
@@ -53,8 +53,9 @@ public record AlgorithmInputCapture(
             throw new IllegalArgumentException("Compared input must reference a previous Analysis");
         }
         artifact = ContractChecks.requireNonNull(artifact, "artifact");
-        String expectedPath = "analyses/" + analysisId.value() + "/input/algorithm-input.json";
-        if (!"ALGORITHM_INPUT".equals(artifact.artifactType())
+        String expectedPath = "input/" + fileName;
+        if (!"algorithm-input".equals(artifact.artifactId())
+                || !"ALGORITHM_INPUT".equals(artifact.artifactType())
                 || !"application/json".equals(artifact.mediaType())
                 || !expectedPath.equals(artifact.relativePath())) {
             throw new IllegalArgumentException("Algorithm input Artifact identity is invalid");

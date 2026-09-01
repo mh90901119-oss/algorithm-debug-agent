@@ -8,7 +8,7 @@ public record MultiArtifactBackedResult<T>(T summary, List<ArtifactReference> ar
     /** 校验摘要存在、引用不可变且数量有界。 */
     public MultiArtifactBackedResult {
         if (summary == null || artifacts == null || artifacts.isEmpty() || artifacts.size() > 32) {
-            throw new IllegalArgumentException("summary 和 1..32 个 artifacts 必须存在");
+            throw new IllegalArgumentException("summary and 1 to 32 artifacts are required");
         }
         artifacts = List.copyOf(artifacts);
     }

@@ -16,7 +16,7 @@ public final class NormalizationException extends RuntimeException {
         super(message, cause);
         if (code == null || code.isBlank() || message == null || message.isBlank()
                 || jsonlLine < 0) {
-            throw new IllegalArgumentException("归一化错误参数非法");
+            throw new IllegalArgumentException("Normalized error arguments are invalid");
         }
         this.code = code;
         this.jsonlLine = jsonlLine;

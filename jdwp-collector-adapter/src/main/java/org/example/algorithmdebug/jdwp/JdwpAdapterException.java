@@ -34,10 +34,10 @@ public final class JdwpAdapterException extends Exception {
             boolean collectorStarted) {
         super(message, cause);
         if (code == null || code.isBlank()) {
-            throw new IllegalArgumentException("code 不能为空");
+            throw new IllegalArgumentException("code must not be null");
         }
         if (collectorStarted && !targetStarted) {
-            throw new IllegalArgumentException("Collector 已启动时目标必须已经启动");
+            throw new IllegalArgumentException("The target must already be started when the Collector is started");
         }
         this.code = code;
         this.targetStarted = targetStarted;

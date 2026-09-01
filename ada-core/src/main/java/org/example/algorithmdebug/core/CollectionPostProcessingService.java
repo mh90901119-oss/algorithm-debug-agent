@@ -73,7 +73,7 @@ final class CollectionPostProcessingService {
             Clock clock) {
         if (casesRoot == null || archive == null || mapper == null || writer == null
                 || ids == null || clock == null) {
-            throw new IllegalArgumentException("Collection 后处理依赖不能为空");
+            throw new IllegalArgumentException("Collection post-processing dependencies must not be null");
         }
         this.casesRoot = casesRoot.toAbsolutePath().normalize();
         this.archive = archive;
@@ -140,7 +140,7 @@ final class CollectionPostProcessingService {
                     Optional.empty(), budget, normalized, now));
             throw new CaseRunException(
                     normalized.failureCode().orElse("CODEPATH_NORMALIZATION_FAILED"),
-                    "CodePath Raw Trace 规范化失败");
+                    "CodePath Raw Trace normalization failed");
         }
         MethodPathSummary summary = normalized.summary().orElseThrow();
         Path summaryPath = archive.createMethodPathSummary(summary);
@@ -189,7 +189,7 @@ final class CollectionPostProcessingService {
                     Optional.empty(), budget, normalized, now));
             throw new CaseRunException(
                     normalized.failureCode().orElse("JDWP_NORMALIZATION_FAILED"),
-                    "JDWP Raw Trace 规范化失败");
+                    "JDWP Raw Trace normalization failed");
         }
         JdwpSnapshotSummary summary = normalized.summary().orElseThrow();
         Path summaryPath = archive.createJdwpSnapshotSummary(summary);
@@ -218,7 +218,7 @@ final class CollectionPostProcessingService {
                 "COLLECTION_VALIDATION", "application/json");
         var runOutcome = archive.findRunOutcome(request.caseId(), request.runId()).orElseThrow(() ->
                 new CaseRunException("EVIDENCE_REFERENCE_RUN_INCOMPLETE",
-                        "Evidence 引用的无采集 Run 尚未完成"));
+                        "The uninstrumented Run referenced by Evidence is not completed"));
         ArtifactReference outcomeReference = describe(
                 request.caseId(), layout.runOutcome(request.runId()),
                 request.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
@@ -379,7 +379,7 @@ final class CollectionPostProcessingService {
             String mediaType) {
         if (!Files.isRegularFile(path)) {
             throw new CaseRunException("COLLECTION_POST_PROCESSING_ARTIFACT_MISSING",
-                    "Collection 后处理产物不存在");
+                    "Collection post-processing artifact does not exist");
         }
         return artifacts.describe(caseId, id, type, mediaType, path);
     }
