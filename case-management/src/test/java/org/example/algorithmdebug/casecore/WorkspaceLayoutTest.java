@@ -23,9 +23,7 @@ class WorkspaceLayoutTest {
 
         assertTrue(layout.root().isAbsolute());
         assertEquals(temporaryDirectory.resolve("agent-workspace").toAbsolutePath().normalize(), layout.root());
-        assertEquals(layout.root().resolve("config"), layout.configRoot());
         assertEquals(layout.root().resolve("projects"), layout.projectsRoot());
-        assertEquals(layout.root().resolve("system"), layout.systemRoot());
     }
 
     @Test

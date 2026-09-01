@@ -1,72 +1,39 @@
 # Agent Eval Harness
 
-Agent Eval Harness 是 Agent 外部的真实 OpenCode 回归工具。它不参与普通用户分析，也不对单次回答
-进行在线二次模型审计。
+Eval Harness 不是面向用户回答的在线模块，而是开发和发布门禁。它启动真实 OpenCode 会话，记录 JSONL Tool Trace，并用确定性规则判断 Agent 是否按预期取证。
+
+## Smoke Suite
+
+`suites/smoke.json` 当前包含 10 个 Case：成功运行、输入异常、算法异常、断言失败、工具失败、静态分析、CodePath、JDWP、Workspace 完整性和跨实体因果。
+
+跨实体因果 Case 不只匹配答案文字，还要求：
+
+- 所有要求的 Collection 成功。
+- 动态 Plan 包含问题、假设和预期观察。
+- Plan 引用已有 Evidence。
+- JDWP 使用结构化条件，且预期值匹配目标实体。
+- 目标 UT 执行次数不突破预算。
 
 ## 运行
 
-先构建并安装当前仓库，然后从目标算法 Maven 模块目录执行：
+```powershell
+.\scripts\run-agent-evals.ps1 -Suite Smoke
+```
+
+只运行一个 Case：
 
 ```powershell
-D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke
+.\scripts\run-agent-evals.ps1 -Suite Smoke -Case cross-wafer-causal -TimeoutSeconds 600
 ```
 
-当前目录就是目标模块。脚本不接受 `-Project`、Workspace、Gantt 或输出目录路径参数；这些路径来自
-`config/agent-settings.json` 安装结果。
+`-Project` 只指定 OpenCode 会话工作目录，不等于“指定 Demo 类型”。产品中目标项目就是用户启动 OpenCode 的 Maven 算法模块。
 
-运行单个 Case：
+报告写入 `config/agent-settings.json` 的 `evalDirectory`。每次运行包含 Suite 摘要、Case 报告、OpenCode Trace 以及关联 Workspace 信息。
+
+## 单元测试
 
 ```powershell
-D:\path\to\algorithm-debug-agent\scripts\run-agent-evals.ps1 -Suite Smoke -Case codepath-independent
+node --test agent-evals/test/*.test.mjs
 ```
 
-`-TimeoutSeconds` 是每个 OpenCode Case 的上限，不是整个 Suite 的上限。
-
-## Harness 做什么
-
-1. 读取版本化 Suite 和当前目标模块。
-2. 为每个 Case 创建隔离 Eval Workspace。
-3. 启动真实 `opencode run --format json`，不使用伪造 ToolResponse。
-4. 解析 OpenCode JSONL，并按 `callID` 合并同一 Tool 的重复状态快照。
-5. 检查必需/禁止 Tool、目标结果、答案模式、证据引用和场景执行预算。
-6. 调用 Java `case_audit` 并保存 Workspace Audit。
-7. 读取 Case-local `interaction.jsonl` 并保存 Interaction Audit。
-8. 比较审计推导的 expected/actual 文件。
-9. 写入每个 Case 的 PASS/FAIL 和 Review。
-
-目标 UT 失败可以是通过的 Eval，前提是 Agent 正确理解、归档和解释了该失败。
-
-## 每个 Eval Case 的报告
-
-```text
-<evalDirectory>/<evalRunId>/cases/<evalCaseId>/
-  request.json
-  stdout.jsonl
-  stderr.log
-  parsed-trace.json
-  final-answer.md
-  grade.json
-  workspace-audit.json
-  interaction-audit.json
-  expected-vs-actual.json
-  case-review.md
-```
-
-这些是 Eval 报告，不会复制到算法源码仓库。真实 Case 副本在同一 Eval Run 的
-`agent-workspace/projects/<projectId>/cases/<caseId>` 下，便于逐文件复盘。
-
-## 当前 Smoke Case
-
-| Case | 目的 |
-|---|---|
-| `passing-ut` | 成功 UT 和 Gantt |
-| `missing-ut` | 不存在目标，禁止强行运行 |
-| `missing-input` | 最早输入异常 |
-| `algorithm-loop-guard` | 算法运行时异常根因 |
-| `assertion-failure` | 断言预期与算法异常区分 |
-| `static-current-source` | 当前源码有界直接调用 |
-| `codepath-independent` | CodePath 不依赖 JDWP |
-| `jdwp-independent` | JDWP 不依赖 CodePath |
-| `artifact-integrity-rejection` | 篡改 Artifact 必须被拒绝 |
-
-执行次数限制是 Eval Case 的回归预算，不是生产 Agent 的全局采集次数。生产工作流按证据是否足够停止。
+测试覆盖 Suite Schema、Runner、JSONL Parser、Deterministic Grader 和 Report Writer。Grader 只验证可确定事实，不尝试用第二个 LLM 对回答做主观评分。

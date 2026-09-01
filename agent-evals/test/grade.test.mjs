@@ -207,3 +207,77 @@ test("rejects current-source or dynamic evidence collection before the first tar
   assert.equal(grade.passed, false)
   assert.match(grade.correctnessFailures.join("\n"), /static_analyze was called before run_test/)
 })
+
+test("grades structured causal intent and conditional JDWP without model-based auditing", () => {
+  const lines = assertionTrace().split("\n")
+  lines.splice(3, 0,
+    toolEvent("static_analyze", {}, toolResponse({ status: "COMPLETE" })),
+    toolEvent("codepath_plan_create", {
+      questionToAnswer: "Which ordered wafer path ran before A-W2?",
+      hypothesis: "B-W1 and C-W1 were scheduled first",
+      basedOnEvidenceIds: ["evidence-static"],
+      expectedObservations: ["Ordered scheduleWafer invocations"],
+    }, toolResponse({ planId: "codepath-plan-1" })),
+    toolEvent("codepath_collect", {}, toolResponse({ completion: "SUCCESS" })),
+    toolEvent("jdwp_plan_create", {
+      questionToAnswer: "When is A-W2 scheduled?",
+      hypothesis: "A-W2 is observed after the first wafers",
+      basedOnEvidenceIds: ["evidence-codepath"],
+      expectedObservations: ["A-W2 top-frame context"],
+      tracepoints: [{
+        maxObservedHits: 20,
+        maxCapturedHits: 1,
+        captureOnMatchedHits: [1],
+        condition: {
+          localName: "context", fieldPath: ["wafer", "waferId"],
+          operator: "EQUALS", expectedType: "STRING", expectedValue: "A-W2",
+        },
+      }],
+    }, toolResponse({ planId: "jdwp-plan-1" })),
+    toolEvent("jdwp_collect", {}, toolResponse({ completion: "SUCCESS" })),
+  )
+  lines[lines.length - 1] = JSON.stringify({
+    type: "text",
+    part: { type: "text", text: "A-W2 starts after B-W1 and C-W1 because whole wafers are ordered before it." },
+  })
+  const evalCase = {
+    ...assertionCase,
+    id: "cross-wafer-causal",
+    requiredTools: [
+      ...assertionCase.requiredTools, "static_analyze", "codepath_plan_create",
+      "codepath_collect", "jdwp_plan_create", "jdwp_collect",
+    ],
+    allowCodePath: true,
+    allowJdwp: true,
+    expectedCollectionCompletion: "SUCCESS",
+    requirePlanIntent: true,
+    minimumPlanEvidenceReferences: 1,
+    requireJdwpCondition: true,
+    requiredJdwpConditionValuePatterns: ["A-W2"],
+    requiredAnswerPatterns: ["A-W2", "B-W1", "C-W1", "ordered|whole wafers"],
+    maxTargetTestExecutions: 3,
+  }
+
+  const trace = parseOpenCodeJsonl(lines.join("\n"))
+  const grade = gradeCase(evalCase, trace, {
+    openCodeExitCode: 0,
+    sourceModified: false,
+  })
+
+  assert.equal(grade.passed, true)
+  assert.deepEqual(grade.correctnessFailures, [])
+  assert.deepEqual(grade.evidenceFailures, [])
+
+  for (const call of trace.toolCalls.filter((item) => item.name.endsWith("_plan_create"))) {
+    call.input.basedOnEvidenceIds = []
+  }
+  delete trace.toolCalls.find((item) => item.name === "jdwp_plan_create")
+    .input.tracepoints[0].condition
+  const rejected = gradeCase(evalCase, trace, {
+    openCodeExitCode: 0,
+    sourceModified: false,
+  })
+  assert.equal(rejected.passed, false)
+  assert.match(rejected.evidenceFailures.join("\n"), /plan.*evidence|lineage/iu)
+  assert.match(rejected.correctnessFailures.join("\n"), /condition/iu)
+})

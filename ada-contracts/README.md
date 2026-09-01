@@ -45,4 +45,4 @@ Baseline 稳定性只使用专用 `BaselineStabilityState`；Case/多轮对话�
 mvn -pl ada-contracts test
 ```
 
-详细设计见 `docs/designs/2026-08-10-ada-contracts-phase0-design.md`。
+当前模块边界见 `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`。

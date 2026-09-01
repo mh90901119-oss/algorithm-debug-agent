@@ -96,8 +96,16 @@ try {
     }
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "JDWP manifest is missing" }
     $traceText = Get-Content -LiteralPath $trace -Raw -Encoding UTF8
-    if ($traceText -notmatch 'marker' -or $traceText -notmatch '42') {
-        throw "JDWP raw trace does not contain marker=42"
+    if ($traceText -notmatch 'marker' -or $traceText -notmatch '42' `
+            -or $traceText -notmatch '"conditionResult":"MATCHED"') {
+        throw "JDWP raw trace does not contain the matched marker=42 snapshot"
+    }
+    $manifestData = Get-Content -LiteralPath $manifest -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($manifestData.observedHitCounts.'probe-marker' -ne 1 `
+            -or $manifestData.matchedHitCounts.'probe-marker' -ne 1 `
+            -or $manifestData.capturedHitCounts.'probe-marker' -ne 1 `
+            -or $manifestData.conditionUnavailableCounts.'probe-marker' -notin @(0, $null)) {
+        throw "JDWP manifest conditional hit counters are invalid"
     }
     $targetText = Get-Content -LiteralPath (Join-Path $logs "target-stdout.log") -Raw -Encoding UTF8
     if ($targetText -notmatch 'JDWP_LOOPBACK_TARGET_OK marker=42') {

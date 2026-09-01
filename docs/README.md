@@ -1,39 +1,25 @@
-# Documentation map
+# 文档索引
 
-## Architecture
+仓库只保留当前实现、仍有效的决策以及当前阶段设计，不保留已经被代码取代的阶段性草稿。
 
-`architecture/` 保存系统边界、模块职责、运行时采集、工具实测基线和性能设计。
+## 使用与排障
 
-## Designs
+- [当前能力与边界](current-capabilities.md)
+- [工作流与 Workspace 产物](algorithm-debug-workflow-and-artifacts.md)
+- [目标环境安装与验证](testing/target-algorithm-environment-installation.md)
+- [OpenCode Agent 调试](testing/opencode-agent-debugging.md)
+- [卸载与重新安装](testing/opencode-uninstallation.md)
 
-`designs/` 保存进入编码阶段的可实施详细设计和统一模板。新功能、跨模块、Schema、SPI、CLI、
-性能或安全相关变更必须先在此处新增或更新设计。
+## 架构与开发
 
-## Development
+- [架构索引](architecture/README.md)
+- [模块详细设计](architecture/algorithm-debug-agent-module-detailed-design-v1.md)
+- [工具验证基线](architecture/tool-validation-baseline.md)
+- [开发规则](development/development-rules.md)
+- [当前开发计划](plans/algorithm-debug-agent-development-plan.md)
+- [当前实现设计](designs/2026-09-01-input-first-causal-evidence-and-conditional-jdwp-design.md)
+- [最终审计](audits/2026-09-01-input-first-conditional-runtime-evidence-final-audit.md)
 
-`development/` 保存仓库开发规则、生命周期、测试策略、质量门禁和 Agent 专项工程规范。
+## 设计决策
 
-## Plans
-
-`plans/` 保存阶段实施计划和验收标准。历史计划不能覆盖当前架构基线。
-
-## Experiments
-
-`experiments/` 保存有明确时间边界的技术 Spike。实验结果是决策证据，不自动成为生产契约。
-
-## Decisions
-
-`decisions/` 保存 Architecture Decision Record。重大技术选型、不可逆边界变化和许可证决策必须归档。
-
-## References
-
-`references/` 保存外部系统、算法 Demo 和领域规格参考，不作为 Agent 核心契约的唯一来源。
-
-## 开发入口
-
-1. 阅读仓库根目录 `AGENTS.md`。
-2. 阅读 `development/development-rules.md`。
-3. 从 `architecture/README.md` 进入当前架构基线。
-4. 检查 `designs/` 是否已有本次变更的可实施设计。
-5. 如无设计，复制 `designs/implementation-design-template.md` 后再编码。
-
+`decisions/` 中的 ADR 记录仍影响当前实现的架构边界。历史背景可以保留，但 ADR 的“当前结论”不得与代码和本索引冲突。

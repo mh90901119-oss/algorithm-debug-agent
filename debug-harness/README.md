@@ -35,7 +35,7 @@ result = runner.run(spec, options, source, parser, runResultPath)
 Adapter 不得选择“最新文件”、指定机器上的 Maven 路径或把时间戳格式作为通用规则。Maven executable
 和日志路径由运行环境显式提供。真实端到端测试已使用正式 Runner 驱动两次 Demo UT，不再包含测试内
 `ProcessBuilder`。完整设计与实现记录见
-`docs/designs/2026-08-11-debug-harness-maven-junit-runner-design.md`。
+当前模块边界见 `docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md`。
 
 Run/Case 持久化与 CLI 编排现由 `case-management`、`ada-core` 和 `algorithm-debug-cli` 完成；Harness
 保持只负责进程、Surefire、Gantt 与失败指纹的确定性事实。参考选择和比较由 Case/Core 层完成；

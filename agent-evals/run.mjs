@@ -64,6 +64,10 @@ export function validateSuite(suite) {
     requireStringArray(item.forbiddenTools, `cases[${index}].forbiddenTools`)
     requireStringArray(item.requiredAnswerPatterns, `cases[${index}].requiredAnswerPatterns`)
     requireStringArray(item.forbiddenAnswerPatterns, `cases[${index}].forbiddenAnswerPatterns`)
+    requireStringArray(
+      item.requiredJdwpConditionValuePatterns,
+      `cases[${index}].requiredJdwpConditionValuePatterns`,
+    )
     if (item.expectedGanttOutcome !== undefined
         && !["PRESENT", "ABSENT"].includes(item.expectedGanttOutcome)) {
       throw new TypeError(`cases[${index}].expectedGanttOutcome must be PRESENT or ABSENT`)
@@ -82,6 +86,19 @@ export function validateSuite(suite) {
     if (item.maxTargetTestExecutions !== undefined
         && (!Number.isInteger(item.maxTargetTestExecutions) || item.maxTargetTestExecutions < 0)) {
       throw new TypeError(`cases[${index}].maxTargetTestExecutions must be a non-negative integer`)
+    }
+    if (item.minimumPlanEvidenceReferences !== undefined
+        && (!Number.isInteger(item.minimumPlanEvidenceReferences)
+          || item.minimumPlanEvidenceReferences < 0
+          || item.minimumPlanEvidenceReferences > 20)) {
+      throw new TypeError(`cases[${index}].minimumPlanEvidenceReferences must be between 0 and 20`)
+    }
+    for (const flag of [
+      "requirePlanIntent", "requireJdwpCondition", "requireAllCollectionsSuccessful",
+    ]) {
+      if (item[flag] !== undefined && typeof item[flag] !== "boolean") {
+        throw new TypeError(`cases[${index}].${flag} must be boolean`)
+      }
     }
   }
   return suite

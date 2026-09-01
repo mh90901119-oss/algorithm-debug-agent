@@ -103,3 +103,16 @@ test("Case interaction DFX schema is strict and contains only bounded diagnostic
     assert.equal(schema.properties[forbidden], undefined)
   }
 })
+
+test("installer and JDWP verification cover every current deterministic boundary", async () => {
+  const [installer, verifier] = await Promise.all([
+    readUtf8("scripts/install-opencode.ps1"),
+    readUtf8("scripts/verify-jdwp-loopback.ps1"),
+  ])
+
+  assert.match(installer, /algorithm-debug_algorithm_input_capture/u)
+  assert.match(verifier, /conditionResult/u)
+  assert.match(verifier, /observedHitCounts/u)
+  assert.match(verifier, /matchedHitCounts/u)
+  assert.match(verifier, /capturedHitCounts/u)
+})

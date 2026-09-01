@@ -444,6 +444,7 @@ function Assert-OpenCodeDiscovery {
             }
             $expectedTools = @(
                 "algorithm-debug_analysis_begin", "algorithm-debug_case_inspect",
+                "algorithm-debug_algorithm_input_capture",
                 "algorithm-debug_case_audit", "algorithm-debug_gantt_inspect",
                 "algorithm-debug_run_test", "algorithm-debug_static_analyze",
                 "algorithm-debug_codepath_plan_create", "algorithm-debug_codepath_collect",

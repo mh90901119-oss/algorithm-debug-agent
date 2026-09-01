@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0",
   "suiteId": "algorithm-debug-smoke",
-  "description": "Nine real OpenCode scenarios covering pass, missing UT, target failures, independent collectors and Artifact integrity",
+  "description": "Ten real OpenCode scenarios covering pass, missing UT, target failures, independent collectors, conditional causal analysis and Artifact integrity",
   "cases": [
     {
       "id": "passing-ut",
@@ -284,6 +284,50 @@
       "allowJdwp": false,
       "maxTargetTestExecutions": 1,
       "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT"
+    },
+    {
+      "id": "cross-wafer-causal",
+      "question": "The Gantt shows A-W2 does not start its first PICK until time 60 even though CH1 became available earlier. Explain the upstream cause, including whether B-W1, C-W1 and whole-wafer ordering contribute. Use input plus current source, then validate the relevant runtime path and one A-W2 state with a conditional JDWP plan; do not assume A-W2 alone caused the delay.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit",
+        "analysis_complete"
+      ],
+      "forbiddenTools": [],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "A-W2 alone|only A-W2"
+      ],
+      "requireAnalysisComplete": true,
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "minimumPlanEvidenceReferences": 1,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": ["A-W2"],
+      "maxTargetTestExecutions": 3,
       "expectedGanttOutcome": "PRESENT"
     }
   ]
