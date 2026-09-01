@@ -50,7 +50,7 @@ class ScheduleProducingTestRunnerTest {
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
                 spec(), options(), source, this::parse,
-                temporaryDirectory.resolve("run-success/result/gantt.json"));
+                temporaryDirectory.resolve("run-success/result"));
 
         assertTrue(result.scheduleResult().isPresent());
         assertEquals(GanttOutcome.PRESENT, result.ganttOutcome());
@@ -74,7 +74,7 @@ class ScheduleProducingTestRunnerTest {
                 snapshotter,
                 waiter(snapshotter, nanos),
                 new ScheduleResultCapture<>(snapshotter, 1024));
-        Path destination = temporaryDirectory.resolve("run-failed/result/gantt.json");
+        Path destination = temporaryDirectory.resolve("run-failed/result");
 
         ScheduleRunResult<TextSnapshot> result = runner.run(
                 spec(), options(), source, this::parse, destination);
@@ -83,7 +83,7 @@ class ScheduleProducingTestRunnerTest {
         assertEquals(GanttOutcome.PRESENT, result.ganttOutcome());
         assertTrue(result.agentFailure().isEmpty());
         assertEquals(1, result.changedOutputCandidates().size());
-        assertTrue(Files.isRegularFile(destination));
+        assertTrue(Files.isRegularFile(destination.resolve("result.json")));
     }
 
     @Test
@@ -107,7 +107,7 @@ class ScheduleProducingTestRunnerTest {
                 path -> {
                     throw new AdapterException("TEST_INVALID_GANTT", "调度结果格式无效");
                 },
-                temporaryDirectory.resolve("run-invalid/result/gantt.json"));
+                temporaryDirectory.resolve("run-invalid/result"));
 
         assertEquals(RunCompletion.FAILED, result.run().completion());
         assertEquals(1, result.run().exitCode().orElseThrow());
@@ -141,7 +141,7 @@ class ScheduleProducingTestRunnerTest {
                 path -> {
                     throw parserFailure;
                 },
-                temporaryDirectory.resolve("run-unchecked/result/gantt.json"));
+                temporaryDirectory.resolve("run-unchecked/result"));
 
         assertEquals(RunCompletion.SUCCEEDED, result.run().completion());
         assertEquals(GanttOutcome.INCOMPLETE, result.ganttOutcome());

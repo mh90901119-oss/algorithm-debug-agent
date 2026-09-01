@@ -91,16 +91,6 @@ public final class CaseWorkspaceAuditor {
                 }
                 Path artifact = root.resolve(registration.artifact().relativePath()).normalize();
                 expected.add(registration.artifact().relativePath()); checked++;
-                if ("ALGORITHM_INPUT".equals(registration.artifact().artifactType())) {
-                    String metadata = registration.artifact().relativePath()
-                            .replace("algorithm-input.json", "input-analysis.json");
-                    expected.add(metadata);
-                    if (!Files.isRegularFile(root.resolve(metadata), LinkOption.NOFOLLOW_LINKS)) {
-                        issues.add(issue("ALGORITHM_INPUT_CONTROL_MISSING", "ANALYSIS",
-                                registration.artifact().artifactId(), "ALGORITHM_INPUT", metadata,
-                                "Algorithm input control document is missing"));
-                    }
-                }
                 ArtifactIntegrityChecker.Status status = integrity.verify(registration.artifact(), artifact).status();
                 if (status != ArtifactIntegrityChecker.Status.VALID) {
                     issues.add(issue("ARTIFACT_" + status, "ARTIFACT", registration.artifact().artifactId(),

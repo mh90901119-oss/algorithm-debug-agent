@@ -20,6 +20,7 @@ class CodePathCollectionPlanJsonTest {
     @Test void roundTripsExactV2PlanAndAlignsSchema() throws Exception {
         CodePathCollectionPlan plan = plan(); JsonNode json = MAPPER.valueToTree(plan);
         assertEquals(plan, MAPPER.treeToValue(json, CodePathCollectionPlan.class));
+        assertEquals("Which path ran?", json.path("intent").path("questionToAnswer").asText());
         for (String old : List.of("sourceFingerprintSha256", "packagePrefixes", "captureScope", "estimatedPackageEvents")) assertFalse(json.has(old));
         assertFalse(json.path("budget").has("maxCallDepth")); JsonNode schema = schema(); Set<String> required = new HashSet<>(); schema.path("required").forEach(v -> required.add(v.asText()));
         assertEquals(Set.of("schemaVersion", "planId", "caseId", "contextId", "analysisId", "targetTest", "selectors", "budget", "rationale", "createdAt"), required);
@@ -37,7 +38,7 @@ class CodePathCollectionPlanJsonTest {
         assertThrows(IllegalArgumentException.class, () -> new CollectionBudget(1, 1, 20 * 60_000L + 1));
         assertThrows(IllegalArgumentException.class, () -> new MethodSelector("x#run()", "x.Y", "run", "()"));
     }
-    private static CodePathCollectionPlan plan() { return new CodePathCollectionPlan(SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "runs"), List.of(new MethodSelector("fixture.TargetTest#runs()V", "fixture.TargetTest", "runs", "()V")), CollectionBudget.defaults(), "定位关键调用", Instant.EPOCH); }
+    private static CodePathCollectionPlan plan() { return new CodePathCollectionPlan(SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "runs"), List.of(new MethodSelector("fixture.TargetTest#runs()V", "fixture.TargetTest", "runs", "()V")), CollectionBudget.defaults(), "Locate the key invocation", new InvestigationIntent("Which path ran?", "One strategy implementation was selected", List.of(), List.of("Observed method path")), Instant.EPOCH); }
     private static JsonNode schema() throws Exception { return MAPPER.readTree(schemaPath().toFile()); }
     private static Path schemaPath() { return Path.of(System.getProperty("maven.multiModuleProjectDirectory", ".."), "schemas", "collection", "codepath-plan-v2.schema.json"); }
     private static Set<String> fields(JsonNode values) { Set<String> result = new HashSet<>(); values.forEach(value -> result.add(value.asText())); return result; }

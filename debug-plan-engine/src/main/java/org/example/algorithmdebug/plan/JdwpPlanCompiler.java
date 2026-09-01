@@ -1,13 +1,9 @@
 package org.example.algorithmdebug.plan;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
-import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.function.Function;
@@ -18,11 +14,11 @@ import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 
-/** 将模型提出的 JDWP 采集意图绑定到当前 MethodCatalog 和真实源码内容。 */
+/** 将模型提出的 JDWP 采集意图绑定到当前 MethodCatalog 和模块内真实源码位置。 */
 public final class JdwpPlanCompiler {
 
     /**
-     * 解析方法身份、复验每个源码文件 Hash，并生成确定性排序的 Agent JDWP Plan。
+     * 解析方法身份、校验源码路径和断点行范围，并生成确定性排序的 Agent JDWP Plan。
      *
      * @param catalog 当前 Case/Context 的静态方法目录
      * @param request 大模型提出的采集意图
@@ -56,7 +52,7 @@ public final class JdwpPlanCompiler {
                     SchemaVersions.JDWP_COLLECTION_PLAN,
                     request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
                     catalog.targetTest(), points,
-                    request.budget(), request.rationale(), request.requestedAt());
+                    request.budget(), request.rationale(), request.intent(), request.requestedAt());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException("The JDWP plan violates the safety contract: " + failure.getMessage(), failure);
         }
@@ -76,7 +72,8 @@ public final class JdwpPlanCompiler {
         try {
             return new JdwpTracepointSpec(
                     request.tracepointId(), entry.methodKey(), anchor,
-                    request.line(), request.maxHits(), request.captureOnHits(), request.capture());
+                    request.line(), request.maxObservedHits(), request.maxCapturedHits(),
+                    request.captureOnMatchedHits(), request.condition(), request.capture());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException(
                     "JDWP tracepoint is invalid " + request.tracepointId() + ": " + failure.getMessage(),

@@ -235,8 +235,6 @@ public final class CollectionApplicationService {
                 collectionId.value() + "-raw", "CODEPATH_RAW", "application/x-ndjson");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("derived/method-path.jsonl"),
                 collectionId.value() + "-trace", "METHOD_PATH_TRACE", "application/x-ndjson");
-        addArtifact(artifacts, caseRoot, collectionRoot.resolve("raw/gantt.json"),
-                collectionId.value() + "-gantt", "GANTT_RAW", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("validation/baseline-check.json"),
                 collectionId.value() + "-baseline", "COLLECTION_BASELINE", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("logs/stdout.log"),
@@ -393,13 +391,7 @@ public final class CollectionApplicationService {
         }
         try {
             if (completion == org.example.algorithmdebug.methodpath.CollectionCompletion.TARGET_FAILED) {
-                return checkTargetFailureBaseline(
-                        archive, record, captureContext, moduleRoot,
-                        result.request().collectionDirectory());
-            }
-            if (captureContext.isPresent()) {
-                capture(captureContext.orElseThrow(),
-                        result.request().collectionDirectory().resolve("raw/gantt.json"));
+                return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
             var reference = archive.findLatestCompletedRun(
                     record.caseId(), record.contextId(), record.analysisId());
@@ -413,7 +405,7 @@ public final class CollectionApplicationService {
                     "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
                     Optional.of(reference.orElseThrow().runId()), true,
-                    "Successful dynamic run; Gantt content is archived but is not an evidence gate",
+                    "Successful dynamic run; Gantt is not copied or used as an evidence gate",
                     clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "Dynamic result capture failed: "
@@ -423,35 +415,11 @@ public final class CollectionApplicationService {
     private CollectionBaselineCheck checkTargetFailureBaseline(
             CaseArchiveRepository archive,
             MethodPathCollectionRecord record,
-            Optional<CaptureContext> captureContext,
-            Path moduleRoot,
-            Path collectionRoot)
+            Path moduleRoot)
             throws WorkspaceException, HarnessException, SurefireDiagnosticException {
-        Optional<CapturedScheduleResult<?>> captured = captureChangedOutput(captureContext,
-                collectionRoot.resolve("raw/gantt.json"));
         return new TargetFailureBaselineEvaluator(clock).evaluate(
                 archive, TargetFailureBaselineEvaluator.Identity.from(record),
-                moduleRoot, captured);
-    }
-
-    private Optional<CapturedScheduleResult<?>> captureChangedOutput(
-            Optional<CaptureContext> context,
-            Path destination) throws HarnessException {
-        if (context.isEmpty()) return Optional.empty();
-        CaptureContext value = context.orElseThrow();
-        if (value.snapshotter().snapshot(value.source()).equals(value.before())) {
-            return Optional.empty();
-        }
-        return Optional.of(capture(value, destination));
-    }
-
-    private CapturedScheduleResult<?> capture(CaptureContext context, Path destination)
-            throws HarnessException {
-        OutputDirectorySnapshot after = new OutputStabilityWaiter(
-                context.snapshotter(), OutputStabilityPolicy.defaults())
-                .awaitStable(context.before(), context.source());
-        return new ScheduleResultCapture<JsonResultSnapshot>(context.snapshotter(), 64L * 1024 * 1024)
-                .capture(context.before(), after, new JsonResultParser(), destination);
+                moduleRoot, Optional.empty());
     }
 
     private CollectionBaselineCheck incomparable(MethodPathCollectionRecord record, String summary) {

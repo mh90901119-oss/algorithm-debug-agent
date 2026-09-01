@@ -165,12 +165,13 @@ class JdwpCollectionApplicationServiceTest {
                 .map(reference -> reference.artifactType()).collect(Collectors.toSet());
         assertTrue(types.containsAll(Set.of(
                 "COLLECTION_REQUEST", "JDWP_COLLECTOR_PLAN", "JDWP_RAW",
-                "JDWP_EXTERNAL_MANIFEST", "JDWP_MANIFEST", "GANTT_RAW",
+                "JDWP_EXTERNAL_MANIFEST", "JDWP_MANIFEST",
                 "COLLECTION_BASELINE", "TARGET_STDOUT", "TARGET_STDERR",
                 "COLLECTOR_STDOUT", "COLLECTOR_STDERR", "JDWP_SNAPSHOT_SUMMARY",
                 "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
                 "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE", "SUFFICIENCY_EVALUATION")));
         assertTrue(!types.contains("JDWP_PLAN"));
+        assertFalse(types.contains("GANTT_RAW"));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
                 Path.of(reference.relativePath()).isAbsolute()));
         assertEquals(SufficiencyStatus.SUFFICIENT, mapper.readJson(
@@ -238,7 +239,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 106)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "测试产物写入失败", failure);
+                        "TEST_IO", "Failed to write the test artifact", failure);
             }
         });
 
@@ -248,7 +249,7 @@ class JdwpCollectionApplicationServiceTest {
         assertEquals("TARGET_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
         assertFalse(result.summary().evidenceUsable());
-        assertTrue(result.artifacts().stream().anyMatch(reference ->
+        assertFalse(result.artifacts().stream().anyMatch(reference ->
                 "GANTT_RAW".equals(reference.artifactType())));
     }
 

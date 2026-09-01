@@ -13,9 +13,20 @@
     "scopeMethodKey": {"oneOf": [{"type": "string", "minLength": 1, "maxLength": 2048}, {"type": "null"}]},
     "budget": {"$ref": "#/$defs/budget"},
     "rationale": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "intent": {"$ref": "#/$defs/intent"},
     "createdAt": {"type": "string", "format": "date-time"}
   },
   "$defs": {
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["questionToAnswer", "hypothesis", "basedOnEvidenceIds", "expectedObservations"],
+      "properties": {
+        "questionToAnswer": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "hypothesis": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "basedOnEvidenceIds": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+        "expectedObservations": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1024}}
+      }
+    },
     "targetTest": {
       "type": "object", "additionalProperties": false,
       "required": ["className", "methodName"],

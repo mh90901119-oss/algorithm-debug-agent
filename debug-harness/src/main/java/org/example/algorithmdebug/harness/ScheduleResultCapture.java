@@ -85,7 +85,9 @@ public final class ScheduleResultCapture<T extends ScheduleResultSnapshot> {
                             + valid.stream().map(item -> item.path().toString()).toList());
         }
         ParsedCandidate<T> selected = valid.getFirst();
-        Path captured = copyAtomically(selected.path(), destination);
+        Path captureDirectory = destination.toAbsolutePath().normalize();
+        Path captured = copyAtomically(
+                selected.path(), captureDirectory.resolve(selected.path().getFileName()));
         return new CapturedScheduleResult<>(
                 selected.path(), captured, selected.sizeBytes(), selected.snapshot());
     }

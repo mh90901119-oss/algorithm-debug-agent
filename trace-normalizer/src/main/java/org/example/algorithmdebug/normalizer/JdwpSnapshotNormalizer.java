@@ -126,12 +126,27 @@ public final class JdwpSnapshotNormalizer {
                         "The JDWP hit does not belong to the collection plan", line, null);
             }
             int hit = requiredPositiveInt(json, "hit", line);
-            if (hit > tracepoint.maxHits()) throw invalid(line, "The JDWP hit exceeds the plan limit");
-            if (!tracepoint.captureOnHits().isEmpty()
-                    && !tracepoint.captureOnHits().contains(hit)) {
+            int observedHit = json.has("observedHit")
+                    ? requiredPositiveInt(json, "observedHit", line) : hit;
+            int matchedHit = json.has("matchedHit")
+                    ? requiredPositiveInt(json, "matchedHit", line) : hit;
+            int capturedHit = json.has("capturedHit")
+                    ? requiredPositiveInt(json, "capturedHit", line) : matchedHit;
+            if (observedHit > tracepoint.maxObservedHits()) {
+                throw invalid(line, "The JDWP observed hit exceeds the plan limit");
+            }
+            if (capturedHit > tracepoint.maxCapturedHits()) {
+                throw invalid(line, "The JDWP captured hit exceeds the plan limit");
+            }
+            if (!tracepoint.captureOnMatchedHits().isEmpty()
+                    && !tracepoint.captureOnMatchedHits().contains(matchedHit)) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
                         "The JDWP hit sequence does not belong to the collection plan", line, null);
+            }
+            if (tracepoint.condition() != null
+                    && !"MATCHED".equals(json.path("conditionResult").asText())) {
+                throw invalid(line, "The conditional JDWP snapshot is not marked MATCHED");
             }
             JsonNode thread = requiredObject(json, "thread", line);
             String threadName = requiredText(thread, "name", 512, line);

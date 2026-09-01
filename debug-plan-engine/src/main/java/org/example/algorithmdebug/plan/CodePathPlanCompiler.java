@@ -55,6 +55,6 @@ public final class CodePathPlanCompiler {
                 SchemaVersions.CODEPATH_COLLECTION_PLAN,
                 request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
                 catalog.targetTest(), selectors, scopeMethodKey,
-                request.budget(), rationale, request.requestedAt());
+                request.budget(), rationale, request.intent(), request.requestedAt());
     }
 }

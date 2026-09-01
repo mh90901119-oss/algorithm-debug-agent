@@ -11,6 +11,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.ContextId;
+import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.PlanId;
@@ -38,6 +39,7 @@ class CodePathPlanCompilerTest {
         assertEquals(List.of("()V", "(I)I"),
                 plan.selectors().stream().map(selector -> selector.descriptor()).toList());
         assertEquals(CollectionBudget.defaults(), plan.budget());
+        assertEquals("Which methods executed?", plan.intent().questionToAnswer());
     }
 
     @Test
@@ -60,18 +62,14 @@ class CodePathPlanCompilerTest {
     }
 
     @Test
-    void rejectsBlankOrOversizedRationaleAsPlanCompilationFailure() {
-        MethodCatalog catalog = catalog(List.of(entry(
-                "fixture.TargetTest", "caseUnderTest", "()V", 0)));
+    void rejectsBlankOrOversizedRationaleAtTheRequestBoundary() {
         List<String> keys = List.of("fixture.TargetTest#caseUnderTest()V");
 
-        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
-                catalog, new CodePathPlanRequest(
-                        new PlanId("blank"), keys, " ", CollectionBudget.defaults(), NOW)));
-        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
-                catalog, new CodePathPlanRequest(
-                        new PlanId("oversized"), keys, "x".repeat(4_097),
-                        CollectionBudget.defaults(), NOW)));
+        assertThrows(IllegalArgumentException.class, () -> new CodePathPlanRequest(
+                new PlanId("blank"), keys, " ", CollectionBudget.defaults(), NOW));
+        assertThrows(IllegalArgumentException.class, () -> new CodePathPlanRequest(
+                new PlanId("oversized"), keys, "x".repeat(4_097),
+                CollectionBudget.defaults(), NOW));
     }
 
     @Test
@@ -99,7 +97,11 @@ class CodePathPlanCompilerTest {
 
     private CodePathPlanRequest request(List<String> keys) {
         return new CodePathPlanRequest(
-                new PlanId("plan-1"), keys, "定位求解路径", CollectionBudget.defaults(), NOW);
+                new PlanId("plan-1"), keys, "Locate the runtime path",
+                new InvestigationIntent(
+                        "Which methods executed?", "One candidate path executed",
+                        List.of(), List.of("Observed method entries")),
+                CollectionBudget.defaults(), NOW);
     }
 
     private MethodCatalog catalog(List<MethodCatalogEntry> entries) {

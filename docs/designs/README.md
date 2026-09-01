@@ -28,6 +28,13 @@ YYYY-MM-DD-<module-or-feature>-design.md
 
 稳定且影响全局的架构结论应另写入 `docs/architecture`；重大决策另写 ADR，详细设计只引用它们。
 
+## 当前设计
+
+- `2026-09-01-input-first-causal-evidence-and-conditional-jdwp-design.md`：当前唯一的输入归档、静态分析、
+  CodePath、JDWP 条件采集、Skill 因果搜索和 Eval 联合设计，状态为 Approved。
+
+以下“已归档设计”只记录仍有历史解释价值且未被当前设计删除的决策背景，不作为当前实现入口。
+
 ## 已归档设计
 
 - `2026-08-10-ada-contracts-phase0-design.md`：基础契约模块 Phase 0，状态为 Implemented。

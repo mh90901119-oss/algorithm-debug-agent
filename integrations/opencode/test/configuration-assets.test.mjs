@@ -43,6 +43,24 @@ test("planning tools expose structured intent instead of raw request JSON", asyn
   assert.match(runtimeSource, /jdwpPlanRequest/u)
 })
 
+test("Skill enforces input-first causal search and current conditional JDWP fields", async () => {
+  const skill = await readUtf8("skills/algorithm-debug/SKILL.md")
+
+  const input = skill.indexOf("## 1. Capture and read the algorithm input")
+  const run = skill.indexOf("## 2. Execute the target UT once")
+  const staticAnalysis = skill.indexOf("## 3. Build causal hypotheses from input and source")
+  const dynamic = skill.indexOf("## 4. Collect only discriminating runtime evidence")
+  assert.ok(input >= 0 && input < run && run < staticAnalysis && staticAnalysis < dynamic)
+  assert.match(skill, /input_\.json/u)
+  assert.match(skill, /questionToAnswer/u)
+  assert.match(skill, /basedOnEvidenceIds/u)
+  assert.match(skill, /maxObservedHits/u)
+  assert.match(skill, /maxCapturedHits/u)
+  assert.match(skill, /captureOnMatchedHits/u)
+  assert.match(skill, /observed.*matched.*captured.*unavailable/su)
+  assert.doesNotMatch(skill, /wafer-demo|wafer-demo-v1|captureOnHits|`maxHits`/iu)
+})
+
 test("external workspace and ToolResponse validation literals are English", async () => {
   const externalBoundaryFiles = [
     "case-management/src/main/java/org/example/algorithmdebug/casecore/CaseWorkspaceAuditor.java",

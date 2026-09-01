@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
+import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.PlanId;
 
 /** 大模型提交给确定性 JDWP 计划编译器的有界意图。 */
@@ -12,6 +13,7 @@ public record JdwpPlanRequest(
         List<JdwpTracepointRequest> tracepoints,
         JdwpCollectionBudget budget,
         String rationale,
+        InvestigationIntent intent,
         Instant requestedAt) {
 
     /** 防御性复制请求；语义和源码一致性由编译器验证。 */
@@ -23,6 +25,18 @@ public record JdwpPlanRequest(
         }
         budget = Objects.requireNonNull(budget, "budget");
         rationale = Objects.requireNonNull(rationale, "rationale");
+        intent = intent == null ? InvestigationIntent.legacy(rationale) : intent;
         requestedAt = Objects.requireNonNull(requestedAt, "requestedAt");
+    }
+
+    /** 兼容缺少结构化调查意图的旧 Tool 与测试调用。 */
+    public JdwpPlanRequest(
+            PlanId planId,
+            List<JdwpTracepointRequest> tracepoints,
+            JdwpCollectionBudget budget,
+            String rationale,
+            Instant requestedAt) {
+        this(planId, tracepoints, budget, rationale,
+                InvestigationIntent.legacy(rationale), requestedAt);
     }
 }

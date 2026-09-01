@@ -11,8 +11,8 @@ class AlgorithmInputCaptureTest {
     @Test
     void keepsOnlyPortableSourceIdentityAndRegisteredContentIdentity() {
         ArtifactReference artifact = new ArtifactReference(
-                "analysis-1-algorithm-input", "ALGORITHM_INPUT",
-                "analyses/analysis-1/input/algorithm-input.json", "application/json",
+                "algorithm-input", "ALGORITHM_INPUT",
+                "input/caseinput.json", "application/json",
                 "a".repeat(64), 42);
         AlgorithmInputCapture capture = new AlgorithmInputCapture(
                 SchemaVersions.ALGORITHM_INPUT_CAPTURE,
@@ -23,6 +23,7 @@ class AlgorithmInputCaptureTest {
                 artifact, Instant.parse("2026-08-27T00:00:00Z"));
         assertEquals("ALGORITHM_INPUT", capture.artifact().artifactType());
         assertEquals("caseinput.json", capture.fileName());
+        assertEquals("input/caseinput.json", capture.artifact().relativePath());
         assertThrows(IllegalArgumentException.class, () -> new AlgorithmInputCapture(
                 SchemaVersions.ALGORITHM_INPUT_CAPTURE,
                 capture.caseId(), capture.contextId(), capture.analysisId(), capture.targetTest(),

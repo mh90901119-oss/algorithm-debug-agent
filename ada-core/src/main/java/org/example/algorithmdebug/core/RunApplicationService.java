@@ -263,7 +263,7 @@ public final class RunApplicationService {
                         ProcessLimits.defaults()),
                 resultSource,
                 new JsonResultParser(),
-                raw.resolve("gantt.json"));
+                raw);
         executionLog.info(logContext, "RunApplicationService", "TARGET_PROCESS_COMPLETED",
                 schedule.run().completion().name(), "Target test process completed");
 

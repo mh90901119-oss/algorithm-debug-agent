@@ -83,8 +83,9 @@ class TracePlanExecutorTest {
     void expandsAndWritesOnlySelectedHitOrdinals() throws Exception {
         DebugPlan plan = DebugPlanTest.validPlan();
         DebugPlan.Tracepoint point = plan.tracepoints.getFirst();
-        point.maxHits = 2;
-        point.captureOnHits = List.of(2);
+        point.maxObservedHits = 2;
+        point.maxCapturedHits = 1;
+        point.captureOnMatchedHits = List.of(2);
         point.capture.locals = false;
         point.capture.stack = false;
         plan.validate();

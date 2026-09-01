@@ -166,6 +166,7 @@ public final class StaticAnalysisApplicationService {
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+            requireEvidenceLineage(archive, caseId, request.intent());
             CodePathCollectionPlan plan = compiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request);
             Path document = archive.createCodePathPlan(plan);
@@ -202,6 +203,7 @@ public final class StaticAnalysisApplicationService {
             ProjectRegistration registration = requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
+            requireEvidenceLineage(archive, caseId, request.intent());
             var plan = jdwpCompiler.compile(
                     archive.requireMethodCatalog(caseId, analysisId), request,
                     Path.of(registration.moduleRoot()));
@@ -263,6 +265,22 @@ public final class StaticAnalysisApplicationService {
                 catalog.targetTest(), catalog.entries(), catalog.edges(), List.copyOf(warnings),
                 SnapshotCompleteness.INCOMPLETE, catalog.discoveredMethodCount(),
                 catalog.discoveredEdgeCount(), catalog.createdAt());
+    }
+
+    private static void requireEvidenceLineage(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            org.example.algorithmdebug.contracts.InvestigationIntent intent) {
+        for (var evidenceId : intent.basedOnEvidenceIds()) {
+            try {
+                archive.requireEvidenceBundle(caseId, evidenceId);
+            } catch (WorkspaceException failure) {
+                throw new CaseRunException(
+                        "PLAN_EVIDENCE_NOT_FOUND",
+                        "Plan references Evidence that is not available in the current Case",
+                        failure);
+            }
+        }
     }
 
     private ProjectRegistration requireRegistration(WorkspaceLayout layout, ProjectId projectId) {

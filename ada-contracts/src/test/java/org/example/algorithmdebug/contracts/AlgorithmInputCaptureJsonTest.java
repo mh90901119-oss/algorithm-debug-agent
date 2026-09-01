@@ -25,8 +25,8 @@ class AlgorithmInputCaptureJsonTest {
                 AlgorithmInputPathKind.RELATIVE, "case-input.json",
                 AlgorithmInputComparison.FIRST_CAPTURE, Optional.empty(),
                 new ArtifactReference(
-                        "algorithm-input-analysis-1", "ALGORITHM_INPUT",
-                        "analyses/analysis-1/input/algorithm-input.json", "application/json",
+                        "algorithm-input", "ALGORITHM_INPUT",
+                        "input/case-input.json", "application/json",
                         "a".repeat(64), 128),
                 Instant.parse("2026-08-27T00:00:00Z"));
 

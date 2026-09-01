@@ -49,7 +49,7 @@ export const case_inspect = tool({
 })
 
 export const algorithm_input_capture = tool({
-  description: "Locate the one supported first-level target-UT String literal ending with input.json, copy and register it for this Analysis, and report input consistency with the previous Analysis. Stop on zero, multiple, computed, missing, or invalid inputs.",
+  description: "Locate the one supported first-level target-UT String literal ending with input.json or input_.json, archive its original file name once per Case, and verify reuse in later analyses. Stop on zero, multiple, computed, missing, invalid, or changed inputs.",
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
@@ -104,6 +104,12 @@ export const codepath_plan_create = tool({
     scopeMethodKey: tool.schema.string().optional()
       .describe("Optional selected method whose repeated invocations should be grouped into path variants"),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-path question"),
+    questionToAnswer: tool.schema.string().describe("The single question this collection must answer"),
+    hypothesis: tool.schema.string().describe("The hypothesis this collection must verify or reject"),
+    basedOnEvidenceIds: tool.schema.array(tool.schema.string()).max(20)
+      .describe("Prior same-Case Evidence IDs that justify this plan"),
+    expectedObservations: tool.schema.array(tool.schema.string()).min(1).max(20)
+      .describe("Runtime observations that can distinguish the hypothesis"),
   },
   execute: (args, context) => runtime.codePathPlanCreate(args, context),
 })
@@ -127,9 +133,24 @@ export const jdwp_plan_create = tool({
         .describe("Exact class#method(descriptor) key from the current Method Catalog"),
       line: tool.schema.number().int().positive()
         .describe("Current executable source line inside the selected method anchor"),
-      maxHits: tool.schema.number().int().min(1).max(20).default(3),
-      captureOnHits: tool.schema.array(tool.schema.number().int().min(1).max(20)).max(20)
-        .optional().describe("Strictly increasing hit ordinals to snapshot; omit to capture every hit"),
+      maxObservedHits: tool.schema.number().int().min(1).max(10000).default(100)
+        .describe("Maximum breakpoint observations before this tracepoint is disabled"),
+      maxCapturedHits: tool.schema.number().int().min(1).max(20).default(3)
+        .describe("Maximum full snapshots written after condition matching"),
+      captureOnMatchedHits: tool.schema.array(tool.schema.number().int().min(1).max(10000)).max(20)
+        .optional().describe("Strictly increasing matched-hit ordinals to snapshot; omit to capture every matched hit"),
+      condition: tool.schema.object({
+        localName: tool.schema.string()
+          .describe("Top-frame local variable name or this"),
+        fieldPath: tool.schema.array(tool.schema.string()).max(8).default([])
+          .describe("Instance field names traversed without invoking methods"),
+        operator: tool.schema.literal("EQUALS").default("EQUALS"),
+        expectedType: tool.schema.enum([
+          "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL",
+        ]),
+        expectedValue: tool.schema.string().optional()
+          .describe("Typed scalar literal; omit only when expectedType is NULL"),
+      }).optional().describe("Optional generic stack-frame value path condition"),
       capture: tool.schema.object({
         locals: tool.schema.boolean().default(true),
         stack: tool.schema.boolean().default(true),
@@ -142,6 +163,12 @@ export const jdwp_plan_create = tool({
       }).optional(),
     })).min(1).max(20),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-state question"),
+    questionToAnswer: tool.schema.string().describe("The single question this collection must answer"),
+    hypothesis: tool.schema.string().describe("The hypothesis this collection must verify or reject"),
+    basedOnEvidenceIds: tool.schema.array(tool.schema.string()).max(20)
+      .describe("Prior same-Case Evidence IDs that justify this plan"),
+    expectedObservations: tool.schema.array(tool.schema.string()).min(1).max(20)
+      .describe("Runtime observations that can distinguish the hypothesis"),
   },
   execute: (args, context) => runtime.jdwpPlanCreate(args, context),
 })

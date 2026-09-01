@@ -21,9 +21,19 @@ record CollectorDebugPlan(
             int line,
             String methodName,
             String methodDescriptor,
-            int maxHits,
-            List<Integer> captureOnHits,
+            int maxObservedHits,
+            int maxCapturedHits,
+            List<Integer> captureOnMatchedHits,
+            Condition condition,
             Capture capture) {
+    }
+
+    record Condition(
+            String localName,
+            List<String> fieldPath,
+            String operator,
+            String expectedType,
+            String expectedValue) {
     }
 
     record Capture(

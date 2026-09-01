@@ -197,7 +197,7 @@ public final class CaseArchiveRepository {
         return value;
     }
 
-    /** 以流式硬上限把目标 UT 的单一算法输入原子复制到当前 Analysis。 */
+    /** 以流式硬上限把目标 UT 的单一算法输入按原文件名原子复制到当前 Case。 */
     public Path copyAlgorithmInput(
             CaseId caseId, AnalysisId analysisId, Path source, long maximumBytes) {
         requireAnalysis(requireNonNull(caseId, "caseId"), requireNonNull(analysisId, "analysisId"));
@@ -205,10 +205,10 @@ public final class CaseArchiveRepository {
             throw new IllegalArgumentException("source and maximumBytes are required");
         }
         CaseArchiveLayout layout = layout(caseId);
-        Path directory = layout.analysisInputRoot(analysisId);
+        Path directory = layout.caseInputRoot();
         try {
             Files.createDirectories(directory);
-            Path target = layout.analysisInputArtifact(analysisId);
+            Path target = layout.caseInputArtifact(source.getFileName().toString());
             writer.writeNew(target, maximumBytes, output -> Files.copy(source, output));
             return target;
         } catch (IOException | SecurityException failure) {

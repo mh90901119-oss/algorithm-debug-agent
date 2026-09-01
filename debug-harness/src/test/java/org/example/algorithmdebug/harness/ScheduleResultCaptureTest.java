@@ -36,7 +36,7 @@ class ScheduleResultCaptureTest {
                         before,
                         source,
                         parser(),
-                        temporaryDirectory.resolve("run/result/gantt.json"));
+                        temporaryDirectory.resolve("run/result"));
 
         assertEquals(produced, captured.sourcePath());
         assertTrue(Files.isRegularFile(captured.capturedPath()));
@@ -56,7 +56,7 @@ class ScheduleResultCaptureTest {
                         before,
                         source,
                         parser(),
-                        temporaryDirectory.resolve("run/result/gantt.json")));
+                        temporaryDirectory.resolve("run/result")));
 
         assertEquals("HARNESS_RESULT_NOT_PRODUCED", exception.code());
     }
@@ -76,7 +76,7 @@ class ScheduleResultCaptureTest {
                         before,
                         source,
                         parser(),
-                        temporaryDirectory.resolve("run/result/gantt.json")));
+                        temporaryDirectory.resolve("run/result")));
 
         assertEquals("HARNESS_RESULT_AMBIGUOUS", exception.code());
     }
@@ -98,7 +98,7 @@ class ScheduleResultCaptureTest {
                         before,
                         stableAfter,
                         parser(),
-                        temporaryDirectory.resolve("run/result/gantt.json"));
+                        temporaryDirectory.resolve("run/result"));
 
         assertEquals(produced, captured.sourcePath());
     }

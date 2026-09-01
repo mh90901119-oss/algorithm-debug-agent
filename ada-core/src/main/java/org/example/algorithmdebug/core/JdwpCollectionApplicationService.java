@@ -199,6 +199,13 @@ public final class JdwpCollectionApplicationService {
             observedCollectorExitCode = exitCode(result.collector());
             ExternalCollectorManifest external = archiveExternalOutputs(
                     collectionRoot, request, result.completion(), plan);
+            executionLog.info(logContext, "JdwpCollectionApplicationService",
+                    "JDWP_HIT_COUNTS_ARCHIVED", "COMPLETED",
+                    "Observed=" + total(external.observedHitCounts())
+                            + ", matched=" + total(external.matchedHitCounts())
+                            + ", captured=" + total(external.capturedHitCounts())
+                            + ", conditionUnavailable="
+                            + total(external.conditionUnavailableCounts()));
             JdwpCollectionCompletion effectiveCompletion = effectiveCompletion(result.completion(), external);
             baseline = checkBaseline(
                     archive, record, effectiveCompletion, capture, collectionRoot, moduleRoot);
@@ -349,16 +356,26 @@ public final class JdwpCollectionApplicationService {
                         "typed-values",
                         "bounded-projection",
                         "tracepoint-request-group");
-                if (!"2.0.0".equals(external.collectorVersion())
+                if (!("2.0.0".equals(external.collectorVersion())
+                        || "3.0.0".equals(external.collectorVersion()))
                         || !"2.0".equals(external.rawTraceSchemaVersion())
                         || !external.capabilities().containsAll(requiredCapabilities)) {
                     throw new IllegalArgumentException(
                             "JDWP Collector 2.0 capability handshake failed");
                 }
+                if ("3.0.0".equals(external.collectorVersion())
+                        && !external.capabilities().containsAll(java.util.Set.of(
+                        "conditional-frame-values", "separate-hit-counters"))) {
+                    throw new IllegalArgumentException(
+                            "JDWP Collector 3.0 conditional capability handshake failed");
+                }
             }
             var allowed = plan.tracepoints().stream()
                     .map(point -> point.tracepointId()).collect(java.util.stream.Collectors.toSet());
-            if (!allowed.containsAll(external.hitCounts().keySet())
+            if (!allowed.containsAll(external.observedHitCounts().keySet())
+                    || !allowed.containsAll(external.matchedHitCounts().keySet())
+                    || !allowed.containsAll(external.capturedHitCounts().keySet())
+                    || !allowed.containsAll(external.conditionUnavailableCounts().keySet())
                     || !allowed.containsAll(external.installedLocations().keySet())) {
                 throw new IllegalArgumentException("Manifest contains a tracepoint outside the plan");
             }
@@ -393,7 +410,9 @@ public final class JdwpCollectionApplicationService {
                 targetExit, collectorExit,
                 completion == JdwpCollectionCompletion.TIMED_OUT,
                 completion == JdwpCollectionCompletion.TRUNCATED,
-                external.eventCount(), existingSize(raw), external.hitCounts(),
+                external.eventCount(), existingSize(raw),
+                external.observedHitCounts(), external.matchedHitCounts(),
+                external.capturedHitCounts(), external.conditionUnavailableCounts(),
                 external.installedLocations(), diagnostic,
                 "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
@@ -420,7 +439,8 @@ public final class JdwpCollectionApplicationService {
                 "jdwp-batch-collector", tool.version(), completion, code,
                 JdwpCollectionStage.FAILED, targetStarted, collectorStarted,
                 targetExitCode, collectorExitCode, completion == JdwpCollectionCompletion.TIMED_OUT,
-                completion == JdwpCollectionCompletion.TRUNCATED, 0, 0, Map.of(), Map.of(),
+                completion == JdwpCollectionCompletion.TRUNCATED, 0, 0,
+                Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
                 Optional.of(new AgentFailureDiagnostic(
                         code, "JDWP collection failed", failure.getClass().getName())),
                 raw.toString().replace('\\', '/'), "raw/collector-manifest.json",
@@ -444,6 +464,10 @@ public final class JdwpCollectionApplicationService {
             return JdwpCollectionCompletion.TOOL_FAILED;
         }
         return processCompletion;
+    }
+
+    private static int total(Map<String, Integer> counters) {
+        return counters.values().stream().mapToInt(Integer::intValue).sum();
     }
 
     private Optional<CaptureContext> prepareCapture(
@@ -479,11 +503,7 @@ public final class JdwpCollectionApplicationService {
         }
         try {
             if (completion == JdwpCollectionCompletion.TARGET_FAILED) {
-                return checkTargetFailureBaseline(
-                        archive, record, captureContext, collectionRoot, moduleRoot);
-            }
-            if (captureContext.isPresent()) {
-                capture(captureContext.orElseThrow(), collectionRoot.resolve("raw/gantt.json"));
+                return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
             var reference = archive.findLatestCompletedRun(
                     record.caseId(), record.contextId(), record.analysisId());
@@ -497,7 +517,7 @@ public final class JdwpCollectionApplicationService {
                     "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
                     Optional.of(reference.orElseThrow().runId()), true,
-                    "Successful JDWP run; Gantt content is archived but is not an evidence gate",
+                    "Successful JDWP run; Gantt is not copied or used as an evidence gate",
                     clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "JDWP result capture failed: "
@@ -507,35 +527,11 @@ public final class JdwpCollectionApplicationService {
     private CollectionBaselineCheck checkTargetFailureBaseline(
             CaseArchiveRepository archive,
             JdwpCollectionRecord record,
-            Optional<CaptureContext> captureContext,
-            Path collectionRoot,
             Path moduleRoot)
             throws WorkspaceException, HarnessException, SurefireDiagnosticException {
-        Optional<CapturedScheduleResult<?>> captured = captureChangedOutput(
-                captureContext, collectionRoot.resolve("raw/gantt.json"));
         return new TargetFailureBaselineEvaluator(clock).evaluate(
                 archive, TargetFailureBaselineEvaluator.Identity.from(record),
-                moduleRoot, captured);
-    }
-
-    private Optional<CapturedScheduleResult<?>> captureChangedOutput(
-            Optional<CaptureContext> context,
-            Path destination) throws HarnessException {
-        if (context.isEmpty()) return Optional.empty();
-        CaptureContext value = context.orElseThrow();
-        if (value.snapshotter().snapshot(value.source()).equals(value.before())) {
-            return Optional.empty();
-        }
-        return Optional.of(capture(value, destination));
-    }
-
-    private CapturedScheduleResult<?> capture(CaptureContext context, Path destination)
-            throws HarnessException {
-        OutputDirectorySnapshot after = new OutputStabilityWaiter(
-                context.snapshotter(), OutputStabilityPolicy.defaults())
-                .awaitStable(context.before(), context.source());
-        return new ScheduleResultCapture<JsonResultSnapshot>(context.snapshotter(), 64L * 1024 * 1024)
-                .capture(context.before(), after, new JsonResultParser(), destination);
+                moduleRoot, Optional.empty());
     }
 
     private CollectionBaselineCheck incomparable(JdwpCollectionRecord record, String summary) {
@@ -563,8 +559,6 @@ public final class JdwpCollectionApplicationService {
                 collectionId.value() + "-raw", "JDWP_RAW", "application/x-ndjson");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("raw/collector-manifest.json"),
                 collectionId.value() + "-external-manifest", "JDWP_EXTERNAL_MANIFEST", "application/json");
-        addArtifact(artifacts, caseRoot, collectionRoot.resolve("raw/gantt.json"),
-                collectionId.value() + "-gantt", "GANTT_RAW", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("validation/baseline-check.json"),
                 collectionId.value() + "-baseline", "COLLECTION_BASELINE", "application/json");
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("logs/target-stdout.log"),
@@ -645,20 +639,45 @@ public final class JdwpCollectionApplicationService {
             Instant finishedAt,
             String completionReason,
             int eventCount,
-            Map<String, Integer> hitCounts,
+            @com.fasterxml.jackson.annotation.JsonAlias("hitCounts")
+            Map<String, Integer> observedHitCounts,
+            Map<String, Integer> matchedHitCounts,
+            Map<String, Integer> capturedHitCounts,
+            Map<String, Integer> conditionUnavailableCounts,
+            Map<String, Map<String, Integer>> conditionUnavailableReasons,
             Map<String, Integer> installedLocations) {
         private ExternalCollectorManifest {
             capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
-            hitCounts = hitCounts == null ? Map.of() : Map.copyOf(hitCounts);
+            observedHitCounts = observedHitCounts == null ? Map.of() : Map.copyOf(observedHitCounts);
+            matchedHitCounts = matchedHitCounts == null
+                    ? observedHitCounts : Map.copyOf(matchedHitCounts);
+            capturedHitCounts = capturedHitCounts == null
+                    ? matchedHitCounts : Map.copyOf(capturedHitCounts);
+            conditionUnavailableCounts = conditionUnavailableCounts == null
+                    ? Map.of() : Map.copyOf(conditionUnavailableCounts);
+            conditionUnavailableReasons = conditionUnavailableReasons == null
+                    ? Map.of() : conditionUnavailableReasons.entrySet().stream().collect(
+                    java.util.stream.Collectors.toUnmodifiableMap(
+                            Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
             installedLocations = installedLocations == null ? Map.of() : Map.copyOf(installedLocations);
             if (target == null || plan == null || plan.isBlank() || trace == null || trace.isBlank()
                     || startedAt == null || finishedAt == null || finishedAt.isBefore(startedAt)
                     || completionReason == null || completionReason.isBlank()
                     || eventCount < 0 || capabilities.size() > 32
-                    || hitCounts.size() > 20 || installedLocations.size() > 20) {
+                    || observedHitCounts.size() > 20 || matchedHitCounts.size() > 20
+                    || capturedHitCounts.size() > 20 || conditionUnavailableCounts.size() > 20
+                    || conditionUnavailableReasons.size() > 20
+                    || installedLocations.size() > 20) {
                 throw new IllegalArgumentException("External JDWP Manifest exceeds bounded limits");
             }
-            if (hitCounts.values().stream().anyMatch(value -> value == null || value < 0)
+            if (observedHitCounts.values().stream().anyMatch(value -> value == null || value < 0)
+                    || matchedHitCounts.values().stream().anyMatch(value -> value == null || value < 0)
+                    || capturedHitCounts.values().stream().anyMatch(value -> value == null || value < 0)
+                    || conditionUnavailableCounts.values().stream().anyMatch(
+                            value -> value == null || value < 0)
+                    || conditionUnavailableReasons.values().stream().anyMatch(reasons ->
+                            reasons.size() > 16 || reasons.values().stream().anyMatch(
+                                    value -> value == null || value < 0))
                     || installedLocations.values().stream().anyMatch(
                             value -> value == null || value < 0)) {
                 throw new IllegalArgumentException("External JDWP Manifest counts are invalid");
@@ -670,7 +689,7 @@ public final class JdwpCollectionApplicationService {
                     "1.0", null, null, List.of(), sessionId,
                     new ExternalCollectorTarget("127.0.0.1", 1),
                     "unavailable", "unavailable", Instant.EPOCH, Instant.EPOCH,
-                    "unavailable", 0, Map.of(), Map.of());
+                    "unavailable", 0, Map.of(), Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
         }
     }
 

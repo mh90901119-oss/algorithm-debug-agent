@@ -211,7 +211,7 @@ class CollectionApplicationServiceTest {
     }
 
     @Test
-    void targetFailureWithGanttRemainsAnalyzableButCannotBecomeConfirmationEvidence()
+    void targetFailureDoesNotCopyDynamicGanttOrBecomeConfirmationEvidence()
             throws Exception {
         String gantt = "{\"schedule\":1}";
         establishBaseline(gantt);
@@ -224,7 +224,7 @@ class CollectionApplicationServiceTest {
         assertEquals("TARGET_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
         assertFalse(result.summary().evidenceUsable());
-        assertTrue(result.artifacts().stream().anyMatch(reference ->
+        assertFalse(result.artifacts().stream().anyMatch(reference ->
                 "GANTT_RAW".equals(reference.artifactType())));
     }
 

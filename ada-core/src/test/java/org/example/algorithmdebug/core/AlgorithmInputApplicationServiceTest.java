@@ -74,25 +74,31 @@ class AlgorithmInputApplicationServiceTest {
     }
 
     @Test
-    void copiesRegistersAndComparesEachAnalysisInput() throws Exception {
+    void copiesInputOncePerCaseAndRejectsAChangedSource() throws Exception {
         var first = service().capture(workspace, PROJECT, CASE, new AnalysisId("analysis-1"));
         createAnalysis("analysis-2", NOW.plusSeconds(1));
         var second = service().capture(workspace, PROJECT, CASE, new AnalysisId("analysis-2"));
-        Files.writeString(input, "{\"value\":2}");
-        createAnalysis("analysis-3", NOW.plusSeconds(2));
-        var third = service().capture(workspace, PROJECT, CASE, new AnalysisId("analysis-3"));
         assertEquals(AlgorithmInputComparison.FIRST_CAPTURE, first.summary().comparison());
         assertEquals(AlgorithmInputComparison.UNCHANGED, second.summary().comparison());
-        assertEquals(AlgorithmInputComparison.CHANGED, third.summary().comparison());
-        assertEquals(new AnalysisId("analysis-2"), third.summary().previousAnalysisId().orElseThrow());
-        assertEquals("ALGORITHM_INPUT", third.artifact().artifactType());
+        assertEquals(new AnalysisId("analysis-1"), second.summary().previousAnalysisId().orElseThrow());
+        assertEquals(first.artifact(), second.artifact());
+        assertEquals("ALGORITHM_INPUT", first.artifact().artifactType());
         Path caseRoot = WorkspaceLayout.of(workspace).projectCases(PROJECT).resolve(CASE.value());
         assertTrue(Files.isRegularFile(caseRoot.resolve(
-                "analyses/analysis-3/input/input-analysis.json")));
-        assertEquals("{\"value\":2}", Files.readString(caseRoot.resolve(
-                "analyses/analysis-3/input/algorithm-input.json")));
-        assertEquals(third.artifact(), archive().requireArtifactRegistration(
-                CASE, third.artifact().artifactId()).artifact());
+                "analyses/analysis-2/input/input-analysis.json")));
+        assertEquals("{\"value\":1}", Files.readString(caseRoot.resolve(
+                "input/caseinput.json")));
+        assertEquals(first.artifact(), archive().requireArtifactRegistration(
+                CASE, first.artifact().artifactId()).artifact());
+
+        Files.writeString(input, "{\"value\":2}");
+        createAnalysis("analysis-3", NOW.plusSeconds(2));
+        CaseRunException changed = assertThrows(CaseRunException.class, () ->
+                service().capture(workspace, PROJECT, CASE, new AnalysisId("analysis-3")));
+        assertEquals("ALGORITHM_INPUT_CHANGED", changed.code());
+        assertEquals("{\"value\":1}", Files.readString(caseRoot.resolve(
+                "input/caseinput.json")));
+        assertTrue(Files.notExists(caseRoot.resolve("analyses/analysis-3/input")));
     }
 
     @Test

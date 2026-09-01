@@ -41,9 +41,9 @@
       "additionalProperties": false,
       "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
       "properties": {
-        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactId": {"const": "algorithm-input"},
         "artifactType": {"const": "ALGORITHM_INPUT"},
-        "relativePath": {"type": "string", "pattern": "^analyses/[A-Za-z0-9._:-]+/input/algorithm-input\\.json$"},
+        "relativePath": {"type": "string", "pattern": "^input/[^/:\\\\]+$"},
         "mediaType": {"const": "application/json"},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "sizeBytes": {"type": "integer", "minimum": 0, "maximum": 268435456}

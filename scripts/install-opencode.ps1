@@ -13,7 +13,6 @@ $manifestRelativePath = ".algorithm-debug-agent/install-manifest.json"
 
 $assets = @(
     @{ Source = "skills\algorithm-debug\SKILL.md"; Destination = "skills\algorithm-debug\SKILL.md" },
-    @{ Source = "skills\algorithm-debug\references\wafer-demo-v1.md"; Destination = "skills\algorithm-debug\references\wafer-demo-v1.md" },
     @{ Source = "integrations\opencode\agents\algorithm-debug.md"; Destination = "agents\algorithm-debug.md" },
     @{ Source = "integrations\opencode\commands\debug-case.md"; Destination = "commands\debug-case.md" },
     @{ Source = "integrations\opencode\tools\algorithm-debug.ts"; Destination = "tools\algorithm-debug.ts" },
@@ -332,7 +331,7 @@ function Invoke-Uninstall {
         }
     }
     Remove-Item -LiteralPath $manifestPath -Force
-    foreach ($relativeDirectory in @("skills\algorithm-debug\references", "skills\algorithm-debug", ".algorithm-debug-agent")) {
+    foreach ($relativeDirectory in @("skills\algorithm-debug", ".algorithm-debug-agent")) {
         $directory = Join-Path $ConfigDirectory $relativeDirectory
         if ((Test-Path -LiteralPath $directory -PathType Container) `
                 -and @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) {

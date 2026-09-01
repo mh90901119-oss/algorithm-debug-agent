@@ -116,6 +116,16 @@ public final class CaseArchiveLayout {
         return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
     }
 
+    /** @return 当前 Case 唯一算法输入快照目录。 */
+    public Path caseInputRoot() {
+        return child(caseRoot, "input");
+    }
+
+    /** @return 使用源文件 basename 保存的 Case 唯一算法输入。 */
+    public Path caseInputArtifact(String fileName) {
+        return child(caseInputRoot(), safeSegment(fileName, "fileName"));
+    }
+
     /** @return 指定 Analysis 的算法输入归档目录。 */
     public Path analysisInputRoot(AnalysisId analysisId) {
         return child(analysisRoot(analysisId), "input");
@@ -124,11 +134,6 @@ public final class CaseArchiveLayout {
     /** @return 指定 Analysis 的输入定位与一致性控制文档。 */
     public Path analysisInputCapture(AnalysisId analysisId) {
         return child(analysisInputRoot(analysisId), "input-analysis.json");
-    }
-
-    /** @return 指定 Analysis 的不可变算法输入副本。 */
-    public Path analysisInputArtifact(AnalysisId analysisId) {
-        return child(analysisInputRoot(analysisId), "algorithm-input.json");
     }
 
     /** @return 指定 Analysis 的静态方法目录 */
