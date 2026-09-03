@@ -1,0 +1,1682 @@
+{
+  "schemaVersion": "1.0",
+  "suiteId": "algorithm-debug-quality-50",
+  "description": "Fifty real OpenCode sessions covering target boundaries, runtime evidence, causal refinement, integrity, and direct answers",
+  "cases": [
+    {
+      "id": "passing-01",
+      "question": "Run this algorithm UT, classify its process and test outcome, and confirm whether its newly generated Gantt JSON was archived.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "passing-02",
+      "question": "Execute the parallel-strategy UT and report the verified Run outcome and Gantt archival result without dynamic collection.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "parallelModeOrdersSameWaferOrdinalAcrossJobs"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "passing-03",
+      "question": "Execute the serial-strategy UT and distinguish Maven process success, JUnit success, and Gantt presence.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "serialModeCompletesEarlierJobWafersFirst"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "passing-04",
+      "question": "Run the running-wafer strategy UT and report whether it passed and produced one new Gantt JSON.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "runningWaferIsScheduledBeforeWaitingWafers"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "passing-05",
+      "question": "Verify the target reproduction UT succeeds, cite its Run evidence, and state whether any CodePath or JDWP collection was unnecessary.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "missing-ut-01",
+      "question": "Check this named UT. If it does not exist, report the missing target and stop before any target execution.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.DoesNotExistTest",
+        "methodName": "missingTarget"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "does not exist|not found|not confirmed to exist"
+      ],
+      "forbiddenAnswerPatterns": [
+        "root cause.*algorithm"
+      ],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "missing-ut-02",
+      "question": "Confirm whether this requested method exists in the named test class; do not substitute another method.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "methodThatDoesNotExist"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "does not exist|not found|not confirmed to exist"
+      ],
+      "forbiddenAnswerPatterns": [
+        "root cause.*algorithm"
+      ],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "missing-ut-03",
+      "question": "Validate the exact target identity and stop with a missing-UT conclusion when the class is absent.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.UnknownSchedulingTest",
+        "methodName": "reproduce"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "does not exist|not found|not confirmed to exist"
+      ],
+      "forbiddenAnswerPatterns": [
+        "root cause.*algorithm"
+      ],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "missing-ut-04",
+      "question": "Check this strategy UT name exactly and do not run or collect against a similarly named test.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "unknownStrategy"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "does not exist|not found|not confirmed to exist"
+      ],
+      "forbiddenAnswerPatterns": [
+        "root cause.*algorithm"
+      ],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "missing-ut-05",
+      "question": "Determine whether the specified fully qualified UT exists and report only the confirmed boundary.",
+      "targetTest": {
+        "className": "missing.package.AlgorithmTest",
+        "methodName": "caseOne"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "does not exist|not found|not confirmed to exist"
+      ],
+      "forbiddenAnswerPatterns": [
+        "root cause.*algorithm"
+      ],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "input-boundary-01",
+      "question": "Inspect the target UT first-level String input literal and stop because its one supported algorithm input file is missing.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "missingAlgorithmInputCausesNullPointerException"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "algorithm input|input.*not found|unsupported target"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "input-boundary-02",
+      "question": "Check the one-input contract. Report that multiple supported algorithm input literals make this UT unsupported and do not run it.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "multipleAlgorithmInputsAreUnsupported"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "algorithm input|input.*not found|unsupported target"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "input-boundary-03",
+      "question": "Verify the configured algorithm input exists before execution; if not, return the input boundary rather than diagnosing later algorithm code.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "missingAlgorithmInputCausesNullPointerException"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "algorithm input|input.*not found|unsupported target"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "input-boundary-04",
+      "question": "Count supported first-level input literals in this UT and stop when the count is not exactly one.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "multipleAlgorithmInputsAreUnsupported"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "algorithm input|input.*not found|unsupported target"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "input-boundary-05",
+      "question": "Attempt deterministic algorithm-input capture only, explain the missing-file result, and audit the resulting Case.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "missingAlgorithmInputCausesNullPointerException"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "run_test",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "requiredAnswerPatterns": [
+        "algorithm input|input.*not found|unsupported target"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": false,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 0,
+      "requireAnswerContext": true
+    },
+    {
+      "id": "loop-guard-01",
+      "question": "Run the UT and explain the earliest runtime exception, including the maximum-iteration guard and affected scheduling loop.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "schedulingLoopExceedsMaximumIterations"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "ERROR",
+      "expectedExceptionClass": "java.lang.IllegalStateException",
+      "requiredAnswerPatterns": [
+        "maximum iterations|loop"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "ABSENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "loop-guard-02",
+      "question": "Determine why this algorithm UT errors instead of failing an assertion; cite the IllegalStateException and loop guard evidence.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "schedulingLoopExceedsMaximumIterations"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "ERROR",
+      "expectedExceptionClass": "java.lang.IllegalStateException",
+      "requiredAnswerPatterns": [
+        "maximum iterations|loop"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "ABSENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "loop-guard-03",
+      "question": "Explain whether the valid input reaches scheduling and why the no-progress loop eventually throws maximum iterations.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "schedulingLoopExceedsMaximumIterations"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "ERROR",
+      "expectedExceptionClass": "java.lang.IllegalStateException",
+      "requiredAnswerPatterns": [
+        "maximum iterations|loop"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "ABSENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "loop-guard-04",
+      "question": "Classify this target failure and identify the source condition that turns forced no-progress behavior into a bounded exception.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "schedulingLoopExceedsMaximumIterations"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "ERROR",
+      "expectedExceptionClass": "java.lang.IllegalStateException",
+      "requiredAnswerPatterns": [
+        "maximum iterations|loop"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "ABSENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "loop-guard-05",
+      "question": "Analyze the exception chain and relevant target frame, then stop at the scheduling-loop root cause because no Gantt can be produced.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "schedulingLoopExceedsMaximumIterations"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "ERROR",
+      "expectedExceptionClass": "java.lang.IllegalStateException",
+      "requiredAnswerPatterns": [
+        "maximum iterations|loop"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "ABSENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "assertion-01",
+      "question": "Run the UT and distinguish an assertion expectation of 164 from the actual 165 operations; do not label it an algorithm exception.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "generatedScheduleHasIntentionalAssertionMismatch"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "FAILED",
+      "expectedExceptionClass": "org.opentest4j.AssertionFailedError",
+      "requiredAnswerPatterns": [
+        "164",
+        "165",
+        "assertion|expectation"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "assertion-02",
+      "question": "Explain whether scheduling completed and the test failed only because expected and actual operation counts differ.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "generatedScheduleHasIntentionalAssertionMismatch"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "FAILED",
+      "expectedExceptionClass": "org.opentest4j.AssertionFailedError",
+      "requiredAnswerPatterns": [
+        "164",
+        "165",
+        "assertion|expectation"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "assertion-03",
+      "question": "Classify this failure using Surefire evidence and report the exact expected 164 versus actual 165 values.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "generatedScheduleHasIntentionalAssertionMismatch"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "FAILED",
+      "expectedExceptionClass": "org.opentest4j.AssertionFailedError",
+      "requiredAnswerPatterns": [
+        "164",
+        "165",
+        "assertion|expectation"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "assertion-04",
+      "question": "Determine why a Gantt exists despite the UT failure and whether the failure is an assertion mismatch.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "generatedScheduleHasIntentionalAssertionMismatch"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "FAILED",
+      "expectedExceptionClass": "org.opentest4j.AssertionFailedError",
+      "requiredAnswerPatterns": [
+        "164",
+        "165",
+        "assertion|expectation"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "assertion-05",
+      "question": "Report the first sufficient cause of this failed UT, including the assertion values, without unnecessary dynamic collection.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingFailureScenarios",
+        "methodName": "generatedScheduleHasIntentionalAssertionMismatch"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "FAILED",
+      "expectedTestOutcome": "FAILED",
+      "expectedExceptionClass": "org.opentest4j.AssertionFailedError",
+      "requiredAnswerPatterns": [
+        "164",
+        "165",
+        "assertion|expectation"
+      ],
+      "forbiddenAnswerPatterns": [
+        "input is missing"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "static-01",
+      "question": "After the Run, build the current Method Catalog and explain the bounded direct call structure around scheduling.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "source|method|call"
+      ],
+      "forbiddenAnswerPatterns": [
+        "complete call graph"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "static-02",
+      "question": "Run the parallel strategy UT, then use current-source static analysis to identify its scheduler entry and relevant direct calls.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "parallelModeOrdersSameWaferOrdinalAcrossJobs"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "source|method|call"
+      ],
+      "forbiddenAnswerPatterns": [
+        "complete call graph"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "static-03",
+      "question": "Use the successful serial strategy Run plus Method Catalog to identify source methods relevant to strategy ordering.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "serialModeCompletesEarlierJobWafersFirst"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "source|method|call"
+      ],
+      "forbiddenAnswerPatterns": [
+        "complete call graph"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "static-04",
+      "question": "After running the running-wafer UT, identify bounded source relationships relevant to running-job initialization and scheduling.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "runningWaferIsScheduledBeforeWaitingWafers"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "source|method|call"
+      ],
+      "forbiddenAnswerPatterns": [
+        "complete call graph"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "static-05",
+      "question": "Explain what the static Method Catalog confirms and what it cannot prove about the runtime path for this UT.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "source|method|call"
+      ],
+      "forbiddenAnswerPatterns": [
+        "complete call graph"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "codepath-01",
+      "question": "Run the UT and collect a bounded CodePath method path showing which scheduler methods actually execute; do not use JDWP.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "CodePath|method path|runtime path"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": false,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "codepath-02",
+      "question": "Use CodePath after the baseline Run to validate the runtime method path for parallel strategy ordering, without JDWP.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "parallelModeOrdersSameWaferOrdinalAcrossJobs"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "CodePath|method path|runtime path"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": false,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "codepath-03",
+      "question": "Collect Method Path Evidence for the serial strategy UT and report executed scheduler boundaries and counts; no JDWP.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "serialModeCompletesEarlierJobWafersFirst"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "CodePath|method path|runtime path"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": false,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "codepath-04",
+      "question": "Collect the runtime CodePath needed to show the running-wafer branch and scheduler path actually executed; do not collect JDWP state.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "runningWaferIsScheduledBeforeWaitingWafers"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "CodePath|method path|runtime path"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": false,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "codepath-05",
+      "question": "Create one precise CodePath Plan using exact Method Catalog keys and scalar projections, execute it, and explain the validated runtime path.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "CodePath|method path|runtime path"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": false,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "jdwp-01",
+      "question": "After a baseline Run, use JDWP alone for focused scheduling-loop values and report observed, matched, and captured counts; no CodePath.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "JDWP|runtime state"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "jdwp-02",
+      "question": "Use one bounded JDWP plan to observe named runtime state relevant to the parallel strategy; do not run CodePath.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "parallelModeOrdersSameWaferOrdinalAcrossJobs"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "JDWP|runtime state"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "jdwp-03",
+      "question": "Collect focused JDWP state at an executable serial-strategy scheduling line and explain only values actually captured.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "serialModeCompletesEarlierJobWafersFirst"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "JDWP|runtime state"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "jdwp-04",
+      "question": "Use conditional JDWP to observe a running-wafer state or report a precise evidence gap; do not use CodePath first.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "runningWaferIsScheduledBeforeWaitingWafers"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "JDWP|runtime state"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "jdwp-05",
+      "question": "Validate one repeated scheduling-loop state with JDWP sampling budgets and distinguish observed hits from captured snapshots.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "codepath_plan_create",
+        "codepath_collect",
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "JDWP|runtime state"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "maxTargetTestExecutions": 2,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "integrity-01",
+      "question": "Run the UT and answer from archived evidence; the Harness will corrupt one registered Artifact and require Case audit detection.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "integrity-02",
+      "question": "Execute the parallel strategy UT and preserve registered evidence so a post-run Artifact tamper check can be verified.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "parallelModeOrdersSameWaferOrdinalAcrossJobs"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "integrity-03",
+      "question": "Run the serial strategy UT, cite its Run evidence, and complete Case audit before the Eval integrity mutation.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "serialModeCompletesEarlierJobWafersFirst"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "integrity-04",
+      "question": "Run the running-wafer UT and produce an auditable Case whose first Artifact corruption must be rejected.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingStrategyScenariosTest",
+        "methodName": "runningWaferIsScheduledBeforeWaitingWafers"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "integrity-05",
+      "question": "Verify normal execution and Artifact registration; do not rely on file names alone because integrity will be tested after the answer.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "passed|success"
+      ],
+      "forbiddenAnswerPatterns": [],
+      "requireEvidenceReferences": true,
+      "allowCodePath": false,
+      "allowJdwp": false,
+      "maxTargetTestExecutions": 1,
+      "postAction": "CORRUPT_FIRST_ARTIFACT",
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "causal-01",
+      "question": "A-W2 first PICK begins at 60. Use input and source, then CodePath and conditional JDWP in sequence, to explain how B-W1, C-W1 and whole-wafer ordering contribute.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "requireSequentialDynamicRefinement": true,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": [
+        "A-W2"
+      ],
+      "maxTargetTestExecutions": 4,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "causal-02",
+      "question": "Explain why A-W2 is delayed although CH1 was available earlier; use CodePath to validate the B-W1/C-W1 whole-wafer runtime path before collecting A-W2 JDWP state.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "requireSequentialDynamicRefinement": true,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": [
+        "A-W2"
+      ],
+      "maxTargetTestExecutions": 4,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "causal-03",
+      "question": "Test the hypothesis that A-W2 alone caused its late PICK. Use CodePath Evidence first, then a JDWP Plan referencing it, and include B-W1, C-W1 and whole-wafer ordering.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "requireSequentialDynamicRefinement": true,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": [
+        "A-W2"
+      ],
+      "maxTargetTestExecutions": 4,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "causal-04",
+      "question": "Trace the upstream cause of A-W2 start time 60 across input order and B-W1/C-W1 resource use; use CodePath for the scheduler path followed by JDWP for focused runtime state, with serial dynamic runs.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "requireSequentialDynamicRefinement": true,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": [
+        "A-W2"
+      ],
+      "maxTargetTestExecutions": 4,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    },
+    {
+      "id": "causal-05",
+      "question": "Provide an evidence-backed cross-wafer explanation for A-W2, explicitly considering B-W1, C-W1 and whole-wafer scheduling, with CodePath followed by conditional JDWP.",
+      "targetTest": {
+        "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+        "methodName": "reproduceComplexSchedulingFromTimestampedInput"
+      },
+      "requiredTools": [
+        "analysis_begin",
+        "algorithm_input_capture",
+        "run_test",
+        "static_analyze",
+        "codepath_plan_create",
+        "codepath_collect",
+        "jdwp_plan_create",
+        "jdwp_collect",
+        "case_audit"
+      ],
+      "forbiddenTools": [
+        "analysis_complete"
+      ],
+      "expectedProcessOutcome": "SUCCEEDED",
+      "expectedTestOutcome": "PASSED",
+      "requiredAnswerPatterns": [
+        "A-W2",
+        "B-W1",
+        "C-W1",
+        "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
+      ],
+      "forbiddenAnswerPatterns": [
+        "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+      ],
+      "requireEvidenceReferences": true,
+      "allowCodePath": true,
+      "allowJdwp": true,
+      "expectedCollectionCompletion": "SUCCESS",
+      "requireAllCollectionsSuccessful": true,
+      "requirePlanIntent": true,
+      "requireSequentialDynamicRefinement": true,
+      "requireJdwpCondition": true,
+      "requiredJdwpConditionValuePatterns": [
+        "A-W2"
+      ],
+      "maxTargetTestExecutions": 4,
+      "expectedGanttOutcome": "PRESENT",
+      "requireAnswerContext": true
+    }
+  ]
+}

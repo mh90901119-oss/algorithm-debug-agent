@@ -126,7 +126,7 @@ public final class AdaMain {
         } catch (CaseRunException failure) {
             logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
-                    ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
+                    ToolResponse.failure(failure.code(), publicDomainMessage(failure), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (ControlPlaneException failure) {
@@ -146,7 +146,8 @@ public final class AdaMain {
             logFailure(logContext, commandName, "PLAN_COMPILATION_FAILED", failure);
             responseWriter.write(
                     ToolResponse.failure(
-                            "PLAN_COMPILATION_FAILED", safeDomainMessage("PLAN_COMPILATION_FAILED"), List.of()),
+                            "PLAN_COMPILATION_FAILED",
+                            planCompilationMessage("PLAN_COMPILATION_FAILED", failure), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (RuntimeException failure) {
@@ -315,8 +316,6 @@ public final class AdaMain {
             case "ALGORITHM_INPUT_TOO_LARGE" -> "Algorithm input exceeds the supported size limit";
             case "ALGORITHM_INPUT_COPY_FAILED" -> "Algorithm input could not be archived";
             case "ANALYSIS_INPUT_NOT_CAPTURED" -> "Capture the current Analysis algorithm input before running the UT";
-            case "ANALYSIS_RESULT_IDENTITY_MISMATCH" -> "Analysis result identity does not match the command";
-            case "ANALYSIS_RESULT_NOT_FOUND" -> "Analysis result was not found";
             case "CASE_ARTIFACT_NOT_REGISTERED" -> "Artifact ID is not registered in this case";
             case "CASE_ARTIFACT_PATH_INVALID" -> "Artifact path is invalid";
             case "CASE_ARTIFACT_OFFSET_INVALID" -> "Artifact offset is invalid";
@@ -332,6 +331,8 @@ public final class AdaMain {
             case "TARGET_TEST_NOT_FOUND" -> "Target test was not found in the current source";
             case "STATIC_ARCHIVE_FAILED" -> "Static analysis artifact could not be archived";
             case "PLAN_COMPILATION_FAILED" -> "Collection plan could not be compiled";
+            case "PLAN_EVIDENCE_NOT_FOUND" ->
+                    "Plan references an Evidence ID that is not available in the current Case";
             case "PLAN_ARCHIVE_FAILED" -> "Collection plan could not be archived";
             case "JDWP_PLAN_COMPILATION_FAILED" -> "JDWP collection plan could not be compiled";
             case "JDWP_PLAN_ARCHIVE_FAILED" -> "JDWP collection plan could not be archived";
@@ -341,6 +342,28 @@ public final class AdaMain {
             case "JDWP_ARCHIVE_FAILED" -> "JDWP collection artifacts could not be archived";
             default -> "Workspace operation failed";
         };
+    }
+
+    private static String publicDomainMessage(CaseRunException failure) {
+        if (("PLAN_COMPILATION_FAILED".equals(failure.code())
+                || "JDWP_PLAN_COMPILATION_FAILED".equals(failure.code()))
+                && failure.getCause() instanceof PlanCompilationException planFailure) {
+            return planCompilationMessage(failure.code(), planFailure);
+        }
+        return safeDomainMessage(failure.code());
+    }
+
+    private static String planCompilationMessage(String code, PlanCompilationException failure) {
+        String base = safeDomainMessage(code);
+        String detail = failure.getMessage();
+        if (detail == null || detail.isBlank()) {
+            return base;
+        }
+        String singleLine = detail.replaceAll("\\s+", " ").strip();
+        if (singleLine.length() > 512) {
+            singleLine = singleLine.substring(0, 509) + "...";
+        }
+        return base + ": " + singleLine;
     }
 }
 

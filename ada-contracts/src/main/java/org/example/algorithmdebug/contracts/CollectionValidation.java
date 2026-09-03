@@ -10,7 +10,6 @@ public record CollectionValidation(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -29,7 +28,6 @@ public record CollectionValidation(
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");

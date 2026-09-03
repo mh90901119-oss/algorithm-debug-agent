@@ -40,6 +40,19 @@ export function createAlgorithmDebugRuntime({
 
   const recorder = interactionRecorder && typeof interactionRecorder.beginTool === "function"
     ? interactionRecorder : NOOP_RECORDER
+  let activeTargetExecution = null
+
+  async function runTargetExecution(toolName, operation) {
+    if (activeTargetExecution !== null) {
+      return failure("ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+    }
+    activeTargetExecution = toolName
+    try {
+      return await operation()
+    } finally {
+      activeTargetExecution = null
+    }
+  }
 
   async function invoke(args, context, scope) {
     const cwd = contextDirectory(context)
@@ -143,19 +156,19 @@ export function createAlgorithmDebugRuntime({
 
   return Object.freeze({
     analysisBegin(input, context) {
-      return runObservedTool("analysis_begin", input, context, scope => {
+      return runObservedTool("analysis_begin", input, context, async scope => {
         const targetTest = requiredText(input.targetTest, "targetTest")
         const options = [
           "--test", targetTest,
-          "--context-mode", contextMode(input.contextMode),
         ]
         appendOptional(options, "--case-id", input.caseId)
         appendOptional(options, "--adapter", input.adapterId)
-        return invokeWithTextFile(
+        const response = await invokeWithTextFile(
           { command: ["case", "open"], options, fileOptionIndex: 2,
             identity: { caseId: input.caseId, targetTest } }, context,
           "--question-file", "question.txt", input.question, QUESTION_LIMIT_BYTES, scope,
         )
+        return withAnalysisDirectories(response)
       })
     },
     caseInspect(input, context) {
@@ -185,7 +198,8 @@ export function createAlgorithmDebugRuntime({
     },
     runTest(input, context) {
       return runObservedTool("run_test", input, context, scope =>
-        invoke(caseAnalysisCommand(["run", "execute"], input), context, scope))
+        runTargetExecution("run_test", () =>
+          invoke(caseAnalysisCommand(["run", "execute"], input), context, scope)))
     },
     staticAnalyze(input, context) {
       return runObservedTool("static_analyze", input, context, scope =>
@@ -200,8 +214,9 @@ export function createAlgorithmDebugRuntime({
     },
     codePathCollect(input, context) {
       return runObservedTool("codepath_collect", input, context, async scope =>
-        collectionFacingResponse(await invoke(
-          collectionCommand(["collection", "codepath", "execute"], input), context, scope)))
+        runTargetExecution("codepath_collect", async () =>
+          collectionFacingResponse(await invoke(
+            collectionCommand(["collection", "codepath", "execute"], input), context, scope))))
     },
     jdwpPlanCreate(input, context) {
       return runObservedTool("jdwp_plan_create", input, context, scope => {
@@ -211,8 +226,9 @@ export function createAlgorithmDebugRuntime({
     },
     jdwpCollect(input, context) {
       return runObservedTool("jdwp_collect", input, context, async scope =>
-        collectionFacingResponse(await invoke(
-          collectionCommand(["collection", "jdwp", "execute"], input), context, scope)))
+        runTargetExecution("jdwp_collect", async () =>
+          collectionFacingResponse(await invoke(
+            collectionCommand(["collection", "jdwp", "execute"], input), context, scope))))
     },
     artifactRead(input, context) {
       return runObservedTool("artifact_read", input, context, scope => {
@@ -232,20 +248,39 @@ export function createAlgorithmDebugRuntime({
         }, context, scope)
       })
     },
-    analysisComplete(input, context) {
-      const resultJson = JSON.stringify(analysisResult(input, now))
-      const identity = {
-        caseId: requiredText(input.caseId, "caseId"),
-        analysisId: requiredText(input.analysisId, "analysisId"),
-      }
-      return runObservedTool("analysis_complete", input, context, scope => {
-        return invokeWithTextFile({
-          command: ["analysis", "complete"], identity,
-          options: [
-            "--case-id", identity.caseId,
-            "--analysis-id", identity.analysisId,
-          ],
-        }, context, "--result-file", "result.json", resultJson, RESULT_LIMIT_BYTES, scope)
+    evidenceQuery(input, context) {
+      return runObservedTool("evidence_query", input, context, scope => {
+        const caseId = requiredText(input.caseId, "caseId")
+        const options = [
+          "--case-id", caseId,
+          "--artifact-id", requiredText(input.artifactId, "artifactId"),
+        ]
+        for (const [field, option] of [
+          ["methodRef", "--method-ref"], ["tracepointId", "--tracepoint-id"],
+          ["valueName", "--value-name"], ["scalarValue", "--scalar-value"],
+          ["valueStatus", "--value-status"],
+        ]) {
+          if (input[field] !== undefined && input[field] !== null) {
+            options.push(option, requiredText(input[field], field))
+          }
+        }
+        for (const [field, option] of [
+          ["sequenceFrom", "--sequence-from"], ["sequenceTo", "--sequence-to"],
+        ]) {
+          if (input[field] !== undefined && input[field] !== null) {
+            options.push(option, String(integerInRange(
+              input[field], field, 1, Number.MAX_SAFE_INTEGER)))
+          }
+        }
+        options.push(
+          "--offset", String(integerInRange(input.offset ?? 0, "offset", 0, Number.MAX_SAFE_INTEGER)),
+          "--limit", String(integerInRange(input.limit ?? 20, "limit", 1, 50)),
+          "--max-bytes", String(integerInRange(
+            input.maxBytes ?? DEFAULT_ARTIFACT_BYTES, "maxBytes", 1, MAXIMUM_ARTIFACT_BYTES)),
+        )
+        return invoke({
+          command: ["evidence", "query"], identity: { caseId }, options,
+        }, context, scope)
       })
     },
   })
@@ -302,64 +337,72 @@ export function createAlgorithmDebugRuntime({
   }
 }
 
-function analysisResult(input, now) {
-  const completedAt = now()
-  if (!(completedAt instanceof Date) || Number.isNaN(completedAt.getTime())) {
-    throw new TypeError("now must return a valid Date")
-  }
-  return {
-    schemaVersion: "1.0",
-    caseId: requiredText(input.caseId, "caseId"),
-    contextId: requiredText(input.contextId, "contextId"),
-    analysisId: requiredText(input.analysisId, "analysisId"),
-    finalAnswer: requiredText(input.finalAnswer, "finalAnswer"),
-    conclusions: conclusionArray(input.conclusions),
-    referencedRunIds: textArray(input.referencedRunIds, "referencedRunIds"),
-    referencedCollectionIds: textArray(
-      input.referencedCollectionIds, "referencedCollectionIds"),
-    referencedEvidenceIds: textArray(input.referencedEvidenceIds, "referencedEvidenceIds"),
-    referencedArtifactIds: textArray(input.referencedArtifactIds, "referencedArtifactIds"),
-    missingEvidence: textArray(input.missingEvidence, "missingEvidence"),
-    completedAt: completedAt.toISOString(),
+function withAnalysisDirectories(response) {
+  try {
+    const value = JSON.parse(response)
+    if (value?.success !== true || !value.data) return response
+    const caseId = identifierText(value.data.caseId)
+    const analysisId = identifierText(value.data.analysisId)
+    const projectId = identifierText(value.data.digest?.projectId ?? value.data.projectId)
+    if (!caseId || !analysisId || !projectId) return response
+    const caseDirectory = `projects/${projectId}/cases/${caseId}`
+    const analysisDirectory = `${caseDirectory}/analyses/${analysisId}`
+    value.data.caseDirectory = caseDirectory
+    value.data.analysisDirectory = analysisDirectory
+    value.data.answerContext = [
+      `Case directory: ${caseDirectory}`,
+      `Analysis directory: ${analysisDirectory}`,
+    ].join("\n")
+    return JSON.stringify(value)
+  } catch {
+    return response
   }
 }
 
-function conclusionArray(value) {
-  const values = value ?? []
-  if (!Array.isArray(values)) throw new TypeError("conclusions must be an array")
-  return values.map((item, index) => {
-    if (!item || typeof item !== "object" || Array.isArray(item)) {
-      throw new TypeError(`conclusions[${index}] must be an object`)
-    }
-    const classification = requiredText(
-      item.classification, `conclusions[${index}].classification`)
-    const evidenceReferenceIds = textArray(
-      item.evidenceReferenceIds, `conclusions[${index}].evidenceReferenceIds`)
-    if (["CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE"]
-      .includes(classification) && evidenceReferenceIds.length === 0) {
-      throw new TypeError(
-        `conclusions[${index}].evidenceReferenceIds must contain at least one `
-        + `evidence reference for ${classification}`)
-    }
-    return {
-      classification,
-      statement: requiredText(item.statement, `conclusions[${index}].statement`),
-      evidenceReferenceIds,
-    }
-  })
+function identifierText(value) {
+  if (typeof value === "string" && value.trim() !== "") return value
+  if (typeof value?.value === "string" && value.value.trim() !== "") return value.value
+  return null
 }
 
 function codePathPlanRequest(input, now, createId) {
-  const selectedMethodKeys = distinctTextArray(
-    input.selectedMethodKeys, "selectedMethodKeys", 100, false)
+  if (!Array.isArray(input.methods) || input.methods.length < 1 || input.methods.length > 50) {
+    throw new RangeError("methods must contain between 1 and 50 entries")
+  }
+  const methodKeys = new Set()
+  const methods = input.methods.map((method, methodIndex) => {
+    const methodKey = requiredText(method?.methodKey, `methods[${methodIndex}].methodKey`)
+    if (methodKeys.has(methodKey)) throw new TypeError("methods must not contain duplicate methodKey")
+    methodKeys.add(methodKey)
+    if (!Array.isArray(method?.projections) || method.projections.length > 32) {
+      throw new RangeError(`methods[${methodIndex}].projections must contain at most 32 entries`)
+    }
+    const names = new Set()
+    const projections = method.projections.map((projection, projectionIndex) => {
+      const name = requiredText(projection?.name,
+        `methods[${methodIndex}].projections[${projectionIndex}].name`)
+      if (names.has(name)) throw new TypeError(`Duplicate projection name for ${methodKey}: ${name}`)
+      names.add(name)
+      if (typeof projection?.required !== "boolean") {
+        throw new TypeError(`methods[${methodIndex}].projections[${projectionIndex}].required must be boolean`)
+      }
+      return {
+        name,
+        path: requiredText(projection.path,
+          `methods[${methodIndex}].projections[${projectionIndex}].path`),
+        required: projection.required,
+      }
+    })
+    return { methodKey, projections }
+  })
   const scopeMethodKey = input.scopeMethodKey === undefined
     ? undefined : requiredText(input.scopeMethodKey, "scopeMethodKey")
-  if (scopeMethodKey && !selectedMethodKeys.includes(scopeMethodKey)) {
-    throw new TypeError("scopeMethodKey must be included in selectedMethodKeys")
+  if (scopeMethodKey && !methodKeys.has(scopeMethodKey)) {
+    throw new TypeError("scopeMethodKey must be included in methods")
   }
   const request = {
     planId: requiredText(createId("codepath-plan"), "generated codepath planId"),
-    selectedMethodKeys,
+    methods,
   }
   if (scopeMethodKey) request.scopeMethodKey = scopeMethodKey
   request.rationale = requiredText(input.rationale, "rationale")
@@ -379,34 +422,45 @@ function jdwpPlanRequest(input, now, createId) {
       throw new TypeError(`tracepoints[${index}] must be an object`)
     }
     const maxObservedHits = integerInRange(
-      point.maxObservedHits ?? point.maxHits ?? 100,
-      `tracepoints[${index}].maxObservedHits`, 1, 10_000)
-    const captureOnMatchedHits = integerArray(
-      point.captureOnMatchedHits ?? point.captureOnHits ?? [],
-      `tracepoints[${index}].captureOnMatchedHits`, 20)
+      point.maxObservedHits ?? 1_000,
+      `tracepoints[${index}].maxObservedHits`, 1, 100_000)
     const maxCapturedHits = integerInRange(
-      point.maxCapturedHits ?? (captureOnMatchedHits.length || 3),
-      `tracepoints[${index}].maxCapturedHits`, 1, 20)
-    let previous = 0
-    for (const hit of captureOnMatchedHits) {
-      if (hit <= previous || hit > maxObservedHits) {
-        throw new RangeError(
-          `tracepoints[${index}].captureOnMatchedHits must be strictly increasing and within maxObservedHits`)
-      }
-      previous = hit
-    }
-    if (captureOnMatchedHits.length > maxCapturedHits) {
-      throw new RangeError(
-        `tracepoints[${index}].captureOnMatchedHits exceeds maxCapturedHits`)
+      point.maxCapturedHits ?? 20,
+      `tracepoints[${index}].maxCapturedHits`, 1, 200)
+    const captureFirstMatchedHits = integerInRange(
+      point.captureFirstMatchedHits ?? Math.min(5, maxCapturedHits),
+      `tracepoints[${index}].captureFirstMatchedHits`, 0, maxCapturedHits)
+    const captureEveryMatchedHits = integerInRange(
+      point.captureEveryMatchedHits ?? Math.min(5, maxObservedHits),
+      `tracepoints[${index}].captureEveryMatchedHits`, 0, maxObservedHits)
+    if (captureFirstMatchedHits === 0 && captureEveryMatchedHits === 0) {
+      throw new RangeError(`tracepoints[${index}] must select at least one matched hit`)
     }
     const capture = point.capture ?? {}
     if (!capture || typeof capture !== "object" || Array.isArray(capture)) {
       throw new TypeError(`tracepoints[${index}].capture must be an object`)
     }
-    const locals = booleanValue(capture.locals ?? true, `tracepoints[${index}].capture.locals`)
+    const localNames = distinctTextArray(
+      capture.localNames ?? [], `tracepoints[${index}].capture.localNames`, 64, true)
+    const fieldPaths = distinctTextArray(
+      capture.fieldPaths ?? [], `tracepoints[${index}].capture.fieldPaths`, 128, true)
+    const locals = booleanValue(capture.locals ?? (localNames.length > 0),
+      `tracepoints[${index}].capture.locals`)
     const stack = booleanValue(capture.stack ?? true, `tracepoints[${index}].capture.stack`)
     if (!locals && !stack) {
       throw new TypeError(`tracepoints[${index}].capture must enable locals or stack`)
+    }
+    if (locals && localNames.length === 0) {
+      throw new TypeError(`tracepoints[${index}].capture.localNames is required when locals is true`)
+    }
+    if (!locals && (localNames.length > 0 || fieldPaths.length > 0)) {
+      throw new TypeError(`tracepoints[${index}].capture projections require locals`)
+    }
+    for (const path of fieldPaths) {
+      const root = path.includes(".") ? path.slice(0, path.indexOf(".")) : path
+      if (!localNames.includes(root)) {
+        throw new TypeError(`tracepoints[${index}].capture.fieldPaths root must be in localNames`)
+      }
     }
     const tracepoint = {
       tracepointId: `tracepoint-${index + 1}`,
@@ -414,7 +468,8 @@ function jdwpPlanRequest(input, now, createId) {
       line: integerInRange(point.line, `tracepoints[${index}].line`, 1, Number.MAX_SAFE_INTEGER),
       maxObservedHits,
       maxCapturedHits,
-      captureOnMatchedHits,
+      captureFirstMatchedHits,
+      captureEveryMatchedHits,
       capture: {
         locals,
         stack,
@@ -427,10 +482,8 @@ function jdwpPlanRequest(input, now, createId) {
         maxStringLength: integerInRange(
           capture.maxStringLength ?? 256,
           `tracepoints[${index}].capture.maxStringLength`, 16, 1_024),
-        localNames: distinctTextArray(
-          capture.localNames ?? [], `tracepoints[${index}].capture.localNames`, 64, true),
-        fieldPaths: distinctTextArray(
-          capture.fieldPaths ?? [], `tracepoints[${index}].capture.fieldPaths`, 128, true),
+        localNames,
+        fieldPaths,
       },
     }
     if (point.condition !== undefined) {
@@ -464,7 +517,7 @@ function jdwpPlanRequest(input, now, createId) {
     planId: requiredText(createId("jdwp-plan"), "generated jdwp planId"),
     tracepoints,
     budget: {
-      maxEvents: 100, maxBytes: 16_777_216, timeoutMillis: 300_000,
+      maxEvents: 500, maxBytes: 33_554_432, timeoutMillis: 300_000,
       idleTimeoutMillis: 120_000,
     },
     rationale: requiredText(input.rationale, "rationale"),
@@ -644,12 +697,6 @@ function boundedText(value, name, maximumBytes) {
 function requiredText(value, name) {
   if (!nonBlank(value)) throw new TypeError(`${name} must be a non-empty string`)
   return value
-}
-
-function contextMode(value) {
-  const mode = value ?? "reuse"
-  if (mode !== "reuse" && mode !== "new") throw new TypeError("contextMode must be reuse or new")
-  return mode
 }
 
 function integerInRange(value, name, minimum, maximum) {

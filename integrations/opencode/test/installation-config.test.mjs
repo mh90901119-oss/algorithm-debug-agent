@@ -112,6 +112,8 @@ test("keeps source-build and JDWP verification scripts in the repository", async
 
   assert.match(build, /agentJavaHome/u)
   assert.match(build, /-Pcodepath-launcher/u)
+  assert.match(build, /\$mavenExitCode\s*=\s*\$LASTEXITCODE/u)
+  assert.match(build, /if\s*\(\$mavenExitCode\s*-ne\s*0\)/u)
   assert.match(verify, /JdwpLoopbackProbe/u)
   assert.match(verify, /marker/u)
   assert.match(pom, /third-party\/maven-repository/u)

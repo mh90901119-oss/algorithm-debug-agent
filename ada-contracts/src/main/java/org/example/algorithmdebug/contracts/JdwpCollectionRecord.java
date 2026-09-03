@@ -6,7 +6,6 @@ import java.time.Instant;
 public record JdwpCollectionRecord(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -21,7 +20,6 @@ public record JdwpCollectionRecord(
             throw new IllegalArgumentException("Unsupported JdwpCollectionRecord schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");

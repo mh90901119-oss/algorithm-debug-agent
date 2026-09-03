@@ -1,6 +1,5 @@
 package one.edee.mcp.jdwp.collector;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import one.edee.mcp.jdwp.core.SnapshotLimits;
 
 import java.util.ArrayList;
@@ -12,7 +11,7 @@ import java.util.Set;
  * JSON-serializable collection plan. Public fields intentionally keep the CLI format transparent.
  */
 public final class DebugPlan {
-    public String schemaVersion = "2.0";
+    public String schemaVersion = "4.0";
     public String sessionId = "jdwp-collection";
     public Target target = new Target();
     public boolean resumeOnAttach = true;
@@ -21,8 +20,7 @@ public final class DebugPlan {
     public List<Tracepoint> tracepoints = new ArrayList<>();
 
     public void validate() {
-        if (!"1.0".equals(schemaVersion) && !"2.0".equals(schemaVersion)
-                && !"3.0".equals(schemaVersion)) {
+        if (!"4.0".equals(schemaVersion)) {
             throw new IllegalArgumentException("unsupported schemaVersion: " + schemaVersion);
         }
         if (sessionId == null || sessionId.isBlank()) {
@@ -44,8 +42,7 @@ public final class DebugPlan {
         Set<String> ids = new HashSet<>();
         for (Tracepoint tracepoint : tracepoints) {
             tracepoint.validate();
-            if (("2.0".equals(schemaVersion) || "3.0".equals(schemaVersion))
-                && (tracepoint.methodDescriptor == null || tracepoint.methodDescriptor.isBlank())) {
+            if (tracepoint.methodDescriptor == null || tracepoint.methodDescriptor.isBlank()) {
                 throw new IllegalArgumentException(
                     "tracepoint.methodDescriptor is required: " + tracepoint.id
                 );
@@ -76,11 +73,10 @@ public final class DebugPlan {
         public int line;
         public String methodName;
         public String methodDescriptor;
-        @JsonAlias("maxHits")
-        public int maxObservedHits = 10_000;
+        public int maxObservedHits = 1_000;
         public int maxCapturedHits = 20;
-        @JsonAlias("captureOnHits")
-        public List<Integer> captureOnMatchedHits = new ArrayList<>();
+        public int captureFirstMatchedHits = 5;
+        public int captureEveryMatchedHits = 5;
         public Condition condition;
         public Capture capture = new Capture();
 
@@ -94,31 +90,22 @@ public final class DebugPlan {
             if (line < 1) {
                 throw new IllegalArgumentException("tracepoint.line must be positive: " + id);
             }
-            if (maxObservedHits < 1 || maxObservedHits > 10_000) {
+            if (maxObservedHits < 1 || maxObservedHits > 100_000) {
                 throw new IllegalArgumentException(
-                    "tracepoint.maxObservedHits must be between 1 and 10000: " + id);
+                    "tracepoint.maxObservedHits must be between 1 and 100000: " + id);
             }
-            if (maxCapturedHits < 1 || maxCapturedHits > 20) {
+            if (maxCapturedHits < 1 || maxCapturedHits > 200) {
                 throw new IllegalArgumentException(
-                    "tracepoint.maxCapturedHits must be between 1 and 20: " + id);
+                    "tracepoint.maxCapturedHits must be between 1 and 200: " + id);
             }
-            if (captureOnMatchedHits == null) {
-                captureOnMatchedHits = new ArrayList<>();
-            } else {
-                int previous = 0;
-                for (Integer hit : captureOnMatchedHits) {
-                    if (hit == null || hit <= previous || hit > maxObservedHits) {
-                        throw new IllegalArgumentException(
-                            "tracepoint.captureOnMatchedHits must be strictly increasing and within maxObservedHits: " + id
-                        );
-                    }
-                    previous = hit;
-                }
-                if (captureOnMatchedHits.size() > maxCapturedHits) {
-                    throw new IllegalArgumentException(
-                        "tracepoint.captureOnMatchedHits exceeds maxCapturedHits: " + id);
-                }
-                captureOnMatchedHits = new ArrayList<>(captureOnMatchedHits);
+            if (captureFirstMatchedHits < 0 || captureFirstMatchedHits > maxCapturedHits) {
+                throw new IllegalArgumentException(
+                    "tracepoint.captureFirstMatchedHits is outside maxCapturedHits: " + id);
+            }
+            if (captureEveryMatchedHits < 0 || captureEveryMatchedHits > maxObservedHits
+                    || (captureFirstMatchedHits == 0 && captureEveryMatchedHits == 0)) {
+                throw new IllegalArgumentException(
+                    "tracepoint matched-hit sampling policy is invalid: " + id);
             }
             if (condition != null) {
                 condition.validate(id);
@@ -131,7 +118,7 @@ public final class DebugPlan {
     }
 
     public static final class Capture {
-        public boolean locals = true;
+        public boolean locals = false;
         public boolean stack = true;
         public int maxFrames = 8;
         public int maxDepth = SnapshotLimits.DEFAULT.maxDepth();
@@ -147,6 +134,21 @@ public final class DebugPlan {
             new SnapshotLimits(maxDepth, maxItems, maxStringLength);
             localNames = normalized(localNames, "capture.localNames", tracepointId);
             fieldPaths = normalized(fieldPaths, "capture.fieldPaths", tracepointId);
+            if (locals && localNames.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "capture.locals requires explicit localNames: " + tracepointId);
+            }
+            if (!locals && (!localNames.isEmpty() || !fieldPaths.isEmpty())) {
+                throw new IllegalArgumentException(
+                    "capture projections require locals: " + tracepointId);
+            }
+            for (String path : fieldPaths) {
+                String root = path.contains(".") ? path.substring(0, path.indexOf('.')) : path;
+                if (!localNames.contains(root)) {
+                    throw new IllegalArgumentException(
+                        "capture.fieldPaths root must be listed in localNames: " + tracepointId);
+                }
+            }
         }
 
         SnapshotLimits limits() {

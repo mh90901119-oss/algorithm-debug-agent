@@ -3,11 +3,11 @@ package org.example.algorithmdebug.plan;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.InvestigationIntent;
+import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.PlanId;
 
-/** 大模型提交给确定性 JDWP 计划编译器的有界意图。 */
+/** 大模型提交给确定性 JDWP 编译器的有界意图。 */
 public record JdwpPlanRequest(
         PlanId planId,
         List<JdwpTracepointRequest> tracepoints,
@@ -16,7 +16,6 @@ public record JdwpPlanRequest(
         InvestigationIntent intent,
         Instant requestedAt) {
 
-    /** 防御性复制请求；语义和源码一致性由编译器验证。 */
     public JdwpPlanRequest {
         planId = Objects.requireNonNull(planId, "planId");
         tracepoints = List.copyOf(Objects.requireNonNull(tracepoints, "tracepoints"));
@@ -24,19 +23,11 @@ public record JdwpPlanRequest(
             throw new IllegalArgumentException("tracepoints must not contain null");
         }
         budget = Objects.requireNonNull(budget, "budget");
-        rationale = Objects.requireNonNull(rationale, "rationale");
-        intent = intent == null ? InvestigationIntent.legacy(rationale) : intent;
+        rationale = Objects.requireNonNull(rationale, "rationale").strip();
+        if (rationale.isEmpty() || rationale.length() > 4_096) {
+            throw new IllegalArgumentException("rationale must contain between 1 and 4096 characters");
+        }
+        intent = Objects.requireNonNull(intent, "intent");
         requestedAt = Objects.requireNonNull(requestedAt, "requestedAt");
-    }
-
-    /** 兼容缺少结构化调查意图的旧 Tool 与测试调用。 */
-    public JdwpPlanRequest(
-            PlanId planId,
-            List<JdwpTracepointRequest> tracepoints,
-            JdwpCollectionBudget budget,
-            String rationale,
-            Instant requestedAt) {
-        this(planId, tracepoints, budget, rationale,
-                InvestigationIntent.legacy(rationale), requestedAt);
     }
 }

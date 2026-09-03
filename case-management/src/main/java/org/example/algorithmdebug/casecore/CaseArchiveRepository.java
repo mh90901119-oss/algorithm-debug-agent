@@ -2,13 +2,10 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
-import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseArtifactRegistration;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.PlanId;
@@ -95,18 +92,11 @@ public final class CaseArchiveRepository {
         }
     }
 
-    /** 在已有 Case 下追加一个 Context。 */
-    public void createContext(ContextRecord context) {
-        requireCase(requireNonNull(context, "context").caseId());
-        Path document = layout(context.caseId()).contextDocument(context.contextId());
-        createChildDocument(document, context);
-    }
 
-    /** 在已有 Case/Context 下追加一个 Analysis 请求。 */
+    /** 在已有 Case 下追加一个 Analysis 请求。 */
     public void createAnalysis(AnalysisRequest analysis) {
         AnalysisRequest checked = requireNonNull(analysis, "analysis");
         requireCase(checked.caseId());
-        requireContext(checked.caseId(), checked.contextId());
         CaseArchiveLayout layout = layout(checked.caseId());
         try {
             Files.createDirectories(layout.analysisRoot(checked.analysisId()));
@@ -116,40 +106,6 @@ public final class CaseArchiveRepository {
         } catch (IOException | SecurityException failure) {
             throw archiveWriteFailure(failure);
         }
-    }
-
-    /**
-     * 原子追加一轮 Analysis 的面向用户结果；同一 Analysis 只能完成一次。
-     *
-     * @param result 最终回答、分级结论和显式证据引用
-     * @return 新建文档路径
-     */
-    public Path completeAnalysis(AnalysisResult result) {
-        AnalysisResult checked = requireNonNull(result, "result");
-        AnalysisRequest request = requireAnalysis(checked.caseId(), checked.analysisId());
-        if (!request.contextId().equals(checked.contextId())) {
-            throw identityMismatch("AnalysisResult does not match the AnalysisRequest Context");
-        }
-        checked.referencedRunIds().forEach(id -> requireRunRequest(checked.caseId(), id));
-        checked.referencedCollectionIds().forEach(id -> requireCollection(
-                checked.caseId(), id));
-        checked.referencedEvidenceIds().forEach(id -> requireEvidenceRequest(
-                checked.caseId(), id));
-        checked.referencedArtifactIds().forEach(id -> requireArtifactRegistration(
-                checked.caseId(), id));
-        Path document = layout(checked.caseId()).analysisResult(checked.analysisId());
-        return createP4Document(document, checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
-    }
-
-    /** 读取指定 Analysis 的完成结果。 */
-    public AnalysisResult requireAnalysisResult(CaseId caseId, AnalysisId analysisId) {
-        AnalysisResult value = requireDocument(
-                layout(caseId).analysisResult(analysisId), AnalysisResult.class,
-                "ANALYSIS_RESULT_NOT_FOUND");
-        if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
-            throw identityMismatch("AnalysisResult document identity does not match its path");
-        }
-        return value;
     }
 
     /** 校验 Artifact 当前内容后，按 ID 原子追加注册。 */
@@ -223,8 +179,7 @@ public final class CaseArchiveRepository {
         var checked = requireNonNull(capture, "capture");
         CaseManifest manifest = requireCase(checked.caseId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
-        if (!analysis.contextId().equals(checked.contextId())
-                || !manifest.targetTest().equals(checked.targetTest())) {
+        if (!manifest.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("Algorithm input identity does not match its Analysis");
         }
         return createP4Document(
@@ -302,11 +257,9 @@ public final class CaseArchiveRepository {
     public Path createMethodCatalog(MethodCatalog catalog) {
         MethodCatalog checked = requireNonNull(catalog, "catalog");
         CaseManifest manifest = requireCase(checked.caseId());
-        requireContext(checked.caseId(), checked.contextId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
-        if (!analysis.contextId().equals(checked.contextId())
-                || !manifest.targetTest().equals(checked.targetTest())) {
-            throw identityMismatch("MethodCatalog and Case/Context/Analysis identity does not match");
+        if (!manifest.targetTest().equals(checked.targetTest())) {
+            throw identityMismatch("MethodCatalog and Case/Analysis identity does not match");
         }
         Path document = layout(checked.caseId()).analysisMethodCatalog(checked.analysisId());
         try {
@@ -341,8 +294,7 @@ public final class CaseArchiveRepository {
     public Path createCodePathPlan(CodePathCollectionPlan plan) {
         CodePathCollectionPlan checked = requireNonNull(plan, "plan");
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
-        if (!catalog.contextId().equals(checked.contextId())
-                || !catalog.targetTest().equals(checked.targetTest())) {
+        if (!catalog.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("CodePath plan identity does not match MethodCatalog");
         }
         validatePlanSelectors(catalog, checked);
@@ -362,7 +314,8 @@ public final class CaseArchiveRepository {
         var catalogEntries = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
         catalog.entries().forEach(entry -> catalogEntries.put(entry.methodKey(), entry));
         var selectorKeys = new HashSet<String>();
-        for (var selector : plan.selectors()) {
+        for (var selection : plan.methodSelections()) {
+            var selector = selection.selector();
             if (!selectorKeys.add(selector.methodKey())) {
                 throw identityMismatch("CodePath plan contains duplicate selector: " + selector.methodKey());
             }
@@ -417,8 +370,7 @@ public final class CaseArchiveRepository {
     public Path createJdwpPlan(JdwpCollectionPlan plan) {
         JdwpCollectionPlan checked = requireNonNull(plan, "plan");
         MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
-        if (!catalog.contextId().equals(checked.contextId())
-                || !catalog.targetTest().equals(checked.targetTest())) {
+        if (!catalog.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("JDWP plan identity does not match MethodCatalog");
         }
         var entries = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
@@ -481,8 +433,7 @@ public final class CaseArchiveRepository {
         MethodPathCollectionRecord checked = requireNonNull(record, "record");
         CodePathCollectionPlan plan = requireCodePathPlan(
                 checked.caseId(), checked.analysisId(), checked.planId());
-        if (!plan.contextId().equals(checked.contextId())
-                || !plan.analysisId().equals(checked.analysisId())
+        if (!plan.analysisId().equals(checked.analysisId())
                 || !plan.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("Collection request identity does not match the CodePath plan");
         }
@@ -504,8 +455,7 @@ public final class CaseArchiveRepository {
         JdwpCollectionRecord checked = requireNonNull(record, "record");
         JdwpCollectionPlan plan = requireJdwpPlan(
                 checked.caseId(), checked.analysisId(), checked.planId());
-        if (!plan.contextId().equals(checked.contextId())
-                || !plan.targetTest().equals(checked.targetTest())) {
+        if (!plan.targetTest().equals(checked.targetTest())) {
             throw identityMismatch("JDWP Collection request identity does not match the plan");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
@@ -550,8 +500,7 @@ public final class CaseArchiveRepository {
         CollectionBaselineCheck checked = requireNonNull(check, "check");
         MethodPathCollectionRecord request = requireMethodPathCollection(
                 checked.caseId(), checked.collectionId());
-        if (!request.contextId().equals(checked.contextId())
-                || !request.analysisId().equals(checked.analysisId())
+        if (!request.analysisId().equals(checked.analysisId())
                 || !request.runId().equals(checked.runId())) {
             throw identityMismatch("Baseline check does not match Collection request identity");
         }
@@ -591,8 +540,7 @@ public final class CaseArchiveRepository {
         CollectionBaselineCheck checked = requireNonNull(check, "check");
         JdwpCollectionRecord request = requireJdwpCollection(
                 checked.caseId(), checked.collectionId());
-        if (!request.contextId().equals(checked.contextId())
-                || !request.analysisId().equals(checked.analysisId())
+        if (!request.analysisId().equals(checked.analysisId())
                 || !request.runId().equals(checked.runId())) {
             throw identityMismatch("Baseline check does not match JDWP Collection request identity");
         }
@@ -610,14 +558,10 @@ public final class CaseArchiveRepository {
     public Path createEvidenceRequest(EvidenceBuildRequest request) {
         EvidenceBuildRequest checked = requireNonNull(request, "request");
         requireCase(checked.caseId());
-        requireContext(checked.caseId(), checked.contextId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
-        if (!analysis.contextId().equals(checked.contextId())) {
-            throw identityMismatch("Evidence request Context does not match Analysis");
-        }
         RunRequest run = requireRunRequest(checked.caseId(), checked.runId());
-        if (!run.contextId().equals(checked.contextId())) {
-            throw identityMismatch("The Evidence request Run does not match its Context");
+        if (!run.analysisId().equals(analysis.analysisId())) {
+            throw identityMismatch("Evidence base Run must belong to the request Analysis");
         }
         if (findRunOutcome(checked.caseId(), checked.runId()).isEmpty()) {
             throw identityMismatch("Evidence request may only reference a completed Run");
@@ -651,7 +595,7 @@ public final class CaseArchiveRepository {
     public Path createNormalizationManifest(NormalizationManifest manifest) {
         NormalizationManifest checked = requireNonNull(manifest, "manifest");
         requireEvidenceCollectionIdentity(
-                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.caseId(), checked.analysisId(),
                 checked.runId(), checked.planId(), checked.collectionId(),
                 checked.evidenceId(), checked.collectorType());
         return createP4Document(layout(checked.caseId()).normalizationManifest(
@@ -663,7 +607,7 @@ public final class CaseArchiveRepository {
     public Path createMethodPathSummary(MethodPathSummary summary) {
         MethodPathSummary checked = requireNonNull(summary, "summary");
         requireEvidenceCollectionIdentity(
-                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.caseId(), checked.analysisId(),
                 checked.runId(), checked.planId(), checked.collectionId(),
                 checked.evidenceId(), "CODEPATH");
         return createP4Document(layout(checked.caseId()).methodPathSummary(
@@ -675,7 +619,7 @@ public final class CaseArchiveRepository {
     public Path createJdwpSnapshotSummary(JdwpSnapshotSummary summary) {
         JdwpSnapshotSummary checked = requireNonNull(summary, "summary");
         requireEvidenceCollectionIdentity(
-                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.caseId(), checked.analysisId(),
                 checked.runId(), checked.planId(), checked.collectionId(),
                 checked.evidenceId(), "JDWP");
         return createP4Document(layout(checked.caseId()).jdwpSnapshotSummary(
@@ -687,7 +631,7 @@ public final class CaseArchiveRepository {
     public Path createCollectionValidation(CollectionValidation validation) {
         CollectionValidation checked = requireNonNull(validation, "validation");
         requireEvidenceCollectionIdentity(
-                checked.caseId(), checked.contextId(), checked.analysisId(),
+                checked.caseId(), checked.analysisId(),
                 checked.runId(), checked.planId(), checked.collectionId(),
                 checked.evidenceId(), checked.collectorType());
         return createP4Document(layout(checked.caseId()).collectionValidation(
@@ -698,8 +642,7 @@ public final class CaseArchiveRepository {
     /** 原子追加面向模型的 Evidence Bundle。 */
     public Path createEvidenceBundle(EvidenceBundle bundle) {
         EvidenceBundle checked = requireNonNull(bundle, "bundle");
-        requireEvidenceIdentity(checked.caseId(), checked.contextId(),
-                checked.analysisId(), checked.evidenceId());
+        requireEvidenceIdentity(checked.caseId(), checked.analysisId(), checked.evidenceId());
         return createP4Document(
                 layout(checked.caseId()).evidenceBundle(checked.evidenceId()), checked,
                 BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
@@ -719,8 +662,7 @@ public final class CaseArchiveRepository {
     /** 原子追加请求维度的充分性评估。 */
     public Path createSufficiencyEvaluation(SufficiencyEvaluation evaluation) {
         SufficiencyEvaluation checked = requireNonNull(evaluation, "evaluation");
-        requireEvidenceIdentity(checked.caseId(), checked.contextId(),
-                checked.analysisId(), checked.evidenceId());
+        requireEvidenceIdentity(checked.caseId(), checked.analysisId(), checked.evidenceId());
         return createP4Document(layout(checked.caseId()).sufficiencyEvaluation(
                 checked.evidenceId()), checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
     }
@@ -729,12 +671,7 @@ public final class CaseArchiveRepository {
     public void startRun(RunRequest request) {
         RunRequest checked = requireNonNull(request, "request");
         CaseManifest manifest = requireCase(checked.caseId());
-        requireContext(checked.caseId(), checked.contextId());
         AnalysisRequest analysis = requireAnalysis(checked.caseId(), checked.analysisId());
-        if (!analysis.contextId().equals(checked.contextId())) {
-            throw new WorkspaceException(
-                    "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest Context does not match Analysis");
-        }
         if (!manifest.targetTest().equals(checked.targetTest())) {
             throw new WorkspaceException(
                     "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest target UT does not match Case");
@@ -756,8 +693,7 @@ public final class CaseArchiveRepository {
     public void completeRun(RunOutcomeSummary outcome) {
         RunOutcomeSummary checked = requireNonNull(outcome, "outcome");
         RunRequest request = requireRunRequest(checked.caseId(), checked.runId());
-        if (!request.contextId().equals(checked.contextId())
-                || !request.analysisId().equals(checked.analysisId())) {
+        if (!request.analysisId().equals(checked.analysisId())) {
             throw new WorkspaceException(
                     "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunOutcome ownership does not match RunRequest");
         }
@@ -785,95 +721,14 @@ public final class CaseArchiveRepository {
         }
     }
 
-    /** 查找指定 Context 的不可变复现参考；不存在时返回空。 */
-    public Optional<RunResultFingerprint> findReproduction(
-            CaseId caseId, ContextId contextId) {
-        requireContext(caseId, contextId);
-        Path document = layout(caseId).contextReproduction(contextId);
-        if (!Files.exists(document, LinkOption.NOFOLLOW_LINKS)) {
-            return Optional.empty();
-        }
-        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "Context reproduction is not a regular file");
-        }
-        RunResultFingerprint value = readFingerprint(document);
-        validateFingerprintPathIdentity(value, caseId, contextId);
-        validateFingerprintRunIdentity(value);
-        return Optional.of(value);
-    }
 
-    /**
-     * 原子建立 Context 的首个复现参考；已有参考时只读返回，绝不覆盖。
-     *
-     * @return 新建或已经存在的参考
-     */
-    public RunResultFingerprint createReproductionIfAbsent(
-            RunResultFingerprint fingerprint) {
-        RunResultFingerprint checked = requireNonNull(fingerprint, "fingerprint");
-        requireContext(checked.caseId(), checked.contextId());
-        validateFingerprintRunIdentity(checked);
-        Optional<RunResultFingerprint> existing =
-                findReproduction(checked.caseId(), checked.contextId());
-        if (existing.isPresent()) {
-            return existing.orElseThrow();
-        }
-        requirePersistedRunFingerprint(checked);
-        Path document = layout(checked.caseId()).contextReproduction(checked.contextId());
-        try {
-            writer.writeNew(document, mapper.writeJson(checked));
-            return checked;
-        } catch (WorkspaceException failure) {
-            Optional<RunResultFingerprint> concurrentlyCreated =
-                    findReproduction(checked.caseId(), checked.contextId());
-            if (concurrentlyCreated.isPresent()) {
-                return concurrentlyCreated.orElseThrow();
-            }
-            throw archiveWriteFailure(failure);
-        }
-    }
 
-    /**
-     * 按 Context 创建时间和 ID 的确定性顺序查找当前 Context 之前最近的复现参考。
-     */
-    public Optional<RunResultFingerprint> findLatestReproductionBefore(
-            CaseId caseId, ContextId currentContextId) {
-        ContextRecord current = requireContext(caseId, currentContextId);
-        Comparator<ContextRecord> order = Comparator
-                .comparing(ContextRecord::createdAt)
-                .thenComparing(value -> value.contextId().value());
-        List<ContextRecord> candidates = childDirectories(layout(caseId).contextsRoot()).stream()
-                .filter(path -> Files.isRegularFile(
-                        path.resolve("context.json"), LinkOption.NOFOLLOW_LINKS))
-                .map(path -> contextIdFromDirectory(path))
-                .map(contextId -> requireContext(caseId, contextId))
-                .filter(candidate -> order.compare(candidate, current) < 0)
-                .sorted(order.reversed())
-                .toList();
-        for (ContextRecord candidate : candidates) {
-            Optional<RunResultFingerprint> reference =
-                    findReproduction(caseId, candidate.contextId());
-            if (reference.isPresent()) {
-                return reference;
-            }
-        }
-        return Optional.empty();
-    }
 
     /** 读取 Case 身份；不存在或损坏时返回结构化错误。 */
     public CaseManifest requireCase(CaseId caseId) {
         return requireDocument(layout(caseId).caseDocument(), CaseManifest.class, "CASE_NOT_FOUND");
     }
 
-    /** 读取指定 Context。 */
-    public ContextRecord requireContext(CaseId caseId, ContextId contextId) {
-        ContextRecord value = requireDocument(
-                layout(caseId).contextDocument(contextId), ContextRecord.class, "CONTEXT_NOT_FOUND");
-        if (!caseId.equals(value.caseId()) || !contextId.equals(value.contextId())) {
-            throw identityMismatch("Context document identity does not match its path");
-        }
-        return value;
-    }
 
     /** 读取指定 Analysis。 */
     public AnalysisRequest requireAnalysis(CaseId caseId, AnalysisId analysisId) {
@@ -908,27 +763,47 @@ public final class CaseArchiveRepository {
         return Optional.of(value);
     }
 
-    /** 查找同一 Analysis 最近完成的一次无采集目标 UT 运行。 */
+    /** ???? Analysis ???????????? UT ??? */
     public Optional<RunOutcomeSummary> findLatestCompletedRun(
-            CaseId caseId, ContextId contextId, AnalysisId analysisId) {
-        requireContext(caseId, contextId);
-        AnalysisRequest analysis = requireAnalysis(caseId, analysisId);
-        if (!analysis.contextId().equals(contextId)) {
-            throw identityMismatch("Analysis does not belong to the requested Context");
-        }
+            CaseId caseId, AnalysisId analysisId) {
+        requireAnalysis(caseId, analysisId);
         return childDirectories(layout(caseId).runsRoot()).stream()
                 .map(path -> new RunId(path.getFileName().toString()))
                 .filter(runId -> Files.isRegularFile(
                         layout(caseId).runRequest(runId), LinkOption.NOFOLLOW_LINKS))
                 .map(runId -> requireRunRequest(caseId, runId))
-                .filter(request -> request.contextId().equals(contextId)
-                        && request.analysisId().equals(analysisId))
+                .filter(request -> request.analysisId().equals(analysisId))
                 .filter(request -> findRunOutcome(caseId, request.runId()).isPresent())
-                .max(Comparator.comparing(RunRequest::createdAt)
-                        .thenComparing(request -> request.runId().value()))
-                .flatMap(request -> findRunOutcome(caseId, request.runId()));
+                .sorted(Comparator.comparing(RunRequest::createdAt)
+                        .thenComparing(value -> value.runId().value()).reversed())
+                .map(request -> findRunOutcome(caseId, request.runId()).orElseThrow())
+                .findFirst();
     }
 
+    /** 查找同一 Analysis 最近归档的普通 UT 失败指纹。 */
+    public Optional<RunResultFingerprint> findLatestRunResultFingerprint(
+            CaseId caseId, AnalysisId analysisId) {
+        requireAnalysis(caseId, analysisId);
+        return childDirectories(layout(caseId).runsRoot()).stream()
+                .map(path -> new RunId(path.getFileName().toString()))
+                .filter(runId -> Files.isRegularFile(
+                        layout(caseId).runRequest(runId), LinkOption.NOFOLLOW_LINKS))
+                .map(runId -> requireRunRequest(caseId, runId))
+                .filter(request -> request.analysisId().equals(analysisId))
+                .filter(request -> Files.isRegularFile(
+                        layout(caseId).runResultFingerprint(request.runId()),
+                        LinkOption.NOFOLLOW_LINKS))
+                .sorted(Comparator.comparing(RunRequest::createdAt)
+                        .thenComparing(value -> value.runId().value()).reversed())
+                .map(request -> {
+                    RunResultFingerprint value = readFingerprint(
+                            layout(caseId).runResultFingerprint(request.runId()));
+                    validateFingerprintPathIdentity(value, caseId, analysisId);
+                    validateFingerprintRunIdentity(value);
+                    return value;
+                })
+                .findFirst();
+    }
     /** @return 指定 Run 中可写入原始产物的已创建目录 */
     public Path runRawDirectory(CaseId caseId, RunId runId) {
         requireRunRequest(caseId, runId);
@@ -992,7 +867,6 @@ public final class CaseArchiveRepository {
 
     private void requireEvidenceCollectionIdentity(
             CaseId caseId,
-            ContextId contextId,
             AnalysisId analysisId,
             RunId runId,
             PlanId planId,
@@ -1003,63 +877,41 @@ public final class CaseArchiveRepository {
         boolean currentEvidence = request.collectionIds().contains(collectionId);
         boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
         if (!currentEvidence && !comparisonEvidence) {
-            throw identityMismatch("Derived artifact does not match Evidence request identity or Collection role");
+            throw identityMismatch("Derived artifact Collection is not selected by the Evidence request");
         }
-        if (currentEvidence && !request.contextId().equals(contextId)) {
-            throw identityMismatch("current Evidence Collection must belong to the request Context");
-        }
-        if (comparisonEvidence && request.contextId().equals(contextId)) {
-            throw identityMismatch("A historical Collection from the same Context must be reused as current evidence, not comparison evidence");
+        if (currentEvidence && !request.analysisId().equals(analysisId)) {
+            throw identityMismatch("Current Evidence Collection must belong to the request Analysis");
         }
         boolean matched;
         if ("CODEPATH".equals(collectorType)) {
             MethodPathCollectionRecord collection = requireMethodPathCollection(caseId, collectionId);
-            matched = collection.contextId().equals(contextId)
-                    && collection.analysisId().equals(analysisId)
+            matched = collection.analysisId().equals(analysisId)
                     && collection.runId().equals(runId)
                     && collection.planId().equals(planId);
         } else if ("JDWP".equals(collectorType)) {
             JdwpCollectionRecord collection = requireJdwpCollection(caseId, collectionId);
-            matched = collection.contextId().equals(contextId)
-                    && collection.analysisId().equals(analysisId)
+            matched = collection.analysisId().equals(analysisId)
                     && collection.runId().equals(runId)
                     && collection.planId().equals(planId);
         } else {
-            throw identityMismatch("Unknown Collector type cannot archive derived artifacts");
+            throw identityMismatch("Unsupported Collector type");
         }
         if (!matched) {
-            throw identityMismatch("Derived artifact does not match the source Collection Context/Analysis/Run/Plan");
+            throw identityMismatch("Derived artifact does not match the source Collection Analysis/Run/Plan");
         }
     }
-
-    private void requireCollection(CaseId caseId, CollectionId collectionId) {
-        try {
-            requireMethodPathCollection(caseId, collectionId);
-        } catch (WorkspaceException codePathFailure) {
-            try {
-                requireJdwpCollection(caseId, collectionId);
-            } catch (WorkspaceException jdwpFailure) {
-                throw new WorkspaceException(
-                        "COLLECTION_NOT_FOUND", "The Collection referenced by AnalysisResult does not exist",
-                        jdwpFailure);
-            }
-        }
-    }
-
     private void requireCollectionSummaryIdentity(CollectionExecutionSummary summary) {
         boolean matched;
         try {
             MethodPathCollectionRecord request = requireMethodPathCollection(
                     summary.caseId(), summary.collectionId());
-            matched = request.contextId().equals(summary.contextId())
-                    && request.analysisId().equals(summary.analysisId())
+            matched = request.analysisId().equals(summary.analysisId())
                     && request.runId().equals(summary.runId())
                     && request.planId().equals(summary.planId());
         } catch (WorkspaceException codePathFailure) {
             JdwpCollectionRecord request = requireJdwpCollection(
                     summary.caseId(), summary.collectionId());
-            matched = request.contextId().equals(summary.contextId())
-                    && request.analysisId().equals(summary.analysisId())
+            matched = request.analysisId().equals(summary.analysisId())
                     && request.runId().equals(summary.runId())
                     && request.planId().equals(summary.planId());
         }
@@ -1067,18 +919,15 @@ public final class CaseArchiveRepository {
             throw identityMismatch("CollectionExecutionSummary does not match launch request identity");
         }
     }
-
     private void requireEvidenceIdentity(
             CaseId caseId,
-            ContextId contextId,
             AnalysisId analysisId,
             EvidenceId evidenceId) {
         EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
-        if (!request.contextId().equals(contextId) || !request.analysisId().equals(analysisId)) {
-            throw identityMismatch("Evidence artifact identity does not match build request");
+        if (!request.analysisId().equals(analysisId)) {
+            throw identityMismatch("Evidence artifact Analysis does not match build request");
         }
     }
-
     private <T> T requireDocument(Path document, Class<T> type, String missingCode) {
         if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
             throw new WorkspaceException(missingCode, "The archived Case document does not exist");
@@ -1100,43 +949,20 @@ public final class CaseArchiveRepository {
         }
     }
 
-    private void requirePersistedRunFingerprint(RunResultFingerprint expected) {
-        Path document = layout(expected.caseId()).runResultFingerprint(expected.runId());
-        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
-            throw new WorkspaceException(
-                    "RUN_RESULT_FINGERPRINT_NOT_FOUND", "Run result fingerprint has not been saved");
-        }
-        RunResultFingerprint persisted = readFingerprint(document);
-        validateFingerprintPathIdentity(
-                persisted, expected.caseId(), expected.contextId());
-        if (!persisted.equals(expected)) {
-            throw identityMismatch("Context reproduction does not match the Run result fingerprint");
-        }
-    }
 
     private void validateFingerprintRunIdentity(RunResultFingerprint fingerprint) {
         RunRequest request = requireRunRequest(fingerprint.caseId(), fingerprint.runId());
-        if (!request.contextId().equals(fingerprint.contextId())) {
-            throw identityMismatch("RunResultFingerprint Context does not match RunRequest");
+        if (!request.analysisId().equals(fingerprint.analysisId())) {
+            throw identityMismatch("RunResultFingerprint Analysis does not match RunRequest");
         }
     }
-
     private static void validateFingerprintPathIdentity(
             RunResultFingerprint fingerprint,
             CaseId caseId,
-            ContextId contextId) {
+            AnalysisId analysisId) {
         if (!caseId.equals(fingerprint.caseId())
-                || !contextId.equals(fingerprint.contextId())) {
-            throw identityMismatch("RunResultFingerprint document identity does not match its path");
-        }
-    }
-
-    private static ContextId contextIdFromDirectory(Path directory) {
-        try {
-            return new ContextId(directory.getFileName().toString());
-        } catch (IllegalArgumentException failure) {
-            throw new WorkspaceException(
-                    "CASE_DOCUMENT_INVALID", "Context directory name is not a valid ID", failure);
+                || !analysisId.equals(fingerprint.analysisId())) {
+            throw identityMismatch("RunResultFingerprint document identity does not match its Analysis");
         }
     }
 

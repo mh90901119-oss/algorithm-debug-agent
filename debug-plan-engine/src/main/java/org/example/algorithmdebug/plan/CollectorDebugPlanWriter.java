@@ -38,7 +38,8 @@ public final class CollectorDebugPlanWriter {
                     point.tracepointId(), point.sourceAnchor().className(), point.line(),
                     point.sourceAnchor().methodName(), point.sourceAnchor().descriptor(),
                     point.maxObservedHits(), point.maxCapturedHits(),
-                    point.captureOnMatchedHits(), condition == null ? null
+                    point.captureFirstMatchedHits(), point.captureEveryMatchedHits(),
+                    condition == null ? null
                     : new CollectorDebugPlan.Condition(
                             condition.localName(), condition.fieldPath(),
                             condition.operator().name(), condition.expectedType().name(),
@@ -49,7 +50,7 @@ public final class CollectorDebugPlanWriter {
                             capture.localNames(), capture.fieldPaths()));
                 }).toList();
         CollectorDebugPlan document = new CollectorDebugPlan(
-                "3.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
+                "4.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
                 true, plan.budget().idleTimeoutMillis(), plan.budget().maxEvents(), points);
         try {
             return mapper.writeValueAsBytes(document);

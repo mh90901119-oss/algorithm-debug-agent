@@ -15,7 +15,6 @@ import java.util.Optional;
 public record JdwpCollectionManifest(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -54,7 +53,6 @@ public record JdwpCollectionManifest(
             throw new IllegalArgumentException("Unsupported JdwpCollectionManifest schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");
@@ -121,7 +119,6 @@ public record JdwpCollectionManifest(
     public JdwpCollectionManifest(
             String schemaVersion,
             CaseId caseId,
-            ContextId contextId,
             AnalysisId analysisId,
             RunId runId,
             PlanId planId,
@@ -150,7 +147,7 @@ public record JdwpCollectionManifest(
             String collectorStderrLog,
             Instant startedAt,
             Instant completedAt) {
-        this(schemaVersion, caseId, contextId, analysisId, runId, planId, collectionId,
+        this(schemaVersion, caseId, analysisId, runId, planId, collectionId,
                 toolName, toolVersion, completion, completionReason, stage,
                 targetStarted, collectorStarted, targetExitCode, collectorExitCode,
                 timedOut, truncated, eventCount, rawBytes,

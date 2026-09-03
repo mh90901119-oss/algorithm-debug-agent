@@ -23,7 +23,8 @@ record CollectorDebugPlan(
             String methodDescriptor,
             int maxObservedHits,
             int maxCapturedHits,
-            List<Integer> captureOnMatchedHits,
+            int captureFirstMatchedHits,
+            int captureEveryMatchedHits,
             Condition condition,
             Capture capture) {
     }

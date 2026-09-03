@@ -23,7 +23,8 @@ test("Agent and Skill assets are valid UTF-8 without forbidden control character
   assert.match(agent, /^---\r?\n[\s\S]*?\r?\n---/u)
   assert.match(skill, /^---\r?\n[\s\S]*?\r?\n---/u)
   assert.match(agent, /algorithm-debug/u)
-  assert.match(agent, /analysis_complete/u)
+  assert.doesNotMatch(agent, /analysis_complete/u)
+  assert.doesNotMatch(skill, /analysis_complete/u)
   assert.match(agent, /bash:\s*deny/u)
   assert.match(agent, /Never call `bash`/u)
   assert.match(skill, /interaction\.jsonl/u)
@@ -38,13 +39,21 @@ test("planning tools expose structured intent instead of raw request JSON", asyn
   ])
 
   assert.doesNotMatch(toolSource, /requestJson/u)
+  assert.doesNotMatch(toolSource, /captureFirstMatchedHits:[\s\S]{0,100}default\(/u)
+  assert.doesNotMatch(toolSource, /locals:[\s\S]{0,80}default\(false\)/u)
   assert.doesNotMatch(skill, /requestJson/u)
+  assert.doesNotMatch(toolSource, /contextMode|contextId/u)
+  assert.doesNotMatch(runtimeSource, /--context-mode|contextMode|contextId/u)
   assert.match(runtimeSource, /codePathPlanRequest/u)
   assert.match(runtimeSource, /jdwpPlanRequest/u)
 })
 
 test("Skill enforces input-first causal search and current conditional JDWP fields", async () => {
-  const skill = await readUtf8("skills/algorithm-debug/SKILL.md")
+  const [skill, agent, toolSource] = await Promise.all([
+    readUtf8("skills/algorithm-debug/SKILL.md"),
+    readUtf8("integrations/opencode/agents/algorithm-debug.md"),
+    readUtf8("integrations/opencode/tools/algorithm-debug.ts"),
+  ])
 
   const input = skill.indexOf("## 1. Capture and read the algorithm input")
   const run = skill.indexOf("## 2. Execute the target UT once")
@@ -56,9 +65,20 @@ test("Skill enforces input-first causal search and current conditional JDWP fiel
   assert.match(skill, /basedOnEvidenceIds/u)
   assert.match(skill, /maxObservedHits/u)
   assert.match(skill, /maxCapturedHits/u)
-  assert.match(skill, /captureOnMatchedHits/u)
+  assert.match(skill, /captureFirstMatchedHits/u)
+  assert.match(skill, /captureEveryMatchedHits/u)
   assert.match(skill, /observed.*matched.*captured.*unavailable/su)
-  assert.doesNotMatch(skill, /wafer-demo|wafer-demo-v1|captureOnHits|`maxHits`/iu)
+  assert.match(skill, /Do not call.*analysis_begin.*clarification/su)
+  assert.match(skill, /needs fresh deterministic work.*prior `caseId`/su)
+  assert.match(skill, /explicitly requests.*runtime method path.*CodePath/su)
+  assert.match(skill, /JDWP.*does not replace.*method-path/su)
+  assert.match(skill, /arg\[0\].*arg0.*invalid/su)
+  assert.match(toolSource, /arg\[0\].*arg0 is invalid/su)
+  assert.match(skill, /full exact.*Run.*Collection.*Evidence.*Artifact.*never abbreviate/su)
+  assert.match(agent, /full exact.*Run.*Collection.*Evidence.*Artifact.*never abbreviate/su)
+  assert.match(agent, /runtime method path.*CodePath/su)
+  assert.doesNotMatch(skill, /for every user question|new Context/iu)
+  assert.doesNotMatch(skill, /wafer-demo|wafer-demo-v1|captureOnHits|captureOnMatchedHits|`maxHits`/iu)
 })
 
 test("external workspace and ToolResponse validation literals are English", async () => {
@@ -115,4 +135,15 @@ test("installer and JDWP verification cover every current deterministic boundary
   assert.match(verifier, /observedHitCounts/u)
   assert.match(verifier, /matchedHitCounts/u)
   assert.match(verifier, /capturedHitCounts/u)
+})
+
+test("Eval documentation uses the target Maven module working directory without a Project path argument", async () => {
+  const [evalReadme, installationGuide] = await Promise.all([
+    readUtf8("agent-evals/README.md"),
+    readUtf8("docs/testing/target-algorithm-environment-installation.md"),
+  ])
+
+  assert.doesNotMatch(`${evalReadme}\n${installationGuide}`, /`-Project`/u)
+  assert.match(evalReadme, /目标.*Maven.*当前工作目录/su)
+  assert.match(installationGuide, /目标.*Maven.*当前工作目录/su)
 })

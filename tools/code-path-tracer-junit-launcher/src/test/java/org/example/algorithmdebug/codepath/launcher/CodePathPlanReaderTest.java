@@ -19,10 +19,12 @@ class CodePathPlanReaderTest {
         LauncherCodePathPlan plan = new CodePathPlanReader().read(planFile);
 
         assertEquals("fixture.TargetTest#case1", plan.targetTest().selector());
-        assertEquals("fixture.Service#solve()V", plan.selectors().get(0).methodKey());
+        assertEquals("fixture.Service#solve()V", plan.methodSelections().get(0).selector().methodKey());
+        assertEquals("waferId", plan.methodSelections().get(0).projections().get(0).name());
         assertEquals("fixture.Service#solve()V", plan.scopeMethodKey());
         assertEquals(100, plan.budget().maxEvents());
         assertEquals(4096, plan.budget().maxBytes());
+        assertEquals("Which path ran?", plan.intent().questionToAnswer());
     }
 
     @Test
@@ -36,21 +38,35 @@ class CodePathPlanReaderTest {
     private static String validPlan(String suffix) {
         return """
                 {
-                  "schemaVersion":"2.0",
+                  "schemaVersion":"4.0",
                   "planId":"plan-1",
                   "caseId":"case-1",
-                  "contextId":"context-1",
                   "analysisId":"analysis-1",
                   "targetTest":{"className":"fixture.TargetTest","methodName":"case1"},
-                  "selectors":[{
-                    "methodKey":"fixture.Service#solve()V",
-                    "className":"fixture.Service",
-                    "methodName":"solve",
-                    "descriptor":"()V"
+                  "methodSelections":[{
+                    "selector":{
+                      "methodKey":"fixture.Service#solve()V",
+                      "className":"fixture.Service",
+                      "methodName":"solve",
+                      "descriptor":"()V"
+                    },
+                    "projections":[{
+                      "name":"waferId",
+                      "source":"ARGUMENT",
+                      "argumentIndex":0,
+                      "fieldPath":["waferId"],
+                      "required":true
+                    }]
                   }],
                   "scopeMethodKey":"fixture.Service#solve()V",
                   "budget":{"maxEvents":100,"maxBytes":4096,"timeoutMillis":30000},
                   "rationale":"fixture",
+                  "intent":{
+                    "questionToAnswer":"Which path ran?",
+                    "hypothesis":"The selected method executes",
+                    "basedOnEvidenceIds":[],
+                    "expectedObservations":["The method is present in the runtime path"]
+                  },
                   "createdAt":"2026-08-25T00:00:00Z"
                 }
                 """.trim().replace("\n}", suffix + "\n}");

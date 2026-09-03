@@ -2,7 +2,6 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.CollectionId;
@@ -76,26 +75,6 @@ public final class CaseArchiveLayout {
         return child(artifactsRoot(), safeSegment(artifactId, "artifactId") + ".json");
     }
 
-    /** @return Context 根目录 */
-    public Path contextsRoot() {
-        return child(caseRoot, "contexts");
-    }
-
-    /** @return 指定 Context 目录 */
-    public Path contextRoot(ContextId contextId) {
-        return child(contextsRoot(), safeSegment(contextId.value(), "contextId"));
-    }
-
-    /** @return 指定 Context 终态文档 */
-    public Path contextDocument(ContextId contextId) {
-        return child(contextRoot(contextId), "context.json");
-    }
-
-    /** @return 指定 Context 的一次性复现参考 */
-    public Path contextReproduction(ContextId contextId) {
-        return child(contextRoot(contextId), "reproduction.json");
-    }
-
     /** @return Analysis 根目录 */
     public Path analysesRoot() {
         return child(caseRoot, "analyses");
@@ -104,11 +83,6 @@ public final class CaseArchiveLayout {
     /** @return 指定 Analysis 请求文档 */
     public Path analysisDocument(AnalysisId analysisId) {
         return child(analysisRoot(analysisId), "analysis-request.json");
-    }
-
-    /** @return 指定 Analysis 的一次性完成结果 */
-    public Path analysisResult(AnalysisId analysisId) {
-        return child(analysisRoot(analysisId), "analysis-result.json");
     }
 
     /** @return 指定 Analysis 目录 */

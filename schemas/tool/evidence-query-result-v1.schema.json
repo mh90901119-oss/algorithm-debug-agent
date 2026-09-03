@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/tool/evidence-query-result-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "artifact", "recordType", "filter", "scannedRecords", "matchedRecords", "offset", "limit", "returnedRecords", "truncated", "recordsJsonl"],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "recordType": {"enum": ["CODEPATH_INVOCATION", "JDWP_SNAPSHOT"]},
+    "filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "methodRef": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "tracepointId": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "valueName": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "scalarValue": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "valueStatus": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "sequenceFrom": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "sequenceTo": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}
+      }
+    },
+    "scannedRecords": {"type": "integer", "minimum": 0},
+    "matchedRecords": {"type": "integer", "minimum": 0},
+    "offset": {"type": "integer", "minimum": 0},
+    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+    "returnedRecords": {"type": "integer", "minimum": 0, "maximum": 50},
+    "truncated": {"type": "boolean"},
+    "recordsJsonl": {"type": "string"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactType": {"type": "string", "minLength": 1, "maxLength": 128},
+        "relativePath": {
+          "type": "string", "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
+        "mediaType": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

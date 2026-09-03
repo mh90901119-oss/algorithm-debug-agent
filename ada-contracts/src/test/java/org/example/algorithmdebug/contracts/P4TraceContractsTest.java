@@ -26,7 +26,7 @@ class P4TraceContractsTest {
         NormalizationManifest manifest = new NormalizationManifest(
                 SchemaVersions.NORMALIZATION_MANIFEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "CODEPATH",
                 "method-path-normalizer", "1.0", NormalizationStatus.FAILED,
@@ -43,7 +43,7 @@ class P4TraceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new NormalizationManifest(
                 SchemaVersions.NORMALIZATION_MANIFEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "JDWP",
                 "jdwp-snapshot-normalizer", "1.0", NormalizationStatus.COMPLETE,
@@ -56,7 +56,7 @@ class P4TraceContractsTest {
         CollectionValidation validation = new CollectionValidation(
                 SchemaVersions.COLLECTION_VALIDATION,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "JDWP",
                 EvidenceValidationStatus.VALID, List.of(),
@@ -71,7 +71,7 @@ class P4TraceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new CollectionValidation(
                 SchemaVersions.COLLECTION_VALIDATION,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "CODEPATH",
                 EvidenceValidationStatus.INCONCLUSIVE,
@@ -87,7 +87,7 @@ class P4TraceContractsTest {
         SufficiencyEvaluation evaluation = new SufficiencyEvaluation(
                 SchemaVersions.SUFFICIENCY_EVALUATION,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 SufficiencyStatus.INSUFFICIENT,
                 Set.of(EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.SCHEDULE_RESULT,
                         EvidenceDimension.VALIDATION),
@@ -102,13 +102,13 @@ class P4TraceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new SufficiencyEvaluation(
                 SchemaVersions.SUFFICIENCY_EVALUATION,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 SufficiencyStatus.SUFFICIENT, Set.of(), Set.of(), Set.of(), List.of(), NOW));
     }
 
     private static TraceProvenance provenance() {
         return new TraceProvenance(
-                new CaseId("case-1"), new ContextId("context-1"), new RunId("run-1"),
+                new CaseId("case-1"), new RunId("run-1"),
                 new CollectionId("collection-1"), rawArtifact(), 1,
                 Optional.of(1L), Optional.empty(), "RAW_OBSERVATION");
     }

@@ -8,15 +8,13 @@ import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
 
-/** 外部 CodePath 工具执行后保留的单原始流 v2 事实清单。 */
+/** 外部 CodePath 工具执行后保留的单次原始流 v3 事实清单。 */
 public record MethodPathManifest(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -45,8 +43,8 @@ public record MethodPathManifest(
 
     /** 校验身份、Hash、计数、完成状态和可移植路径。 */
     public MethodPathManifest {
-        if (!"2.0".equals(schemaVersion)) throw new IllegalArgumentException("Unsupported MethodPathManifest version");
-        caseId = Objects.requireNonNull(caseId); contextId = Objects.requireNonNull(contextId);
+        if (!"3.0".equals(schemaVersion)) throw new IllegalArgumentException("Unsupported MethodPathManifest version");
+        caseId = Objects.requireNonNull(caseId);
         analysisId = Objects.requireNonNull(analysisId); runId = Objects.requireNonNull(runId);
         planId = Objects.requireNonNull(planId); collectionId = Objects.requireNonNull(collectionId);
         toolName = bounded(toolName, "toolName", 128); toolVersion = bounded(toolVersion, "toolVersion", 256);

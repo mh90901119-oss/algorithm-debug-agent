@@ -353,8 +353,7 @@ public final class JavaSourceCallGraphAnalyzer {
         boolean incomplete = discovery.truncated() || guard.truncated()
                 || !edgeScan.warnings().isEmpty() || compilerErrors;
         return new MethodCatalog(
-                SchemaVersions.METHOD_CATALOG, request.caseId(), request.contextId(),
-                request.analysisId(), request.targetTest(),
+                SchemaVersions.METHOD_CATALOG, request.caseId(), request.analysisId(), request.targetTest(),
                 entries, edges, warnings.values(),
                 incomplete ? SnapshotCompleteness.INCOMPLETE : SnapshotCompleteness.COMPLETE,
                 guard.discoveredMethods(), guard.discoveredEdges(), request.requestedAt());

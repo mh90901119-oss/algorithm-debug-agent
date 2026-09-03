@@ -21,12 +21,12 @@ class MethodPathSummaryJsonTest {
                 "raw-1", "CODEPATH_RAW", "collections/c-1/raw/codepath.jsonl",
                 "application/x-ndjson", "a".repeat(64), 128);
         TraceProvenance provenance = new TraceProvenance(
-                new CaseId("case-1"), new ContextId("ctx-1"), new RunId("run-1"),
+                new CaseId("case-1"), new RunId("run-1"),
                 new CollectionId("collection-1"), raw, 1, Optional.of(1L),
                 Optional.empty(), "RAW_OBSERVATION");
         MethodPathSummary summary = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, new EvidenceId("evidence-1"),
-                new CaseId("case-1"), new ContextId("ctx-1"), new AnalysisId("analysis-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"), new CollectionId("collection-1"), raw,
                 List.of(new MethodPathSummary.MethodStatistic(
                         "fixture.A#one()V", 1, 1, 0, 0, provenance, provenance)),
@@ -40,11 +40,11 @@ class MethodPathSummaryJsonTest {
                                 1, 1, Optional.of(2L), 2, 1,
                                 Optional.of("PATH_001"), false)),
                         List.of(new MethodPathSummary.PathVariant(
-                                "PATH_001", List.of(1), List.of("fixture.A#one()V"))))),
+                                "PATH_001", 1, List.of(1), List.of("fixture.A#one()V"))))),
                 false, Instant.EPOCH);
 
         Path schema = Path.of(System.getProperty("maven.multiModuleProjectDirectory", ".."),
-                "schemas", "trace", "method-path-summary-v2.schema.json");
+                "schemas", "trace", "method-path-summary-v4.schema.json");
         JsonSchemaTestSupport.assertValid(schema, MAPPER.writeValueAsString(summary));
     }
 }

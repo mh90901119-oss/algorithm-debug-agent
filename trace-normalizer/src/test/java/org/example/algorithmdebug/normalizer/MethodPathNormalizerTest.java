@@ -16,7 +16,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
 import org.example.algorithmdebug.contracts.MethodPathSummary;
@@ -33,7 +32,6 @@ import org.junit.jupiter.api.io.TempDir;
 class MethodPathNormalizerTest {
 
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final RunId RUN_ID = new RunId("run-1");
     private static final PlanId PLAN_ID = new PlanId("plan-1");
@@ -190,11 +188,11 @@ class MethodPathNormalizerTest {
         assertEquals(List.of(1, 3), scope.pathVariants().stream()
                 .filter(variant -> variant.representativeMethodSequence().contains(
                         "fixture.Decision#choose()V"))
-                .findFirst().orElseThrow().invocationOrdinals());
+                .findFirst().orElseThrow().representativeInvocationOrdinals());
         assertEquals(List.of(2), scope.pathVariants().stream()
                 .filter(variant -> variant.representativeMethodSequence().contains(
                         "fixture.Result#commit()V"))
-                .findFirst().orElseThrow().invocationOrdinals());
+                .findFirst().orElseThrow().representativeInvocationOrdinals());
     }
 
     @Test
@@ -217,6 +215,38 @@ class MethodPathNormalizerTest {
         assertEquals(1, scope.incompleteInvocationCount());
         assertTrue(scope.invocations().getFirst().endEventId().isEmpty());
         assertTrue(scope.invocations().getFirst().pathId().isEmpty());
+    }
+
+    @Test
+    void countsAllScopeInvocationsWhileBoundingRepresentativeDetails() throws Exception {
+        StringBuilder raw = new StringBuilder();
+        long eventId = 1;
+        for (int invocation = 0; invocation < 5; invocation++) {
+            raw.append("{\"eventId\":").append(eventId++)
+                    .append(",\"eventType\":\"METHOD_ENTER\",\"depth\":1,\"threadName\":\"main\",\"className\":\"fixture.Algorithm\",\"methodName\":\"solve\",\"descriptor\":\"()V\"}\n");
+            raw.append("{\"eventId\":").append(eventId++)
+                    .append(",\"eventType\":\"METHOD_EXIT\",\"depth\":1,\"threadName\":\"main\",\"className\":\"fixture.Algorithm\",\"methodName\":\"solve\",\"descriptor\":\"()V\"}\n");
+        }
+        Path trace = write(raw.toString());
+        NormalizationBudget defaults = NormalizationBudget.defaults();
+        NormalizationBudget budget = new NormalizationBudget(
+                defaults.maxRawBytes(), defaults.maxRecordBytes(), defaults.maxRecords(),
+                defaults.maxMethods(), defaults.maxRelationships(), 2,
+                defaults.maxFramesPerHit(), defaults.maxValueFacts(),
+                defaults.maxScalarChars(), defaults.maxSummaryBytes());
+
+        NormalizationResult<MethodPathSummary> result = normalizer().normalize(input(
+                trace, plan(selectors("solve"), Optional.of("fixture.Algorithm#solve()V")),
+                budget, "EXACT_DESCRIPTOR", false));
+
+        MethodPathSummary.ScopeSummary scope = result.summary().orElseThrow().scope().orElseThrow();
+        assertEquals(5, scope.invocationCount());
+        assertEquals(5, scope.completeInvocationCount());
+        assertEquals(2, scope.invocations().size());
+        assertEquals(5, scope.pathVariants().getFirst().occurrenceCount());
+        assertEquals(List.of(1, 2),
+                scope.pathVariants().getFirst().representativeInvocationOrdinals());
+        assertTrue(result.truncationReasons().contains("SCOPE_REPRESENTATIVE_BUDGET_EXCEEDED"));
     }
 
     @Test
@@ -305,6 +335,29 @@ class MethodPathNormalizerTest {
         assertTrue(result.summary().isEmpty());
     }
 
+    @Test
+    void derivesPairedInvocationProjectionRowsAndMarksRequiredReadFailuresPartial() throws Exception {
+        Path trace = write("""
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V","projections":[{"name":"waferId","path":"arg[0].waferId","required":true,"status":"VALUE","value":"W-1","failureCode":null}]}
+                {"eventId":2,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V","projections":[{"name":"chamber","path":"return.chamber","required":true,"status":"UNAVAILABLE","value":null,"failureCode":"FIELD_NOT_FOUND"}]}
+                """);
+        Path invocations = temporaryDirectory.resolve("derived-invocations.jsonl");
+        CodePathNormalizationInput input = input(
+                trace, plan(selectors("solve")), NormalizationBudget.defaults(),
+                "EXACT_DESCRIPTOR", false, invocations);
+
+        NormalizationResult<MethodPathSummary> result = normalizer().normalize(input);
+
+        assertEquals(NormalizationStatus.PARTIAL, result.status());
+        assertTrue(result.truncationReasons().contains("REQUIRED_PROJECTION_UNAVAILABLE"));
+        com.fasterxml.jackson.databind.JsonNode invocation = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(Files.readString(invocations).strip());
+        assertEquals("fixture.Algorithm#solve()V", invocation.path("methodRef").asText());
+        assertEquals("W-1", invocation.path("projections").get(0).path("value").asText());
+        assertEquals("FIELD_NOT_FOUND",
+                invocation.path("projections").get(1).path("failureCode").asText());
+    }
+
     private MethodPathNormalizer normalizer() {
         return new MethodPathNormalizer();
     }
@@ -315,34 +368,57 @@ class MethodPathNormalizerTest {
             NormalizationBudget budget,
             String precision,
             boolean collectorTruncated) throws Exception {
+        return input(trace, plan, budget, precision, collectorTruncated,
+                temporaryDirectory.resolve("invocations-" + System.nanoTime() + ".jsonl"));
+    }
+
+    private CodePathNormalizationInput input(
+            Path trace,
+            CodePathCollectionPlan plan,
+            NormalizationBudget budget,
+            String precision,
+            boolean collectorTruncated,
+            Path invocationOutput) throws Exception {
         long bytes = Files.size(trace);
         return new CodePathNormalizationInput(
                 new MethodPathCollectionRecord(
-                        "1.0", CASE_ID, CONTEXT_ID, ANALYSIS_ID, RUN_ID, PLAN_ID,
+                        "1.0", CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID,
                         COLLECTION_ID, TARGET, "CODEPATH", NOW),
                 plan,
                 new ArtifactReference(
                         "raw-1", "CODEPATH_FILTERED_TRACE",
                         "collections/collection-1/raw/filtered.jsonl",
                         "application/x-ndjson", HASH, bytes),
-                trace, EVIDENCE_ID, budget, collectorTruncated, NOW);
+                trace, invocationOutput, EVIDENCE_ID, budget, collectorTruncated, NOW);
     }
 
     private static CodePathCollectionPlan plan(
             List<MethodSelector> selectors, Optional<String> scopeMethodKey) {
         return new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, selectors, scopeMethodKey,
-                CollectionBudget.defaults(), "locate repeated paths", NOW);
+                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                methodSelections(selectors), scopeMethodKey,
+                CollectionBudget.defaults(), "locate repeated paths", intent(), NOW);
     }
 
     private static CodePathCollectionPlan plan(List<MethodSelector> selectors) {
         return new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, selectors,
-                CollectionBudget.defaults(), "定位关键路径", NOW);
+                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                methodSelections(selectors), Optional.empty(),
+                CollectionBudget.defaults(), "Locate the key path", intent(), NOW);
     }
 
+    private static List<org.example.algorithmdebug.contracts.CodePathMethodSelection> methodSelections(
+            List<MethodSelector> selectors) {
+        return selectors.stream().map(selector ->
+                new org.example.algorithmdebug.contracts.CodePathMethodSelection(selector, List.of()))
+                .toList();
+    }
+
+    private static org.example.algorithmdebug.contracts.InvestigationIntent intent() {
+        return new org.example.algorithmdebug.contracts.InvestigationIntent(
+                "Which path executed?", "The selected path executed", List.of(),
+                List.of("Observed method path"));
+    }
     private static List<MethodSelector> selectors(String... methods) {
         return java.util.Arrays.stream(methods).map(method -> {
             String className = switch (method) {
@@ -357,7 +433,12 @@ class MethodPathNormalizerTest {
 
     private Path write(String content) throws Exception {
         Path path = temporaryDirectory.resolve("trace-" + System.nanoTime() + ".jsonl");
-        Files.writeString(path, content);
+        String normalized = content.lines()
+                .map(line -> line.contains("\"projections\"")
+                        ? line
+                        : line.replaceFirst("}$", ",\"projections\":[]}"))
+                .collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+        Files.writeString(path, normalized);
         return path;
     }
 }

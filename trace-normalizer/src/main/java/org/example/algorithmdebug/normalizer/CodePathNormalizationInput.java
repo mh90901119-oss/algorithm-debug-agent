@@ -14,6 +14,7 @@ public record CodePathNormalizationInput(
         CodePathCollectionPlan plan,
         ArtifactReference rawTrace,
         Path rawTracePath,
+        Path invocationOutputPath,
         EvidenceId evidenceId,
         NormalizationBudget budget,
         boolean collectorTruncated,
@@ -22,12 +23,12 @@ public record CodePathNormalizationInput(
     /** 校验 Collection、Plan 和 Raw 输入身份。 */
     public CodePathNormalizationInput {
         if (collection == null || plan == null || rawTrace == null || rawTracePath == null
+                || invocationOutputPath == null
                 || evidenceId == null || budget == null
                 || createdAt == null) {
             throw new IllegalArgumentException("CodePath normalization input must not be null");
         }
         if (!collection.caseId().equals(plan.caseId())
-                || !collection.contextId().equals(plan.contextId())
                 || !collection.analysisId().equals(plan.analysisId())
                 || !collection.planId().equals(plan.planId())
                 || !collection.targetTest().equals(plan.targetTest())) {
@@ -36,9 +37,13 @@ public record CodePathNormalizationInput(
         if (rawTrace.sizeBytes() > budget.maxRawBytes()) {
             throw new IllegalArgumentException("Raw Trace references exceed the normalization budget");
         }
-        if (budget.maxMethods() < plan.selectors().size()) {
+        if (budget.maxMethods() < plan.methodSelections().size()) {
             throw new IllegalArgumentException("maxMethods must not be less than the method count in the collection plan");
         }
         rawTracePath = rawTracePath.toAbsolutePath().normalize();
+        invocationOutputPath = invocationOutputPath.toAbsolutePath().normalize();
+        if (rawTracePath.equals(invocationOutputPath)) {
+            throw new IllegalArgumentException("Invocation output must not overwrite the Raw Trace");
+        }
     }
 }

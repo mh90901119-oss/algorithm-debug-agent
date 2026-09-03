@@ -10,7 +10,6 @@ public record EvidenceBuildRequest(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         List<CollectionId> collectionIds,
@@ -27,7 +26,6 @@ public record EvidenceBuildRequest(
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         collectionIds = boundedIds(collectionIds, "collectionIds");

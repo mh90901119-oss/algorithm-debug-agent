@@ -44,6 +44,45 @@ try {
         throw "Installer did not create the ownership manifest"
     }
 
+    # 模拟旧版本曾安装、但当前版本已经删除的 Agent 专属 Skill 文件。
+    # 新版本必须依据旧清单安全清理它，不能要求旧清单与当前文件集合完全相同。
+    $removedLegacyAsset = Join-Path $configRoot "skills\algorithm-debug\references\removed-v1.md"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $removedLegacyAsset) -Force | Out-Null
+    [System.IO.File]::WriteAllText($removedLegacyAsset, "legacy managed asset", [System.Text.UTF8Encoding]::new($false))
+    $legacyManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $legacyManifest.managedFiles += [pscustomobject]@{
+        relativePath = "skills/algorithm-debug/references/removed-v1.md"
+        sha256 = (Get-FileHash -LiteralPath $removedLegacyAsset -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [System.IO.File]::WriteAllText(
+        $manifestPath,
+        ($legacyManifest | ConvertTo-Json -Depth 8),
+        [System.Text.UTF8Encoding]::new($false))
+
+    & $installer -Mode Install
+    if (Test-Path -LiteralPath $removedLegacyAsset) {
+        throw "Installer did not remove an obsolete managed asset during upgrade"
+    }
+    & $installer -Mode Check
+
+    $foreignAsset = Join-Path $configRoot "unrelated-user-config.txt"
+    [System.IO.File]::WriteAllText($foreignAsset, "preserve", [System.Text.UTF8Encoding]::new($false))
+    $validManifestBytes = [System.IO.File]::ReadAllBytes($manifestPath)
+    $foreignManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $foreignManifest.managedFiles += [pscustomobject]@{
+        relativePath = "unrelated-user-config.txt"
+        sha256 = (Get-FileHash -LiteralPath $foreignAsset -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [System.IO.File]::WriteAllText(
+        $manifestPath,
+        ($foreignManifest | ConvertTo-Json -Depth 8),
+        [System.Text.UTF8Encoding]::new($false))
+    $foreignPathRejected = $false
+    try { & $uninstaller } catch { $foreignPathRejected = $_.Exception.Message -match "outside the Agent-owned namespace" }
+    if (-not $foreignPathRejected) { throw "Uninstaller accepted a managed path outside the Agent-owned namespace" }
+    if (-not (Test-Path -LiteralPath $foreignAsset -PathType Leaf)) { throw "Uninstaller removed an unrelated user file" }
+    [System.IO.File]::WriteAllBytes($manifestPath, $validManifestBytes)
+
     $installationModule = [System.IO.File]::ReadAllText((Join-Path $configRoot "lib\installation.mjs"))
     $expectedLauncher = (Join-Path $RepositoryRoot "bin\ada.cmd").Replace("\", "\\")
     if (-not $installationModule.Contains($expectedLauncher)) {

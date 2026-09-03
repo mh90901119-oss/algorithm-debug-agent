@@ -135,6 +135,25 @@ class AdaMainTest {
     }
 
     @Test
+    void missingPlanEvidenceReturnsAnActionablePublicMessage() throws Exception {
+        AdaMain application = new AdaMain(
+                command -> {
+                    throw new CaseRunException(
+                            "PLAN_EVIDENCE_NOT_FOUND", "internal archive detail");
+                },
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "case", "inspect", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1");
+
+        assertFailure(invocation, 3, "PLAN_EVIDENCE_NOT_FOUND");
+        assertEquals(
+                "Plan references an Evidence ID that is not available in the current Case",
+                invocation.response().path("message").textValue());
+    }
+
+    @Test
     void staticAndPlanExpectedFailuresUseStageCodesInsteadOfInternalError() throws Exception {
         AdaMain staticApplication = new AdaMain(
                 command -> { throw new StaticAnalysisException("local source detail"); },
@@ -154,6 +173,9 @@ class AdaMainTest {
 
         assertFailure(staticFailure, 3, "STATIC_ANALYSIS_FAILED");
         assertFailure(planFailure, 3, "PLAN_COMPILATION_FAILED");
+        assertEquals(
+                "Collection plan could not be compiled: model rationale detail",
+                planFailure.response().path("message").textValue());
         assertEquals("", staticFailure.stderr());
         assertEquals("", planFailure.stderr());
     }
@@ -308,24 +330,6 @@ class AdaMainTest {
 
         assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
         assertEquals("Invalid CLI input: question-file is not valid UTF-8",
-                invocation.response().path("message").textValue());
-        assertFalse(invocation.stdout().contains(malformed.toString()));
-        assertEquals("", invocation.stderr());
-    }
-
-    @Test
-    void malformedAnalysisResultExplainsHowToCorrectTheCompletionCall() throws Exception {
-        AdaMain application = AdaMain.defaultApplication();
-        Path malformed = Files.writeString(
-                temporaryDirectory.resolve("analysis-result.json"), "{\"unexpected\":true}");
-
-        Invocation invocation = invoke(application,
-                "analysis", "complete", "--workspace", "workspace", "--project-id", "demo",
-                "--case-id", "case-1", "--analysis-id", "analysis-1",
-                "--result-file", malformed.toString());
-
-        assertFailure(invocation, 2, "CLI_INVALID_ARGUMENTS");
-        assertEquals("Invalid CLI input: result-file is not valid AnalysisResult JSON",
                 invocation.response().path("message").textValue());
         assertFalse(invocation.stdout().contains(malformed.toString()));
         assertEquals("", invocation.stderr());

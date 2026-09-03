@@ -80,8 +80,7 @@ function Invoke-Main {
 
     if ($Mode -eq "Install") {
         if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
-            Assert-InstalledFilesUnmodified -ConfigDirectory $configuration -ManifestPath $manifestPath `
-                -ExpectedRelativePaths @($managedFiles.RelativePath)
+            Invoke-Uninstall -ConfigDirectory $configuration -Quiet
         }
         foreach ($directory in @($configuration, $workspaceDirectory, $dfxDirectory, $evalDirectory)) {
             New-Item -ItemType Directory -Path $directory -Force | Out-Null
@@ -266,14 +265,36 @@ function Read-InstallManifest {
                 -or $sha -notmatch '^[0-9a-f]{64}$' -or $seen.ContainsKey($relative)) {
             throw "OpenCode installation manifest contains an invalid managed file"
         }
+        if (-not (Test-AgentOwnedRelativePath -RelativePath $relative)) {
+            throw "OpenCode installation manifest path is outside the Agent-owned namespace: $relative"
+        }
         $seen[$relative] = $sha
     }
-    $expected = @($ExpectedRelativePaths | Sort-Object)
-    $actual = @($seen.Keys | Sort-Object)
-    if (($expected -join "`n") -cne ($actual -join "`n")) {
-        throw "OpenCode installation manifest managed file set is incompatible with this Agent version"
+    if ($null -ne $ExpectedRelativePaths) {
+        $expected = @($ExpectedRelativePaths | Sort-Object)
+        $actual = @($seen.Keys | Sort-Object)
+        if (($expected -join "`n") -cne ($actual -join "`n")) {
+            throw "OpenCode installation manifest managed file set is incompatible with this Agent version"
+        }
     }
     return $manifest
+}
+
+function Test-AgentOwnedRelativePath {
+    param([string]$RelativePath)
+
+    if ($RelativePath.StartsWith("skills/algorithm-debug/", [System.StringComparison]::Ordinal)) {
+        return $true
+    }
+    return $RelativePath -in @(
+        "agents/algorithm-debug.md",
+        "commands/debug-case.md",
+        "tools/algorithm-debug.ts",
+        "lib/ada-cli.mjs",
+        "lib/case-interaction-recorder.mjs",
+        "lib/tool-runtime.mjs",
+        "lib/installation.mjs"
+    )
 }
 
 function Assert-InstalledFilesUnmodified {
@@ -293,7 +314,7 @@ function Assert-InstalledFilesUnmodified {
 }
 
 function Invoke-Uninstall {
-    param([string]$ConfigDirectory)
+    param([string]$ConfigDirectory, [switch]$Quiet)
 
     $knownRelativePaths = @($assets | ForEach-Object { $_.Destination.Replace("\", "/") }) + "lib/installation.mjs"
     $manifestPath = Join-Path $ConfigDirectory $manifestRelativePath.Replace("/", "\")
@@ -308,7 +329,7 @@ function Invoke-Uninstall {
         return
     }
 
-    $manifest = Read-InstallManifest -Path $manifestPath -ExpectedRelativePaths $knownRelativePaths
+    $manifest = Read-InstallManifest -Path $manifestPath
     $conflicts = @()
     foreach ($entry in @($manifest.managedFiles)) {
         $destination = Join-Path $ConfigDirectory ([string]$entry.relativePath).Replace("/", "\")
@@ -331,6 +352,15 @@ function Invoke-Uninstall {
         }
     }
     Remove-Item -LiteralPath $manifestPath -Force
+    $skillDirectory = Join-Path $ConfigDirectory "skills\algorithm-debug"
+    if (Test-Path -LiteralPath $skillDirectory -PathType Container) {
+        @(Get-ChildItem -LiteralPath $skillDirectory -Recurse -Directory -Force | Sort-Object FullName -Descending) |
+            ForEach-Object {
+                if (@(Get-ChildItem -LiteralPath $_.FullName -Force).Count -eq 0) {
+                    Remove-Item -LiteralPath $_.FullName -Force
+                }
+            }
+    }
     foreach ($relativeDirectory in @("skills\algorithm-debug", ".algorithm-debug-agent")) {
         $directory = Join-Path $ConfigDirectory $relativeDirectory
         if ((Test-Path -LiteralPath $directory -PathType Container) `
@@ -338,8 +368,10 @@ function Invoke-Uninstall {
             Remove-Item -LiteralPath $directory -Force
         }
     }
-    Write-Output "OPENCODE_ADAPTER_UNINSTALLED $ConfigDirectory"
-    Write-EffectivePaths
+    if (-not $Quiet) {
+        Write-Output "OPENCODE_ADAPTER_UNINSTALLED $ConfigDirectory"
+        Write-EffectivePaths
+    }
 }
 
 function Install-Bytes {
@@ -449,7 +481,7 @@ function Assert-OpenCodeDiscovery {
                 "algorithm-debug_run_test", "algorithm-debug_static_analyze",
                 "algorithm-debug_codepath_plan_create", "algorithm-debug_codepath_collect",
                 "algorithm-debug_jdwp_plan_create", "algorithm-debug_jdwp_collect",
-                "algorithm-debug_artifact_read", "algorithm-debug_analysis_complete"
+                "algorithm-debug_artifact_read", "algorithm-debug_evidence_query"
             )
             foreach ($toolName in $expectedTools) {
                 if ($agent.tools.$toolName -ne $true) {

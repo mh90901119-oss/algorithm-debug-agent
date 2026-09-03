@@ -41,8 +41,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
@@ -78,7 +76,6 @@ import org.junit.jupiter.api.io.TempDir;
 class JdwpCollectionApplicationServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final ProjectId PROJECT_ID = new ProjectId("project-1");
     private static final PlanId PLAN_ID = new PlanId("jdwp-plan-1");
@@ -91,7 +88,6 @@ class JdwpCollectionApplicationServiceTest {
     private Path maven;
     private Path java;
     private Path collectorJar;
-    private ContextRecord context;
     private BoundedDocumentMapper mapper;
     private AtomicDocumentWriter writer;
 
@@ -120,7 +116,6 @@ class JdwpCollectionApplicationServiceTest {
         writer = new AtomicDocumentWriter();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Files.createDirectories(layout.projectCases(PROJECT_ID));
-        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
@@ -129,9 +124,8 @@ class JdwpCollectionApplicationServiceTest {
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
                 "fixture", "why", NOW));
-        archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, ANALYSIS_ID, "continue", NOW));
         new AlgorithmInputApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaTestAlgorithmInputLocator(), fixedClock())
@@ -145,8 +139,9 @@ class JdwpCollectionApplicationServiceTest {
         staticAnalysis.createJdwpPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new JdwpPlanRequest(PLAN_ID, List.of(new JdwpTracepointRequest(
                         "target-entry", catalog.entries().getFirst().methodKey(),
-                        anchor.startLine(), 3, JdwpCaptureSpec.stackOnly())),
-                        JdwpCollectionBudget.defaults(), "查看调用栈", NOW));
+                        anchor.startLine(), 3, 3, 3, 0, null,
+                        JdwpCaptureSpec.stackOnly())),
+                        JdwpCollectionBudget.defaults(), "Inspect target call", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
     }
 
     @Test
@@ -474,7 +469,7 @@ class JdwpCollectionApplicationServiceTest {
         RunId runId = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(successfulBaselineOutcome(runId));
     }
@@ -483,11 +478,11 @@ class JdwpCollectionApplicationServiceTest {
         RunId runId = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.FAILED,
+                ANALYSIS_ID, runId, ProcessOutcome.FAILED,
                 TestOutcome.ERROR, GanttOutcome.ABSENT,
                 Optional.of(new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
                         org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
@@ -499,11 +494,10 @@ class JdwpCollectionApplicationServiceTest {
                 "java.lang.IllegalStateException", message, "",
                 "fixture.Algorithm.solve(Algorithm.java:42)");
         RunResultFingerprint fingerprint = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, ANALYSIS_ID, runId,
                 new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
                         .sha256(diagnostic));
         archive.createRunResultFingerprint(fingerprint);
-        archive.createReproductionIfAbsent(fingerprint);
     }
 
     private void writeFailureReport(String message) throws Exception {
@@ -539,7 +533,7 @@ class JdwpCollectionApplicationServiceTest {
     private static RunOutcomeSummary successfulBaselineOutcome(RunId runId) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
+                ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
                 TestOutcome.PASSED, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(),
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
     }

@@ -1,8 +1,8 @@
 package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.CaseId;
+import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
@@ -23,23 +23,21 @@ class ReproductionComparatorTest {
     @Test
     void matchesSameTargetFailure() {
         ReproductionComparator.Result result = comparator.compare(
-                failure("case-1", "context-1", "run-1", FAILURE_A),
-                failure("case-1", "context-1", "run-2", FAILURE_A),
-                ReproductionComparator.Scope.SAME_CONTEXT);
+                failure("case-1", "analysis-1", "run-1", FAILURE_A),
+                failure("case-1", "analysis-1", "run-2", FAILURE_A));
 
         assertEquals(ComparisonOutcome.MATCHED, result.outcome());
         assertEquals(List.of(), result.changedDimensions());
         assertEquals(
-                "Baseline MATCHED; scope=SAME_CONTEXT; referenceRunId=run-1; changedDimensions=NONE",
+                "Baseline MATCHED; scope=SAME_ANALYSIS; referenceRunId=run-1; changedDimensions=NONE",
                 result.summary());
     }
 
     @Test
     void reportsTargetFailureChange() {
         ReproductionComparator.Result result = comparator.compare(
-                failure("case-1", "context-1", "run-1", FAILURE_A),
-                failure("case-1", "context-2", "run-2", FAILURE_B),
-                ReproductionComparator.Scope.CROSS_CONTEXT);
+                failure("case-1", "analysis-1", "run-1", FAILURE_A),
+                failure("case-1", "analysis-1", "run-2", FAILURE_B));
 
         assertEquals(ComparisonOutcome.CHANGED, result.outcome());
         assertEquals(List.of("TARGET_FAILURE"), result.changedDimensions());
@@ -48,17 +46,19 @@ class ReproductionComparatorTest {
     @Test
     void rejectsComparisonAcrossCases() {
         assertThrows(IllegalArgumentException.class, () -> comparator.compare(
-                failure("case-1", "context-1", "run-1", FAILURE_A),
-                failure("case-2", "context-1", "run-2", FAILURE_A),
-                ReproductionComparator.Scope.CROSS_CONTEXT));
+                failure("case-1", "analysis-1", "run-1", FAILURE_A),
+                failure("case-2", "analysis-1", "run-2", FAILURE_A)));
+        assertThrows(IllegalArgumentException.class, () -> comparator.compare(
+                failure("case-1", "analysis-1", "run-1", FAILURE_A),
+                failure("case-1", "analysis-2", "run-2", FAILURE_A)));
     }
 
     private static RunResultFingerprint failure(
-            String caseId, String contextId, String runId, String failure) {
+            String caseId, String analysisId, String runId, String failure) {
         return new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT,
                 new CaseId(caseId),
-                new ContextId(contextId),
+                new AnalysisId(analysisId),
                 new RunId(runId),
                 failure);
     }

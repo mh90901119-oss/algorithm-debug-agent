@@ -119,14 +119,13 @@ public final class StaticAnalysisApplicationService {
             ProjectRegistration registration = requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             var analysis = archive.requireAnalysis(caseId, analysisId);
-            var context = archive.requireContext(caseId, analysis.contextId());
             var manifest = archive.requireCase(caseId);
             if (!manifest.projectId().equals(projectId)) {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
             }
             StaticAnalysisRequest request = new StaticAnalysisRequest(
                     Path.of(registration.moduleRoot()), manifest.targetTest(), caseId,
-                    context.contextId(), analysisId, StaticAnalysisBudget.defaults(), clock.instant());
+                    analysisId, StaticAnalysisBudget.defaults(), clock.instant());
             MethodCatalog catalog = analyzeWithTargetClasspath(
                     request, Path.of(registration.moduleRoot()),
                     layout.projectCases(projectId).resolve(caseId.value()), logContext);
@@ -137,7 +136,7 @@ public final class StaticAnalysisApplicationService {
                     "METHOD_CATALOG", "STATIC_");
             archive.registerArtifact(caseId, artifact, clock.instant());
             ArtifactBackedResult<StaticAnalysisSummary> result = new ArtifactBackedResult<>(new StaticAnalysisSummary(
-                    catalog.caseId(), catalog.contextId(), catalog.analysisId(),
+                    catalog.caseId(), catalog.analysisId(),
                     catalog.completeness(), catalog.entries().size(), catalog.edges().size(),
                     catalog.warnings().size()), artifact);
             executionLog.info(logContext, "StaticAnalysisApplicationService", "STATIC_ANALYSIS_COMPLETED",
@@ -178,11 +177,15 @@ public final class StaticAnalysisApplicationService {
             executionLog.info(logContext.withPlan(plan.planId().value()),
                     "StaticAnalysisApplicationService", "CODEPATH_PLAN_COMPLETED",
                     "COMPLETED", "CodePath plan was archived", Map.of(
-                            "selectorCount", Integer.toString(plan.selectors().size()),
+                            "methodCount", Integer.toString(plan.methodSelections().size()),
+                            "projectionCount", Integer.toString(plan.methodSelections().stream()
+                                    .mapToInt(selection -> selection.projections().size()).sum()),
+                            "basedOnEvidenceCount", Integer.toString(
+                                    plan.intent().basedOnEvidenceIds().size()),
                             "scopeConfigured", Boolean.toString(plan.scopeMethodKey().isPresent())));
             return new ArtifactBackedResult<>(new CodePathPlanSummary(
-                    plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
-                    plan.selectors().size()), artifact);
+                    plan.caseId(), plan.analysisId(), plan.planId(),
+                    plan.methodSelections().size()), artifact);
         } catch (PlanCompilationException failure) {
             throw new CaseRunException("PLAN_COMPILATION_FAILED", "CodePath plan compilation failed", failure);
         } catch (WorkspaceException failure) {
@@ -215,9 +218,20 @@ public final class StaticAnalysisApplicationService {
             archive.registerArtifact(caseId, artifact, clock.instant());
             executionLog.info(logContext.withPlan(plan.planId().value()),
                     "StaticAnalysisApplicationService", "JDWP_PLAN_COMPLETED",
-                    "COMPLETED", "JDWP plan was archived");
+                    "COMPLETED", "JDWP plan was archived", Map.of(
+                            "tracepointCount", Integer.toString(plan.tracepoints().size()),
+                            "totalObservedBudget", Integer.toString(plan.tracepoints().stream()
+                                    .mapToInt(org.example.algorithmdebug.contracts.JdwpTracepointSpec::maxObservedHits).sum()),
+                            "totalCapturedBudget", Integer.toString(plan.tracepoints().stream()
+                                    .mapToInt(org.example.algorithmdebug.contracts.JdwpTracepointSpec::maxCapturedHits).sum()),
+                            "conditionalTracepointCount", Long.toString(plan.tracepoints().stream()
+                                    .filter(point -> point.condition() != null).count()),
+                            "localsTracepointCount", Long.toString(plan.tracepoints().stream()
+                                    .filter(point -> point.capture().locals()).count()),
+                            "basedOnEvidenceCount", Integer.toString(
+                                    plan.intent().basedOnEvidenceIds().size())));
             return new ArtifactBackedResult<>(new JdwpPlanSummary(
-                    plan.caseId(), plan.contextId(), plan.analysisId(), plan.planId(),
+                    plan.caseId(), plan.analysisId(), plan.planId(),
                     plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),
                     artifact);
         } catch (PlanCompilationException failure) {
@@ -261,7 +275,7 @@ public final class StaticAnalysisApplicationService {
                 .limit(999)
                 .forEach(warnings::add);
         return new MethodCatalog(
-                catalog.schemaVersion(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
+                catalog.schemaVersion(), catalog.caseId(), catalog.analysisId(),
                 catalog.targetTest(), catalog.entries(), catalog.edges(), List.copyOf(warnings),
                 SnapshotCompleteness.INCOMPLETE, catalog.discoveredMethodCount(),
                 catalog.discoveredEdgeCount(), catalog.createdAt());

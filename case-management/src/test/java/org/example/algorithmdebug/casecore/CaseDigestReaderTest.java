@@ -2,7 +2,6 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
-import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
@@ -45,7 +44,6 @@ class CaseDigestReaderTest {
                 casesRoot, new BoundedDocumentMapper(), new AtomicDocumentWriter());
         reader = new CaseDigestReader(repository);
         repository.createCase(CaseArchiveRepositoryTest.manifest());
-        repository.createContext(CaseArchiveRepositoryTest.context());
         repository.createAnalysis(CaseArchiveRepositoryTest.analysis());
     }
 
@@ -89,17 +87,17 @@ class CaseDigestReaderTest {
     void shouldWarnAboutCorruptChildAndContinueReadingValidFacts() throws Exception {
         CaseId caseId = CaseArchiveRepositoryTest.manifest().caseId();
         CaseArchiveLayout layout = CaseArchiveLayout.of(temporaryDirectory.resolve("cases"), caseId);
-        Path corrupt = layout.contextDocument(new org.example.algorithmdebug.contracts.ContextId("context-broken"));
+        Path corrupt = layout.analysisDocument(new AnalysisId("analysis-broken"));
         Files.createDirectories(corrupt.getParent());
         Files.writeString(corrupt, "{", StandardCharsets.UTF_8);
 
         CaseDigest digest = reader.read(caseId);
 
-        assertEquals(1, digest.contextCount());
+        assertEquals(1, digest.analysisCount());
         assertFalse(digest.archiveWarnings().isEmpty());
         assertEquals("CASE_CHILD_DOCUMENT_INVALID", digest.archiveWarnings().getFirst().code());
-        assertEquals(CaseArchiveRepositoryTest.context().contextId(),
-                digest.latestContextId().orElseThrow());
+        assertEquals(CaseArchiveRepositoryTest.analysis().analysisId(),
+                digest.latestAnalysisId().orElseThrow());
     }
 
     @Test
@@ -107,7 +105,6 @@ class CaseDigestReaderTest {
         AnalysisRequest newest = new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST,
                 CaseArchiveRepositoryTest.manifest().caseId(),
-                CaseArchiveRepositoryTest.context().contextId(),
                 new AnalysisId("analysis-2"), "问".repeat(3_000),
                 Instant.parse("2026-08-16T00:00:05Z"));
         repository.createAnalysis(newest);
@@ -118,66 +115,10 @@ class CaseDigestReaderTest {
         assertEquals(2_048, digest.latestQuestionExcerpt().length());
     }
 
-    @Test
-    void shouldExposeCompletedAnalysisWithoutModelReasoning() {
-        repository.completeAnalysis(CaseArchiveRepositoryTest.analysisResult());
-
-        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
-
-        assertEquals(1, digest.completedAnalysisCount());
-        assertEquals("设备空闲来自等待前序操作。",
-                digest.recentAnalysisResults().getFirst().finalAnswerExcerpt());
-        assertEquals(1, digest.recentAnalysisResults().getFirst().conclusions().size());
-    }
-
-    @Test
-    void shouldWarnAboutCorruptAnalysisResultAndKeepRequest() throws Exception {
-        CaseArchiveLayout layout = CaseArchiveLayout.of(
-                temporaryDirectory.resolve("cases"), CaseArchiveRepositoryTest.manifest().caseId());
-        Files.writeString(layout.analysisResult(CaseArchiveRepositoryTest.analysis().analysisId()),
-                "{", StandardCharsets.UTF_8);
-
-        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
-
-        assertEquals(1, digest.analysisCount());
-        assertEquals(0, digest.completedAnalysisCount());
-        assertTrue(digest.archiveWarnings().stream().anyMatch(warning ->
-                "CASE_CHILD_DOCUMENT_INVALID".equals(warning.code())));
-    }
-
-    @Test
-    void shouldLimitRecentAnalysisResultsToTwenty() {
-        repository.completeAnalysis(CaseArchiveRepositoryTest.analysisResult());
-        for (int index = 2; index <= 25; index++) {
-            AnalysisId id = new AnalysisId("analysis-" + index);
-            Instant time = Instant.parse("2026-08-16T00:00:00Z").plusSeconds(index);
-            repository.createAnalysis(new AnalysisRequest(
-                    SchemaVersions.ANALYSIS_REQUEST,
-                    CaseArchiveRepositoryTest.manifest().caseId(),
-                    CaseArchiveRepositoryTest.context().contextId(), id,
-                    "追问 " + index, time));
-            repository.completeAnalysis(new AnalysisResult(
-                    SchemaVersions.ANALYSIS_RESULT,
-                    CaseArchiveRepositoryTest.manifest().caseId(),
-                    CaseArchiveRepositoryTest.context().contextId(), id,
-                    "回答 " + index, List.of(), List.of(), List.of(), List.of(), List.of(),
-                    List.of(), time.plusMillis(1)));
-        }
-
-        CaseDigest digest = reader.read(CaseArchiveRepositoryTest.manifest().caseId());
-
-        assertEquals(25, digest.completedAnalysisCount());
-        assertEquals(20, digest.recentAnalysisResults().size());
-        assertEquals(new AnalysisId("analysis-25"),
-                digest.recentAnalysisResults().getFirst().analysisId());
-        assertTrue(digest.truncated());
-    }
-
     private static RunOutcomeSummary outcome(RunId runId) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED",
                 CaseArchiveRepositoryTest.manifest().caseId(),
-                CaseArchiveRepositoryTest.context().contextId(),
                 CaseArchiveRepositoryTest.analysis().analysisId(), runId,
                 ProcessOutcome.SUCCEEDED, TestOutcome.PASSED, GanttOutcome.ABSENT,
                 Optional.empty(), Optional.empty(), ComparisonOutcome.NOT_COMPARED,

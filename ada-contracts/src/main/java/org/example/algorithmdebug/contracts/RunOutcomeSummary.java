@@ -11,7 +11,6 @@ public record RunOutcomeSummary(
         String schemaVersion,
         String eventType,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         ProcessOutcome processOutcome,
@@ -34,7 +33,6 @@ public record RunOutcomeSummary(
             throw new IllegalArgumentException("Unsupported eventType: " + eventType);
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         processOutcome = ContractChecks.requireNonNull(processOutcome, "processOutcome");

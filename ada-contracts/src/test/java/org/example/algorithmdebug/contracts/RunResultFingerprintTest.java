@@ -10,7 +10,7 @@ class RunResultFingerprintTest {
     void recordsOnlyTheStructuredTargetFailureFingerprint() {
         RunResultFingerprint value = new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, new CaseId("case-1"),
-                new ContextId("context-1"), new RunId("run-1"), "a".repeat(64));
+                new AnalysisId("analysis-1"), new RunId("run-1"), "a".repeat(64));
         assertEquals("a".repeat(64), value.targetFailureSha256());
     }
 
@@ -18,6 +18,6 @@ class RunResultFingerprintTest {
     void rejectsInvalidFailureFingerprint() {
         assertThrows(IllegalArgumentException.class, () -> new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT, new CaseId("case-1"),
-                new ContextId("context-1"), new RunId("run-1"), "not-a-hash"));
+                new AnalysisId("analysis-1"), new RunId("run-1"), "not-a-hash"));
     }
 }

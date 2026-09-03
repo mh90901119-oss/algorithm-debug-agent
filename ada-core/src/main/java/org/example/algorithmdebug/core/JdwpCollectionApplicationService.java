@@ -142,7 +142,6 @@ public final class JdwpCollectionApplicationService {
         CaseArchiveRepository archive = new CaseArchiveRepository(
                 layout.projectCases(projectId), mapper, writer);
         JdwpCollectionPlan plan = archive.requireJdwpPlan(caseId, planId);
-        var context = archive.requireContext(caseId, plan.contextId());
         var caseManifest = archive.requireCase(caseId);
         if (!caseManifest.projectId().equals(projectId)) {
             throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
@@ -153,7 +152,7 @@ public final class JdwpCollectionApplicationService {
         RunId runId = ids.newRunId();
         CollectionId collectionId = ids.newCollectionId();
         JdwpCollectionRecord record = new JdwpCollectionRecord(
-                SchemaVersions.JDWP_COLLECTION_REQUEST, caseId, plan.contextId(), plan.analysisId(),
+                SchemaVersions.JDWP_COLLECTION_REQUEST, caseId, plan.analysisId(),
                 runId, planId, collectionId, plan.targetTest(), "JDWP", clock.instant());
         Path collectionRoot = archive.startJdwpCollection(record);
         logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
@@ -267,7 +266,7 @@ public final class JdwpCollectionApplicationService {
                 && manifest.eventCount() > 0 && !manifest.truncated()
                 && baseline.evidenceUsable() && postProcessing.confirmationUsable();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
-                caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
+                caseId, plan.analysisId(), runId, planId, collectionId,
                 manifest.completion().name(), baseline.outcome(), usable,
                 artifacts.stream().map(ArtifactReference::relativePath).toList(),
                 artifacts.stream().map(ArtifactReference::artifactId).toList());
@@ -403,8 +402,7 @@ public final class JdwpCollectionApplicationService {
                 ? JdwpCollectionStage.BASELINE_CHECKED : JdwpCollectionStage.PROCESS_COMPLETED;
         Optional<AgentFailureDiagnostic> diagnostic = Optional.empty();
         return new JdwpCollectionManifest(
-                SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
-                record.analysisId(), record.runId(), record.planId(), record.collectionId(),
+                SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.analysisId(), record.runId(), record.planId(), record.collectionId(),
                 "jdwp-batch-collector", tool.version(), completion, external.completionReason(),
                 stage, result.targetStarted(), result.collectorStarted(),
                 targetExit, collectorExit,
@@ -434,8 +432,7 @@ public final class JdwpCollectionApplicationService {
             Instant startedAt) {
         Path raw = Path.of("raw/jdwp.jsonl");
         return new JdwpCollectionManifest(
-                SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.contextId(),
-                record.analysisId(), record.runId(), record.planId(), record.collectionId(),
+                SchemaVersions.JDWP_COLLECTION_MANIFEST, record.caseId(), record.analysisId(), record.runId(), record.planId(), record.collectionId(),
                 "jdwp-batch-collector", tool.version(), completion, code,
                 JdwpCollectionStage.FAILED, targetStarted, collectorStarted,
                 targetExitCode, collectorExitCode, completion == JdwpCollectionCompletion.TIMED_OUT,
@@ -497,7 +494,7 @@ public final class JdwpCollectionApplicationService {
                 || completion == JdwpCollectionCompletion.TIMED_OUT
                 || completion == JdwpCollectionCompletion.AGENT_FAILED) {
             return incomparable(record, archive.findLatestCompletedRun(
-                            record.caseId(), record.contextId(), record.analysisId())
+                            record.caseId(), record.analysisId())
                             .map(org.example.algorithmdebug.contracts.RunOutcomeSummary::runId),
                     "JDWP collection did not complete with confirmable evidence");
         }
@@ -506,7 +503,7 @@ public final class JdwpCollectionApplicationService {
                 return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
             var reference = archive.findLatestCompletedRun(
-                    record.caseId(), record.contextId(), record.analysisId());
+                    record.caseId(), record.analysisId());
             if (reference.isEmpty()
                     || reference.orElseThrow().testOutcome()
                     != org.example.algorithmdebug.contracts.TestOutcome.PASSED) {
@@ -514,7 +511,7 @@ public final class JdwpCollectionApplicationService {
                         "No completed passing uninstrumented run exists for this Analysis");
             }
             return new CollectionBaselineCheck(
-                    "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
                     Optional.of(reference.orElseThrow().runId()), true,
                     "Successful JDWP run; Gantt is not copied or used as an evidence gate",
@@ -541,7 +538,7 @@ public final class JdwpCollectionApplicationService {
     private CollectionBaselineCheck incomparable(
             JdwpCollectionRecord record, Optional<RunId> referenceRunId, String summary) {
         return new CollectionBaselineCheck(
-                "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                 record.collectionId(), ComparisonOutcome.INCOMPARABLE, referenceRunId,
                 false, summary, clock.instant());
     }

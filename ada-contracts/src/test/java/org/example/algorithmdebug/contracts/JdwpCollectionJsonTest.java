@@ -37,15 +37,15 @@ class JdwpCollectionJsonTest {
         assertEquals("Which state selected the branch?",
                 MAPPER.readTree(json).path("intent").path("questionToAnswer").asText());
 
-        JsonNode schema = schema("jdwp-plan-v2.schema.json");
+        JsonNode schema = schema("jdwp-plan-v4.schema.json");
         assertFalse(schema.path("additionalProperties").asBoolean(true));
         Set<String> required = new HashSet<>();
         schema.path("required").forEach(node -> required.add(node.asText()));
         assertEquals(Set.of(
-                "schemaVersion", "planId", "caseId", "contextId", "analysisId",
+                "schemaVersion", "planId", "caseId", "analysisId",
                 "targetTest", "tracepoints", "budget",
-                "rationale", "createdAt"), required);
-        for (String id : List.of("planId", "caseId", "contextId", "analysisId")) {
+                "rationale", "intent", "createdAt"), required);
+        for (String id : List.of("planId", "caseId", "analysisId")) {
             assertEquals("string", schema.path("properties").path(id).path("type").asText(), id);
         }
         assertEquals("#/$defs/tracepoint",
@@ -53,7 +53,7 @@ class JdwpCollectionJsonTest {
         assertEquals("#/$defs/capture",
                 schema.path("$defs").path("tracepoint").path("properties")
                         .path("capture").path("$ref").asText());
-        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v2.schema.json"),
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v4.schema.json"),
                 MAPPER.writeValueAsString(plan));
     }
 
@@ -65,26 +65,28 @@ class JdwpCollectionJsonTest {
 
         assertThrows(UnrecognizedPropertyException.class, () ->
                 MAPPER.treeToValue(root, JdwpCollectionPlan.class));
-        assertFalse(schema("jdwp-plan-v2.schema.json")
+        assertFalse(schema("jdwp-plan-v4.schema.json")
                 .path("$defs").path("capture").path("additionalProperties").asBoolean(true));
     }
 
     @Test
-    void schemasExposeP3HardLimitsAndRejectRemoteHostFields() throws Exception {
-        JsonNode plan = schema("jdwp-plan-v2.schema.json");
+    void schemasExposeP4HardLimitsAndRejectRemoteHostFields() throws Exception {
+        JsonNode plan = schema("jdwp-plan-v4.schema.json");
         JsonNode tracepoints = plan.path("properties").path("tracepoints");
         JsonNode budget = plan.path("$defs").path("budget").path("properties");
 
         assertEquals(20, tracepoints.path("maxItems").asInt());
-        assertEquals(1_000, budget.path("maxEvents").path("maximum").asInt());
+        assertEquals(5_000, budget.path("maxEvents").path("maximum").asInt());
         assertEquals(50L * 1024 * 1024,
                 budget.path("maxBytes").path("maximum").asLong());
         assertFalse(plan.path("properties").has("host"));
-        assertFalse(plan.toString().contains("projection"));
-        assertFalse(plan.toString().contains("sampling"));
-        assertTrue(schema("jdwp-manifest-v2.schema.json")
+        assertTrue(plan.path("$defs").path("tracepoint").path("properties")
+                .has("captureFirstMatchedHits"));
+        assertTrue(plan.path("$defs").path("tracepoint").path("properties")
+                .has("captureEveryMatchedHits"));
+        assertTrue(schema("jdwp-manifest-v3.schema.json")
                 .path("properties").has("rawTraceRelativePath"));
-        assertFalse(schema("jdwp-manifest-v2.schema.json")
+        assertFalse(schema("jdwp-manifest-v3.schema.json")
                 .path("properties").has("toolSha256"));
     }
 
@@ -92,8 +94,7 @@ class JdwpCollectionJsonTest {
     void roundTripsManifestWithoutCollectorJarFingerprint() throws Exception {
         JdwpCollectionManifest manifest = new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST,
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
                 "jdwp-batch-collector", "1.0.0",
                 JdwpCollectionCompletion.SUCCESS, "vm_death", JdwpCollectionStage.BASELINE_CHECKED,
@@ -110,7 +111,7 @@ class JdwpCollectionJsonTest {
 
         assertEquals(manifest, MAPPER.readValue(json, JdwpCollectionManifest.class));
         assertFalse(MAPPER.readTree(json).has("toolSha256"));
-        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-manifest-v2.schema.json"), json);
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-manifest-v3.schema.json"), json);
     }
 
     private static JdwpCollectionPlan plan() {
@@ -119,11 +120,10 @@ class JdwpCollectionJsonTest {
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(new JdwpTracepointSpec(
-                        "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
-                        JdwpCaptureSpec.stackOnly())),
+                        "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
+                        100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "Capture the key decision state",
                 new InvestigationIntent(
                         "Which state selected the branch?",

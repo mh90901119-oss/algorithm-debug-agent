@@ -9,7 +9,6 @@ import java.util.Set;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ClaimClassification;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
 import org.example.algorithmdebug.contracts.EvidenceBundle;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
@@ -23,7 +22,6 @@ class EvidenceSufficiencyEvaluatorTest {
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final EvidenceId EVIDENCE_ID = new EvidenceId("evidence-1");
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
 
     @org.junit.jupiter.api.Test
@@ -63,15 +61,13 @@ class EvidenceSufficiencyEvaluatorTest {
 
     private static EvidenceBuildRequest request(Set<EvidenceDimension> required) {
         return new EvidenceBuildRequest(
-                SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, new org.example.algorithmdebug.contracts.RunId("run-1"),
+                SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, new org.example.algorithmdebug.contracts.RunId("run-1"),
                 List.of(), List.of(), required, 64 * 1024, 256 * 1024, NOW);
     }
 
     private static EvidenceBundle bundle(
             Set<EvidenceDimension> covered, List<EvidenceFact> facts) {
         return new EvidenceBundle(
-                SchemaVersions.EVIDENCE_BUNDLE, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, facts, List.of(), covered, List.of(), false, NOW);
+                SchemaVersions.EVIDENCE_BUNDLE, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, facts, List.of(), covered, List.of(), false, NOW);
     }
 }

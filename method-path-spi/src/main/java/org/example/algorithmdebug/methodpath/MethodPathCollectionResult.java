@@ -16,7 +16,7 @@ public record MethodPathCollectionResult(
         Path root = request.collectionDirectory();
         rawTrace = inside(root, rawTrace, "rawTrace"); stdoutLog = inside(root, stdoutLog, "stdoutLog");
         stderrLog = inside(root, stderrLog, "stderrLog"); manifest = Objects.requireNonNull(manifest);
-        if (!manifest.caseId().equals(request.caseId()) || !manifest.contextId().equals(request.contextId())
+        if (!manifest.caseId().equals(request.caseId())
                 || !manifest.analysisId().equals(request.analysisId())
                 || !manifest.collectionId().equals(request.collectionId())
                 || !manifest.planId().equals(request.plan().planId())

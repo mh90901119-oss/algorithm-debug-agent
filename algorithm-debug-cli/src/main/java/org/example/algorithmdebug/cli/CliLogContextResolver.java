@@ -26,8 +26,7 @@ final class CliLogContextResolver {
         if (command instanceof CliCommand.CodePathCollectionExecute value) return caseContext(value.workspace(), value.projectId(), value.caseId()).withPlan(value.planId().value());
         if (command instanceof CliCommand.JdwpCollectionExecute value) return caseContext(value.workspace(), value.projectId(), value.caseId()).withPlan(value.planId().value());
         if (command instanceof CliCommand.ArtifactRead value) return caseContext(value.workspace(), value.projectId(), value.caseId()).withArtifact(value.artifactId());
-        if (command instanceof CliCommand.AnalysisComplete value) return caseContext(value.workspace(), value.projectId(), value.caseId()).withAnalysis(value.analysisId());
-        return AgentLogContext.bootstrap();
+        if (command instanceof CliCommand.EvidenceQuery value) return caseContext(value.workspace(), value.projectId(), value.caseId()).withArtifact(value.artifactId());        return AgentLogContext.bootstrap();
     }
 
     static AgentLogContext after(CliCommand command, Object result) {

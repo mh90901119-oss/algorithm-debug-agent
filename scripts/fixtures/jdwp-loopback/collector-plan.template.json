@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "2.0",
+  "schemaVersion": "4.0",
   "sessionId": "jdwp-loopback-verification",
   "target": {"host": "127.0.0.1", "port": __PORT__},
   "resumeOnAttach": true,
@@ -13,7 +13,8 @@
     "methodDescriptor": "(I)I",
     "maxObservedHits": 1,
     "maxCapturedHits": 1,
-    "captureOnMatchedHits": [1],
+    "captureFirstMatchedHits": 1,
+    "captureEveryMatchedHits": 0,
     "condition": {
       "localName": "marker",
       "fieldPath": [],

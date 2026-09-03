@@ -12,7 +12,6 @@ import java.util.Optional;
 public record AlgorithmInputCapture(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         TargetTest targetTest,
         String variableName,
@@ -31,7 +30,6 @@ public record AlgorithmInputCapture(
             throw new IllegalArgumentException("Unsupported AlgorithmInputCapture schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         variableName = ContractChecks.requireJavaMethodName(variableName, "variableName");

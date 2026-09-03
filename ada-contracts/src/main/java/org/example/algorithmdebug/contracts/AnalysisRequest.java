@@ -7,7 +7,6 @@ import java.time.Instant;
  *
  * @param schemaVersion Schema 版本
  * @param caseId 所属 Case
- * @param contextId 本次问题对应的 Context
  * @param analysisId Analysis ID
  * @param question 用户问题原文
  * @param createdAt 创建时间
@@ -15,7 +14,6 @@ import java.time.Instant;
 public record AnalysisRequest(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         String question,
         Instant createdAt) {
@@ -25,7 +23,6 @@ public record AnalysisRequest(
         schemaVersion = CaseManifest.requireVersion(
                 schemaVersion, SchemaVersions.ANALYSIS_REQUEST, "AnalysisRequest");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         question = ContractChecks.requireBoundedText(question, "question", 65_536, false);
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");

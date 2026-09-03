@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/evidence/sufficiency-evaluation-v2.schema.json",
+  "title": "SufficiencyEvaluation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evidenceId",
+    "caseId",
+    "analysisId",
+    "status",
+    "requiredDimensions",
+    "coveredDimensions",
+    "missingDimensions",
+    "contradictions",
+    "evaluatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "evidenceId": {
+      "type": "string"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "analysisId": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "SUFFICIENT",
+        "INSUFFICIENT",
+        "CONTRADICTED"
+      ]
+    },
+    "requiredDimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "coveredDimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "missingDimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "contradictions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "maxLength": 2048
+      }
+    },
+    "evaluatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

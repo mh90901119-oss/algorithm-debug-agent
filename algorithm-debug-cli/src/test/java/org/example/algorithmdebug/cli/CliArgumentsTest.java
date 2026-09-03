@@ -5,7 +5,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.PlanId;
-import org.example.algorithmdebug.casecore.ContextMode;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -61,7 +60,7 @@ class CliArgumentsTest {
                 new CliCommand.CaseOpen(
                         Path.of("workspace"), new ProjectId("demo"),
                         new TargetTest("a.b.Test", "case1"), Path.of("question.txt"),
-                        Optional.empty(), Optional.empty(), ContextMode.REUSE_LATEST),
+                        Optional.empty(), Optional.empty()),
                 CliArguments.parse(new String[]{
                         "case", "open", "--workspace", "workspace",
                         "--project-id", "demo", "--test", "a.b.Test#case1",
@@ -70,13 +69,11 @@ class CliArgumentsTest {
                 new CliCommand.CaseOpen(
                         Path.of("workspace"), new ProjectId("demo"),
                         new TargetTest("a.b.Test", "case1"), Path.of("question.txt"),
-                        Optional.of(new CaseId("case-1")), Optional.of("wafer-demo"),
-                        ContextMode.CREATE_NEW),
+                        Optional.of(new CaseId("case-1")), Optional.of("wafer-demo")),
                 CliArguments.parse(new String[]{
                         "case", "open", "--workspace", "workspace", "--project-id", "demo",
                         "--test", "a.b.Test#case1", "--question-file", "question.txt",
-                        "--case-id", "case-1", "--adapter", "wafer-demo",
-                        "--context-mode", "new"}));
+                        "--case-id", "case-1", "--adapter", "wafer-demo"}));
         assertEquals(
                 new CliCommand.CaseInspect(
                         Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1")),
@@ -158,13 +155,21 @@ class CliArgumentsTest {
                         "artifact", "read", "--workspace", "workspace", "--project-id", "demo",
                         "--case-id", "case-1", "--artifact-id", "artifact-1"}));
         assertEquals(
-                new CliCommand.AnalysisComplete(
+                new CliCommand.EvidenceQuery(
                         Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
-                        new AnalysisId("analysis-1"), Path.of("result.json")),
+                        "invocations", new org.example.algorithmdebug.contracts.EvidenceQueryFilter(
+                                java.util.Optional.of("fixture.Target#run()V"),
+                                java.util.Optional.empty(), java.util.Optional.of("waferId"),
+                                java.util.Optional.of("W2"), java.util.Optional.of("VALUE"),
+                                java.util.Optional.of(2L), java.util.Optional.of(8L)),
+                        1, 10, 32_768),
                 CliArguments.parse(new String[]{
-                        "analysis", "complete", "--workspace", "workspace", "--project-id", "demo",
-                        "--case-id", "case-1", "--analysis-id", "analysis-1",
-                        "--result-file", "result.json"}));
+                        "evidence", "query", "--workspace", "workspace", "--project-id", "demo",
+                        "--case-id", "case-1", "--artifact-id", "invocations",
+                        "--method-ref", "fixture.Target#run()V", "--value-name", "waferId",
+                        "--scalar-value", "W2", "--value-status", "VALUE",
+                        "--sequence-from", "2", "--sequence-to", "8",
+                        "--offset", "1", "--limit", "10", "--max-bytes", "32768"}));
     }
 
     @Test
@@ -182,6 +187,9 @@ class CliArgumentsTest {
                 new String[]{"case", "open", "--workspace", "w", "--project-id", "p",
                         "--test", "a.b.Test#case1", "--question-file", "q",
                         "--context-mode", "automatic"},
+                new String[]{"case", "open", "--workspace", "w", "--project-id", "p",
+                        "--test", "a.b.Test#case1", "--question-file", "q",
+                        "--context-mode", "new"},
                 new String[]{"run", "execute", "--workspace", "w", "--project-id", "p",
                         "--case-id", "c"});
 

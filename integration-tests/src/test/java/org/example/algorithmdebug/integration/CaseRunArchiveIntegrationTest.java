@@ -13,7 +13,6 @@ import org.example.algorithmdebug.adapter.TestLaunchSpec;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
-import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
@@ -84,7 +83,7 @@ class CaseRunArchiveIntegrationTest {
         CaseOpenResult opened = services.cases().open(
                 workspace, registration.registration().projectId(), target,
                 "验证隔离 Maven 场景 " + scenario.name(), Optional.empty(),
-                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+                Optional.of("fixture-adapter"));
         services.algorithmInputs().capture(
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
@@ -117,7 +116,7 @@ class CaseRunArchiveIntegrationTest {
                 Optional.of(module.resolve("output").toAbsolutePath().normalize().toString()));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查调度是否稳定", Optional.empty(),
-                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+                Optional.of("fixture-adapter"));
         services.algorithmInputs().capture(
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
@@ -128,10 +127,10 @@ class CaseRunArchiveIntegrationTest {
                 java.nio.file.StandardOpenOption.APPEND);
         CaseOpenResult reopened = services.cases().open(
                 workspace, projectId, target, "代码变化后继续检查", Optional.of(opened.caseId()),
-                Optional.of("fixture-adapter"), ContextMode.CREATE_NEW);
+                Optional.of("fixture-adapter"));
         services.algorithmInputs().capture(
                 workspace, projectId, opened.caseId(), reopened.analysisId());
-        RunOutcomeSummary crossContext = services.runs().execute(
+        RunOutcomeSummary crossAnalysis = services.runs().execute(
                 workspace, projectId, opened.caseId(), reopened.analysisId());
         ControlPlaneServices changedServices = services(
                 new FixtureAdapter(Scenario.PASS, "changed"), Optional.of(maven));
@@ -139,12 +138,12 @@ class CaseRunArchiveIntegrationTest {
                 workspace, projectId, opened.caseId(), reopened.analysisId());
 
         assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
-        assertEquals(ComparisonOutcome.NOT_COMPARED, crossContext.comparisonOutcome());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, crossAnalysis.comparisonOutcome());
         assertEquals(ComparisonOutcome.NOT_COMPARED, changed.comparisonOutcome());
         ArtifactReference firstGantt = first.artifacts().stream()
                 .filter(artifact -> "GANTT".equals(artifact.artifactType()))
                 .findFirst().orElseThrow();
-        ArtifactReference secondGantt = crossContext.artifacts().stream()
+        ArtifactReference secondGantt = crossAnalysis.artifacts().stream()
                 .filter(artifact -> "GANTT".equals(artifact.artifactType()))
                 .findFirst().orElseThrow();
         ArtifactReference changedGantt = changed.artifacts().stream()
@@ -155,17 +154,19 @@ class CaseRunArchiveIntegrationTest {
         Path caseRoot = workspace.resolve("projects").resolve(projectId.value())
                 .resolve("cases").resolve(opened.caseId().value());
         Path firstRunRoot = caseRoot.resolve("runs").resolve(first.runId().value());
-        Path secondRunRoot = caseRoot.resolve("runs").resolve(crossContext.runId().value());
+        Path secondRunRoot = caseRoot.resolve("runs").resolve(crossAnalysis.runId().value());
         assertTrue(Files.notExists(firstRunRoot.resolve("run-result-fingerprint.json")));
         assertTrue(Files.notExists(secondRunRoot.resolve("run-result-fingerprint.json")));
-        assertTrue(Files.notExists(caseRoot.resolve("contexts")
-                .resolve(opened.contextId().value()).resolve("reproduction.json")));
-        assertTrue(Files.notExists(caseRoot.resolve("contexts")
-                .resolve(reopened.contextId().value()).resolve("reproduction.json")));
+        assertNotEquals(opened.analysisId(), reopened.analysisId());
+        assertTrue(Files.isRegularFile(caseRoot.resolve("analyses")
+                .resolve(opened.analysisId().value()).resolve("analysis-request.json")));
+        assertTrue(Files.isRegularFile(caseRoot.resolve("analyses")
+                .resolve(reopened.analysisId().value()).resolve("analysis-request.json")));
+        assertTrue(Files.notExists(caseRoot.resolve("contexts")));
     }
 
     @org.junit.jupiter.api.Test
-    void matchesRepeatedBusinessExceptionWithoutGantt() throws Exception {
+    void archivesRepeatedBusinessExceptionFingerprintsWithoutComparingOrdinaryRuns() throws Exception {
         Path scenarioRoot = Files.createDirectories(temporaryDirectory.resolve("failure-comparison"));
         Path module = Files.createDirectories(scenarioRoot.resolve("module"));
         Path workspace = scenarioRoot.resolve("workspace");
@@ -181,7 +182,7 @@ class CaseRunArchiveIntegrationTest {
                 Optional.of(module.resolve("output").toAbsolutePath().normalize().toString()));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "检查异常是否稳定", Optional.empty(),
-                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+                Optional.of("fixture-adapter"));
         services.algorithmInputs().capture(
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
@@ -191,11 +192,13 @@ class CaseRunArchiveIntegrationTest {
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
         assertEquals(ComparisonOutcome.NOT_COMPARED, first.comparisonOutcome());
-        assertEquals(ComparisonOutcome.MATCHED, second.comparisonOutcome());
+        assertEquals(ComparisonOutcome.NOT_COMPARED, second.comparisonOutcome());
         assertEquals(GanttOutcome.ABSENT, second.ganttOutcome());
         assertEquals(FailureCategory.TEST_ERROR,
                 second.targetFailure().orElseThrow().category());
         assertTrue(second.artifacts().stream().anyMatch(
+                artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
+        assertTrue(first.artifacts().stream().anyMatch(
                 artifact -> "RUN_RESULT_FINGERPRINT".equals(artifact.artifactType())));
     }
 
@@ -215,7 +218,7 @@ class CaseRunArchiveIntegrationTest {
                 Optional.of(module.resolve("output").toAbsolutePath().normalize().toString()));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "Maven 不可用", Optional.empty(),
-                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+                Optional.of("fixture-adapter"));
         services.algorithmInputs().capture(
                 workspace, projectId, opened.caseId(), opened.analysisId());
 
@@ -227,8 +230,7 @@ class CaseRunArchiveIntegrationTest {
                 .resolve("cases").resolve(opened.caseId().value());
         assertTrue(Files.notExists(caseRoot.resolve("runs").resolve(outcome.runId().value())
                 .resolve("run-result-fingerprint.json")));
-        assertTrue(Files.notExists(caseRoot.resolve("contexts")
-                .resolve(opened.contextId().value()).resolve("reproduction.json")));
+        assertTrue(Files.notExists(caseRoot.resolve("contexts")));
     }
 
     @org.junit.jupiter.api.Test
@@ -247,7 +249,7 @@ class CaseRunArchiveIntegrationTest {
                 Optional.of(module.resolve("output").toAbsolutePath().normalize().toString()));
         CaseOpenResult opened = services.cases().open(
                 workspace, projectId, target, "check missing target", Optional.empty(),
-                Optional.of("fixture-adapter"), ContextMode.REUSE_LATEST);
+                Optional.of("fixture-adapter"));
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
                 services.algorithmInputs().capture(

@@ -37,7 +37,8 @@ class ConditionalTracePlanExecutorTest {
         DebugPlan.Tracepoint point = plan.tracepoints.getFirst();
         point.maxObservedHits = 5;
         point.maxCapturedHits = 1;
-        point.captureOnMatchedHits = List.of(1);
+        point.captureFirstMatchedHits = 1;
+        point.captureEveryMatchedHits = 0;
         point.capture.locals = false;
         point.capture.stack = false;
         point.condition = new DebugPlan.Condition();

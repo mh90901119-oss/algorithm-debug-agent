@@ -199,13 +199,15 @@ projects/<projectId>/cases/<caseId>/
 
 ## 13. 运行真实 Eval
 
-在 Agent 仓库执行：
+切换到目标算法 Maven 模块，使它成为当前工作目录，再调用 Agent 仓库中的脚本：
 
 ```powershell
-.\scripts\run-agent-evals.ps1 -Suite Smoke
+Set-Location <TargetAlgorithmMavenModule>
+& "<AgentRepository>\scripts\run-agent-evals.ps1" -Suite Smoke
 ```
 
-Eval 的 `-Project` 若存在只表示 OpenCode 会话启动目录，不表示固定 Demo，也不改变产品运行逻辑。默认应在配置或 Suite 中使用可执行的验证项目。报告写入 `evalDirectory`。
+Eval 使用当前工作目录启动 OpenCode，不接收目标项目路径参数，也不会把验证项目写进 Suite。
+报告写入 `evalDirectory`。
 
 ## 14. 修改 Agent 后重新安装
 

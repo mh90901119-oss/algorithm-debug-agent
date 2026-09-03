@@ -139,7 +139,8 @@ class RealJdwpCollectorSmokeTest {
                     "methodDescriptor": "(I)I",
                     "maxObservedHits": 1,
                     "maxCapturedHits": 1,
-                    "captureOnMatchedHits": [1],
+                    "captureFirstMatchedHits": 1,
+                    "captureEveryMatchedHits": 0,
                     "condition": {
                       "localName": "value",
                       "fieldPath": [],

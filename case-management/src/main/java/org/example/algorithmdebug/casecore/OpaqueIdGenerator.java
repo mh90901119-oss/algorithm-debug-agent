@@ -2,7 +2,6 @@ package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.EvidenceId;
@@ -10,7 +9,7 @@ import org.example.algorithmdebug.contracts.EvidenceId;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/** 生成不可解析的不透明 Case/Context/Analysis/Run ID；测试可注入固定 token。 */
+/** 生成不可解析的不透明 Case/Analysis/Run ID；测试可注入固定 token。 */
 public final class OpaqueIdGenerator {
 
     private final Supplier<String> tokenSupplier;
@@ -31,11 +30,6 @@ public final class OpaqueIdGenerator {
     /** @return 新 Case ID */
     public CaseId newCaseId() {
         return new CaseId(value("case"));
-    }
-
-    /** @return 新 Context ID */
-    public ContextId newContextId() {
-        return new ContextId(value("context"));
     }
 
     /** @return 新 Analysis ID */

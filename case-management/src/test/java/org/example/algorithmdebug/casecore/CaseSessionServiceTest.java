@@ -41,70 +41,52 @@ class CaseSessionServiceTest {
     }
 
     @Test
-    void shouldCreateInitialContextForNewCase() {
-        CaseSessionService service = service("1", "1", "1");
+    void shouldCreateInitialAnalysisForNewCaseWithoutContextDirectory() {
+        CaseSessionService service = service("1", "1");
 
-        CaseOpenResult result = service.open(request(Optional.empty(), ContextMode.REUSE_LATEST));
+        CaseOpenResult result = service.open(request(Optional.empty()));
 
         assertTrue(result.caseCreated());
-        assertTrue(result.contextCreated());
         assertEquals("case-1", result.caseId().value());
-        assertEquals("context-1", result.contextId().value());
         assertEquals("analysis-1", result.analysisId().value());
         assertEquals("wafer-demo", repository.requireCase(result.caseId()).adapterId());
-        assertEquals(1, result.digest().contextCount());
+        assertEquals(1, result.digest().analysisCount());
+        assertTrue(Files.notExists(temporaryDirectory.resolve("cases/case-1/contexts")));
     }
 
     @Test
-    void shouldReuseLatestContextByDefaultAndOnlyAppendAnalysis() {
-        CaseSessionService service = service("1", "1", "1", "2");
-        CaseOpenResult first = service.open(request(Optional.empty(), ContextMode.REUSE_LATEST));
+    void shouldReuseCaseAndAppendAnalysis() {
+        CaseSessionService service = service("1", "1", "2");
+        CaseOpenResult first = service.open(request(Optional.empty()));
 
         CaseOpenResult second = service.open(new CaseSessionRequest(
-                Optional.of(first.caseId()), PROJECT, TARGET, "wafer-demo", "继续追问",
-                ContextMode.REUSE_LATEST));
+                Optional.of(first.caseId()), PROJECT, TARGET, "wafer-demo", "继续调查"));
 
-        assertEquals(first.contextId(), second.contextId());
-        assertTrue(!second.contextCreated());
+        assertEquals(first.caseId(), second.caseId());
         assertNotEquals(first.analysisId(), second.analysisId());
-        assertEquals(1, second.digest().contextCount());
         assertEquals(2, second.digest().analysisCount());
-    }
-
-    @Test
-    void shouldAppendContextOnlyWhenExplicitlyRequested() {
-        CaseSessionService service = service("1", "1", "1", "2", "2");
-        CaseOpenResult first = service.open(request(Optional.empty(), ContextMode.REUSE_LATEST));
-
-        CaseOpenResult second = service.open(new CaseSessionRequest(
-                Optional.of(first.caseId()), PROJECT, TARGET, "wafer-demo", "代码已修改",
-                ContextMode.CREATE_NEW));
-
-        assertNotEquals(first.contextId(), second.contextId());
-        assertTrue(second.contextCreated());
-        assertEquals(2, second.digest().contextCount());
+        assertTrue(Files.notExists(temporaryDirectory.resolve("cases/case-1/contexts")));
     }
 
     @Test
     void shouldRejectDifferentTargetOrAdapterForExistingCase() {
-        CaseSessionService service = service("1", "1", "1");
-        CaseOpenResult first = service.open(request(Optional.empty(), ContextMode.REUSE_LATEST));
+        CaseSessionService service = service("1", "1");
+        CaseOpenResult first = service.open(request(Optional.empty()));
 
         WorkspaceException targetFailure = assertThrows(WorkspaceException.class, () -> service.open(
                 new CaseSessionRequest(Optional.of(first.caseId()), PROJECT,
-                        new TargetTest("a.b.ScheduleTest", "case2"), "wafer-demo", "问题",
-                        ContextMode.REUSE_LATEST)));
+                        new TargetTest("a.b.ScheduleTest", "case2"), "wafer-demo", "问题")));
         WorkspaceException adapterFailure = assertThrows(WorkspaceException.class, () -> service.open(
                 new CaseSessionRequest(Optional.of(first.caseId()), PROJECT, TARGET,
-                        "another-adapter", "问题", ContextMode.REUSE_LATEST)));
+                        "another-adapter", "问题")));
 
         assertEquals("CASE_TARGET_TEST_MISMATCH", targetFailure.code());
         assertEquals("CASE_ADAPTER_MISMATCH", adapterFailure.code());
     }
 
-    private CaseSessionRequest request(Optional<CaseId> caseId, ContextMode mode) {
+    private CaseSessionRequest request(Optional<CaseId> caseId) {
         return new CaseSessionRequest(
-                caseId, PROJECT, TARGET, "wafer-demo", "问题一", mode);
+                caseId, PROJECT, TARGET, "wafer-demo", "问题一");
     }
 
     private CaseSessionService service(String... ids) {

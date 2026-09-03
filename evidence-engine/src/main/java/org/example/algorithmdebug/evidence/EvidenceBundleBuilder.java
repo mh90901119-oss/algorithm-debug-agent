@@ -38,14 +38,13 @@ public final class EvidenceBundleBuilder {
                 request.collectionIds(), indexed, "current");
         List<ValidatedCollectionSource> comparison = select(
                 request.comparisonCollectionIds(), indexed, "comparison");
-        validateCollectionContexts(request, current, comparison);
+        validateCollectionAnalyses(request, current, comparison);
 
         ArrayList<EvidenceFact> facts = new ArrayList<>();
         ArrayList<EvidenceFact> comparisonFacts = new ArrayList<>();
         LinkedHashSet<EvidenceDimension> covered = new LinkedHashSet<>();
         LinkedHashMap<String, ArtifactReference> artifacts = new LinkedHashMap<>();
         addArtifact(artifacts, sources.runOutcomeArtifact());
-        addArtifact(artifacts, sources.contextArtifact());
         sources.runOutcome().artifacts().forEach(value -> addArtifact(artifacts, value));
         sources.runFingerprintArtifact().ifPresent(value -> addArtifact(artifacts, value));
 
@@ -85,7 +84,7 @@ public final class EvidenceBundleBuilder {
                 .toList();
         EvidenceBundle bundle = new EvidenceBundle(
                 SchemaVersions.EVIDENCE_BUNDLE, request.evidenceId(), request.caseId(),
-                request.contextId(), request.analysisId(), facts, comparisonFacts,
+                request.analysisId(), facts, comparisonFacts,
                 Set.copyOf(covered), orderedArtifacts, diagnosticsTruncated, request.createdAt());
         if (estimatedBytes(bundle) <= request.maxEvidenceBundleBytes()) {
             return bundle;
@@ -95,7 +94,7 @@ public final class EvidenceBundleBuilder {
                 .toList();
         EvidenceBundle truncated = new EvidenceBundle(
                 SchemaVersions.EVIDENCE_BUNDLE, request.evidenceId(), request.caseId(),
-                request.contextId(), request.analysisId(), facts, List.of(),
+                request.analysisId(), facts, List.of(),
                 Set.copyOf(covered), requiredArtifacts, true, request.createdAt());
         if (estimatedBytes(truncated) > request.maxEvidenceBundleBytes()) {
             throw new IllegalArgumentException("The Evidence Bundle exceeds maxEvidenceBundleBytes");
@@ -106,17 +105,14 @@ public final class EvidenceBundleBuilder {
     private static void validateBaseIdentity(
             EvidenceBuildRequest request, EvidenceBuildSources sources) {
         var outcome = sources.runOutcome();
-        var context = sources.contextRecord();
         if (!request.caseId().equals(outcome.caseId())
-                || !request.contextId().equals(outcome.contextId())
-                || !request.runId().equals(outcome.runId())
-                || !request.caseId().equals(context.caseId())
-                || !request.contextId().equals(context.contextId())) {
-            throw new IllegalArgumentException("RunOutcome or Context identity does not match the request");
+                || !request.analysisId().equals(outcome.analysisId())
+                || !request.runId().equals(outcome.runId())) {
+            throw new IllegalArgumentException("RunOutcome identity does not match the request Analysis");
         }
         sources.runFingerprint().ifPresent(fingerprint -> {
             if (!request.caseId().equals(fingerprint.caseId())
-                    || !request.contextId().equals(fingerprint.contextId())
+                    || !request.analysisId().equals(fingerprint.analysisId())
                     || !outcome.runId().equals(fingerprint.runId())) {
                 throw new IllegalArgumentException("Run fingerprint identity does not match the request");
             }
@@ -146,15 +142,15 @@ public final class EvidenceBundleBuilder {
         }).toList();
     }
 
-    private static void validateCollectionContexts(
+    private static void validateCollectionAnalyses(
             EvidenceBuildRequest request,
             List<ValidatedCollectionSource> current,
             List<ValidatedCollectionSource> comparison) {
         for (ValidatedCollectionSource source : current) {
             CollectionValidation value = source.validation();
             if (!request.caseId().equals(value.caseId())
-                    || !request.contextId().equals(value.contextId())) {
-                throw new IllegalArgumentException("current Collection must belong to the request Case/Context");
+                    || !request.analysisId().equals(value.analysisId())) {
+                throw new IllegalArgumentException("Current Collection must belong to the request Case/Analysis");
             }
         }
         for (ValidatedCollectionSource source : comparison) {

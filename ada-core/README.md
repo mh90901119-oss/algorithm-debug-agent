@@ -1,30 +1,25 @@
 # ADA Core
 
-Core 是应用用例编排层，不实现具体算法业务，也不直接调用 LLM。
+Core 是应用用例编排层，不实现目标算法业务语义，也不直接调用 LLM。
 
-当前已实现：
+## 当前职责
 
-- `AdapterCatalog`：对组合根注入的 Adapter 做确定性选择；
-- `CaseApplicationService`：打开/续接 Case 和只读检查 Digest，显式选择复用或新建 Context，打开时不运行 UT；
-- `RunApplicationService`：验证 Case/Context/Analysis，先写 `run-request.json`，显式运行一次目标 UT，
-  再追加 `run-result-fingerprint.json`、Context `reproduction.json`、真实比较结论、
-  `run-outcome.json` 和 Artifact 引用；
-- `RunArtifactArchiver`：在 Run 根目录内有界复制或引用原始产物并计算 SHA-256；
-- `StaticAnalysisApplicationService`：生成有界方法目录以及精确 CodePath/JDWP 采集计划；
-- `CollectionApplicationService`、`JdwpCollectionApplicationService`：执行动态采集、归档单一 Raw 流/日志/Manifest，并执行无采集 Baseline 一致性门禁；
-- `CollectionPostProcessingService`：采集后自动生成有界 MethodPath/JDWP 摘要、技术校验、Evidence Bundle
-  和充分性评估；格式错误单独保存 `post-processing-failure.json`，不覆盖 Collector Manifest；
-- `ControlPlaneServices`：装配 Workspace、Project、Doctor、Case、Run、静态分析与采集用例。
+- `AdapterCatalog`：确定性选择目标项目 Adapter。
+- `CaseApplicationService`：创建或复用 Case、追加 Analysis、读取 Digest；打开 Case 时不运行 UT。
+- `AlgorithmInputApplicationService`：识别目标 UT 第一层唯一输入路径，首次按原名复制到 Case，后续 Analysis 校验并复用。
+- `RunApplicationService`：先归档 `run-request.json`，再执行一次目标 UT，最后追加 `run-outcome.json`、失败指纹和 Artifact 引用；不自动重试。
+- `RunArtifactArchiver`：在 Run 目录内有界复制 stdout、stderr、Surefire XML 和本次新增 Gantt，并计算 Artifact SHA-256。
+- `StaticAnalysisApplicationService`：为当前 Analysis 生成有界 Method Catalog，并编译精确 CodePath/JDWP Plan。
+- `CollectionApplicationService`：执行 CodePath 动态采集并保存请求、Manifest、Raw Trace 和日志。
+- `JdwpCollectionApplicationService`：启动目标测试 JVM 与 loopback Collector，保存有界快照及执行事实。
+- `CollectionPostProcessingService`：确定性生成 Normalized Summary、Validation、Evidence Bundle 和 Sufficiency Evaluation；后处理失败单独保存，不覆盖原始采集事实。
+- `ControlPlaneServices`：装配 Workspace、Project、Doctor、Case、Run、静态分析和动态采集用例。
 
-Core 依赖稳定契约、Adapter SPI、Case Management 和 Debug Harness，不依赖 Wafer Demo Adapter 实现。
-缺少 Maven 或进程启动失败时仍会归档 `NOT_STARTED` RunOutcome；目标 UT 断言/异常不是 Agent 崩溃。
-每次 `run execute` 只创建一次 Run，不自动重试。指纹或参考后处理失败时比较为 `INCOMPARABLE`，
-但已取得的目标进程、测试、异常和 Gantt 事实不会被覆盖。
+## 执行边界
 
-Core 不计算模块源码指纹。CodePath 按已归档 Plan 的精确方法选择器采集；JDWP 继续校验每个 tracepoint 的
-`SourceAnchor`。动态证据只有在 Gantt 内容或目标失败指纹与同 Context 无采集参考一致时才可用于确认结论。
-后处理使用采集 Plan 的 Raw 字节/事件预算，不扩大采集范围；零命中、截断和 Baseline 变化仍归档为
-`INSUFFICIENT` 或 `CONTRADICTED`，不会伪装成有效证据。
+缺少 Maven、JDK 或进程启动失败属于 Agent/环境故障；目标 UT 的异常、断言失败、超时和非零退出仍是目标执行证据。每次 `run execute` 只创建一个 Run。
+
+普通 Run 与动态 Collection 通过同一 `analysisId` 关联，不要求使用同一个 `runId`。失败动态采集通过结构化失败指纹与该 Analysis 的普通 Run 比较；成功运行不比较 Gantt 内容 SHA。CodePath 与 JDWP 相互独立，均按已归档 Plan 和预算执行。
 
 ```powershell
 mvn -pl ada-core -am test

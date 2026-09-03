@@ -15,9 +15,10 @@
 - [ADR-007：OpenCode 通过 CLI Adapter 集成](../decisions/ADR-007-opencode-adapter-via-cli.md)
 - [ADR-008：失败指纹取代 Gantt SHA 门禁](../decisions/ADR-008-json-content-fingerprint-baseline.md)
 - [ADR-009：先保留通用运行时证据](../decisions/ADR-009-generic-runtime-evidence-before-domain-mapping.md)
-- [ADR-010：显式 Context 与精确 CodePath](../decisions/ADR-010-explicit-context-and-exact-codepath.md)
+- [ADR-010：显式 Context 与精确 CodePath（Context 部分已被 ADR-015 取代）](../decisions/ADR-010-explicit-context-and-exact-codepath.md)
 - [ADR-012：统一路径配置](../decisions/ADR-012-unified-agent-path-configuration.md)
 - [ADR-013：Case 内 DFX 日志](../decisions/ADR-013-case-local-dfx-interaction-log.md)
 - [ADR-014：Agent 自维护 JDWP Collector](../decisions/ADR-014-agent-owned-jdwp-collector.md)
+- [ADR-015：删除 Context，运行时基线收敛到 Analysis](../decisions/ADR-015-remove-context-and-scope-runtime-baseline-to-analysis.md)
 
 若历史 ADR 的背景描述与当前代码不同，以其后续 ADR、当前实现设计和代码为准；不得恢复已删除的阶段性设计文件。

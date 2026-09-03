@@ -80,12 +80,13 @@ class TracePlanExecutorTest {
     }
 
     @Test
-    void expandsAndWritesOnlySelectedHitOrdinals() throws Exception {
+    void expandsAndWritesOnlyHitsSelectedByTheSamplingPolicy() throws Exception {
         DebugPlan plan = DebugPlanTest.validPlan();
         DebugPlan.Tracepoint point = plan.tracepoints.getFirst();
         point.maxObservedHits = 2;
         point.maxCapturedHits = 1;
-        point.captureOnMatchedHits = List.of(2);
+        point.captureFirstMatchedHits = 0;
+        point.captureEveryMatchedHits = 2;
         point.capture.locals = false;
         point.capture.stack = false;
         plan.validate();

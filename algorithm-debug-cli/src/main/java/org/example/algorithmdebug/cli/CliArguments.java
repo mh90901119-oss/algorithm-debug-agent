@@ -5,7 +5,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.PlanId;
-import org.example.algorithmdebug.casecore.ContextMode;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -50,7 +49,7 @@ public final class CliArguments {
         if (matches(arguments, "case", "open")) {
             Map<String, String> options = options(arguments, 2, Set.of(
                     "--workspace", "--project-id", "--test", "--question-file",
-                    "--case-id", "--adapter", "--context-mode"));
+                    "--case-id", "--adapter"));
             requirePresent(options, "--workspace", "--project-id", "--test", "--question-file");
             return new CliCommand.CaseOpen(
                     path(options.get("--workspace"), "--workspace"),
@@ -58,8 +57,7 @@ public final class CliArguments {
                     targetTest(options.get("--test")),
                     path(options.get("--question-file"), "--question-file"),
                     Optional.ofNullable(options.get("--case-id")).map(CaseId::new),
-                    Optional.ofNullable(options.get("--adapter")),
-                    contextMode(options.get("--context-mode")));
+                    Optional.ofNullable(options.get("--adapter")));
         }
         if (matches(arguments, "case", "inspect")) {
             Map<String, String> options = options(
@@ -155,17 +153,28 @@ public final class CliArguments {
                     nonNegativeLong(options.getOrDefault("--offset-bytes", "0"), "--offset-bytes"),
                     boundedInt(options.getOrDefault("--max-bytes", "16384"), "--max-bytes", 1, 65_536));
         }
-        if (matches(arguments, "analysis", "complete")) {
+        if (matches(arguments, "evidence", "query")) {
             Map<String, String> options = options(arguments, 2, Set.of(
-                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--result-file"));
-            requireExactly(options, Set.of(
-                    "--workspace", "--project-id", "--case-id", "--analysis-id", "--result-file"));
-            return new CliCommand.AnalysisComplete(
+                    "--workspace", "--project-id", "--case-id", "--artifact-id",
+                    "--method-ref", "--tracepoint-id", "--value-name", "--scalar-value",
+                    "--value-status", "--sequence-from", "--sequence-to",
+                    "--offset", "--limit", "--max-bytes"));
+            requirePresent(options, "--workspace", "--project-id", "--case-id", "--artifact-id");
+            var filter = new org.example.algorithmdebug.contracts.EvidenceQueryFilter(
+                    Optional.ofNullable(options.get("--method-ref")),
+                    Optional.ofNullable(options.get("--tracepoint-id")),
+                    Optional.ofNullable(options.get("--value-name")),
+                    Optional.ofNullable(options.get("--scalar-value")),
+                    Optional.ofNullable(options.get("--value-status")),
+                    optionalPositiveLong(options, "--sequence-from"),
+                    optionalPositiveLong(options, "--sequence-to"));
+            return new CliCommand.EvidenceQuery(
                     path(options.get("--workspace"), "--workspace"),
                     new ProjectId(options.get("--project-id")),
-                    new CaseId(options.get("--case-id")),
-                    new AnalysisId(options.get("--analysis-id")),
-                    path(options.get("--result-file"), "--result-file"));
+                    new CaseId(options.get("--case-id")), options.get("--artifact-id"), filter,
+                    boundedInt(options.getOrDefault("--offset", "0"), "--offset", 0, Integer.MAX_VALUE),
+                    boundedInt(options.getOrDefault("--limit", "20"), "--limit", 1, 50),
+                    boundedInt(options.getOrDefault("--max-bytes", "16384"), "--max-bytes", 1, 65_536));
         }
         if (arguments.length >= 3 && "plan".equals(arguments[0])
                 && "jdwp".equals(arguments[1]) && "create".equals(arguments[2])) {
@@ -265,14 +274,13 @@ public final class CliArguments {
         }
     }
 
-    private static ContextMode contextMode(String value) {
-        if (value == null || "reuse".equals(value)) {
-            return ContextMode.REUSE_LATEST;
-        }
-        if ("new".equals(value)) {
-            return ContextMode.CREATE_NEW;
-        }
-        throw invalid("CONTEXT_MODE_INVALID: --context-mode supports only reuse or new");
+    private static Optional<Long> optionalPositiveLong(
+            Map<String, String> options, String option) {
+        String value = options.get(option);
+        if (value == null) return Optional.empty();
+        long parsed = nonNegativeLong(value, option);
+        if (parsed < 1) throw invalid(option + " must be a positive integer");
+        return Optional.of(parsed);
     }
 
     private static long nonNegativeLong(String value, String option) {

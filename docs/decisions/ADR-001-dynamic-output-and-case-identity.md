@@ -1,7 +1,9 @@
 # ADR-001：动态输出发现与两阶段 Case 身份
 
-- 状态：Accepted
+- 状态：Accepted（身份作用域条款由 ADR-015 修订）
 - 日期：2026-08-11
+
+> 当前状态：动态输出 provenance 仍有效；Context 身份与基线作用域已由 ADR-015 删除并改为 Analysis 作用域。
 
 ## 背景
 

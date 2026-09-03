@@ -1,5 +1,6 @@
 package org.example.algorithmdebug.codepath.launcher;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.takahirom.codepathtracer.CodePathTracer;
 import io.github.takahirom.codepathtracer.CodePathTracerAgent;
 import io.github.takahirom.codepathtracer.TraceEvent;
@@ -20,6 +21,7 @@ import org.junit.platform.launcher.listeners.TestExecutionSummary;
 
 /** 读取归档精确计划并受控运行一个 JUnit 方法的 CodePath Launcher。 */
 public final class ExternalJUnitTraceLauncher {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private ExternalJUnitTraceLauncher() {}
 
     /** 进程入口；目标失败和工具失败通过结构化 Summary 分开报告。 */
@@ -99,7 +101,8 @@ public final class ExternalJUnitTraceLauncher {
                 + "\",\"depth\":" + event.getDepth()
                 + ",\"className\":\"" + escape(event.getClassName())
                 + "\",\"methodName\":\"" + escape(generator.methodName(event))
-                + "\",\"descriptor\":\"" + escape(generator.descriptor(event)) + "\"}";
+                + "\",\"descriptor\":\"" + escape(generator.descriptor(event))
+                + "\",\"projections\":" + MAPPER.valueToTree(generator.projections(event)) + "}";
     }
 
     private static String escape(String value) {

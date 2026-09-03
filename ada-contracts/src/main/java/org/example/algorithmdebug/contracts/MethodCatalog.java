@@ -12,7 +12,6 @@ import java.util.Set;
 public record MethodCatalog(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         TargetTest targetTest,
         List<MethodCatalogEntry> entries,
@@ -33,7 +32,6 @@ public record MethodCatalog(
             throw new IllegalArgumentException("Unsupported MethodCatalog schemaVersion");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");
         entries = ContractChecks.immutableList(entries, "entries");

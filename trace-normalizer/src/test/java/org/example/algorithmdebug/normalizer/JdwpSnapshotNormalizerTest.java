@@ -14,7 +14,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
@@ -35,7 +34,6 @@ import org.junit.jupiter.api.io.TempDir;
 class JdwpSnapshotNormalizerTest {
 
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final RunId RUN_ID = new RunId("run-1");
     private static final PlanId PLAN_ID = new PlanId("plan-1");
@@ -100,7 +98,7 @@ class JdwpSnapshotNormalizerTest {
         assertEquals(NormalizationStatus.COMPLETE, result.status());
         JdwpSnapshotSummary summary = result.summary().orElseThrow();
         JdwpSnapshotSummary.TracepointHit hit = summary.hits().getFirst();
-        assertEquals("2.0", summary.schemaVersion());
+        assertEquals(SchemaVersions.JDWP_SNAPSHOT_SUMMARY, summary.schemaVersion());
         assertEquals(Optional.of("()V"), hit.methodDescriptor());
         assertEquals(Optional.of(4L), hit.codeIndex());
         assertEquals(Optional.of("()V"), hit.frames().getFirst().methodDescriptor());
@@ -285,18 +283,24 @@ class JdwpSnapshotNormalizerTest {
     }
 
     @Test
-    void rejectsSnapshotForHitOrdinalNotSelectedByPlan() throws Exception {
+    void rejectsSnapshotOutsideMatchedHitSamplingPolicy() throws Exception {
         Path raw = write(hit(1, "point-1", 2, "\"unexpected-hit\""));
         SourceAnchor anchor = new SourceAnchor(
                 "fixture.Algorithm", "solve", "()V",
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         JdwpTracepointSpec point = new JdwpTracepointSpec(
-                "point-1", "fixture.Algorithm#solve()V", anchor, 12, 5,
-                List.of(1, 3, 5), new JdwpCaptureSpec(true, true, 8, 2, 20, 256));
+                "point-1", "fixture.Algorithm#solve()V", anchor, 12,
+                5, 3, 1, 3, null,
+                new JdwpCaptureSpec(
+                        true, true, 8, 2, 20, 256,
+                        List.of("algorithmState"), List.of()));
         JdwpCollectionPlan sparsePlan = new JdwpCollectionPlan(
-                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, List.of(point), JdwpCollectionBudget.defaults(),
-                "定位方法内部状态", NOW);
+                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET, List.of(point), JdwpCollectionBudget.defaults(),
+                "Inspect method state",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which state was observed?", "The target method receives the expected state",
+                        List.of(), List.of("A matching runtime snapshot")),
+                NOW);
 
         NormalizationResult<JdwpSnapshotSummary> result = normalize(
                 raw, sparsePlan, NormalizationBudget.defaults(), false);
@@ -312,8 +316,7 @@ class JdwpSnapshotNormalizerTest {
             boolean collectorTruncated) throws Exception {
         return new JdwpSnapshotNormalizer().normalize(new JdwpNormalizationInput(
                 new JdwpCollectionRecord(
-                        SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, CONTEXT_ID,
-                        ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, TARGET, "JDWP", NOW),
+                        SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, TARGET, "JDWP", NOW),
                 plan,
                 new ArtifactReference(
                         "raw-jdwp", "JDWP_RAW_TRACE",
@@ -329,7 +332,9 @@ class JdwpSnapshotNormalizerTest {
     }
 
     private static JdwpCollectionPlan plan(String... ids) {
-        return plan(new JdwpCaptureSpec(true, true, 8, 2, 20, 256), ids);
+        return plan(new JdwpCaptureSpec(
+                true, true, 8, 2, 20, 256,
+                List.of("algorithmState"), List.of()), ids);
     }
 
     private static JdwpCollectionPlan stackOnlyPlan(String... ids) {
@@ -342,11 +347,20 @@ class JdwpSnapshotNormalizerTest {
                 new SourceAnchor(
                         "fixture.Algorithm", "solve", "()V",
                         "src/main/java/fixture/Algorithm.java", 10, 20),
-                12, capture.locals() ? 5 : 20, capture)).toList();
+                12,
+                capture.locals() ? 5 : 20,
+                capture.locals() ? 5 : 20,
+                capture.locals() ? 5 : 20,
+                0,
+                null,
+                capture)).toList();
         return new JdwpCollectionPlan(
-                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, TARGET, points, JdwpCollectionBudget.defaults(),
-                "定位方法内部状态", NOW);
+                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET, points, JdwpCollectionBudget.defaults(),
+                "Inspect method state",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which state was observed?", "The target method receives the expected state",
+                        List.of(), List.of("A matching runtime snapshot")),
+                NOW);
     }
 
     private static String hit(long sequence, String tracepointId, int hit, String localValue) {

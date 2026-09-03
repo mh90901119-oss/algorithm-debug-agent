@@ -45,8 +45,11 @@ class CliCommandExecutorTest {
     @Test
     void codePathRequestFileRejectsUtf16EvenWhenJsonParserCouldDetectIt() throws Exception {
         String json = """
-                {"planId":"plan-1","selectedMethodKeys":["fixture.Test#case1()V"],
+                {"planId":"plan-1","methods":[{"methodKey":"fixture.Test#case1()V","projections":[]}],
                  "scopeMethodKey":"fixture.Test#case1()V",
+                 "intent":{"questionToAnswer":"Which path executed?",
+                 "hypothesis":"The target method executed",
+                 "basedOnEvidenceIds":[],"expectedObservations":["An observed method path"]},
                  "rationale":"定位","budget":{"maxEvents":100,"maxBytes":1024,
                  "timeoutMillis":1000},
                  "requestedAt":"2026-08-18T00:00:00Z"}
@@ -66,11 +69,11 @@ class CliCommandExecutorTest {
         Path valid = Files.writeString(temporaryDirectory.resolve("jdwp.json"), """
                 {"planId":"jdwp-plan-1","tracepoints":[{
                  "tracepointId":"entry","methodKey":"fixture.Test#case1()V",
-                 "line":12,"maxHits":3,"capture":{"locals":false,"stack":true,
+                 "line":12,"maxObservedHits":3,"maxCapturedHits":3,"captureFirstMatchedHits":3,"captureEveryMatchedHits":0,"capture":{"locals":false,"stack":true,
                  "maxFrames":8,"maxDepth":1,"maxItems":20,"maxStringLength":256}}],
                  "budget":{"maxEvents":100,"maxBytes":16777216,
                  "timeoutMillis":300000,"idleTimeoutMillis":120000},
-                 "rationale":"查看调用栈","requestedAt":"2026-08-18T00:00:00Z"}
+                 "rationale":"查看调用栈","intent":{"questionToAnswer":"Which state was observed?","hypothesis":"The target method receives the expected state","basedOnEvidenceIds":[],"expectedObservations":["A matching snapshot"]},"requestedAt":"2026-08-18T00:00:00Z"}
                 """);
         Path unsupported = Files.writeString(temporaryDirectory.resolve("unsupported.json"), """
                 {"planId":"jdwp-plan-1","tracepoints":[],"projection":["x"],
@@ -84,26 +87,5 @@ class CliCommandExecutorTest {
                 () -> CliCommandExecutor.readJdwpPlanRequest(unsupported));
     }
 
-    @Test
-    void analysisResultFileContainsOnlySupportedFinalResultFields() throws Exception {
-        Path valid = Files.writeString(temporaryDirectory.resolve("analysis-result.json"), """
-                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
-                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
-                 "referencedRunIds":[],"referencedCollectionIds":[],
-                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
-                 "missingEvidence":[],"completedAt":"2026-08-19T00:00:00Z"}
-                """);
-        Path reasoning = Files.writeString(temporaryDirectory.resolve("reasoning.json"), """
-                {"schemaVersion":"1.0","caseId":"case-1","contextId":"context-1",
-                 "analysisId":"analysis-1","finalAnswer":"回答","conclusions":[],
-                 "referencedRunIds":[],"referencedCollectionIds":[],
-                 "referencedEvidenceIds":[],"referencedArtifactIds":[],
-                 "missingEvidence":[],"reasoning":"hidden",
-                 "completedAt":"2026-08-19T00:00:00Z"}
-                """);
 
-        assertEquals("回答", CliCommandExecutor.readAnalysisResult(valid).finalAnswer());
-        assertThrows(CliInputException.class,
-                () -> CliCommandExecutor.readAnalysisResult(reasoning));
-    }
 }

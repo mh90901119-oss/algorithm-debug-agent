@@ -48,30 +48,51 @@ class JdwpCollectionContractsTest {
     void rejectsLineOutsideSourceMethodAndMismatchedMethodIdentity() {
         SourceAnchor anchor = anchor();
         assertThrows(IllegalArgumentException.class, () -> new JdwpTracepointSpec(
-                "point-1", methodKey(), anchor, 21, 1, JdwpCaptureSpec.stackOnly()));
+                "point-1", methodKey(), anchor, 21,
+                1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()));
         assertThrows(IllegalArgumentException.class, () -> new JdwpTracepointSpec(
-                "point-1", "fixture.Algorithm#other()V", anchor, 11, 1,
-                JdwpCaptureSpec.stackOnly()));
+                "point-1", "fixture.Algorithm#other()V", anchor, 11,
+                1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()));
     }
 
     @Test
-    void enforcesConservativeAllVisibleLocalsLimits() {
+    void enforcesExplicitProjectedLocalsLimits() {
         assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 3, 20, 256));
+                true, true, 8, 3, 20, 256, List.of("state"), List.of()));
         assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 1, 101, 256));
+                true, true, 8, 1, 101, 256, List.of("state"), List.of()));
         assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                false, false, 8, 1, 20, 256));
+                false, false, 8, 1, 20, 256, List.of(), List.of()));
 
-        JdwpCaptureSpec locals = new JdwpCaptureSpec(true, true, 8, 1, 20, 256);
-        assertThrows(IllegalArgumentException.class, () -> plan(List.of(
-                tracepoint("point-1", 11, 6, locals)), JdwpCollectionBudget.defaults()));
+        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
+                true, true, 8, 1, 20, 256,
+                List.of("state"), List.of("other.current")));
+    }
+
+    @Test
+    void allowsTwentyExplicitProjectedLocalSnapshotsWithoutTheHistoricalFiveHitCap() {
+        JdwpCaptureSpec projected = new JdwpCaptureSpec(
+                true, true, 8, 1, 20, 256,
+                List.of("state"), List.of("state.current"));
+        JdwpTracepointSpec point = new JdwpTracepointSpec(
+                "point-1", methodKey(), anchor(), 11,
+                1_000, 20, 5, 5, null, projected);
+
+        JdwpCollectionPlan plan = plan(List.of(point), JdwpCollectionBudget.defaults());
+
+        assertEquals(20, plan.tracepoints().getFirst().maxCapturedHits());
+    }
+
+    @Test
+    void rejectsImplicitAllVisibleLocalsBecauseItCannotExpressCollectionIntent() {
+        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
+                true, true, 8, 1, 20, 256, List.of(), List.of()));
     }
 
     @Test
     void enforcesJdwpSpecificProcessAndRawBudgets() {
         assertThrows(IllegalArgumentException.class, () ->
-                new JdwpCollectionBudget(1_001, 1, 1_000, 1_000));
+                new JdwpCollectionBudget(5_001, 1, 1_000, 1_000));
         assertThrows(IllegalArgumentException.class, () ->
                 new JdwpCollectionBudget(1, 50L * 1024 * 1024 + 1, 1_000, 1_000));
         assertThrows(IllegalArgumentException.class, () ->
@@ -86,8 +107,7 @@ class JdwpCollectionContractsTest {
         hits.put("point-1", 2);
         JdwpCollectionManifest manifest = new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST,
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
                 "jdwp-batch-collector", "0.1.0-SNAPSHOT",
                 JdwpCollectionCompletion.SUCCESS, "vm_death", JdwpCollectionStage.BASELINE_CHECKED,
@@ -119,8 +139,7 @@ class JdwpCollectionContractsTest {
     void requestIdentityIsFixedToJdwpCollector() {
         assertThrows(IllegalArgumentException.class, () -> new JdwpCollectionRecord(
                 SchemaVersions.JDWP_COLLECTION_REQUEST,
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
                 new TargetTest("fixture.AlgorithmTest", "runs"), "CODEPATH", NOW));
     }
@@ -129,14 +148,18 @@ class JdwpCollectionContractsTest {
             List<JdwpTracepointSpec> tracepoints, JdwpCollectionBudget budget) {
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                tracepoints, budget, "采集关键决策位置", NOW);
+                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                tracepoints, budget, "Capture the decision state",
+                new InvestigationIntent(
+                        "Which value selected the branch?", "The state selected the branch",
+                        List.of(), List.of("Observed runtime state")), NOW);
     }
 
     private static JdwpTracepointSpec tracepoint(
             String id, int line, int maxHits, JdwpCaptureSpec capture) {
-        return new JdwpTracepointSpec(id, methodKey(), anchor(), line, maxHits, capture);
+        return new JdwpTracepointSpec(
+                id, methodKey(), anchor(), line, maxHits, maxHits,
+                maxHits, 0, null, capture);
     }
 
     private static SourceAnchor anchor() {
@@ -156,8 +179,7 @@ class JdwpCollectionContractsTest {
             Optional<AgentFailureDiagnostic> failure) {
         return new JdwpCollectionManifest(
                 SchemaVersions.JDWP_COLLECTION_MANIFEST,
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
                 "jdwp-batch-collector", "1.0.0", completion, "test_completion",
                 JdwpCollectionStage.FAILED,

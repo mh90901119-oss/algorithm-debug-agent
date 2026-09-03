@@ -11,7 +11,6 @@ import java.time.Instant;
 import java.util.List;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
@@ -65,28 +64,28 @@ class JdwpPlanCompilerTest {
     }
 
     @Test
-    void preservesSparseCaptureHitsAndRejectsHitsOutsideMaximum() {
-        JdwpTracepointRequest sparse = new JdwpTracepointRequest(
-                "sparse", "fixture.Algorithm#schedule()V", 4, 5,
-                List.of(1, 3, 5), JdwpCaptureSpec.stackOnly());
+    void preservesFirstAndPeriodicSamplingAndRejectsInvalidPolicy() {
+        JdwpTracepointRequest sampled = new JdwpTracepointRequest(
+                "sampled", "fixture.Algorithm#schedule()V", 4,
+                100, 20, 5, 10, null, JdwpCaptureSpec.stackOnly());
 
         JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(sparse)), moduleRoot);
+                catalog(), request(List.of(sampled)), moduleRoot);
 
-        assertEquals(List.of(1, 3, 5),
-                plan.tracepoints().getFirst().captureOnMatchedHits());
+        assertEquals(5, plan.tracepoints().getFirst().captureFirstMatchedHits());
+        assertEquals(10, plan.tracepoints().getFirst().captureEveryMatchedHits());
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(
-                        "outside", "fixture.Algorithm#schedule()V", 4, 5,
-                        List.of(1, 6), JdwpCaptureSpec.stackOnly()))), moduleRoot));
+                        "invalid", "fixture.Algorithm#schedule()V", 4,
+                        5, 3, 0, 0, null, JdwpCaptureSpec.stackOnly()))), moduleRoot));
     }
 
     @Test
     void rejectsUnknownMethodDuplicatePointAndLineOutsideMethod() {
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(
-                        "missing", "fixture.Missing#run()V", 1, 1,
-                        JdwpCaptureSpec.stackOnly()))), moduleRoot));
+                        "missing", "fixture.Missing#run()V", 1,
+                        1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()))), moduleRoot));
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(
                         point("same", 4),
@@ -123,15 +122,14 @@ class JdwpPlanCompilerTest {
 
     private JdwpTracepointRequest point(String id, int line) {
         return new JdwpTracepointRequest(
-                id, "fixture.Algorithm#schedule()V", line, 3,
-                JdwpCaptureSpec.stackOnly());
+                id, "fixture.Algorithm#schedule()V", line,
+                100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly());
     }
 
     private MethodCatalog catalog() {
         return new MethodCatalog(
                 SchemaVersions.METHOD_CATALOG,
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(
                         new MethodCatalogEntry("fixture.AlgorithmTest#runs()V", targetAnchor, 0, true),
                         new MethodCatalogEntry("fixture.Algorithm#schedule()V", serviceAnchor, 1, false)),

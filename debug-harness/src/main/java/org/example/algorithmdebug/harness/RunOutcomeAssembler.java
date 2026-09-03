@@ -70,7 +70,7 @@ public final class RunOutcomeAssembler {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY,
                 "TARGET_TEST_RUN_COMPLETED",
-                request.caseId(), request.contextId(), request.analysisId(), request.runId(),
+                request.caseId(), request.analysisId(), request.runId(),
                 processOutcome, testFacts.outcome(), ganttOutcome,
                 testFacts.failure(), agentFailure,
                 comparisonOutcome,

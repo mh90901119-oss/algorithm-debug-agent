@@ -4,7 +4,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.TargetTest;
-import org.example.algorithmdebug.casecore.ContextMode;
 
 import java.nio.file.Path;
 import java.util.Optional;
@@ -16,8 +15,8 @@ public sealed interface CliCommand
         CliCommand.RunExecute,
         CliCommand.StaticAnalyze, CliCommand.CodePathPlanCreate,
         CliCommand.CodePathCollectionExecute, CliCommand.JdwpPlanCreate,
-        CliCommand.JdwpCollectionExecute, CliCommand.ArtifactRead,
-        CliCommand.AnalysisComplete, CliCommand.CaseAudit, CliCommand.GanttInspect {
+        CliCommand.JdwpCollectionExecute, CliCommand.ArtifactRead, CliCommand.EvidenceQuery,
+        CliCommand.CaseAudit, CliCommand.GanttInspect {
 
     /**
      * 初始化外部 Workspace。
@@ -74,8 +73,7 @@ public sealed interface CliCommand
             TargetTest targetTest,
             Path questionFile,
             Optional<CaseId> caseId,
-            Optional<String> adapterId,
-            ContextMode contextMode) implements CliCommand {
+            Optional<String> adapterId) implements CliCommand {
         /** 校验解析后的 Case open 参数容器。 */
         public CaseOpen {
             require(workspace, "workspace");
@@ -84,7 +82,6 @@ public sealed interface CliCommand
             require(questionFile, "questionFile");
             require(caseId, "caseId");
             require(adapterId, "adapterId");
-            require(contextMode, "contextMode");
         }
     }
 
@@ -215,15 +212,25 @@ public sealed interface CliCommand
         }
     }
 
-    /** 从有界 JSON 文件原子完成一轮 Analysis。 */
-    record AnalysisComplete(
-            Path workspace, ProjectId projectId, CaseId caseId, AnalysisId analysisId,
-            Path resultFile) implements CliCommand {
-        /** 校验命令参数。 */
-        public AnalysisComplete {
+    /** 查询已注册 CodePath/JDWP 派生证据。 */
+    record EvidenceQuery(
+            Path workspace,
+            ProjectId projectId,
+            CaseId caseId,
+            String artifactId,
+            org.example.algorithmdebug.contracts.EvidenceQueryFilter filter,
+            int offset,
+            int limit,
+            int maxBytes) implements CliCommand {
+        /** 校验查询身份、条件和输出预算。 */
+        public EvidenceQuery {
             require(workspace, "workspace"); require(projectId, "projectId");
-            require(caseId, "caseId"); require(analysisId, "analysisId");
-            require(resultFile, "resultFile");
+            require(caseId, "caseId"); require(artifactId, "artifactId");
+            require(filter, "filter");
+            if (offset < 0 || limit < 1 || limit > 50
+                    || maxBytes < 1 || maxBytes > 65_536) {
+                throw new IllegalArgumentException("Evidence Query budget is invalid");
+            }
         }
     }
 

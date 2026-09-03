@@ -7,7 +7,6 @@ import java.time.Instant;
  *
  * @param schemaVersion Schema 版本
  * @param caseId 所属 Case
- * @param contextId 本次运行对应的 Context
  * @param analysisId 发起运行的 Analysis
  * @param runId Run ID
  * @param targetTest 目标 UT
@@ -17,7 +16,6 @@ import java.time.Instant;
 public record RunRequest(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         TargetTest targetTest,
@@ -29,7 +27,6 @@ public record RunRequest(
         schemaVersion = CaseManifest.requireVersion(
                 schemaVersion, SchemaVersions.RUN_REQUEST, "RunRequest");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         targetTest = ContractChecks.requireNonNull(targetTest, "targetTest");

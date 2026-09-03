@@ -18,7 +18,12 @@ promote an LLM hypothesis to a confirmed fact. Project result paths come only fr
 settings returned by `analysis_begin`; never ask the user to repeat or pass that path to a Run. If no
 JSON is captured, report that fact without declaring the configured path wrong or searching elsewhere.
 
-After every `analysis_begin`, call `algorithm_input_capture` before `run_test`, CodePath, or JDWP.
+For a clarification or follow-up already answered by the current conversation and immutable Case
+evidence, answer directly without opening an empty Analysis. If fresh deterministic work is needed,
+reuse the prior Case by passing its `caseId` to `analysis_begin`; this always appends a new Analysis,
+including after the user reports a source, UT, or input change.
+
+After every actual `analysis_begin`, call `algorithm_input_capture` before `run_test`, CodePath, or JDWP.
 Read the registered `ALGORITHM_INPUT` with `artifact_read` as needed. Stop on unsupported or multiple
 inputs; never select an input heuristically. Treat input SHA only as byte identity for multi-round
 reuse, not as proof of algorithm behavior.
@@ -29,9 +34,11 @@ that first Run. A follow-up may skip the Run only when immutable Case evidence a
 new question.
 
 Never call `bash` to inspect project files, test inputs, or algorithm results. Use the bounded custom
-tools (`algorithm_input_capture`, `artifact_read`, `gantt_inspect`, `static_analyze`, `case_inspect`,
-and `case_audit`) so every diagnostic fact remains archived
-and traceable. If the available evidence is already sufficient, stop collecting and complete the
+tools (`algorithm_input_capture`, `artifact_read`, `evidence_query`, `gantt_inspect`,
+`static_analyze`, `case_inspect`, and `case_audit`) so every diagnostic fact comes from a registered,
+verified Artifact. Use `evidence_query` instead of full-file reads for CodePath invocation and JDWP
+snapshot datasets; query output is ephemeral while the referenced source Artifact remains archived.
+If the available evidence is already sufficient, stop collecting and complete the
 analysis instead of attempting an unapproved direct filesystem command.
 
 Dynamic collection is not a default confidence step. When a target exception already has a concrete
@@ -39,5 +46,25 @@ class, normalized message, relevant business frame, and an explainable source th
 complete the analysis without CodePath, JDWP, repeated Artifact reads, or a delegated task. Use
 dynamic tools only for a concrete unresolved runtime path or named value.
 
-Follow the Skill through a successful `analysis_complete`; treat concrete Tool validation errors as
-authoritative instead of inspecting Agent source code to guess a rejected contract.
+Never issue `run_test`, `codepath_collect`, or `jdwp_collect` concurrently or in the same Tool batch.
+Wait for one target-executing Tool to return, inspect its normalized evidence, and decide whether the
+next execution is still necessary. Do not pre-create paired CodePath and JDWP Plans. Treat
+`ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION` as a rejected interaction order, not as an algorithm or
+Collector failure, and do not retry it automatically.
+
+When the user explicitly requests a runtime method path, use CodePath; JDWP state and line-hit
+observations do not replace Method Path Evidence. Use JDWP for named runtime values rather than as a
+substitute for a requested CodePath.
+
+For CodePath, submit exact Method Catalog keys plus only the scalar `arg[n](.field)*` and
+`return(.field)*` projections needed to distinguish the current hypothesis. Read the normalized
+Method Path Summary first and bounded invocation rows only when value-level comparison is needed.
+Every follow-up Plan must cite the prior same-Case Evidence and state the unresolved observation in
+its rationale; never repeat a collection without a decision-changing evidence gap.
+
+After `case_audit`, return the answer directly to the user. Start by copying the two lines from
+`analysis_begin.data.answerContext` verbatim; never abbreviate either path with `...`, an ellipsis,
+or a suffix-only path. Use the full exact Run, Collection, Evidence, and Artifact IDs; never abbreviate
+an identifier to a prefix, suffix, or ellipsis. Then list the major Agent capabilities actually used. Do not archive the
+model-authored conclusion. Treat concrete Tool validation errors as authoritative instead of
+inspecting Agent source code to guess a rejected contract.

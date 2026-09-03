@@ -11,7 +11,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CollectionBaselineCheck;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.MethodPathCollectionRecord;
 import org.example.algorithmdebug.contracts.RunId;
@@ -24,7 +23,7 @@ import org.example.algorithmdebug.harness.SurefireDiagnosticException;
 import org.example.algorithmdebug.harness.SurefireDiagnosticReader;
 import org.example.algorithmdebug.harness.TargetFailureFingerprinter;
 
-/** 以 Surefire 通用失败指纹比较无采集与动态采集的目标失败结果。 */
+/** 以同 Analysis 普通 Run 的失败指纹比较动态采集目标失败。 */
 final class TargetFailureBaselineEvaluator {
 
     private final Clock clock;
@@ -43,8 +42,8 @@ final class TargetFailureBaselineEvaluator {
         if (archive == null || identity == null || moduleRoot == null || captured == null) {
             throw new IllegalArgumentException("failed Baseline parameters must not be null");
         }
-        Optional<RunResultFingerprint> reference = archive.findReproduction(
-                identity.caseId(), identity.contextId());
+        Optional<RunResultFingerprint> reference = archive.findLatestRunResultFingerprint(
+                identity.caseId(), identity.analysisId());
         var diagnostic = new SurefireDiagnosticReader().read(
                 moduleRoot.resolve("target/surefire-reports"), identity.targetTest().selector());
         if (diagnostic.isEmpty()) {
@@ -53,14 +52,14 @@ final class TargetFailureBaselineEvaluator {
                     "Target failed; Surefire did not provide a comparable failure fingerprint");
         }
         RunResultFingerprint current = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, identity.caseId(), identity.contextId(),
+                SchemaVersions.RUN_RESULT_FINGERPRINT, identity.caseId(), identity.analysisId(),
                 identity.runId(), new TargetFailureFingerprinter().sha256(diagnostic.orElseThrow()));
         if (reference.isEmpty()) {
             return check(identity, ComparisonOutcome.NOT_COMPARED, Optional.empty(), false,
-                    "No uninstrumented same-context reproduction reference");
+                    "No uninstrumented same-analysis failure fingerprint");
         }
         ReproductionComparator.Result compared = new ReproductionComparator().compare(
-                reference.orElseThrow(), current, ReproductionComparator.Scope.SAME_CONTEXT);
+                reference.orElseThrow(), current);
         return check(identity, compared.outcome(),
                 Optional.of(reference.orElseThrow().runId()),
                 compared.outcome() == ComparisonOutcome.MATCHED, compared.summary());
@@ -73,22 +72,22 @@ final class TargetFailureBaselineEvaluator {
             boolean usable,
             String summary) {
         return new CollectionBaselineCheck(
-                "1.0", identity.caseId(), identity.contextId(), identity.analysisId(),
-                identity.runId(), identity.collectionId(), outcome, referenceRunId,
+                SchemaVersions.COLLECTION_BASELINE_CHECK,
+                identity.caseId(), identity.analysisId(), identity.runId(),
+                identity.collectionId(), outcome, referenceRunId,
                 usable, summary, clock.instant());
     }
 
     /** 两类 Collection 共享的最小目标运行身份。 */
     record Identity(
             CaseId caseId,
-            ContextId contextId,
             AnalysisId analysisId,
             RunId runId,
             CollectionId collectionId,
             TargetTest targetTest) {
 
         Identity {
-            if (caseId == null || contextId == null || analysisId == null || runId == null
+            if (caseId == null || analysisId == null || runId == null
                     || collectionId == null || targetTest == null) {
                 throw new IllegalArgumentException("The failed Baseline identity must not be null");
             }
@@ -96,13 +95,13 @@ final class TargetFailureBaselineEvaluator {
 
         static Identity from(MethodPathCollectionRecord record) {
             return new Identity(
-                    record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                    record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), record.targetTest());
         }
 
         static Identity from(JdwpCollectionRecord record) {
             return new Identity(
-                    record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                    record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), record.targetTest());
         }
     }

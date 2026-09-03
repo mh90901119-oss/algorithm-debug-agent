@@ -67,7 +67,7 @@ public final class CollectionEvidenceValidator {
         return new CollectionValidation(
                 SchemaVersions.COLLECTION_VALIDATION,
                 input.summary().evidenceId(), input.collection().caseId(),
-                input.collection().contextId(), input.collection().analysisId(),
+                input.collection().analysisId(),
                 input.collection().runId(), input.collection().planId(),
                 input.collection().collectionId(), "CODEPATH", status,
                 List.copyOf(findings), dimensions, Optional.of(input.summaryReference()),
@@ -123,7 +123,7 @@ public final class CollectionEvidenceValidator {
         return new CollectionValidation(
                 SchemaVersions.COLLECTION_VALIDATION,
                 input.summary().evidenceId(), input.collection().caseId(),
-                input.collection().contextId(), input.collection().analysisId(),
+                input.collection().analysisId(),
                 input.collection().runId(), input.collection().planId(),
                 input.collection().collectionId(), "JDWP", status,
                 List.copyOf(findings), dimensions, Optional.of(input.summaryReference()),
@@ -137,25 +137,21 @@ public final class CollectionEvidenceValidator {
         var normalization = input.normalizationManifest();
         var summary = input.summary();
         boolean mismatch = !collection.caseId().equals(input.plan().caseId())
-                || !collection.contextId().equals(input.plan().contextId())
                 || !collection.analysisId().equals(input.plan().analysisId())
                 || !collection.planId().equals(input.plan().planId())
                 || !collection.targetTest().equals(input.plan().targetTest())
                 || !collection.caseId().equals(manifest.caseId())
-                || !collection.contextId().equals(manifest.contextId())
                 || !collection.analysisId().equals(manifest.analysisId())
                 || !collection.runId().equals(manifest.runId())
                 || !collection.planId().equals(manifest.planId())
                 || !collection.collectionId().equals(manifest.collectionId())
                 || !collection.caseId().equals(normalization.caseId())
-                || !collection.contextId().equals(normalization.contextId())
                 || !collection.analysisId().equals(normalization.analysisId())
                 || !collection.runId().equals(normalization.runId())
                 || !collection.planId().equals(normalization.planId())
                 || !collection.collectionId().equals(normalization.collectionId())
                 || !"JDWP".equals(normalization.collectorType())
                 || !collection.caseId().equals(summary.caseId())
-                || !collection.contextId().equals(summary.contextId())
                 || !collection.analysisId().equals(summary.analysisId())
                 || !collection.runId().equals(summary.runId())
                 || !collection.planId().equals(summary.planId())
@@ -163,7 +159,6 @@ public final class CollectionEvidenceValidator {
                 || !collection.collectionId().equals(input.baselineCheck().collectionId())
                 || !collection.runId().equals(input.baselineCheck().runId())
                 || !collection.caseId().equals(input.baselineCheck().caseId())
-                || !collection.contextId().equals(input.baselineCheck().contextId())
                 || !collection.analysisId().equals(input.baselineCheck().analysisId())
                 || !summary.rawTrace().equals(input.rawReference())
                 || !normalization.rawArtifact().equals(input.rawReference())
@@ -202,12 +197,10 @@ public final class CollectionEvidenceValidator {
             MethodPathValidationInput input, List<ValidationFinding> findings) {
         var collection = input.collection();
         boolean mismatch = !collection.caseId().equals(input.plan().caseId())
-                || !collection.contextId().equals(input.plan().contextId())
                 || !collection.analysisId().equals(input.plan().analysisId())
                 || !collection.planId().equals(input.plan().planId())
                 || !collection.targetTest().equals(input.plan().targetTest())
                 || !collection.caseId().equals(input.collectorManifest().caseId())
-                || !collection.contextId().equals(input.collectorManifest().contextId())
                 || !collection.analysisId().equals(input.collectorManifest().analysisId())
                 || !collection.runId().equals(input.collectorManifest().runId())
                 || !collection.planId().equals(input.collectorManifest().planId())
@@ -217,7 +210,6 @@ public final class CollectionEvidenceValidator {
                 || !collection.collectionId().equals(input.baselineCheck().collectionId())
                 || !collection.runId().equals(input.baselineCheck().runId())
                 || !collection.caseId().equals(input.baselineCheck().caseId())
-                || !collection.contextId().equals(input.baselineCheck().contextId())
                 || !collection.analysisId().equals(input.baselineCheck().analysisId())
                 || !input.summary().rawTrace().equals(input.rawReference())
                 || !input.normalizationManifest().rawArtifact().equals(input.rawReference())
@@ -292,7 +284,6 @@ public final class CollectionEvidenceValidator {
             org.example.algorithmdebug.contracts.MethodPathCollectionRecord collection,
             NormalizationManifest manifest) {
         return collection.caseId().equals(manifest.caseId())
-                && collection.contextId().equals(manifest.contextId())
                 && collection.analysisId().equals(manifest.analysisId())
                 && collection.runId().equals(manifest.runId())
                 && collection.planId().equals(manifest.planId())
@@ -304,7 +295,6 @@ public final class CollectionEvidenceValidator {
             org.example.algorithmdebug.contracts.MethodPathCollectionRecord collection,
             MethodPathSummary summary) {
         return collection.caseId().equals(summary.caseId())
-                && collection.contextId().equals(summary.contextId())
                 && collection.analysisId().equals(summary.analysisId())
                 && collection.runId().equals(summary.runId())
                 && collection.planId().equals(summary.planId())

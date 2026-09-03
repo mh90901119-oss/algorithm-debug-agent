@@ -42,7 +42,6 @@ public final class CaseWorkspaceAuditor {
         entries.stream().filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                 .map(path -> relative(root, path)).forEach(actual::add);
         require(root, caseId, "case.json", "CASE_MANIFEST", expected, issues);
-        checkScopes(root.resolve("contexts"), "context.json", "CONTEXT", caseId, expected, issues);
         checkScopes(root.resolve("analyses"), "analysis-request.json", "ANALYSIS", caseId, expected, issues);
         checkScopes(root.resolve("runs"), "run-request.json", "RUN", caseId, expected, issues);
         checkScopes(root.resolve("runs"), "run-outcome.json", "RUN", caseId, expected, issues);
@@ -176,8 +175,7 @@ public final class CaseWorkspaceAuditor {
         return path.equals("case.json")
                 || path.equals("interaction.jsonl")
                 || path.matches("logs/agent-\\d{4}-\\d{2}-\\d{2}\\.log")
-                || path.matches("contexts/[^/]+/(context|reproduction)\\.json")
-                || path.matches("analyses/[^/]+/(analysis-request|analysis-result|method-catalog)\\.json")
+                || path.matches("analyses/[^/]+/(analysis-request|method-catalog)\\.json")
                 || path.matches("analyses/[^/]+/input/input-analysis\\.json")
                 || path.matches("analyses/[^/]+/plans/[^/]+\\.json")
                 || path.matches("runs/[^/]+/(run-request|run-outcome|run-result-fingerprint)\\.json")

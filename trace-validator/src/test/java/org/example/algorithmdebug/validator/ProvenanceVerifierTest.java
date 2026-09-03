@@ -12,7 +12,6 @@ import java.util.Optional;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.TraceProvenance;
 import org.junit.jupiter.api.Test;
@@ -64,7 +63,7 @@ class ProvenanceVerifierTest {
             Optional<Long> eventId,
             Optional<Long> sequence) {
         return new TraceProvenance(
-                new CaseId("case-1"), new ContextId("context-1"), new RunId("run-1"),
+                new CaseId("case-1"), new RunId("run-1"),
                 new CollectionId("collection-1"), reference, line, eventId, sequence,
                 "RAW_OBSERVATION");
     }

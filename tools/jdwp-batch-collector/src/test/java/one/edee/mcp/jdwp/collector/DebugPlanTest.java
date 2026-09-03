@@ -11,19 +11,20 @@ import org.junit.jupiter.api.Test;
 class DebugPlanTest {
 
     @Test
-    void v2RequiresExactMethodDescriptorWhileV1RemainsReadable() {
+    void v4RequiresExactMethodDescriptorAndRejectsHistoricalSchemas() {
         DebugPlan plan = validPlan();
         plan.tracepoints.getFirst().methodDescriptor = null;
 
         assertThrows(IllegalArgumentException.class, plan::validate);
 
-        plan.schemaVersion = "1.0";
-        assertDoesNotThrow(plan::validate);
+        plan.schemaVersion = "3.0";
+        assertThrows(IllegalArgumentException.class, plan::validate);
     }
 
     @Test
     void normalizesProjectionEntriesDeterministically() {
         DebugPlan plan = validPlan();
+        plan.tracepoints.getFirst().capture.locals = true;
         plan.tracepoints.getFirst().capture.localNames = new ArrayList<>(
             List.of(" state ", "state", "input")
         );
@@ -34,18 +35,19 @@ class DebugPlanTest {
     }
 
     @Test
-    void validatesSparseCaptureHitOrdinals() {
+    void validatesFirstAndPeriodicMatchedHitSampling() {
         DebugPlan plan = validPlan();
         plan.tracepoints.getFirst().maxObservedHits = 5;
         plan.tracepoints.getFirst().maxCapturedHits = 3;
-        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 3, 5));
+        plan.tracepoints.getFirst().captureFirstMatchedHits = 1;
+        plan.tracepoints.getFirst().captureEveryMatchedHits = 2;
 
         assertDoesNotThrow(plan::validate);
-        assertEquals(List.of(1, 3, 5), plan.tracepoints.getFirst().captureOnMatchedHits);
 
-        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 1));
+        plan.tracepoints.getFirst().captureFirstMatchedHits = 4;
         assertThrows(IllegalArgumentException.class, plan::validate);
-        plan.tracepoints.getFirst().captureOnMatchedHits = new ArrayList<>(List.of(1, 6));
+        plan.tracepoints.getFirst().captureFirstMatchedHits = 0;
+        plan.tracepoints.getFirst().captureEveryMatchedHits = 0;
         assertThrows(IllegalArgumentException.class, plan::validate);
     }
 

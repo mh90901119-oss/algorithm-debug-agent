@@ -138,11 +138,13 @@ public final class JdwpSnapshotNormalizer {
             if (capturedHit > tracepoint.maxCapturedHits()) {
                 throw invalid(line, "The JDWP captured hit exceeds the plan limit");
             }
-            if (!tracepoint.captureOnMatchedHits().isEmpty()
-                    && !tracepoint.captureOnMatchedHits().contains(matchedHit)) {
+            boolean selectedBySampling = matchedHit <= tracepoint.captureFirstMatchedHits()
+                    || (tracepoint.captureEveryMatchedHits() > 0
+                    && matchedHit % tracepoint.captureEveryMatchedHits() == 0);
+            if (!selectedBySampling) {
                 throw new NormalizationException(
                         "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "The JDWP hit sequence does not belong to the collection plan", line, null);
+                        "The JDWP matched hit does not satisfy the collection sampling policy", line, null);
             }
             if (tracepoint.condition() != null
                     && !"MATCHED".equals(json.path("conditionResult").asText())) {
@@ -295,8 +297,7 @@ public final class JdwpSnapshotNormalizer {
                     !"ZERO_TRACEPOINT_HITS".equals(reason));
             JdwpSnapshotSummary summary = new JdwpSnapshotSummary(
                     SchemaVersions.JDWP_SNAPSHOT_SUMMARY, input.evidenceId(),
-                    input.collection().caseId(), input.collection().contextId(),
-                    input.collection().analysisId(), input.collection().runId(),
+                    input.collection().caseId(), input.collection().analysisId(), input.collection().runId(),
                     input.collection().planId(), input.collection().collectionId(),
                     input.rawTrace(), List.copyOf(hits), List.copyOf(limits),
                     truncated, input.createdAt());
@@ -310,8 +311,7 @@ public final class JdwpSnapshotNormalizer {
 
         private TraceProvenance provenance(long line, long sequence) {
             return new TraceProvenance(
-                    input.collection().caseId(), input.collection().contextId(),
-                    input.collection().runId(), input.collection().collectionId(),
+                    input.collection().caseId(), input.collection().runId(), input.collection().collectionId(),
                     input.rawTrace(), line, Optional.empty(), Optional.of(sequence),
                     "RAW_OBSERVATION");
         }
@@ -386,7 +386,6 @@ public final class JdwpSnapshotNormalizer {
         private static long identityBytes(JdwpNormalizationInput input) {
             return textBytes(input.evidenceId().value())
                     + textBytes(input.collection().caseId().value())
-                    + textBytes(input.collection().contextId().value())
                     + textBytes(input.collection().analysisId().value())
                     + textBytes(input.collection().runId().value())
                     + textBytes(input.collection().planId().value())

@@ -20,8 +20,7 @@ class RunOutcomeSummaryTest {
     void shouldKeepTargetFailureAndGanttIndependent() {
         RunOutcomeSummary summary = new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED",
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 ProcessOutcome.FAILED, TestOutcome.ERROR, GanttOutcome.PRESENT,
                 Optional.of(new TargetFailureDiagnostic(
                         FailureCategory.TEST_ERROR, "java.lang.NullPointerException",
@@ -39,8 +38,7 @@ class RunOutcomeSummaryTest {
         List<ArtifactReference> artifacts = new ArrayList<>(List.of(GANTT));
         RunOutcomeSummary summary = new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED",
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 ProcessOutcome.SUCCEEDED, TestOutcome.PASSED, GanttOutcome.PRESENT,
                 Optional.empty(), Optional.of(new AgentFailureDiagnostic("ARTIFACT_WRITE_FAILED", "write failed")),
                 ComparisonOutcome.MATCHED, "Semantic hash matched", artifacts);
@@ -81,8 +79,7 @@ class RunOutcomeSummaryTest {
 
         RunOutcomeSummary agentFailure = new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED",
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 ProcessOutcome.NOT_STARTED, TestOutcome.NOT_EXECUTED, GanttOutcome.ABSENT,
                 Optional.empty(), Optional.of(new AgentFailureDiagnostic(
                         "AGENT_PROCESS_START_FAILED", "Maven process could not be started")),
@@ -106,8 +103,7 @@ class RunOutcomeSummaryTest {
             List<ArtifactReference> artifacts) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED",
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 ProcessOutcome.FAILED, testOutcome, ganttOutcome,
                 targetFailure, Optional.empty(), ComparisonOutcome.NOT_COMPARED,
                 "No comparison", artifacts);

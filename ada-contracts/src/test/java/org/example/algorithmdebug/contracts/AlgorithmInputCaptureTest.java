@@ -16,7 +16,7 @@ class AlgorithmInputCaptureTest {
                 "a".repeat(64), 42);
         AlgorithmInputCapture capture = new AlgorithmInputCapture(
                 SchemaVersions.ALGORITHM_INPUT_CAPTURE,
-                new CaseId("case-1"), new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new TargetTest("a.b.TargetTest", "runs"), "algorithmInput",
                 "src/test/java/a/b/TargetTest.java", 8, AlgorithmInputPathKind.RELATIVE,
                 "caseinput.json", AlgorithmInputComparison.FIRST_CAPTURE, Optional.empty(),
@@ -26,7 +26,7 @@ class AlgorithmInputCaptureTest {
         assertEquals("input/caseinput.json", capture.artifact().relativePath());
         assertThrows(IllegalArgumentException.class, () -> new AlgorithmInputCapture(
                 SchemaVersions.ALGORITHM_INPUT_CAPTURE,
-                capture.caseId(), capture.contextId(), capture.analysisId(), capture.targetTest(),
+                capture.caseId(), capture.analysisId(), capture.targetTest(),
                 capture.variableName(), "C:/private/TargetTest.java", capture.sourceLine(),
                 capture.pathKind(), capture.fileName(), capture.comparison(),
                 capture.previousAnalysisId(), artifact, capture.capturedAt()));

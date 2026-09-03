@@ -33,7 +33,7 @@ flowchart TD
     F --> M
     M --> H["形成可验证假设"]
     H --> E{"证据是否足够"}
-    E -->|是| C["analysis_complete"]
+    E -->|是| C["直接返回答案"]
     E -->|需要真实路径| P["CodePath Plan 和独立采集"]
     E -->|需要关键状态| D["条件 JDWP Plan 和独立采集"]
     P --> E
@@ -114,7 +114,8 @@ Analysis Evidence。Java 不判断问题、假设或预期观察的业务真实�
 | `capturedHits` | 完整快照写盘次数 |
 | `unavailableHits` | 条件无法确定计算的次数 |
 
-计划使用 `maxObservedHits`、`maxCapturedHits` 和可选 `captureOnMatchedHits`。条件结果必须区分 `MATCHED`、`NOT_MATCHED`、
+计划使用 `maxObservedHits`、`maxCapturedHits`、`captureFirstMatchedHits` 和
+`captureEveryMatchedHits`。条件结果必须区分 `MATCHED`、`NOT_MATCHED`、
 `UNAVAILABLE`。UNAVAILABLE 保留第一个确定性原因。条件不匹配时立即恢复事件线程，不展开对象图。硬预算同时包含断点观察数、
 快照数、Raw 事件数、字节数、对象深度、字段项数、字符串长度、总超时和空闲超时。
 
@@ -142,4 +143,3 @@ DFX 记录 caseId、analysisId、runId、planId、collectionId、阶段、预算
 所有行为按 Red-Green-Refactor 实现。每阶段先运行受影响模块测试，再运行依赖模块测试。跨契约阶段运行根项目 `mvn test`。
 最终真实 OpenCode E2E 覆盖主运行、CodePath、条件 JDWP、条件不可用、错误假设拒绝和跨对象因果追踪，并逐 Case 审计
 Workspace 文件、Schema、Artifact 完整性、Interaction 和 DFX 日志。
-

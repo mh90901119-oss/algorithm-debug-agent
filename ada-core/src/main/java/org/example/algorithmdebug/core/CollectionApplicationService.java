@@ -125,7 +125,6 @@ public final class CollectionApplicationService {
         CaseArchiveRepository archive = new CaseArchiveRepository(
                 layout.projectCases(projectId), mapper, writer);
         var plan = archive.requireCodePathPlan(caseId, planId);
-        var context = archive.requireContext(caseId, plan.contextId());
         var caseManifest = archive.requireCase(caseId);
         if (!caseManifest.projectId().equals(projectId)) {
             throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
@@ -136,7 +135,7 @@ public final class CollectionApplicationService {
         RunId runId = ids.newRunId();
         CollectionId collectionId = ids.newCollectionId();
         MethodPathCollectionRecord record = new MethodPathCollectionRecord(
-                "1.0", caseId, plan.contextId(), plan.analysisId(), runId, planId,
+                "1.0", caseId, plan.analysisId(), runId, planId,
                 collectionId, plan.targetTest(), "CODEPATH", clock.instant());
         Path collectionRoot = archive.startMethodPathCollection(record);
         logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
@@ -154,7 +153,7 @@ public final class CollectionApplicationService {
             List<String> classpath = classpaths.resolve(maven, moduleRoot, collectionRoot);
             stage = "CLASSPATH_RESOLVED";
             result = collector.collect(new MethodPathCollectionRequest(
-                    caseId, plan.contextId(), plan.analysisId(), runId, plan, collectionId,
+                    caseId, plan.analysisId(), runId, plan, collectionId,
                     Path.of(registration.mavenExecutionRoot()), collectionRoot,
                     javaExecutable, classpath, plan.targetTest().selector()));
             executionLog.info(logContext, "CollectionApplicationService", "LAUNCHER_COMPLETED",
@@ -198,7 +197,7 @@ public final class CollectionApplicationService {
         artifacts.addAll(postProcessing.artifacts());
         artifacts = List.copyOf(artifacts);
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
-                caseId, plan.contextId(), plan.analysisId(), runId, planId, collectionId,
+                caseId, plan.analysisId(), runId, planId, collectionId,
                 result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
                         result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
                         && postProcessing.confirmationUsable(),
@@ -302,7 +301,7 @@ public final class CollectionApplicationService {
             Instant startedAt) {
         MethodPathManifest observed = observedResult == null ? null : observedResult.manifest();
         return new MethodPathManifest(
-                "2.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                "3.0", record.caseId(), record.analysisId(), record.runId(),
                 record.planId(), record.collectionId(), "code-path-tracer", "unavailable",
                 completion, "FAILED",
                 observed == null ? processStarted : observed.processStarted(),
@@ -385,7 +384,7 @@ public final class CollectionApplicationService {
                 || completion == org.example.algorithmdebug.methodpath.CollectionCompletion.TIMED_OUT
                 || completion == org.example.algorithmdebug.methodpath.CollectionCompletion.TRUNCATED) {
             return incomparable(record, archive.findLatestCompletedRun(
-                            record.caseId(), record.contextId(), record.analysisId())
+                            record.caseId(), record.analysisId())
                             .map(org.example.algorithmdebug.contracts.RunOutcomeSummary::runId),
                     "Dynamic collection did not complete with confirmable evidence");
         }
@@ -394,7 +393,7 @@ public final class CollectionApplicationService {
                 return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
             var reference = archive.findLatestCompletedRun(
-                    record.caseId(), record.contextId(), record.analysisId());
+                    record.caseId(), record.analysisId());
             if (reference.isEmpty()
                     || reference.orElseThrow().testOutcome()
                     != org.example.algorithmdebug.contracts.TestOutcome.PASSED) {
@@ -402,7 +401,7 @@ public final class CollectionApplicationService {
                         "No completed passing uninstrumented run exists for this Analysis");
             }
             return new CollectionBaselineCheck(
-                    "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
                     Optional.of(reference.orElseThrow().runId()), true,
                     "Successful dynamic run; Gantt is not copied or used as an evidence gate",
@@ -429,7 +428,7 @@ public final class CollectionApplicationService {
     private CollectionBaselineCheck incomparable(
             MethodPathCollectionRecord record, Optional<RunId> referenceRunId, String summary) {
         return new CollectionBaselineCheck(
-                "1.0", record.caseId(), record.contextId(), record.analysisId(), record.runId(),
+                org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                 record.collectionId(), ComparisonOutcome.INCOMPARABLE, referenceRunId,
                 false, summary, clock.instant());
     }

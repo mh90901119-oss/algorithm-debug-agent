@@ -29,9 +29,12 @@ final class JsonlTraceWriter implements Closeable {
         );
     }
 
-    synchronized void write(Map<String, Object> event) throws IOException {
+    void write(Map<String, Object> event) throws IOException {
         writer.write(compactWriter.writeValueAsString(event));
         writer.newLine();
+    }
+
+    void flush() throws IOException {
         writer.flush();
     }
 
