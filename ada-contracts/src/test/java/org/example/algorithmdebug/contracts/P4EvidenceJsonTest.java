@@ -56,7 +56,7 @@ class P4EvidenceJsonTest {
         for (String relative : List.of(
                 "trace/normalization-manifest-v2.schema.json",
                 "trace/method-path-summary-v4.schema.json",
-                "trace/jdwp-snapshot-summary-v3.schema.json",
+                "trace/jdwp-snapshot-summary-v4.schema.json",
                 "evidence/collection-validation-v2.schema.json",
                 "evidence/evidence-build-request-v2.schema.json",
                 "evidence/evidence-bundle-v2.schema.json",

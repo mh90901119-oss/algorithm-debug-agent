@@ -75,14 +75,16 @@ class P4EvidenceContractsTest {
     }
 
     @Test
-    void jdwpValueFactPreservesCapturedAlgorithmValue() {
+    void jdwpProjectionPreservesCapturedAlgorithmValue() {
         TraceProvenance provenance = provenance(7, 9L);
-        JdwpSnapshotSummary.ValueFact fact = new JdwpSnapshotSummary.ValueFact(
-                "locals.context.fields.algorithmState", "STRING", Optional.of("java.lang.String"),
-                "algorithm-input-value", false, List.of(), provenance);
+        JdwpSnapshotSummary.ProjectionFact fact = new JdwpSnapshotSummary.ProjectionFact(
+                "context.algorithmState", JdwpSnapshotSummary.ProjectionStatus.CAPTURED,
+                Optional.of("STRING"), Optional.of("java.lang.String"),
+                Optional.of("algorithm-input-value"), false,
+                Optional.empty(), Optional.empty(), provenance);
 
-        assertEquals("algorithm-input-value", fact.scalarPreview());
-        assertEquals("locals.context.fields.algorithmState", fact.valuePath());
+        assertEquals("algorithm-input-value", fact.scalarValue().orElseThrow());
+        assertEquals("context.algorithmState", fact.valuePath());
     }
 
     @Test

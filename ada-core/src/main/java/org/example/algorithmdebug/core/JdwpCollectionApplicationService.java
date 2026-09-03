@@ -155,6 +155,7 @@ public final class JdwpCollectionApplicationService {
                 SchemaVersions.JDWP_COLLECTION_REQUEST, caseId, plan.analysisId(),
                 runId, planId, collectionId, plan.targetTest(), "JDWP", clock.instant());
         Path collectionRoot = archive.startJdwpCollection(record);
+        Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
                 .withCollection(collectionId.value());
         executionLog.info(logContext, "JdwpCollectionApplicationService", "COLLECTION_RECORD_CREATED",
@@ -221,13 +222,19 @@ public final class JdwpCollectionApplicationService {
                     -1, -1, startedAt);
             baseline = incomparable(record, "JDWP tool failed before baseline check: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException(failure.code(), "JDWP collection failed", failure);
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId,
+                    new CaseRunException(failure.code(), "JDWP collection failed", failure));
         } catch (AdapterException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     "JDWP_LAUNCH_SPEC_FAILED", failure, false, false, -1, -1, startedAt);
             baseline = incomparable(record, "JDWP launch specification failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_LAUNCH_SPEC_FAILED", "Failed to create JDWP launch specification", failure);
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId,
+                    new CaseRunException(
+                            "JDWP_LAUNCH_SPEC_FAILED",
+                            "Failed to create JDWP launch specification", failure));
         } catch (CaseRunException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     failure.code(), failure, observedTargetStarted, observedCollectorStarted,
@@ -236,17 +243,20 @@ public final class JdwpCollectionApplicationService {
                     ? "JDWP post-processing failed after target execution: " + failure.code()
                     : "JDWP collection did not start: " + failure.code());
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw failure;
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId, failure);
         } catch (IOException | WorkspaceException failure) {
             manifest = failureManifest(collectionRoot, record, plan, JdwpCollectionCompletion.AGENT_FAILED,
                     "JDWP_ARCHIVE_FAILED", failure, observedTargetStarted, observedCollectorStarted,
                     observedTargetExitCode, observedCollectorExitCode, startedAt);
             baseline = incomparable(record, "JDWP artifact validation or archive failed");
             archiveFailureDocuments(archive, collectionRoot, manifest, baseline);
-            throw new CaseRunException("JDWP_ARCHIVE_FAILED", "JDWP artifact archival failed", failure);
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId,
+                    new CaseRunException(
+                            "JDWP_ARCHIVE_FAILED", "JDWP artifact archival failed", failure));
         }
 
-        Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         CollectionPostProcessingResult postProcessing = Files.isRegularFile(
                 collectionRoot.resolve("raw/jdwp.jsonl"))
                 ? new CollectionPostProcessingService(
@@ -342,32 +352,25 @@ public final class JdwpCollectionApplicationService {
         try {
             ExternalCollectorManifest external = mapper.readJson(
                     document, ExternalCollectorManifest.class);
-            if (!("1.0".equals(external.schemaVersion()) || "2.0".equals(external.schemaVersion()))
+            if (!"2.0".equals(external.schemaVersion())
                     || !plan.planId().value().equals(external.sessionId())
                     || !"127.0.0.1".equals(external.target().host())
                     || external.target().port() != expectedPort) {
                 throw new IllegalArgumentException("Collector manifest identity or endpoint does not match the current plan");
             }
-            if ("2.0".equals(external.schemaVersion())) {
-                var requiredCapabilities = java.util.Set.of(
-                        "exact-method-descriptor",
-                        "code-index",
-                        "typed-values",
-                        "bounded-projection",
-                        "tracepoint-request-group");
-                if (!("2.0.0".equals(external.collectorVersion())
-                        || "3.0.0".equals(external.collectorVersion()))
-                        || !"2.0".equals(external.rawTraceSchemaVersion())
-                        || !external.capabilities().containsAll(requiredCapabilities)) {
-                    throw new IllegalArgumentException(
-                            "JDWP Collector 2.0 capability handshake failed");
-                }
-                if ("3.0.0".equals(external.collectorVersion())
-                        && !external.capabilities().containsAll(java.util.Set.of(
-                        "conditional-frame-values", "separate-hit-counters"))) {
-                    throw new IllegalArgumentException(
-                            "JDWP Collector 3.0 conditional capability handshake failed");
-                }
+            var requiredCapabilities = java.util.Set.of(
+                    "exact-method-descriptor",
+                    "code-index",
+                    "typed-values",
+                    "precise-value-paths",
+                    "and-conditions",
+                    "separate-hit-counters",
+                    "tracepoint-request-group");
+            if (!"4.0.0".equals(external.collectorVersion())
+                    || !"3.0".equals(external.rawTraceSchemaVersion())
+                    || !external.capabilities().containsAll(requiredCapabilities)) {
+                throw new IllegalArgumentException(
+                        "JDWP Collector 4.0 capability handshake failed");
             }
             var allowed = plan.tracepoints().stream()
                     .map(point -> point.tracepointId()).collect(java.util.stream.Collectors.toSet());
@@ -589,6 +592,41 @@ public final class JdwpCollectionApplicationService {
         }
     }
 
+    private List<ArtifactReference> registerFailureArtifacts(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            Path caseRoot,
+            Path collectionRoot,
+            CollectionId collectionId) {
+        List<ArtifactReference> artifacts = new ArrayList<>();
+        addArtifact(artifacts, caseRoot, collectionRoot.resolve("manifest.json"),
+                collectionId.value() + "-manifest", "JDWP_MANIFEST", "application/json");
+        addArtifact(artifacts, caseRoot, collectionRoot.resolve("validation/baseline-check.json"),
+                collectionId.value() + "-baseline", "COLLECTION_BASELINE", "application/json");
+        List<ArtifactReference> result = List.copyOf(artifacts);
+        result.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
+        return result;
+    }
+
+    private CaseRunException withFailureArtifacts(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            Path caseRoot,
+            Path collectionRoot,
+            CollectionId collectionId,
+            CaseRunException failure) {
+        try {
+            return new CaseRunException(
+                    failure.code(), failure.getMessage(),
+                    failure.getCause() == null ? failure : failure.getCause(),
+                    registerFailureArtifacts(
+                            archive, caseId, caseRoot, collectionRoot, collectionId));
+        } catch (RuntimeException artifactFailure) {
+            failure.addSuppressed(artifactFailure);
+            return failure;
+        }
+    }
+
     private static long existingSize(Path path) {
         try { return Files.isRegularFile(path) ? Files.size(path) : 0; }
         catch (IOException failure) { return 0; }
@@ -636,7 +674,6 @@ public final class JdwpCollectionApplicationService {
             Instant finishedAt,
             String completionReason,
             int eventCount,
-            @com.fasterxml.jackson.annotation.JsonAlias("hitCounts")
             Map<String, Integer> observedHitCounts,
             Map<String, Integer> matchedHitCounts,
             Map<String, Integer> capturedHitCounts,

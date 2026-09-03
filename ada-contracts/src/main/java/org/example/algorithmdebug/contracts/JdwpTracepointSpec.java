@@ -1,6 +1,6 @@
 package org.example.algorithmdebug.contracts;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.List;
 
 /**
  * 与当前源码位置绑定的 JDWP 采集点。
@@ -19,7 +19,7 @@ public record JdwpTracepointSpec(
         int maxCapturedHits,
         int captureFirstMatchedHits,
         int captureEveryMatchedHits,
-        @JsonInclude(JsonInclude.Include.NON_NULL) JdwpValueCondition condition,
+        List<JdwpValueCondition> conditions,
         JdwpCaptureSpec capture) {
 
     public JdwpTracepointSpec {
@@ -46,6 +46,10 @@ public record JdwpTracepointSpec(
         if (captureEveryMatchedHits < 0 || captureEveryMatchedHits > maxObservedHits
                 || (captureFirstMatchedHits == 0 && captureEveryMatchedHits == 0)) {
             throw new IllegalArgumentException("The matched-hit sampling policy is invalid");
+        }
+        conditions = conditions == null ? List.of() : List.copyOf(conditions);
+        if (conditions.size() > 4) {
+            throw new IllegalArgumentException("JDWP tracepoint supports at most 4 conditions");
         }
         capture = ContractChecks.requireNonNull(capture, "capture");
     }

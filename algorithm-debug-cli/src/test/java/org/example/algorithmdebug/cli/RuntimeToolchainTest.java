@@ -40,9 +40,10 @@ class RuntimeToolchainTest {
 
         assertEquals(agentJava.toAbsolutePath().normalize(), fallback.targetJavaExecutable());
         assertEquals(java.util.Optional.empty(), fallback.mavenExecutable());
-        assertThrows(IllegalArgumentException.class, () -> RuntimeToolchain.resolve(
+        CliStartupException failure = assertThrows(CliStartupException.class, () -> RuntimeToolchain.resolve(
                 Map.of("ADA_TARGET_JAVA_HOME", directory.resolve("missing").toString()),
                 agentJava,
                 true));
+        assertEquals("CLI_TOOLCHAIN_FILE_MISSING", failure.code());
     }
 }

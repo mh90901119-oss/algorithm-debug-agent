@@ -40,15 +40,14 @@ class CollectorDebugPlanWriterTest {
         assertEquals(120_000, root.path("idleTimeoutMillis").asLong());
         assertEquals(500, root.path("maxEvents").asInt());
         JsonNode point = root.path("tracepoints").path(0);
-        assertEquals("4.0", root.path("schemaVersion").asText());
+        assertEquals("5.0", root.path("schemaVersion").asText());
         assertEquals("fixture.Algorithm", point.path("className").asText());
         assertEquals("schedule", point.path("methodName").asText());
         assertEquals("()V", point.path("methodDescriptor").asText());
         assertEquals(11, point.path("line").asInt());
-        assertFalse(point.path("capture").path("locals").asBoolean());
+        assertFalse(point.path("capture").has("locals"));
         assertFalse(root.toString().contains("sourceSha256"));
-        assertEquals(0, point.path("capture").path("localNames").size());
-        assertEquals(0, point.path("capture").path("fieldPaths").size());
+        assertEquals(0, point.path("capture").path("valuePaths").size());
         assertEquals(5, point.path("captureFirstMatchedHits").asInt());
         assertEquals(5, point.path("captureEveryMatchedHits").asInt());
     }
@@ -80,7 +79,7 @@ class CollectorDebugPlanWriterTest {
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         JdwpTracepointSpec point = new JdwpTracepointSpec(
                 "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
-                100, 20, 5, 10, null, JdwpCaptureSpec.stackOnly());
+                100, 20, 5, 10, List.of(), JdwpCaptureSpec.stackOnly());
 
         JsonNode json = MAPPER.readTree(new CollectorDebugPlanWriter().write(
                 plan(List.of(point)), 50_005));
@@ -99,9 +98,9 @@ class CollectorDebugPlanWriterTest {
         JdwpTracepointSpec point = new JdwpTracepointSpec(
                 "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
                 500, 20, 5, 10,
-                new JdwpValueCondition(
-                        "candidate", List.of("wafer", "id"),
-                        JdwpConditionOperator.EQUALS, JdwpScalarType.STRING, "WAFER-1"),
+                List.of(new JdwpValueCondition(
+                        "candidate.wafer.id", JdwpConditionOperator.EQUALS,
+                        JdwpScalarType.STRING, "WAFER-1")),
                 JdwpCaptureSpec.stackOnly());
 
         JsonNode json = MAPPER.readTree(new CollectorDebugPlanWriter().write(
@@ -110,8 +109,10 @@ class CollectorDebugPlanWriterTest {
 
         assertEquals(500, written.path("maxObservedHits").asInt());
         assertEquals(20, written.path("maxCapturedHits").asInt());
-        assertEquals("candidate", written.path("condition").path("localName").asText());
-        assertEquals("WAFER-1", written.path("condition").path("expectedValue").asText());
+        assertEquals("candidate.wafer.id",
+                written.path("conditions").path(0).path("valuePath").asText());
+        assertEquals("WAFER-1",
+                written.path("conditions").path(0).path("expectedValue").asText());
     }
 
     private static JdwpCollectionPlan plan() {
@@ -124,7 +125,7 @@ class CollectorDebugPlanWriterTest {
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpTracepointSpec(
                 id, "fixture.Algorithm#schedule()V", anchor, line,
-                100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly());
+                100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly());
     }
 
     private static JdwpCollectionPlan plan(List<JdwpTracepointSpec> points) {

@@ -187,9 +187,8 @@ public final class CollectionEvidenceValidator {
         LinkedHashSet<TraceProvenance> result = new LinkedHashSet<>();
         summary.hits().forEach(hit -> {
             result.add(hit.provenance());
-            hit.values().forEach(value -> result.add(value.provenance()));
+            hit.projections().forEach(value -> result.add(value.provenance()));
         });
-        summary.limits().forEach(limit -> result.add(limit.provenance()));
         return List.copyOf(result);
     }
 

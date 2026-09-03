@@ -147,30 +147,23 @@ export const jdwp_plan_create = tool({
         .describe("Capture the first N condition-matched hits consecutively"),
       captureEveryMatchedHits: tool.schema.number().int().min(0).max(100000).optional()
         .describe("After the first group, capture every Nth matched hit; zero disables periodic sampling"),
-      condition: tool.schema.object({
-        localName: tool.schema.string()
-          .describe("Top-frame local variable name or this"),
-        fieldPath: tool.schema.array(tool.schema.string()).max(8).default([])
-          .describe("Instance field names traversed without invoking methods"),
+      conditions: tool.schema.array(tool.schema.object({
+        valuePath: tool.schema.string()
+          .describe("Exact top-frame value path, for example candidate.wafer.id or this.state"),
         operator: tool.schema.literal("EQUALS").default("EQUALS"),
         expectedType: tool.schema.enum([
           "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL",
         ]),
         expectedValue: tool.schema.string().optional()
           .describe("Typed scalar literal; omit only when expectedType is NULL"),
-      }).optional().describe("Optional generic stack-frame value path condition"),
+      })).max(4).default([])
+        .describe("Optional AND conditions evaluated before a snapshot is captured"),
       capture: tool.schema.object({
-        locals: tool.schema.boolean().optional()
-          .describe("Defaults to true when localNames is non-empty, otherwise false"),
         stack: tool.schema.boolean().default(true),
         maxFrames: tool.schema.number().int().min(1).max(64).default(8),
-        maxDepth: tool.schema.number().int().min(0).max(2).default(1),
-        maxItems: tool.schema.number().int().min(1).max(100).default(20),
         maxStringLength: tool.schema.number().int().min(16).max(1024).default(256),
-        localNames: tool.schema.array(tool.schema.string()).max(64).default([])
-          .describe("Explicit top-frame local names or this; required when locals is true"),
-        fieldPaths: tool.schema.array(tool.schema.string()).max(128).default([])
-          .describe("Paths prefixed by a selected local root, for example state.current"),
+        valuePaths: tool.schema.array(tool.schema.string()).max(128).default([])
+          .describe("Exact scalar or enum paths to read; complex values return REFERENCE_ONLY"),
       }).optional(),
     })).min(1).max(20),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-state question"),
@@ -220,6 +213,7 @@ export const evidence_query = tool({
     valueStatus: tool.schema.enum([
       "VALUE", "NULL", "UNAVAILABLE", "TRUNCATED",
       "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY",
+      "CAPTURED", "REFERENCE_ONLY",
     ]).optional(),
     sequenceFrom: tool.schema.number().int().positive().optional(),
     sequenceTo: tool.schema.number().int().positive().optional(),

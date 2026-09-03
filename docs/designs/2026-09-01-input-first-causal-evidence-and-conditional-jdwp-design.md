@@ -1,7 +1,7 @@
 # 输入优先的因果证据与条件 JDWP 可实施设计
 
 - 文档状态：Approved
-- 设计版本：1.0
+- 设计版本：1.1
 - 创建日期：2026-09-01
 - 适用范围：单 Maven 算法模块、单目标 JUnit UT、OpenCode algorithm-debug Agent
 - 取代设计：算法输入捕获、静态与运行时证据优化、P3 JDWP 集成和 Demo 领域知识主动加载的旧设计
@@ -91,19 +91,37 @@ CodePath 和 JDWP Plan 使用同一个小型不可变契约：
 文本、列表长度和 ID 格式由 Contracts 校验。Core 在归档 Plan 前校验 Evidence 存在且属于当前 Case；允许引用同一 Case 的历史
 Analysis Evidence。Java 不判断问题、假设或预期观察的业务真实性。
 
-## 7. 条件 JDWP
+## 7. 精确投影与条件 JDWP
 
-条件只读取断点栈顶帧的一个局部变量或方法参数，并沿普通实例字段路径读取值。第一版只支持 `EQUALS`，期望值支持字符串、
-整数、浮点数、布尔值、字符、枚举名和 null。禁止调用方法、getter、表达式求值、集合过滤、数组查询和目标 JVM 状态修改。
+JDWP 只读取断点栈顶帧中由 Plan 明确列出的 `valuePaths`。每条路径以局部变量、方法参数或 `this` 开始，最多沿八层普通
+实例字段前进。路径最终值为标量时记录完整有界值；最终值为复杂对象时只记录类型和对象标识，不递归展开。禁止调用方法、
+getter、表达式求值、静态字段、集合过滤、Map Key、数组下标和目标 JVM 状态修改。
 
 ```json
 {
-  "localName": "waferContext",
-  "fieldPath": ["waferId"],
-  "operator": "EQUALS",
-  "expected": {"type": "STRING", "value": "W1"}
+  "capture": {
+    "stack": true,
+    "maxFrames": 8,
+    "maxStringLength": 256,
+    "valuePaths": ["context.wafer.waferId", "decision.start"]
+  },
+  "conditions": [
+    {
+      "valuePath": "context.wafer.waferId",
+      "operator": "EQUALS",
+      "expectedType": "STRING",
+      "expectedValue": "W1"
+    }
+  ]
 }
 ```
+
+单个 tracepoint 最多包含四个条件，条件按 Plan 顺序执行并使用 AND 语义。第一版只支持 `EQUALS`，期望值支持字符串、整数、
+浮点数、布尔值、字符、枚举名和 null。任意条件明确不匹配时结果为 `NOT_MATCHED`；全部匹配时为 `MATCHED`；没有不匹配但
+至少一项无法读取时为 `UNAVAILABLE`。
+
+每个被选中的命中必须为每条 `valuePath` 写一个投影结果。结果状态限定为 `CAPTURED`、`TRUNCATED`、`REFERENCE_ONLY` 或
+`UNAVAILABLE`，并保留稳定原因码。读取一条路径失败不能丢弃同一命中的其他路径。
 
 每个 Tracepoint 使用下列独立计数：
 
@@ -116,13 +134,16 @@ Analysis Evidence。Java 不判断问题、假设或预期观察的业务真实�
 
 计划使用 `maxObservedHits`、`maxCapturedHits`、`captureFirstMatchedHits` 和
 `captureEveryMatchedHits`。条件结果必须区分 `MATCHED`、`NOT_MATCHED`、
-`UNAVAILABLE`。UNAVAILABLE 保留第一个确定性原因。条件不匹配时立即恢复事件线程，不展开对象图。硬预算同时包含断点观察数、
-快照数、Raw 事件数、字节数、对象深度、字段项数、字符串长度、总超时和空闲超时。
+`UNAVAILABLE`。UNAVAILABLE 保留第一个确定性原因。条件不匹配时立即恢复事件线程。硬预算包含断点观察数、快照数、
+`valuePaths` 数量和深度、Raw 事件数、字节数、字符串长度、总超时和空闲超时。
+
+Collector 保持单线程事件循环。在断点暂停期间完成条件和精确值读取，在内存中构造完整事件，恢复事件线程后同步追加一条
+JSONL 并按现有策略 flush。不引入异步落盘、队列或锁。
 
 ## 8. Schema 与兼容
 
-新的 CodePath/JDWP Plan 和 Collector Plan 升级主版本。当前写入只产生新版本；历史 v2 Schema 保留用于旧 Workspace Artifact
-校验，不允许把旧 Plan 重新绑定到新源码执行。Collector 内部不再保留无真实调用方的 v1 运行时兼容分支。
+精确投影 JDWP Plan、Collector Plan、Raw Trace 和 Snapshot Summary 升级主版本。当前写入只产生新版本，不允许把旧 Plan
+重新绑定到新源码执行。历史 Schema 只有在当前审计器仍用于只读校验时保留；没有真实调用方的旧运行时分支和递归对象格式删除。
 
 输入和 Gantt Artifact 路径行为是新 Case 的行为变化。旧 Case 继续只读；不得迁移、覆盖或重命名历史文件。
 
@@ -135,11 +156,12 @@ Skill 必须先读输入，再运行主 UT，再结合 Gantt/失败事实和源�
 
 ## 10. DFX 与安全
 
-DFX 记录 caseId、analysisId、runId、planId、collectionId、阶段、预算、observed/matched/captured/unavailable 计数、停止原因和异常栈。
+DFX 记录 caseId、analysisId、runId、planId、collectionId、阶段、预算、条件数、值路径数、observed/matched/captured/unavailable
+计数、投影状态计数、停止原因和异常栈。
 不得记录算法输入内容、源代码、变量值、凭据或未脱敏绝对路径。日志失败不得改变 Tool 的业务结果。
 
 ## 11. 验证与 Eval
 
 所有行为按 Red-Green-Refactor 实现。每阶段先运行受影响模块测试，再运行依赖模块测试。跨契约阶段运行根项目 `mvn test`。
-最终真实 OpenCode E2E 覆盖主运行、CodePath、条件 JDWP、条件不可用、错误假设拒绝和跨对象因果追踪，并逐 Case 审计
+最终真实 OpenCode E2E 覆盖主运行、CodePath、多条件 JDWP、精确投影、投影不可用、错误假设拒绝和跨对象因果追踪，并逐 Case 审计
 Workspace 文件、Schema、Artifact 完整性、Interaction 和 DFX 日志。

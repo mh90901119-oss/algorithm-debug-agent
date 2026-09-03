@@ -74,7 +74,7 @@ public final class JdwpPlanCompiler {
                     request.tracepointId(), entry.methodKey(), anchor,
                     request.line(), request.maxObservedHits(), request.maxCapturedHits(),
                     request.captureFirstMatchedHits(), request.captureEveryMatchedHits(),
-                    request.condition(), request.capture());
+                    request.conditions(), request.capture());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException(
                     "JDWP tracepoint is invalid " + request.tracepointId() + ": " + failure.getMessage(),

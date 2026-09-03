@@ -102,6 +102,13 @@ for the current evidence gap, collect it, evaluate it, and only then create a di
 new concrete gap remains. `ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION` is a workflow rejection, not a
 target failure; do not retry it automatically.
 
+For every ToolResponse with `success=false`, treat the named error code and message as the
+authoritative Agent boundary. Never use that failed call as target-test evidence. When the response
+contains a failure Manifest Artifact, read that bounded Manifest to distinguish process start,
+exit, attach, and archive facts; do not read Collector logs as algorithm evidence. Follow only the
+specific recovery action in the message, and never modify the target project POM to repair an Agent
+installation or Collector failure.
+
 Use CodePath when the unresolved question is which implementation or path executed. Select exact
 `class#method(descriptor)` keys from the current Method Catalog. Use `scopeMethodKey` for a repeated
 operation whose invocation groups/path variants matter. Expand only across a specific unresolved
@@ -134,14 +141,17 @@ JDWP state or line-hit evidence does not replace method-path evidence. Conversel
 replace JDWP when the unresolved question requires a named runtime value.
 
 Use JDWP when the unresolved question is a named runtime value at a current executable source line.
-CodePath and JDWP are independent; do not require one before the other. Prefer focused `localNames`
-and `fieldPaths` projections.
+CodePath and JDWP are independent; do not require one before the other. Build each tracepoint from the
+current Method Catalog and source: select an executable line where the named state is in scope, then
+request only the exact scalar or enum `valuePaths` needed to distinguish the current hypothesis.
+Algorithm-input identifiers may be used as condition values, but the Collector never assigns business
+meaning to a field.
 
-For a repeated method, use a generic `condition` when an entity or state can identify relevant
-invocations:
+For a repeated method, use up to four `conditions` when entity and state values identify relevant
+invocations. All conditions are combined with AND:
 
-- `localName`: top-frame local/parameter name or `this`.
-- `fieldPath`: at most eight instance fields; no getter, method, array index, or collection scan.
+- `valuePath`: top-frame local/parameter name or `this`, followed by at most seven instance fields,
+  for example `candidate.wafer.id`.
 - `operator`: `EQUALS`.
 - `expectedType`: `STRING`, `LONG`, `DOUBLE`, `BOOLEAN`, `CHAR`, `ENUM`, or `NULL`.
 - `expectedValue`: typed scalar text, omitted only for `NULL`.
@@ -150,9 +160,9 @@ Set `maxObservedHits` high enough to encounter the relevant invocation but no hi
 Set `maxCapturedHits` to the bounded number of full snapshots required. Use
 `captureFirstMatchedHits` to retain the first matched state transitions and
 `captureEveryMatchedHits` to sample later matched transitions without guessing fixed hit ordinals.
-Non-matching observations briefly suspend only the event thread and skip full stack/local/object
-expansion. Request `locals` only with explicit `localNames`; request each object value through a
-bounded `fieldPath` rooted at one of those local names.
+Non-matching observations briefly suspend only the event thread and skip snapshot creation. A capture
+`valuePath` reads exactly that path and never expands an object, collection, Map, or array. Select a
+deeper field path in a later Plan when the result is `REFERENCE_ONLY`.
 
 Read the Collector/Agent Manifest counters as separate facts: `observed` is breakpoint encounters,
 `matched` passed the condition, `captured` produced full snapshots, and `unavailable` means the
@@ -160,9 +170,14 @@ condition could not be evaluated. Read bounded unavailable-reason details before
 Never treat zero captured snapshots as proof that the expected state never existed when the Plan was
 truncated or condition evaluation was unavailable.
 
-After a Collection, read normalized Summary/Evidence first. Use `evidence_query` on the registered
-`JDWP_SNAPSHOT_SUMMARY` Artifact to select an exact `tracepointId`, normalized `valueName`, scalar
-value, or sequence window. Read Raw Trace only for a specific detail missing from normalized evidence.
+After a Collection, read normalized Summary/Evidence first. Each requested path has one projection
+status: `CAPTURED` contains a scalar value, `TRUNCATED` contains a bounded prefix,
+`REFERENCE_ONLY` identifies a complex runtime object that needs a deeper path, and `UNAVAILABLE`
+contains the deterministic read-failure reason. Use `evidence_query` on the registered
+`JDWP_SNAPSHOT_SUMMARY` Artifact to select an exact `tracepointId`, `valueName`, `scalarValue`,
+`valueStatus`, or sequence window. Interpret the value with the Method Catalog declaration, current
+source, Algorithm Input, stack location, runtime type, and Plan intent; do not infer meaning from a
+field name alone. Read Raw Trace only for a specific detail missing from normalized evidence.
 Do not repeat an effective Plan unchanged. A later Plan must answer
 a materially different question or change a field named by deterministic validation.
 

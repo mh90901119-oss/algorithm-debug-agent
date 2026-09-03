@@ -131,7 +131,8 @@ public final class RegisteredEvidenceQuery {
     private static boolean matchesJdwp(JsonNode record, EvidenceQueryFilter filter) {
         if (!matchesText(record.path("tracepointId"), filter.tracepointId())) return false;
         if (!matchesSequence(record.path("provenance").path("sequence"), filter)) return false;
-        return matchesValues(record.path("values"), "valuePath", "scalarPreview", "kind", filter);
+        return matchesValues(
+                record.path("projections"), "valuePath", "scalarValue", "status", filter);
     }
 
     private static boolean matchesValues(

@@ -38,12 +38,14 @@
 - 单个投影不可读不会丢弃调用事件；必填投影缺失会形成 Evidence gap。
 - Plan 错误返回具体、单行、有界的英文原因。
 
-### JDWP v4
+### JDWP Collector 4.0 / Plan v5
 
-- 支持精确方法/行断点、显式局部变量、`this`、普通实例字段路径和一个通用 `EQUALS` 条件。
+- 支持精确方法/行断点、显式局部变量、`this` 和普通实例字段的精确值路径。
+- 单个 Tracepoint 支持最多四个 `EQUALS` 条件，全部满足才采集；条件与投影共用同一值路径读取规则。
 - 分离 `maxObservedHits`、`maxCapturedHits`、首批匹配采样和周期匹配采样。
 - 暂停期间只复制选定值，`finally` 恢复事件集，恢复后由同一 Collector 线程顺序写 JSONL。
-- Manifest 分别记录 observed、matched、captured、unavailable。
+- Manifest 分别记录 observed、matched、captured、unavailable；每个计划值保留 `CAPTURED/TRUNCATED/REFERENCE_ONLY/UNAVAILABLE` 状态。
+- Collector 不递归展开完整对象图，也不自动猜测字段的业务含义。
 - 大型重复循环可依据前一轮 Manifest 的具体缺口创建新 Plan；没有固定采集轮数。
 
 ### 证据访问与顺序
@@ -68,7 +70,7 @@
 - Java 工具不解释 Gantt 业务语义，`gantt_inspect` 只提供有界 JSON 结构和值。
 - 复杂反射、运行时生成代码和外部依赖分派可能在静态 Catalog 中保持未解析。
 - JDWP 只能读取命中栈顶帧可见值及有界实例字段，不执行方法或任意表达式。
-- 动态证据受命中、深度、条目、字节和超时预算约束；超限必须报告为部分证据。
+- 动态证据受观察命中、匹配命中、采集命中、栈帧、字符串、字节和超时预算约束；超限必须报告为部分证据。
 - 当前只保证一个 OpenCode 会话内的目标执行顺序，不提供多会话锁或跨进程协调。
 - Agent 不修改目标算法生产源码，不接管生产调度决策。
 

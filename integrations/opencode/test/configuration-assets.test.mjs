@@ -48,6 +48,14 @@ test("planning tools expose structured intent instead of raw request JSON", asyn
   assert.match(runtimeSource, /jdwpPlanRequest/u)
 })
 
+test("evidence query exposes every normalized JDWP projection status", async () => {
+  const toolSource = await readUtf8("integrations/opencode/tools/algorithm-debug.ts")
+
+  for (const status of ["CAPTURED", "TRUNCATED", "REFERENCE_ONLY", "UNAVAILABLE"]) {
+    assert.match(toolSource, new RegExp(`valueStatus:[\\s\\S]{0,300}"${status}"`, "u"))
+  }
+})
+
 test("Skill enforces input-first causal search and current conditional JDWP fields", async () => {
   const [skill, agent, toolSource] = await Promise.all([
     readUtf8("skills/algorithm-debug/SKILL.md"),

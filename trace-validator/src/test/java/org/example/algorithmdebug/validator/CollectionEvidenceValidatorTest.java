@@ -199,9 +199,11 @@ class CollectionEvidenceValidatorTest {
         JdwpSnapshotSummary summary = new JdwpSnapshotSummary(
                 SchemaVersions.JDWP_SNAPSHOT_SUMMARY, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, rawReference,
                 List.of(new JdwpSnapshotSummary.TracepointHit(
-                        "point-1", 1, "main", "fixture.Algorithm#solve:12",
+                        "point-1", 1, 1, 1, "main", "fixture.Algorithm#solve:12",
+                        Optional.of("()V"), Optional.of(4L),
                         List.of(new JdwpSnapshotSummary.StackFrame(
-                                0, "fixture.Algorithm", "solve", 12)),
+                                0, "fixture.Algorithm", "solve",
+                                Optional.of("()V"), 12, Optional.of(4L))),
                         List.of(), provenance)), List.of(), truncated, NOW);
         NormalizationManifest normalization = new NormalizationManifest(
                 SchemaVersions.NORMALIZATION_MANIFEST, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID, "JDWP",

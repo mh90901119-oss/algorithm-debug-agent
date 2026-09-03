@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "4.0",
+  "schemaVersion": "5.0",
   "sessionId": "jdwp-loopback-verification",
   "target": {"host": "127.0.0.1", "port": __PORT__},
   "resumeOnAttach": true,
@@ -15,22 +15,17 @@
     "maxCapturedHits": 1,
     "captureFirstMatchedHits": 1,
     "captureEveryMatchedHits": 0,
-    "condition": {
-      "localName": "marker",
-      "fieldPath": [],
+    "conditions": [{
+      "valuePath": "marker",
       "operator": "EQUALS",
       "expectedType": "LONG",
       "expectedValue": "42"
-    },
+    }],
     "capture": {
-      "locals": true,
       "stack": true,
       "maxFrames": 4,
-      "maxDepth": 1,
-      "maxItems": 10,
       "maxStringLength": 128,
-      "localNames": ["marker"],
-      "fieldPaths": []
+      "valuePaths": ["marker"]
     }
   }]
 }

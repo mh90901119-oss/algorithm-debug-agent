@@ -267,14 +267,15 @@ export function gradeCase(evalCase, trace, runtime) {
     const jdwpPlans = trace.toolCalls.filter((call) => call.name === "jdwp_plan_create")
     const conditionalPoints = jdwpPlans.flatMap((call) =>
       Array.isArray(call.input?.tracepoints) ? call.input.tracepoints : [])
-      .filter((point) => point?.condition
+      .filter((point) => Array.isArray(point?.conditions) && point.conditions.length > 0
         && Number.isInteger(point.maxObservedHits)
         && Number.isInteger(point.maxCapturedHits))
     if (conditionalPoints.length === 0) {
       correctnessFailures.push("A bounded JDWP condition was required but none was planned")
     }
     for (const pattern of evalCase.requiredJdwpConditionValuePatterns ?? []) {
-      const values = conditionalPoints.map((point) => point.condition.expectedValue ?? "")
+      const values = conditionalPoints.flatMap((point) =>
+        point.conditions.map(condition => condition.expectedValue ?? ""))
       if (!values.some((value) => new RegExp(pattern, "iu").test(value))) {
         correctnessFailures.push(`No JDWP condition value matches required pattern: ${pattern}`)
       }

@@ -138,6 +138,7 @@ public final class CollectionApplicationService {
                 "1.0", caseId, plan.analysisId(), runId, planId,
                 collectionId, plan.targetTest(), "CODEPATH", clock.instant());
         Path collectionRoot = archive.startMethodPathCollection(record);
+        Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         logContext = logContext.withAnalysis(plan.analysisId()).withRun(runId.value())
                 .withCollection(collectionId.value());
         executionLog.info(logContext, "CollectionApplicationService", "COLLECTION_RECORD_CREATED",
@@ -170,7 +171,9 @@ public final class CollectionApplicationService {
                     failure.processStarted(), failure.exitCode(), startedAt));
             baseline = incomparable(record, "Collection failed before baseline check: " + failure.code());
             archive.createCollectionBaselineCheck(baseline);
-            throw new CaseRunException(failure.code(), "CodePath collection failed", failure);
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId,
+                    new CaseRunException(failure.code(), "CodePath collection failed", failure));
         } catch (CaseRunException failure) {
             archiveManifest(collectionRoot, failureManifest(
                     collectionRoot, record, plan, CollectionCompletion.AGENT_FAILED,
@@ -178,7 +181,8 @@ public final class CollectionApplicationService {
                     result, false, -1, startedAt));
             baseline = incomparable(record, "Collection did not start: " + failure.code());
             archive.createCollectionBaselineCheck(baseline);
-            throw failure;
+            throw withFailureArtifacts(
+                    archive, caseId, caseRoot, collectionRoot, collectionId, failure);
         }
         archive.createCollectionBaselineCheck(baseline);
         CollectionPostProcessingResult postProcessing = Files.isRegularFile(
@@ -191,7 +195,6 @@ public final class CollectionApplicationService {
                 "COLLECTION_POST_PROCESSING_COMPLETED",
                 postProcessing.confirmationUsable() ? "USABLE" : "PARTIAL",
                 "CodePath normalization, validation, and evidence processing completed");
-        Path caseRoot = layout.projectCases(projectId).resolve(caseId.value());
         List<ArtifactReference> artifacts = new java.util.ArrayList<>(describeArtifacts(
                 caseRoot, collectionRoot, collectionId));
         artifacts.addAll(postProcessing.artifacts());
@@ -241,6 +244,40 @@ public final class CollectionApplicationService {
         addArtifact(artifacts, caseRoot, collectionRoot.resolve("logs/stderr.log"),
                 collectionId.value() + "-stderr", "COLLECTOR_STDERR", "text/plain");
         return List.copyOf(artifacts);
+    }
+
+    private List<ArtifactReference> registerFailureArtifacts(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            Path caseRoot,
+            Path collectionRoot,
+            CollectionId collectionId) {
+        List<ArtifactReference> artifacts = new java.util.ArrayList<>();
+        addArtifact(artifacts, caseRoot, collectionRoot.resolve("manifest.json"),
+                collectionId.value() + "-manifest", "CODEPATH_MANIFEST", "application/json");
+        addArtifact(artifacts, caseRoot, collectionRoot.resolve("validation/baseline-check.json"),
+                collectionId.value() + "-baseline", "COLLECTION_BASELINE", "application/json");
+        List<ArtifactReference> result = List.copyOf(artifacts);
+        result.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
+        return result;
+    }
+
+    private CaseRunException withFailureArtifacts(
+            CaseArchiveRepository archive,
+            CaseId caseId,
+            Path caseRoot,
+            Path collectionRoot,
+            CollectionId collectionId,
+            CaseRunException failure) {
+        try {
+            return new CaseRunException(
+                    failure.code(), failure.getMessage(), failure,
+                    registerFailureArtifacts(
+                            archive, caseId, caseRoot, collectionRoot, collectionId));
+        } catch (RuntimeException artifactFailure) {
+            failure.addSuppressed(artifactFailure);
+            return failure;
+        }
     }
 
     private static void addArtifact(

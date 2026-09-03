@@ -12,8 +12,6 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class JdwpCollectionContractsTest {
-
-    private static final String HASH = "a".repeat(64);
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
 
     @Test
@@ -25,7 +23,7 @@ class JdwpCollectionContractsTest {
         mutable.clear();
 
         assertEquals(1, plan.tracepoints().size());
-        assertFalse(plan.tracepoints().getFirst().capture().locals());
+        assertFalse(plan.tracepoints().getFirst().capture().valuePaths().iterator().hasNext());
         assertEquals(8, plan.tracepoints().getFirst().capture().maxFrames());
     }
 
@@ -35,7 +33,6 @@ class JdwpCollectionContractsTest {
                 tracepoint("same", 11, 1, JdwpCaptureSpec.stackOnly()),
                 tracepoint("same", 12, 1, JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults()));
-
         List<JdwpTracepointSpec> excessive = java.util.stream.IntStream.rangeClosed(1, 21)
                 .mapToObj(index -> tracepoint("point-" + index, 11, 1,
                         JdwpCaptureSpec.stackOnly()))
@@ -49,34 +46,36 @@ class JdwpCollectionContractsTest {
         SourceAnchor anchor = anchor();
         assertThrows(IllegalArgumentException.class, () -> new JdwpTracepointSpec(
                 "point-1", methodKey(), anchor, 21,
-                1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()));
+                1, 1, 1, 0, List.of(), JdwpCaptureSpec.stackOnly()));
         assertThrows(IllegalArgumentException.class, () -> new JdwpTracepointSpec(
                 "point-1", "fixture.Algorithm#other()V", anchor, 11,
-                1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()));
+                1, 1, 1, 0, List.of(), JdwpCaptureSpec.stackOnly()));
     }
 
     @Test
-    void enforcesExplicitProjectedLocalsLimits() {
-        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 3, 20, 256, List.of("state"), List.of()));
-        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 1, 101, 256, List.of("state"), List.of()));
-        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                false, false, 8, 1, 20, 256, List.of(), List.of()));
-
-        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 1, 20, 256,
-                List.of("state"), List.of("other.current")));
+    void enforcesPreciseValuePathLimits() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(true, 65, 256, List.of("state")));
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(true, 8, 1_025, List.of("state")));
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(false, 8, 256, List.of()));
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(true, 8, 256, List.of("state.getCurrent()")));
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(true, 8, 256, List.of("状态.id")));
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(true, 8, 256,
+                        List.of("state.current", "state.current")));
     }
 
     @Test
-    void allowsTwentyExplicitProjectedLocalSnapshotsWithoutTheHistoricalFiveHitCap() {
+    void allowsTwentyPreciseSnapshotsWithoutTheHistoricalFiveHitCap() {
         JdwpCaptureSpec projected = new JdwpCaptureSpec(
-                true, true, 8, 1, 20, 256,
-                List.of("state"), List.of("state.current"));
+                true, 8, 256, List.of("state.current"));
         JdwpTracepointSpec point = new JdwpTracepointSpec(
                 "point-1", methodKey(), anchor(), 11,
-                1_000, 20, 5, 5, null, projected);
+                1_000, 20, 5, 5, List.of(), projected);
 
         JdwpCollectionPlan plan = plan(List.of(point), JdwpCollectionBudget.defaults());
 
@@ -84,9 +83,9 @@ class JdwpCollectionContractsTest {
     }
 
     @Test
-    void rejectsImplicitAllVisibleLocalsBecauseItCannotExpressCollectionIntent() {
-        assertThrows(IllegalArgumentException.class, () -> new JdwpCaptureSpec(
-                true, true, 8, 1, 20, 256, List.of(), List.of()));
+    void rejectsCaptureWithoutStackOrExactValuePath() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new JdwpCaptureSpec(false, 8, 256, List.of()));
     }
 
     @Test
@@ -148,8 +147,9 @@ class JdwpCollectionContractsTest {
             List<JdwpTracepointSpec> tracepoints, JdwpCollectionBudget budget) {
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
-                tracepoints, budget, "Capture the decision state",
+                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"),
+                new TargetTest("fixture.AlgorithmTest", "runs"), tracepoints, budget,
+                "Capture the decision state",
                 new InvestigationIntent(
                         "Which value selected the branch?", "The state selected the branch",
                         List.of(), List.of("Observed runtime state")), NOW);
@@ -159,7 +159,7 @@ class JdwpCollectionContractsTest {
             String id, int line, int maxHits, JdwpCaptureSpec capture) {
         return new JdwpTracepointSpec(
                 id, methodKey(), anchor(), line, maxHits, maxHits,
-                maxHits, 0, null, capture);
+                maxHits, 0, List.of(), capture);
     }
 
     private static SourceAnchor anchor() {
@@ -182,9 +182,8 @@ class JdwpCollectionContractsTest {
                 new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new PlanId("plan-1"), new CollectionId("collection-1"),
                 "jdwp-batch-collector", "1.0.0", completion, "test_completion",
-                JdwpCollectionStage.FAILED,
-                true, true, 1, 2, timedOut, truncated, 0, 0,
-                Map.of(), Map.of(), failure,
+                JdwpCollectionStage.FAILED, true, true, 1, 2,
+                timedOut, truncated, 0, 0, Map.of(), Map.of(), failure,
                 "raw/jdwp.jsonl", "raw/collector-manifest.json",
                 "logs/target-stdout.log", "logs/target-stderr.log",
                 "logs/collector-stdout.log", "logs/collector-stderr.log", NOW, NOW);

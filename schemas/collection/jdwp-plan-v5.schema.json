@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/jdwp-plan-v5.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "planId", "caseId", "analysisId", "targetTest", "tracepoints", "budget", "rationale", "intent", "createdAt"],
+  "properties": {
+    "schemaVersion": {"const": "5.0"},
+    "planId": {"type": "string", "minLength": 1},
+    "caseId": {"type": "string", "minLength": 1},
+    "analysisId": {"type": "string", "minLength": 1},
+    "targetTest": {"$ref": "#/$defs/targetTest"},
+    "tracepoints": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"$ref": "#/$defs/tracepoint"}},
+    "budget": {"$ref": "#/$defs/budget"},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "intent": {"$ref": "#/$defs/intent"},
+    "createdAt": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "valuePath": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^(this|[A-Za-z_$][A-Za-z0-9_$]*)(\\.[A-Za-z_$][A-Za-z0-9_$]*){0,7}$"},
+    "targetTest": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName"],
+      "properties": {"className": {"type": "string", "minLength": 1}, "methodName": {"type": "string", "minLength": 1}}
+    },
+    "sourceAnchor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName", "descriptor", "sourceRelativePath", "startLine", "endLine"],
+      "properties": {
+        "className": {"type": "string", "minLength": 1},
+        "methodName": {"type": "string", "minLength": 1},
+        "descriptor": {"type": "string", "minLength": 3},
+        "sourceRelativePath": {"type": "string", "minLength": 1},
+        "startLine": {"type": "integer", "minimum": 1},
+        "endLine": {"type": "integer", "minimum": 1}
+      }
+    },
+    "condition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["valuePath", "operator", "expectedType", "expectedValue"],
+      "properties": {
+        "valuePath": {"$ref": "#/$defs/valuePath"},
+        "operator": {"const": "EQUALS"},
+        "expectedType": {"enum": ["STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL"]},
+        "expectedValue": {"type": ["string", "null"], "maxLength": 1024}
+      }
+    },
+    "capture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stack", "maxFrames", "maxStringLength", "valuePaths"],
+      "properties": {
+        "stack": {"type": "boolean"},
+        "maxFrames": {"type": "integer", "minimum": 1, "maximum": 64},
+        "maxStringLength": {"type": "integer", "minimum": 16, "maximum": 1024},
+        "valuePaths": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"$ref": "#/$defs/valuePath"}}
+      }
+    },
+    "tracepoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["tracepointId", "methodKey", "sourceAnchor", "line", "maxObservedHits", "maxCapturedHits", "captureFirstMatchedHits", "captureEveryMatchedHits", "conditions", "capture"],
+      "properties": {
+        "tracepointId": {"type": "string", "minLength": 1},
+        "methodKey": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "sourceAnchor": {"$ref": "#/$defs/sourceAnchor"},
+        "line": {"type": "integer", "minimum": 1},
+        "maxObservedHits": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "maxCapturedHits": {"type": "integer", "minimum": 1, "maximum": 200},
+        "captureFirstMatchedHits": {"type": "integer", "minimum": 0, "maximum": 200},
+        "captureEveryMatchedHits": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "conditions": {"type": "array", "maxItems": 4, "items": {"$ref": "#/$defs/condition"}},
+        "capture": {"$ref": "#/$defs/capture"}
+      }
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxEvents", "maxBytes", "timeoutMillis", "idleTimeoutMillis"],
+      "properties": {
+        "maxEvents": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "maxBytes": {"type": "integer", "minimum": 1, "maximum": 52428800},
+        "timeoutMillis": {"type": "integer", "minimum": 1000, "maximum": 1200000},
+        "idleTimeoutMillis": {"type": "integer", "minimum": 1000, "maximum": 1200000}
+      }
+    },
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["questionToAnswer", "hypothesis", "basedOnEvidenceIds", "expectedObservations"],
+      "properties": {
+        "questionToAnswer": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "hypothesis": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "basedOnEvidenceIds": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+        "expectedObservations": {"type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 1024}}
+      }
+    }
+  }
+}

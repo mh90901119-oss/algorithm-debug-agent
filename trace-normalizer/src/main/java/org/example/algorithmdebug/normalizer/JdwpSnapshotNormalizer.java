@@ -7,6 +7,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -17,38 +18,28 @@ import org.example.algorithmdebug.contracts.NormalizationStatus;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.TraceProvenance;
 
-/** 将 JDWP Raw JSONL 流式归一化为命中、栈帧和通用值路径摘要。 */
+/** 将 JDWP Raw JSONL 流式归一化为调用栈和精确值路径摘要。 */
 public final class JdwpSnapshotNormalizer {
-
     private static final List<String> LIFECYCLE_EVENTS = List.of(
             "collector_started", "collector_finished");
     private final BoundedJsonlReader reader;
-    private final JdwpValueFlattener valueFlattener;
 
-    /** 使用固定缓冲区 Reader 和通用值扁平器。 */
     public JdwpSnapshotNormalizer() {
-        this(new BoundedJsonlReader(), new JdwpValueFlattener());
+        this(new BoundedJsonlReader());
     }
 
-    JdwpSnapshotNormalizer(BoundedJsonlReader reader, JdwpValueFlattener valueFlattener) {
-        if (reader == null || valueFlattener == null) {
-            throw new IllegalArgumentException("JDWP Normalizer dependencies must not be null");
+    JdwpSnapshotNormalizer(BoundedJsonlReader reader) {
+        if (reader == null) {
+            throw new IllegalArgumentException("JDWP Normalizer dependency must not be null");
         }
         this.reader = reader;
-        this.valueFlattener = valueFlattener;
     }
 
-    /**
-     * 归一化一条归档的 JDWP Trace；格式失败返回 FAILED 且不伪造空摘要。
-     *
-     * @param input 已校验身份和预算的 JDWP 输入
-     * @return 通用运行时摘要或结构化失败
-     */
     public NormalizationResult<JdwpSnapshotSummary> normalize(JdwpNormalizationInput input) {
         if (input == null) throw new IllegalArgumentException("input must not be null");
         Accumulator accumulator = null;
         try {
-            accumulator = new Accumulator(input, valueFlattener);
+            accumulator = new Accumulator(input);
             reader.read(
                     input.rawTracePath(), input.budget().maxRawBytes(),
                     input.budget().maxRecordBytes(), input.budget().maxRecords(),
@@ -68,22 +59,17 @@ public final class JdwpSnapshotNormalizer {
     }
 
     private static final class Accumulator {
-
         private final JdwpNormalizationInput input;
-        private final JdwpValueFlattener flattener;
         private final Map<String, JdwpTracepointSpec> tracepoints = new HashMap<>();
         private final ArrayList<JdwpSnapshotSummary.TracepointHit> hits = new ArrayList<>();
-        private final ArrayList<JdwpSnapshotSummary.CollectorLimitFact> limits = new ArrayList<>();
         private final LinkedHashSet<String> reasons = new LinkedHashSet<>();
         private final SummaryBudget summaryBudget;
         private long recordCount;
         private long previousSequence;
-        private int valueFactCount;
-        private String rawSchemaVersion;
+        private int projectionCount;
 
-        private Accumulator(JdwpNormalizationInput input, JdwpValueFlattener flattener) {
+        private Accumulator(JdwpNormalizationInput input) {
             this.input = input;
-            this.flattener = flattener;
             this.summaryBudget = new SummaryBudget(input, reasons);
             input.plan().tracepoints().forEach(point -> tracepoints.put(point.tracepointId(), point));
             if (input.collectorTruncated()) reasons.add("COLLECTOR_TRUNCATED");
@@ -91,12 +77,7 @@ public final class JdwpSnapshotNormalizer {
 
         private void accept(long line, JsonNode json) {
             recordCount++;
-            String recordVersion = requireVersion(json, line);
-            if (rawSchemaVersion == null) {
-                rawSchemaVersion = recordVersion;
-            } else if (!rawSchemaVersion.equals(recordVersion)) {
-                throw invalid(line, "JDWP Raw schemaVersion changed within one trace");
-            }
+            requireVersion(json, line);
             requiredText(json, "sessionId", 1_024, line);
             validateTimestamp(json, line);
             long sequence = requiredPositiveLong(json, "sequence", line);
@@ -121,61 +102,44 @@ public final class JdwpSnapshotNormalizer {
             String tracepointId = requiredText(json, "tracepointId", 256, line);
             JdwpTracepointSpec tracepoint = tracepoints.get(tracepointId);
             if (tracepoint == null) {
-                throw new NormalizationException(
-                        "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "The JDWP hit does not belong to the collection plan", line, null);
+                throw outsidePlan(line, "The JDWP hit does not belong to the collection plan");
             }
-            int hit = requiredPositiveInt(json, "hit", line);
-            int observedHit = json.has("observedHit")
-                    ? requiredPositiveInt(json, "observedHit", line) : hit;
-            int matchedHit = json.has("matchedHit")
-                    ? requiredPositiveInt(json, "matchedHit", line) : hit;
-            int capturedHit = json.has("capturedHit")
-                    ? requiredPositiveInt(json, "capturedHit", line) : matchedHit;
-            if (observedHit > tracepoint.maxObservedHits()) {
-                throw invalid(line, "The JDWP observed hit exceeds the plan limit");
-            }
-            if (capturedHit > tracepoint.maxCapturedHits()) {
-                throw invalid(line, "The JDWP captured hit exceeds the plan limit");
+            int observedHit = requiredPositiveInt(json, "observedHit", line);
+            int matchedHit = requiredPositiveInt(json, "matchedHit", line);
+            int capturedHit = requiredPositiveInt(json, "capturedHit", line);
+            if (matchedHit > observedHit || capturedHit > matchedHit
+                    || observedHit > tracepoint.maxObservedHits()
+                    || capturedHit > tracepoint.maxCapturedHits()) {
+                throw outsidePlan(line, "The JDWP hit counters violate the collection plan");
             }
             boolean selectedBySampling = matchedHit <= tracepoint.captureFirstMatchedHits()
                     || (tracepoint.captureEveryMatchedHits() > 0
                     && matchedHit % tracepoint.captureEveryMatchedHits() == 0);
             if (!selectedBySampling) {
-                throw new NormalizationException(
-                        "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "The JDWP matched hit does not satisfy the collection sampling policy", line, null);
+                throw outsidePlan(line, "The JDWP hit violates the matched-hit sampling policy");
             }
-            if (tracepoint.condition() != null
+            if (!tracepoint.conditions().isEmpty()
                     && !"MATCHED".equals(json.path("conditionResult").asText())) {
                 throw invalid(line, "The conditional JDWP snapshot is not marked MATCHED");
             }
+
             JsonNode thread = requiredObject(json, "thread", line);
             String threadName = requiredText(thread, "name", 512, line);
             JsonNode location = requiredObject(json, "location", line);
             String className = requiredText(location, "className", 1_024, line);
             String methodName = requiredText(location, "methodName", 512, line);
-            int sourceLine = requiredLine(location, "line", line);
-            Optional<String> methodDescriptor = optionalText(
-                    location, "methodDescriptor", 2_048, line);
-            Optional<Long> codeIndex = optionalNonNegativeLong(location, "codeIndex", line);
-            if ("2.0".equals(rawSchemaVersion)
-                    && (methodDescriptor.isEmpty() || codeIndex.isEmpty())) {
-                throw invalid(line, "JDWP Raw 2.0 location lacks methodDescriptor or codeIndex");
-            }
+            int sourceLine = requiredPositiveInt(location, "line", line);
+            String descriptor = requiredText(location, "methodDescriptor", 2_048, line);
+            long codeIndex = requiredNonNegativeLong(location, "codeIndex", line);
             if (!className.equals(tracepoint.sourceAnchor().className())
                     || !methodName.equals(tracepoint.sourceAnchor().methodName())
                     || sourceLine != tracepoint.line()
-                    || (methodDescriptor.isPresent() && !methodDescriptor.orElseThrow()
-                            .equals(tracepoint.sourceAnchor().descriptor()))) {
-                throw new NormalizationException(
-                        "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "JDWP location does not match the collection plan", line, null);
+                    || !descriptor.equals(tracepoint.sourceAnchor().descriptor())) {
+                throw outsidePlan(line, "JDWP location does not match the collection plan");
             }
-            JsonNode framesNode = json.get("frames");
-            if (framesNode == null || !framesNode.isArray()) {
-                throw invalid(line, "The JDWP hit is missing a frames array");
-            }
+
+            JsonNode framesNode = requiredArray(json, "frames", line);
+            JsonNode projectionsNode = requiredArray(json, "projections", line);
             if (hits.size() >= input.budget().maxHits()) {
                 reasons.add("HIT_BUDGET_EXCEEDED");
                 return;
@@ -183,126 +147,119 @@ public final class JdwpSnapshotNormalizer {
             TraceProvenance provenance = provenance(line, sequence);
             int frameLimit = Math.min(
                     input.budget().maxFramesPerHit(), tracepoint.capture().maxFrames());
-            List<JdwpSnapshotSummary.StackFrame> frames = frames(
-                    framesNode, frameLimit, line, "2.0".equals(rawSchemaVersion));
+            List<JdwpSnapshotSummary.StackFrame> frames = frames(framesNode, frameLimit, line);
             if (framesNode.size() > frameLimit) reasons.add("FRAME_BUDGET_EXCEEDED");
-            String normalizedLocation = className + "#" + methodName + ":" + sourceLine;
-            if (!summaryBudget.reserveHit(tracepointId, threadName, normalizedLocation, frames)) {
+            if (tracepoint.capture().stack() && frames.isEmpty()) reasons.add("STACK_UNAVAILABLE");
+
+            List<JdwpSnapshotSummary.ProjectionFact> projections = projections(
+                    projectionsNode, tracepoint, provenance, line);
+            if (projectionCount + projections.size() > input.budget().maxValueFacts()) {
+                reasons.add("PROJECTION_BUDGET_EXCEEDED");
                 return;
             }
-            List<JdwpValueFlattener.RootValue> roots = roots(framesNode);
-            if (!tracepoint.capture().locals() && !roots.isEmpty()) {
-                throw new NormalizationException(
-                        "NORMALIZE_EVENT_OUTSIDE_PLAN",
-                        "The JDWP Raw Trace contains locals/this values not requested by the plan", line, null);
+            projections.forEach(this::recordProjectionStatus);
+            String normalizedLocation = className + "#" + methodName + ":" + sourceLine;
+            if (!summaryBudget.reserveHit(
+                    tracepointId, threadName, normalizedLocation, frames, projections)) {
+                return;
             }
-            int remainingFacts = Math.max(0, input.budget().maxValueFacts() - valueFactCount);
-            JdwpValueFlattener.Result flattened = flattener.flatten(
-                    roots, provenance, input.budget(), remainingFacts);
-            reasons.addAll(flattened.reasons());
-            ArrayList<JdwpSnapshotSummary.ValueFact> retainedFacts = new ArrayList<>();
-            for (JdwpSnapshotSummary.ValueFact fact : flattened.facts()) {
-                if (!summaryBudget.reserveValue(fact)) break;
-                retainedFacts.add(fact);
-            }
-            retainedFacts.sort(Comparator.comparing(JdwpSnapshotSummary.ValueFact::valuePath));
-            valueFactCount += retainedFacts.size();
-            int remainingLimits = Math.max(0, 1_024 - limits.size());
-            if (flattened.limits().size() > remainingLimits) {
-                reasons.add("LIMIT_FACT_BUDGET_EXCEEDED");
-            }
-            for (JdwpSnapshotSummary.CollectorLimitFact limit : flattened.limits().subList(
-                    0, Math.min(remainingLimits, flattened.limits().size()))) {
-                if (!summaryBudget.reserveLimit(limit)) break;
-                limits.add(limit);
-            }
+            projectionCount += projections.size();
             hits.add(new JdwpSnapshotSummary.TracepointHit(
-                    tracepointId, hit, threadName,
-                    normalizedLocation, methodDescriptor, codeIndex,
-                    frames, List.copyOf(retainedFacts), provenance));
+                    tracepointId, observedHit, matchedHit, capturedHit,
+                    threadName, normalizedLocation, Optional.of(descriptor), Optional.of(codeIndex),
+                    frames, projections, provenance));
+        }
+
+        private void recordProjectionStatus(JdwpSnapshotSummary.ProjectionFact projection) {
+            switch (projection.status()) {
+                case CAPTURED -> { }
+                case TRUNCATED -> reasons.add("PROJECTION_TRUNCATED");
+                case REFERENCE_ONLY -> reasons.add("PROJECTION_REQUIRES_DEEPER_PATH");
+                case UNAVAILABLE -> reasons.add("PROJECTION_UNAVAILABLE");
+            }
         }
 
         private List<JdwpSnapshotSummary.StackFrame> frames(
-                JsonNode frames,
-                int maximum,
-                long line,
-                boolean requireV2Location) {
+                JsonNode frames, int maximum, long line) {
             ArrayList<JdwpSnapshotSummary.StackFrame> result = new ArrayList<>();
-            java.util.HashSet<Integer> indexes = new java.util.HashSet<>();
+            HashSet<Integer> indexes = new HashSet<>();
             for (int index = 0; index < Math.min(maximum, frames.size()); index++) {
                 JsonNode frame = frames.get(index);
-                if (!frame.isObject()) throw invalid(line, "JDWP frame must be object");
+                if (!frame.isObject()) throw invalid(line, "JDWP frame must be an object");
                 int frameIndex = requiredNonNegativeInt(frame, "index", line);
-                if (!indexes.add(frameIndex)) throw invalid(line, "JDWP frame index duplicate");
-                Optional<String> descriptor = optionalText(
-                        frame, "methodDescriptor", 2_048, line);
-                Optional<Long> codeIndex = optionalNonNegativeLong(frame, "codeIndex", line);
-                if (requireV2Location && (descriptor.isEmpty() || codeIndex.isEmpty())) {
-                    throw invalid(line, "JDWP Raw 2.0 frame lacks methodDescriptor or codeIndex");
-                }
+                if (!indexes.add(frameIndex)) throw invalid(line, "JDWP frame index is duplicated");
                 result.add(new JdwpSnapshotSummary.StackFrame(
                         frameIndex,
                         requiredText(frame, "className", 1_024, line),
                         requiredText(frame, "methodName", 512, line),
-                        descriptor,
+                        Optional.of(requiredText(frame, "methodDescriptor", 2_048, line)),
                         requiredFrameLine(frame, "line", line),
-                        codeIndex));
+                        Optional.of(requiredNonNegativeLong(frame, "codeIndex", line))));
             }
             result.sort(Comparator.comparingInt(JdwpSnapshotSummary.StackFrame::index));
             return List.copyOf(result);
         }
 
-        private List<JdwpValueFlattener.RootValue> roots(JsonNode frames) {
-            if (frames.isEmpty() || !frames.get(0).isObject()) return List.of();
-            JsonNode top = frames.get(0);
-            ArrayList<JdwpValueFlattener.RootValue> result = new ArrayList<>();
-            JsonNode locals = top.get("locals");
-            if (locals != null && !locals.isNull()) {
-                if (plainLocalsObject(locals)) {
-                    List<String> names = new ArrayList<>();
-                    locals.fieldNames().forEachRemaining(names::add);
-                    names.sort(Comparator.naturalOrder());
-                    names.forEach(name -> result.add(new JdwpValueFlattener.RootValue(
-                            "locals." + name, locals.get(name))));
-                } else {
-                    result.add(new JdwpValueFlattener.RootValue("locals", locals));
+        private List<JdwpSnapshotSummary.ProjectionFact> projections(
+                JsonNode projections,
+                JdwpTracepointSpec tracepoint,
+                TraceProvenance provenance,
+                long line) {
+            Map<String, JsonNode> byPath = new HashMap<>();
+            for (JsonNode projection : projections) {
+                if (!projection.isObject()) throw invalid(line, "JDWP projection must be an object");
+                String path = requiredText(projection, "valuePath", 2_048, line);
+                if (!tracepoint.capture().valuePaths().contains(path)) {
+                    throw outsidePlan(line, "JDWP projection was not requested by the plan");
+                }
+                if (byPath.put(path, projection) != null) {
+                    throw invalid(line, "JDWP projection valuePath is duplicated");
                 }
             }
-            JsonNode thisValue = top.get("this");
-            if (thisValue != null && !thisValue.isNull()) {
-                result.add(new JdwpValueFlattener.RootValue("this", thisValue));
+            if (!byPath.keySet().equals(new HashSet<>(tracepoint.capture().valuePaths()))) {
+                throw invalid(line, "JDWP projections do not cover every requested valuePath");
             }
-            return List.copyOf(result);
+            return tracepoint.capture().valuePaths().stream()
+                    .map(path -> projection(byPath.get(path), path, provenance, line))
+                    .toList();
         }
 
-        private static boolean plainLocalsObject(JsonNode locals) {
-            if (!locals.isObject()) return false;
-            java.util.Iterator<String> names = locals.fieldNames();
-            while (names.hasNext()) {
-                String name = names.next();
-                if (name.startsWith("$")) return false;
+        private JdwpSnapshotSummary.ProjectionFact projection(
+                JsonNode json, String path, TraceProvenance provenance, long line) {
+            JdwpSnapshotSummary.ProjectionStatus status;
+            try {
+                status = JdwpSnapshotSummary.ProjectionStatus.valueOf(
+                        requiredText(json, "status", 32, line));
+            } catch (IllegalArgumentException failure) {
+                throw invalid(line, "JDWP projection status is invalid");
             }
-            return true;
+            return new JdwpSnapshotSummary.ProjectionFact(
+                    path,
+                    status,
+                    optionalText(json, "kind", 64, line),
+                    optionalText(json, "runtimeType", 1_024, line),
+                    optionalText(json, "scalarValue", input.budget().maxScalarChars(), line),
+                    requiredBoolean(json, "valueTruncated", line),
+                    optionalNonNegativeLong(json, "objectId", line),
+                    optionalText(json, "reason", 256, line),
+                    provenance);
         }
 
         private NormalizationResult<JdwpSnapshotSummary> finish() {
             if (hits.isEmpty()) reasons.add("ZERO_TRACEPOINT_HITS");
-            hits.sort(Comparator.comparingLong(hit ->
-                    hit.provenance().sequence().orElseThrow()));
-            limits.sort(Comparator.comparing(JdwpSnapshotSummary.CollectorLimitFact::valuePath)
-                    .thenComparing(JdwpSnapshotSummary.CollectorLimitFact::marker)
-                    .thenComparingLong(limit -> limit.provenance().sequence().orElseThrow()));
+            hits.sort(Comparator.comparingLong(hit -> hit.provenance().sequence().orElseThrow()));
             boolean partial = !reasons.isEmpty();
             boolean truncated = input.collectorTruncated() || reasons.stream().anyMatch(reason ->
-                    !"ZERO_TRACEPOINT_HITS".equals(reason));
+                    reason.contains("BUDGET") || reason.contains("TRUNCATED")
+                    || "SEQUENCE_INCOMPLETE".equals(reason));
             JdwpSnapshotSummary summary = new JdwpSnapshotSummary(
                     SchemaVersions.JDWP_SNAPSHOT_SUMMARY, input.evidenceId(),
-                    input.collection().caseId(), input.collection().analysisId(), input.collection().runId(),
-                    input.collection().planId(), input.collection().collectionId(),
-                    input.rawTrace(), List.copyOf(hits), List.copyOf(limits),
-                    truncated, input.createdAt());
+                    input.collection().caseId(), input.collection().analysisId(),
+                    input.collection().runId(), input.collection().planId(),
+                    input.collection().collectionId(), input.rawTrace(),
+                    List.copyOf(hits), List.copyOf(reasons), truncated, input.createdAt());
             long frameCount = hits.stream().mapToLong(hit -> hit.frames().size()).sum();
-            long emitted = hits.size() + frameCount + valueFactCount + limits.size();
+            long emitted = hits.size() + frameCount + projectionCount;
             return new NormalizationResult<>(
                     partial ? NormalizationStatus.PARTIAL : NormalizationStatus.COMPLETE,
                     Optional.of(summary), recordCount, emitted, List.copyOf(reasons),
@@ -311,13 +268,12 @@ public final class JdwpSnapshotNormalizer {
 
         private TraceProvenance provenance(long line, long sequence) {
             return new TraceProvenance(
-                    input.collection().caseId(), input.collection().runId(), input.collection().collectionId(),
-                    input.rawTrace(), line, Optional.empty(), Optional.of(sequence),
-                    "RAW_OBSERVATION");
+                    input.collection().caseId(), input.collection().runId(),
+                    input.collection().collectionId(), input.rawTrace(), line,
+                    Optional.empty(), Optional.of(sequence), "RAW_OBSERVATION");
         }
     }
 
-    /** 按实际字符串长度保守估算 JSON 大小，达到预算后停止追加事实。 */
     private static final class SummaryBudget {
         private static final long SUMMARY_OVERHEAD = 1_536;
         private static final long PROVENANCE_OVERHEAD = 384;
@@ -327,20 +283,18 @@ public final class JdwpSnapshotNormalizer {
         private long reserved;
         private boolean exhausted;
 
-        private SummaryBudget(
-                JdwpNormalizationInput input,
-                LinkedHashSet<String> reasons) {
+        private SummaryBudget(JdwpNormalizationInput input, LinkedHashSet<String> reasons) {
             this.maximum = input.budget().maxSummaryBytes();
             this.reasons = reasons;
             this.provenanceBytes = PROVENANCE_OVERHEAD
                     + identityBytes(input) + artifactBytes(input.rawTrace())
                     + textBytes("RAW_OBSERVATION");
-            this.reserved = SUMMARY_OVERHEAD
-                    + identityBytes(input) + artifactBytes(input.rawTrace());
+            this.reserved = SUMMARY_OVERHEAD + identityBytes(input) + artifactBytes(input.rawTrace());
             if (reserved > maximum) {
                 throw new NormalizationException(
                         "NORMALIZE_OUTPUT_BUDGET_TOO_SMALL",
-                        "The summary budget cannot preserve the evidence identity and raw artifact references", 0, null);
+                        "The summary budget cannot preserve evidence identity and raw references",
+                        0, null);
             }
         }
 
@@ -348,31 +302,20 @@ public final class JdwpSnapshotNormalizer {
                 String tracepointId,
                 String threadName,
                 String location,
-                List<JdwpSnapshotSummary.StackFrame> frames) {
+                List<JdwpSnapshotSummary.StackFrame> frames,
+                List<JdwpSnapshotSummary.ProjectionFact> projections) {
             long bytes = 512L + provenanceBytes + textBytes(tracepointId)
                     + textBytes(threadName) + textBytes(location);
             for (JdwpSnapshotSummary.StackFrame frame : frames) {
                 bytes += 256L + textBytes(frame.className()) + textBytes(frame.methodName());
             }
-            return reserve(bytes);
-        }
-
-        private boolean reserveValue(JdwpSnapshotSummary.ValueFact fact) {
-            long bytes = 320L + provenanceBytes
-                    + textBytes(fact.valuePath()) + textBytes(fact.kind())
-                    + textBytes(fact.scalarPreview());
-            if (fact.runtimeType().isPresent()) bytes += textBytes(fact.runtimeType().orElseThrow());
-            for (String marker : fact.collectorMarkers()) bytes += textBytes(marker) + 8L;
-            return reserve(bytes);
-        }
-
-        private boolean reserveLimit(JdwpSnapshotSummary.CollectorLimitFact limit) {
-            return reserve(256L + provenanceBytes
-                    + textBytes(limit.valuePath()) + textBytes(limit.marker())
-                    + textBytes(limit.detail()));
-        }
-
-        private boolean reserve(long bytes) {
+            for (JdwpSnapshotSummary.ProjectionFact projection : projections) {
+                bytes += 320L + provenanceBytes + textBytes(projection.valuePath());
+                bytes += projection.kind().map(SummaryBudget::textBytes).orElse(0L);
+                bytes += projection.runtimeType().map(SummaryBudget::textBytes).orElse(0L);
+                bytes += projection.scalarValue().map(SummaryBudget::textBytes).orElse(0L);
+                bytes += projection.reason().map(SummaryBudget::textBytes).orElse(0L);
+            }
             if (exhausted) return false;
             if (bytes > maximum - reserved) {
                 exhausted = true;
@@ -409,21 +352,18 @@ public final class JdwpSnapshotNormalizer {
         }
     }
 
-    private static String requireVersion(JsonNode json, long line) {
-        String version = requiredText(json, "schemaVersion", 32, line);
-        if (!"1.0".equals(version) && !"2.0".equals(version)) {
+    private static void requireVersion(JsonNode json, long line) {
+        if (!"3.0".equals(requiredText(json, "schemaVersion", 32, line))) {
             throw invalid(line, "Unsupported JDWP Raw schemaVersion");
         }
-        return version;
     }
 
     private static Optional<String> optionalText(
             JsonNode json, String field, int maximum, long line) {
         JsonNode value = json.get(field);
         if (value == null || value.isNull()) return Optional.empty();
-        if (!value.isTextual() || value.textValue().isBlank()
-                || value.textValue().length() > maximum) {
-            throw invalid(line, field + " invalid");
+        if (!value.isTextual() || value.textValue().length() > maximum) {
+            throw invalid(line, field + " is invalid");
         }
         return Optional.of(value.textValue());
     }
@@ -433,15 +373,25 @@ public final class JdwpSnapshotNormalizer {
         JsonNode value = json.get(field);
         if (value == null || value.isNull()) return Optional.empty();
         if (!value.isIntegralNumber() || !value.canConvertToLong() || value.longValue() < 0) {
-            throw invalid(line, field + " invalid");
+            throw invalid(line, field + " is invalid");
         }
         return Optional.of(value.longValue());
     }
 
+    private static long requiredNonNegativeLong(JsonNode json, String field, long line) {
+        return optionalNonNegativeLong(json, field, line)
+                .orElseThrow(() -> invalid(line, field + " is missing"));
+    }
+
+    private static boolean requiredBoolean(JsonNode json, String field, long line) {
+        JsonNode value = json.get(field);
+        if (value == null || !value.isBoolean()) throw invalid(line, field + " is invalid");
+        return value.booleanValue();
+    }
+
     private static void validateTimestamp(JsonNode json, long line) {
-        String value = requiredText(json, "timestamp", 128, line);
         try {
-            Instant.parse(value);
+            Instant.parse(requiredText(json, "timestamp", 128, line));
         } catch (DateTimeParseException failure) {
             throw new NormalizationException(
                     "NORMALIZE_SCHEMA_UNSUPPORTED", "JDWP timestamp is invalid", line, failure);
@@ -451,6 +401,12 @@ public final class JdwpSnapshotNormalizer {
     private static JsonNode requiredObject(JsonNode json, String field, long line) {
         JsonNode value = json.get(field);
         if (value == null || !value.isObject()) throw invalid(line, field + " is invalid");
+        return value;
+    }
+
+    private static JsonNode requiredArray(JsonNode json, String field, long line) {
+        JsonNode value = json.get(field);
+        if (value == null || !value.isArray()) throw invalid(line, field + " is invalid");
         return value;
     }
 
@@ -479,16 +435,9 @@ public final class JdwpSnapshotNormalizer {
     }
 
     private static int requiredNonNegativeInt(JsonNode json, String field, long line) {
-        JsonNode value = json.get(field);
-        if (value == null || !value.isIntegralNumber()
-                || !value.canConvertToInt() || value.intValue() < 0) {
-            throw invalid(line, field + " is invalid");
-        }
-        return value.intValue();
-    }
-
-    private static int requiredLine(JsonNode json, String field, long line) {
-        return requiredPositiveInt(json, field, line);
+        long value = requiredNonNegativeLong(json, field, line);
+        if (value > Integer.MAX_VALUE) throw invalid(line, field + " exceeds the limit");
+        return (int) value;
     }
 
     private static int requiredFrameLine(JsonNode json, String field, long line) {
@@ -498,6 +447,10 @@ public final class JdwpSnapshotNormalizer {
             throw invalid(line, field + " is invalid");
         }
         return value.intValue();
+    }
+
+    private static NormalizationException outsidePlan(long line, String detail) {
+        return new NormalizationException("NORMALIZE_EVENT_OUTSIDE_PLAN", detail, line, null);
     }
 
     private static NormalizationException invalid(long line, String detail) {

@@ -44,7 +44,10 @@ export function createAlgorithmDebugRuntime({
 
   async function runTargetExecution(toolName, operation) {
     if (activeTargetExecution !== null) {
-      return failure("ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+      return failure(
+        "ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION",
+        `${toolName} cannot start while ${activeTargetExecution} is active. Wait for the active ToolResponse, inspect it, and then decide whether a new collection is required. Do not treat this rejection as a target-test failure.`,
+      )
     }
     activeTargetExecution = toolName
     try {
@@ -412,6 +415,16 @@ function codePathPlanRequest(input, now, createId) {
   return request
 }
 
+function jdwpValuePath(value, name) {
+  const path = requiredText(value, name)
+  const segments = path.split(".")
+  if (path.length > 2_048 || segments.length > 8
+      || segments.some(segment => !/^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(segment))) {
+    throw new TypeError(`${name} must contain at most 8 Java identifier segments`)
+  }
+  return path
+}
+
 function jdwpPlanRequest(input, now, createId) {
   if (!Array.isArray(input.tracepoints)
       || input.tracepoints.length < 1 || input.tracepoints.length > 20) {
@@ -440,27 +453,13 @@ function jdwpPlanRequest(input, now, createId) {
     if (!capture || typeof capture !== "object" || Array.isArray(capture)) {
       throw new TypeError(`tracepoints[${index}].capture must be an object`)
     }
-    const localNames = distinctTextArray(
-      capture.localNames ?? [], `tracepoints[${index}].capture.localNames`, 64, true)
-    const fieldPaths = distinctTextArray(
-      capture.fieldPaths ?? [], `tracepoints[${index}].capture.fieldPaths`, 128, true)
-    const locals = booleanValue(capture.locals ?? (localNames.length > 0),
-      `tracepoints[${index}].capture.locals`)
+    const valuePaths = distinctTextArray(
+      capture.valuePaths ?? [], `tracepoints[${index}].capture.valuePaths`, 128, true)
+      .map((path, pathIndex) => jdwpValuePath(
+        path, `tracepoints[${index}].capture.valuePaths[${pathIndex}]`))
     const stack = booleanValue(capture.stack ?? true, `tracepoints[${index}].capture.stack`)
-    if (!locals && !stack) {
-      throw new TypeError(`tracepoints[${index}].capture must enable locals or stack`)
-    }
-    if (locals && localNames.length === 0) {
-      throw new TypeError(`tracepoints[${index}].capture.localNames is required when locals is true`)
-    }
-    if (!locals && (localNames.length > 0 || fieldPaths.length > 0)) {
-      throw new TypeError(`tracepoints[${index}].capture projections require locals`)
-    }
-    for (const path of fieldPaths) {
-      const root = path.includes(".") ? path.slice(0, path.indexOf(".")) : path
-      if (!localNames.includes(root)) {
-        throw new TypeError(`tracepoints[${index}].capture.fieldPaths root must be in localNames`)
-      }
+    if (!stack && valuePaths.length === 0) {
+      throw new TypeError(`tracepoints[${index}].capture must request stack or valuePaths`)
     }
     const tracepoint = {
       tracepointId: `tracepoint-${index + 1}`,
@@ -471,46 +470,47 @@ function jdwpPlanRequest(input, now, createId) {
       captureFirstMatchedHits,
       captureEveryMatchedHits,
       capture: {
-        locals,
         stack,
         maxFrames: integerInRange(
           capture.maxFrames ?? 8, `tracepoints[${index}].capture.maxFrames`, 1, 64),
-        maxDepth: integerInRange(
-          capture.maxDepth ?? 1, `tracepoints[${index}].capture.maxDepth`, 0, 2),
-        maxItems: integerInRange(
-          capture.maxItems ?? 20, `tracepoints[${index}].capture.maxItems`, 1, 100),
         maxStringLength: integerInRange(
           capture.maxStringLength ?? 256,
           `tracepoints[${index}].capture.maxStringLength`, 16, 1_024),
-        localNames,
-        fieldPaths,
+        valuePaths,
       },
     }
-    if (point.condition !== undefined) {
-      const condition = point.condition
+    const conditions = point.conditions ?? []
+    if (!Array.isArray(conditions) || conditions.length > 4) {
+      throw new TypeError(`tracepoints[${index}].conditions must contain at most 4 entries`)
+    }
+    tracepoint.conditions = conditions.map((condition, conditionIndex) => {
       if (!condition || typeof condition !== "object" || Array.isArray(condition)) {
-        throw new TypeError(`tracepoints[${index}].condition must be an object`)
+        throw new TypeError(`tracepoints[${index}].conditions[${conditionIndex}] must be an object`)
       }
       const expectedType = requiredText(
-        condition.expectedType, `tracepoints[${index}].condition.expectedType`)
+        condition.expectedType,
+        `tracepoints[${index}].conditions[${conditionIndex}].expectedType`)
       if (!["STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL"]
         .includes(expectedType)) {
-        throw new TypeError(`tracepoints[${index}].condition.expectedType is unsupported`)
+        throw new TypeError(
+          `tracepoints[${index}].conditions[${conditionIndex}].expectedType is unsupported`)
       }
-      tracepoint.condition = {
-        localName: requiredText(
-          condition.localName, `tracepoints[${index}].condition.localName`),
-        fieldPath: distinctTextArray(
-          condition.fieldPath ?? [], `tracepoints[${index}].condition.fieldPath`, 8, true),
+      const result = {
+        valuePath: jdwpValuePath(
+          condition.valuePath,
+          `tracepoints[${index}].conditions[${conditionIndex}].valuePath`),
         operator: condition.operator ?? "EQUALS",
         expectedType,
         expectedValue: expectedType === "NULL" ? null : requiredText(
-          condition.expectedValue, `tracepoints[${index}].condition.expectedValue`),
+          condition.expectedValue,
+          `tracepoints[${index}].conditions[${conditionIndex}].expectedValue`),
       }
-      if (tracepoint.condition.operator !== "EQUALS") {
-        throw new TypeError(`tracepoints[${index}].condition.operator must be EQUALS`)
+      if (result.operator !== "EQUALS") {
+        throw new TypeError(
+          `tracepoints[${index}].conditions[${conditionIndex}].operator must be EQUALS`)
       }
-    }
+      return result
+    })
     return tracepoint
   })
   return {
@@ -726,15 +726,26 @@ function nonBlank(value) {
   return typeof value === "string" && value.trim().length > 0
 }
 
-function failure(code) {
+function failure(code, message = runtimeFailureMessage(code)) {
   return JSON.stringify({
     schemaVersion: "2.0",
     success: false,
     code,
-    message: "Algorithm Debug OpenCode adapter failed; inspect local Agent logs for details",
+    message,
     data: null,
     artifacts: [],
   })
+}
+
+function runtimeFailureMessage(code) {
+  const messages = {
+    ADA_PROJECT_PREPARATION_FAILED: "The target project could not be prepared, so no analysis operation started. Report the Agent failure and inspect local DFX logs. This tool result is not target-test evidence.",
+    ADA_PROJECT_REGISTRATION_INVALID_RESPONSE: "Project registration returned an invalid response, so no analysis operation started. Report the Agent failure. This tool result is not target-test evidence.",
+    ADA_TEMP_FILE_OPERATION_FAILED: "The OpenCode adapter could not create its bounded request file. Report the Agent file-operation failure. This tool result is not target-test evidence.",
+    ADA_CLI_EXECUTION_FAILED: "The OpenCode adapter could not complete the Agent CLI invocation. Report the Agent failure and inspect local DFX logs. This tool result is not target-test evidence.",
+  }
+  return messages[code]
+    ?? `${String(code).toLowerCase().replaceAll("_", " ")}. This tool result is not target-test evidence.`
 }
 
 const NOOP_SCOPE = Object.freeze({

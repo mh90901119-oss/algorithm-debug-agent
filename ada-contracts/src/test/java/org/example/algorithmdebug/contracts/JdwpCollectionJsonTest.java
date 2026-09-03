@@ -37,7 +37,7 @@ class JdwpCollectionJsonTest {
         assertEquals("Which state selected the branch?",
                 MAPPER.readTree(json).path("intent").path("questionToAnswer").asText());
 
-        JsonNode schema = schema("jdwp-plan-v4.schema.json");
+        JsonNode schema = schema("jdwp-plan-v5.schema.json");
         assertFalse(schema.path("additionalProperties").asBoolean(true));
         Set<String> required = new HashSet<>();
         schema.path("required").forEach(node -> required.add(node.asText()));
@@ -53,7 +53,7 @@ class JdwpCollectionJsonTest {
         assertEquals("#/$defs/capture",
                 schema.path("$defs").path("tracepoint").path("properties")
                         .path("capture").path("$ref").asText());
-        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v4.schema.json"),
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v5.schema.json"),
                 MAPPER.writeValueAsString(plan));
     }
 
@@ -65,13 +65,13 @@ class JdwpCollectionJsonTest {
 
         assertThrows(UnrecognizedPropertyException.class, () ->
                 MAPPER.treeToValue(root, JdwpCollectionPlan.class));
-        assertFalse(schema("jdwp-plan-v4.schema.json")
+        assertFalse(schema("jdwp-plan-v5.schema.json")
                 .path("$defs").path("capture").path("additionalProperties").asBoolean(true));
     }
 
     @Test
     void schemasExposeP4HardLimitsAndRejectRemoteHostFields() throws Exception {
-        JsonNode plan = schema("jdwp-plan-v4.schema.json");
+        JsonNode plan = schema("jdwp-plan-v5.schema.json");
         JsonNode tracepoints = plan.path("properties").path("tracepoints");
         JsonNode budget = plan.path("$defs").path("budget").path("properties");
 
@@ -123,7 +123,7 @@ class JdwpCollectionJsonTest {
                 new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
-                        100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly())),
+                        100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "Capture the key decision state",
                 new InvestigationIntent(
                         "Which state selected the branch?",

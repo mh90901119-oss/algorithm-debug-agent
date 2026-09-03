@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.jdi.Location;
 import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
+import com.sun.jdi.StackFrame;
 import com.sun.jdi.ThreadReference;
 import com.sun.jdi.VMDisconnectedException;
 import com.sun.jdi.VirtualMachine;
@@ -87,8 +88,8 @@ class TracePlanExecutorTest {
         point.maxCapturedHits = 1;
         point.captureFirstMatchedHits = 0;
         point.captureEveryMatchedHits = 2;
-        point.capture.locals = false;
         point.capture.stack = false;
+        point.capture.valuePaths = List.of("missing");
         plan.validate();
 
         VirtualMachine vm = mock(VirtualMachine.class);
@@ -100,6 +101,7 @@ class TracePlanExecutorTest {
         BreakpointEvent first = mock(BreakpointEvent.class);
         BreakpointEvent second = mock(BreakpointEvent.class);
         ThreadReference thread = mock(ThreadReference.class);
+        StackFrame frame = mock(StackFrame.class);
         EventSet events = mock(EventSet.class);
         when(vm.eventRequestManager()).thenReturn(manager);
         when(vm.eventQueue()).thenReturn(queue);
@@ -115,6 +117,7 @@ class TracePlanExecutorTest {
         when(second.location()).thenReturn(location);
         when(thread.uniqueID()).thenReturn(7L);
         when(thread.name()).thenReturn("main");
+        when(thread.frame(0)).thenReturn(frame);
         when(events.iterator()).thenReturn(List.<Event>of(first, second).iterator());
         when(queue.remove(anyLong())).thenReturn(events).thenThrow(new VMDisconnectedException());
 
@@ -132,7 +135,6 @@ class TracePlanExecutorTest {
 
         assertEquals(1, hits.size());
         assertEquals(2, hits.getFirst().path("hit").asInt());
-        verify(first, never()).thread();
     }
 
     private Path execute(VirtualMachine vm, DebugPlan plan) throws Exception {

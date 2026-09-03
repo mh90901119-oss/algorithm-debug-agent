@@ -88,11 +88,11 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       methodKey: "fixture.Algorithm#schedule()V", line: 12,
       maxObservedHits: 500, maxCapturedHits: 2,
       captureFirstMatchedHits: 2, captureEveryMatchedHits: 0,
-      condition: {
-        localName: "candidate", fieldPath: ["wafer", "id"],
+      conditions: [{
+        valuePath: "candidate.wafer.id",
         expectedType: "STRING", expectedValue: "WAFER-1",
-      },
-      capture: { localNames: ["state"], fieldPaths: ["state.current"] },
+      }],
+      capture: { valuePaths: ["state.current"] },
     }],
     rationale: "Observe selected state transitions",
     questionToAnswer: "Which state selected the branch?",
@@ -173,14 +173,13 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         maxObservedHits: 500, maxCapturedHits: 2,
         captureFirstMatchedHits: 2, captureEveryMatchedHits: 0,
         capture: {
-          locals: true, stack: true, maxFrames: 8, maxDepth: 1,
-          maxItems: 20, maxStringLength: 256,
-          localNames: ["state"], fieldPaths: ["state.current"],
+          stack: true, maxFrames: 8, maxStringLength: 256,
+          valuePaths: ["state.current"],
         },
-        condition: {
-          localName: "candidate", fieldPath: ["wafer", "id"], operator: "EQUALS",
+        conditions: [{
+          valuePath: "candidate.wafer.id", operator: "EQUALS",
           expectedType: "STRING", expectedValue: "WAFER-1",
-        },
+        }],
       }],
       budget: {
         maxEvents: 500, maxBytes: 33554432, timeoutMillis: 300000,
@@ -360,14 +359,14 @@ test("derives JDWP sampling and locals defaults from explicit budgets and projec
     tracepoints: [{
       methodKey: "fixture.Algorithm#schedule()V", line: 12,
       maxObservedHits: 3, maxCapturedHits: 1,
-      capture: { localNames: ["state"] },
+      capture: { valuePaths: ["state"] },
     }],
     rationale: "Observe one state",
   }, { directory: "D:/module" })
 
   assert.equal(request.tracepoints[0].captureFirstMatchedHits, 1)
   assert.equal(request.tracepoints[0].captureEveryMatchedHits, 3)
-  assert.equal(request.tracepoints[0].capture.locals, true)
+  assert.deepEqual(request.tracepoints[0].capture.valuePaths, ["state"])
 })
 
 test("rejects a JDWP collection while a CodePath target execution is active", async () => {
@@ -407,6 +406,8 @@ test("rejects a JDWP collection while a CodePath target execution is active", as
 
   assert.equal(jdwp.success, false)
   assert.equal(jdwp.code, "ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+  assert.match(jdwp.message, /jdwp_collect cannot start while codepath_collect is active/u)
+  assert.doesNotMatch(jdwp.message, /inspect local Agent logs/u)
   assert.deepEqual(businessCalls, ["collection codepath execute"])
 })
 
@@ -442,6 +443,7 @@ test("rejects a CodePath collection while an uninstrumented target run is active
   await run
 
   assert.equal(codePath.code, "ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+  assert.match(codePath.message, /codepath_collect cannot start while run_test is active/u)
   assert.deepEqual(businessCalls, ["run execute --workspace"])
 })
 

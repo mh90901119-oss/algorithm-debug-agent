@@ -67,7 +67,7 @@ class JdwpPlanCompilerTest {
     void preservesFirstAndPeriodicSamplingAndRejectsInvalidPolicy() {
         JdwpTracepointRequest sampled = new JdwpTracepointRequest(
                 "sampled", "fixture.Algorithm#schedule()V", 4,
-                100, 20, 5, 10, null, JdwpCaptureSpec.stackOnly());
+                100, 20, 5, 10, List.of(), JdwpCaptureSpec.stackOnly());
 
         JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(sampled)), moduleRoot);
@@ -77,7 +77,7 @@ class JdwpPlanCompilerTest {
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(
                         "invalid", "fixture.Algorithm#schedule()V", 4,
-                        5, 3, 0, 0, null, JdwpCaptureSpec.stackOnly()))), moduleRoot));
+                        5, 3, 0, 0, List.of(), JdwpCaptureSpec.stackOnly()))), moduleRoot));
     }
 
     @Test
@@ -85,7 +85,7 @@ class JdwpPlanCompilerTest {
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(new JdwpTracepointRequest(
                         "missing", "fixture.Missing#run()V", 1,
-                        1, 1, 1, 0, null, JdwpCaptureSpec.stackOnly()))), moduleRoot));
+                        1, 1, 1, 0, List.of(), JdwpCaptureSpec.stackOnly()))), moduleRoot));
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), request(List.of(
                         point("same", 4),
@@ -123,7 +123,7 @@ class JdwpPlanCompilerTest {
     private JdwpTracepointRequest point(String id, int line) {
         return new JdwpTracepointRequest(
                 id, "fixture.Algorithm#schedule()V", line,
-                100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly());
+                100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly());
     }
 
     private MethodCatalog catalog() {

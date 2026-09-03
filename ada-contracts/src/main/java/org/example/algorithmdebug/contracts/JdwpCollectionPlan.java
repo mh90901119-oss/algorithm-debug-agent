@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 
-/** 可归档、可确定性编译的 JDWP v4 采集计划。 */
+/** 可归档、可确定性编译的 JDWP v5 采集计划。 */
 public record JdwpCollectionPlan(
         String schemaVersion,
         PlanId planId,

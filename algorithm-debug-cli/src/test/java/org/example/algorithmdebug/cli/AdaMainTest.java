@@ -3,6 +3,7 @@ package org.example.algorithmdebug.cli;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.core.CaseRunException;
 import org.example.algorithmdebug.core.ArtifactBackedResult;
 import org.example.algorithmdebug.plan.PlanCompilationException;
@@ -135,6 +136,57 @@ class AdaMainTest {
     }
 
     @Test
+    void domainFailureReturnsAccurateMessageAndArchivedFailureArtifacts() throws Exception {
+        ArtifactReference manifest = new ArtifactReference(
+                "collection-1-manifest", "CODEPATH_MANIFEST",
+                "collections/collection-1/manifest.json", "application/json",
+                "0".repeat(64), 12);
+        AdaMain application = new AdaMain(
+                command -> {
+                    throw new CaseRunException(
+                            "METHOD_PATH_COLLECTION_FAILED", "internal detail", null,
+                            List.of(manifest));
+                },
+                new CliResponseWriter());
+
+        Invocation invocation = invoke(application,
+                "case", "inspect", "--workspace", "workspace",
+                "--project-id", "demo", "--case-id", "case-1");
+
+        assertFailure(invocation, 3, "METHOD_PATH_COLLECTION_FAILED");
+        assertTrue(invocation.response().path("message").asText()
+                .startsWith("Method path collection failed."));
+        assertFalse(invocation.response().path("message").asText()
+                .contains("Workspace operation failed"));
+        assertEquals("collection-1-manifest",
+                invocation.response().path("artifacts").get(0).path("artifactId").asText());
+    }
+
+    @Test
+    void bootstrapFailureAlwaysReturnsOneSanitizedToolResponse() throws Exception {
+        ByteArrayOutputStream stdoutBytes = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderrBytes = new ByteArrayOutputStream();
+        String secret = "D:/sensitive/jdk/bin/java.exe";
+
+        int exitCode;
+        try (PrintStream stdout = new PrintStream(stdoutBytes, true, StandardCharsets.UTF_8);
+             PrintStream stderr = new PrintStream(stderrBytes, true, StandardCharsets.UTF_8)) {
+            exitCode = AdaMain.launch(new String[0], stdout, stderr, () -> {
+                throw new CliStartupException(
+                        "CLI_TOOLCHAIN_FILE_MISSING", "missing: " + secret);
+            });
+        }
+
+        JsonNode response = new ObjectMapper().readTree(stdoutBytes.toString(StandardCharsets.UTF_8));
+        assertEquals(10, exitCode);
+        assertFalse(response.path("success").asBoolean());
+        assertEquals("CLI_TOOLCHAIN_FILE_MISSING", response.path("code").asText());
+        assertTrue(response.path("message").asText().contains("agent-settings.json"));
+        assertFalse(response.toString().contains(secret));
+        assertEquals("", stderrBytes.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void missingPlanEvidenceReturnsAnActionablePublicMessage() throws Exception {
         AdaMain application = new AdaMain(
                 command -> {
@@ -149,7 +201,9 @@ class AdaMainTest {
 
         assertFailure(invocation, 3, "PLAN_EVIDENCE_NOT_FOUND");
         assertEquals(
-                "Plan references an Evidence ID that is not available in the current Case",
+                "The Plan references Evidence that is not available in the current Case; "
+                        + "use a complete existing Evidence ID. "
+                        + "This tool result is not target-test evidence.",
                 invocation.response().path("message").textValue());
     }
 
@@ -174,7 +228,9 @@ class AdaMainTest {
         assertFailure(staticFailure, 3, "STATIC_ANALYSIS_FAILED");
         assertFailure(planFailure, 3, "PLAN_COMPILATION_FAILED");
         assertEquals(
-                "Collection plan could not be compiled: model rationale detail",
+                "Collection plan could not be compiled: model rationale detail; "
+                        + "correct the collection plan before submitting it again. "
+                        + "This tool result is not target-test evidence.",
                 planFailure.response().path("message").textValue());
         assertEquals("", staticFailure.stderr());
         assertEquals("", planFailure.stderr());

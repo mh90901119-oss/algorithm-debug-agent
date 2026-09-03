@@ -59,7 +59,7 @@ public final class SchemaVersions {
     public static final String CODEPATH_COLLECTION_PLAN = "4.0";
 
     /** JDWP 采集计划 Schema 版本。 */
-    public static final String JDWP_COLLECTION_PLAN = "4.0";
+    public static final String JDWP_COLLECTION_PLAN = "5.0";
 
     /** JDWP 采集请求 Schema 版本。 */
     public static final String JDWP_COLLECTION_REQUEST = "2.0";
@@ -75,8 +75,7 @@ public final class SchemaVersions {
     /** 通用方法路径摘要 Schema 版本。 */
     public static final String METHOD_PATH_SUMMARY = "4.0";
     /** 通用 JDWP 快照摘要 Schema 版本。 */
-    public static final String JDWP_SNAPSHOT_SUMMARY_V1 = "1.0";
-    public static final String JDWP_SNAPSHOT_SUMMARY = "3.0";
+    public static final String JDWP_SNAPSHOT_SUMMARY = "4.0";
     /** Collection 证据校验 Schema 版本。 */
     public static final String COLLECTION_VALIDATION = "2.0";
     /** Evidence 构建请求 Schema 版本。 */

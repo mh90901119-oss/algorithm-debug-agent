@@ -10,6 +10,7 @@ $previousLocalAppData = $env:LOCALAPPDATA
 $env:USERPROFILE = Join-Path $temporaryRoot "profile"
 $env:LOCALAPPDATA = Join-Path $temporaryRoot "local-app-data"
 $configRoot = Join-Path $env:USERPROFILE ".config\opencode"
+$packagePath = Join-Path $configRoot "package.json"
 
 try {
     $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
@@ -25,10 +26,28 @@ try {
         }
     }
     New-Item -ItemType Directory -Path (Join-Path $configRoot "agents") -Force | Out-Null
+    [System.IO.File]::WriteAllText(
+        $packagePath,
+        "{`n  `"private`": true`n}`n",
+        [System.Text.UTF8Encoding]::new($false))
     $existingAgent = Join-Path $configRoot "agents\algorithm-debug.md"
     [System.IO.File]::WriteAllText($existingAgent, "existing user agent", [System.Text.UTF8Encoding]::new($false))
 
+    & $uninstaller
+    if (Test-Path -LiteralPath $existingAgent) {
+        throw "Legacy uninstall left the known Agent file"
+    }
+    & $uninstaller
+
     & $installer -Mode Install
+
+    $installedPackage = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($installedPackage.private -ne $true) {
+        throw "Installer did not preserve the existing OpenCode package.json"
+    }
+    if ($null -eq $installedPackage.dependencies.'@opencode-ai/plugin') {
+        throw "Installer did not declare @opencode-ai/plugin"
+    }
 
     $backups = @(Get-ChildItem -LiteralPath (Join-Path $configRoot "agents") -Filter "algorithm-debug.md.ada-backup-*" -File)
     if ($backups.Count -ne 0) { throw "Installer left a random backup after a successful atomic install" }
@@ -130,6 +149,11 @@ try {
     }
     if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) { throw "Uninstaller removed unrelated OpenCode data" }
     if (-not (Test-Path -LiteralPath $workspaceSentinel -PathType Leaf)) { throw "Uninstaller removed Workspace data" }
+    $packageAfterUninstall = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($packageAfterUninstall.private -ne $true `
+            -or $null -eq $packageAfterUninstall.dependencies.'@opencode-ai/plugin') {
+        throw "Uninstaller changed the shared OpenCode package.json"
+    }
     & $uninstaller
 
     & $installer -Mode Install

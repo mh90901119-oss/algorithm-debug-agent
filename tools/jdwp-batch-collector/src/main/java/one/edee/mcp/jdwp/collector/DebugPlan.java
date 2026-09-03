@@ -1,17 +1,13 @@
 package one.edee.mcp.jdwp.collector;
 
-import one.edee.mcp.jdwp.core.SnapshotLimits;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/**
- * JSON-serializable collection plan. Public fields intentionally keep the CLI format transparent.
- */
+/** JSON-serializable collection plan. Public fields intentionally keep the CLI format transparent. */
 public final class DebugPlan {
-    public String schemaVersion = "4.0";
+    public String schemaVersion = "5.0";
     public String sessionId = "jdwp-collection";
     public Target target = new Target();
     public boolean resumeOnAttach = true;
@@ -20,33 +16,24 @@ public final class DebugPlan {
     public List<Tracepoint> tracepoints = new ArrayList<>();
 
     public void validate() {
-        if (!"4.0".equals(schemaVersion)) {
+        if (!"5.0".equals(schemaVersion)) {
             throw new IllegalArgumentException("unsupported schemaVersion: " + schemaVersion);
         }
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("sessionId must not be blank");
         }
-        if (target == null) {
-            throw new IllegalArgumentException("target is required");
-        }
+        if (target == null) throw new IllegalArgumentException("target is required");
         target.validate();
         if (idleTimeoutMillis < 1_000) {
             throw new IllegalArgumentException("idleTimeoutMillis must be at least 1000");
         }
-        if (maxEvents < 1) {
-            throw new IllegalArgumentException("maxEvents must be positive");
-        }
-        if (tracepoints == null || tracepoints.isEmpty()) {
-            throw new IllegalArgumentException("at least one tracepoint is required");
+        if (maxEvents < 1) throw new IllegalArgumentException("maxEvents must be positive");
+        if (tracepoints == null || tracepoints.isEmpty() || tracepoints.size() > 20) {
+            throw new IllegalArgumentException("tracepoints must contain between 1 and 20 entries");
         }
         Set<String> ids = new HashSet<>();
         for (Tracepoint tracepoint : tracepoints) {
             tracepoint.validate();
-            if (tracepoint.methodDescriptor == null || tracepoint.methodDescriptor.isBlank()) {
-                throw new IllegalArgumentException(
-                    "tracepoint.methodDescriptor is required: " + tracepoint.id
-                );
-            }
             if (!ids.add(tracepoint.id)) {
                 throw new IllegalArgumentException("duplicate tracepoint id: " + tracepoint.id);
             }
@@ -77,7 +64,7 @@ public final class DebugPlan {
         public int maxCapturedHits = 20;
         public int captureFirstMatchedHits = 5;
         public int captureEveryMatchedHits = 5;
-        public Condition condition;
+        public List<Condition> conditions = new ArrayList<>();
         public Capture capture = new Capture();
 
         void validate() {
@@ -87,130 +74,104 @@ public final class DebugPlan {
             if (className == null || className.isBlank()) {
                 throw new IllegalArgumentException("tracepoint.className must not be blank: " + id);
             }
+            if (methodName == null || methodName.isBlank()
+                    || methodDescriptor == null || methodDescriptor.isBlank()) {
+                throw new IllegalArgumentException(
+                        "tracepoint method identity is required: " + id);
+            }
             if (line < 1) {
                 throw new IllegalArgumentException("tracepoint.line must be positive: " + id);
             }
             if (maxObservedHits < 1 || maxObservedHits > 100_000) {
                 throw new IllegalArgumentException(
-                    "tracepoint.maxObservedHits must be between 1 and 100000: " + id);
+                        "tracepoint.maxObservedHits must be between 1 and 100000: " + id);
             }
             if (maxCapturedHits < 1 || maxCapturedHits > 200) {
                 throw new IllegalArgumentException(
-                    "tracepoint.maxCapturedHits must be between 1 and 200: " + id);
+                        "tracepoint.maxCapturedHits must be between 1 and 200: " + id);
             }
             if (captureFirstMatchedHits < 0 || captureFirstMatchedHits > maxCapturedHits) {
                 throw new IllegalArgumentException(
-                    "tracepoint.captureFirstMatchedHits is outside maxCapturedHits: " + id);
+                        "tracepoint.captureFirstMatchedHits is outside maxCapturedHits: " + id);
             }
             if (captureEveryMatchedHits < 0 || captureEveryMatchedHits > maxObservedHits
                     || (captureFirstMatchedHits == 0 && captureEveryMatchedHits == 0)) {
                 throw new IllegalArgumentException(
-                    "tracepoint matched-hit sampling policy is invalid: " + id);
+                        "tracepoint matched-hit sampling policy is invalid: " + id);
             }
-            if (condition != null) {
-                condition.validate(id);
+            conditions = conditions == null ? new ArrayList<>() : new ArrayList<>(conditions);
+            if (conditions.size() > 4) {
+                throw new IllegalArgumentException(
+                        "tracepoint.conditions supports at most 4 entries: " + id);
             }
-            if (capture == null) {
-                capture = new Capture();
-            }
+            conditions.forEach(condition -> condition.validate(id));
+            if (capture == null) capture = new Capture();
             capture.validate(id);
         }
     }
 
     public static final class Capture {
-        public boolean locals = false;
         public boolean stack = true;
         public int maxFrames = 8;
-        public int maxDepth = SnapshotLimits.DEFAULT.maxDepth();
-        public int maxItems = SnapshotLimits.DEFAULT.maxItems();
-        public int maxStringLength = SnapshotLimits.DEFAULT.maxStringLength();
-        public List<String> localNames = new ArrayList<>();
-        public List<String> fieldPaths = new ArrayList<>();
+        public int maxStringLength = 256;
+        public List<String> valuePaths = new ArrayList<>();
 
         void validate(String tracepointId) {
-            if (maxFrames < 1 || maxFrames > 256) {
-                throw new IllegalArgumentException("capture.maxFrames must be between 1 and 256: " + tracepointId);
-            }
-            new SnapshotLimits(maxDepth, maxItems, maxStringLength);
-            localNames = normalized(localNames, "capture.localNames", tracepointId);
-            fieldPaths = normalized(fieldPaths, "capture.fieldPaths", tracepointId);
-            if (locals && localNames.isEmpty()) {
+            if (maxFrames < 1 || maxFrames > 64) {
                 throw new IllegalArgumentException(
-                    "capture.locals requires explicit localNames: " + tracepointId);
+                        "capture.maxFrames must be between 1 and 64: " + tracepointId);
             }
-            if (!locals && (!localNames.isEmpty() || !fieldPaths.isEmpty())) {
+            if (maxStringLength < 16 || maxStringLength > 1_024) {
                 throw new IllegalArgumentException(
-                    "capture projections require locals: " + tracepointId);
+                        "capture.maxStringLength must be between 16 and 1024: " + tracepointId);
             }
-            for (String path : fieldPaths) {
-                String root = path.contains(".") ? path.substring(0, path.indexOf('.')) : path;
-                if (!localNames.contains(root)) {
-                    throw new IllegalArgumentException(
-                        "capture.fieldPaths root must be listed in localNames: " + tracepointId);
-                }
+            valuePaths = valuePaths == null ? new ArrayList<>() : new ArrayList<>(valuePaths);
+            if (!stack && valuePaths.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "capture must request stack or valuePaths: " + tracepointId);
             }
-        }
-
-        SnapshotLimits limits() {
-            return new SnapshotLimits(maxDepth, maxItems, maxStringLength);
-        }
-
-        private static List<String> normalized(List<String> values, String name, String tracepointId) {
-            if (values == null) {
-                return new ArrayList<>();
+            if (valuePaths.size() > 128 || new HashSet<>(valuePaths).size() != valuePaths.size()) {
+                throw new IllegalArgumentException(
+                        "capture.valuePaths must be unique and contain at most 128 entries: "
+                                + tracepointId);
             }
-            List<String> result = values.stream()
-                .filter(value -> value != null && !value.isBlank())
-                .map(String::trim)
-                .distinct()
-                .toList();
-            if (result.size() > 256) {
-                throw new IllegalArgumentException(name + " must contain at most 256 entries: " + tracepointId);
-            }
-            return new ArrayList<>(result);
+            valuePaths.forEach(path -> validateValuePath(path, "capture.valuePaths", tracepointId));
         }
     }
 
     public static final class Condition {
-        public String localName;
-        public List<String> fieldPath = new ArrayList<>();
+        public String valuePath;
         public String operator = "EQUALS";
         public String expectedType;
         public String expectedValue;
 
         void validate(String tracepointId) {
-            if (localName == null || !("this".equals(localName)
-                    || localName.matches("[A-Za-z_$][A-Za-z0-9_$]*"))) {
-                throw new IllegalArgumentException(
-                    "condition.localName must be a Java identifier or this: " + tracepointId);
-            }
-            fieldPath = fieldPath == null ? new ArrayList<>() : new ArrayList<>(fieldPath);
-            if (fieldPath.size() > 8 || fieldPath.stream().anyMatch(segment -> segment == null
-                    || !segment.matches("[A-Za-z_$][A-Za-z0-9_$]*"))) {
-                throw new IllegalArgumentException(
-                    "condition.fieldPath must contain at most 8 Java field identifiers: " + tracepointId);
-            }
+            validateValuePath(valuePath, "condition.valuePath", tracepointId);
             if (!"EQUALS".equals(operator)) {
                 throw new IllegalArgumentException(
-                    "condition.operator must be EQUALS: " + tracepointId);
+                        "condition.operator must be EQUALS: " + tracepointId);
             }
             Set<String> types = Set.of(
-                "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL");
+                    "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL");
             if (!types.contains(expectedType)) {
                 throw new IllegalArgumentException(
-                    "condition.expectedType is unsupported: " + tracepointId);
+                        "condition.expectedType is unsupported: " + tracepointId);
             }
             if ("NULL".equals(expectedType)) {
                 if (expectedValue != null && !expectedValue.isBlank()) {
                     throw new IllegalArgumentException(
-                        "NULL condition must not have expectedValue: " + tracepointId);
+                            "NULL condition must not have expectedValue: " + tracepointId);
                 }
                 expectedValue = null;
             } else if (expectedValue == null || expectedValue.isBlank()
                     || expectedValue.length() > 1_024) {
                 throw new IllegalArgumentException(
-                    "condition.expectedValue is invalid: " + tracepointId);
+                        "condition.expectedValue is invalid: " + tracepointId);
             }
+            validateScalar(tracepointId);
+        }
+
+        private void validateScalar(String tracepointId) {
             try {
                 switch (expectedType) {
                     case "LONG" -> Long.parseLong(expectedValue);
@@ -218,24 +179,37 @@ public final class DebugPlan {
                     case "BOOLEAN" -> {
                         if (!("true".equals(expectedValue) || "false".equals(expectedValue))) {
                             throw new IllegalArgumentException(
-                                "condition BOOLEAN value must be true or false: " + tracepointId);
+                                    "condition BOOLEAN value must be true or false: " + tracepointId);
                         }
                     }
                     case "CHAR" -> {
                         if (expectedValue.codePointCount(0, expectedValue.length()) != 1) {
                             throw new IllegalArgumentException(
-                                "condition CHAR value must contain one character: " + tracepointId);
+                                    "condition CHAR value must contain one character: " + tracepointId);
                         }
                     }
-                    default -> {
-                        // STRING, ENUM and NULL need no additional scalar parsing.
-                    }
+                    default -> { }
                 }
             } catch (NumberFormatException failure) {
                 throw new IllegalArgumentException(
-                    "condition scalar value is malformed: " + tracepointId, failure);
+                        "condition scalar value is malformed: " + tracepointId, failure);
             }
         }
     }
 
+    private static void validateValuePath(String path, String name, String tracepointId) {
+        if (path == null || path.isBlank() || path.length() > 2_048) {
+            throw new IllegalArgumentException(name + " contains an invalid path: " + tracepointId);
+        }
+        String[] segments = path.split("\\.", -1);
+        if (segments.length > 8) {
+            throw new IllegalArgumentException(name + " exceeds 8 segments: " + tracepointId);
+        }
+        for (String segment : segments) {
+            if (!segment.matches("[A-Za-z_$][A-Za-z0-9_$]*")) {
+                throw new IllegalArgumentException(
+                        name + " contains a non-Java identifier: " + tracepointId);
+            }
+        }
+    }
 }

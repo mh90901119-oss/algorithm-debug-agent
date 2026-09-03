@@ -13,6 +13,7 @@ import com.sun.jdi.Method;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.StackFrame;
 import com.sun.jdi.ThreadReference;
+import com.sun.jdi.Type;
 import com.sun.jdi.VMDisconnectedException;
 import com.sun.jdi.VirtualMachine;
 import com.sun.jdi.event.BreakpointEvent;
@@ -39,12 +40,13 @@ class ConditionalTracePlanExecutorTest {
         point.maxCapturedHits = 1;
         point.captureFirstMatchedHits = 1;
         point.captureEveryMatchedHits = 0;
-        point.capture.locals = false;
         point.capture.stack = false;
-        point.condition = new DebugPlan.Condition();
-        point.condition.localName = "waferNumber";
-        point.condition.expectedType = "LONG";
-        point.condition.expectedValue = "2";
+        point.capture.valuePaths = List.of("waferNumber");
+        DebugPlan.Condition condition = new DebugPlan.Condition();
+        condition.valuePath = "waferNumber";
+        condition.expectedType = "LONG";
+        condition.expectedValue = "2";
+        point.conditions.add(condition);
         plan.validate();
 
         VirtualMachine vm = mock(VirtualMachine.class);
@@ -58,6 +60,7 @@ class ConditionalTracePlanExecutorTest {
         LocalVariable variable = mock(LocalVariable.class);
         IntegerValue firstValue = mock(IntegerValue.class);
         IntegerValue secondValue = mock(IntegerValue.class);
+        Type integerType = mock(Type.class);
         BreakpointEvent first = breakpoint(request, thread, location);
         BreakpointEvent second = breakpoint(request, thread, location);
         EventSet events = mock(EventSet.class);
@@ -75,6 +78,9 @@ class ConditionalTracePlanExecutorTest {
         when(frame.getValue(variable)).thenReturn(firstValue, secondValue);
         when(firstValue.longValue()).thenReturn(1L);
         when(secondValue.longValue()).thenReturn(2L);
+        when(firstValue.type()).thenReturn(integerType);
+        when(secondValue.type()).thenReturn(integerType);
+        when(integerType.name()).thenReturn("int");
         when(thread.uniqueID()).thenReturn(7L);
         when(thread.name()).thenReturn("main");
         when(events.iterator()).thenReturn(List.<Event>of(first, second).iterator());

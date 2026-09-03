@@ -159,6 +159,9 @@ class CollectionApplicationServiceTest {
                 service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
 
         assertEquals("MAVEN_NOT_FOUND", failure.code());
+        assertEquals(List.of("CODEPATH_MANIFEST", "COLLECTION_BASELINE"),
+                failure.artifacts().stream().map(
+                        org.example.algorithmdebug.contracts.ArtifactReference::artifactType).toList());
         assertEquals(0, collectorCalls.get());
         Path collection = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                 .resolve("case-1/collections/collection-fixed");
@@ -171,6 +174,9 @@ class CollectionApplicationServiceTest {
         assertFalse(manifest.processStarted());
         assertEquals(-1, manifest.exitCode());
         assertEquals("MAVEN_NOT_FOUND", manifest.agentFailure().orElseThrow().code());
+        failure.artifacts().forEach(reference -> assertTrue(Files.isRegularFile(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1").resolve(reference.relativePath()))));
     }
 
     @Test

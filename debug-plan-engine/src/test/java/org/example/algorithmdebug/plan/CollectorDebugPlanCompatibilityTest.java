@@ -49,7 +49,7 @@ class CollectorDebugPlanCompatibilityTest {
                 new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
-                        100, 20, 5, 5, null, JdwpCaptureSpec.stackOnly())),
+                        100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "Inspect the decision state",
                 new org.example.algorithmdebug.contracts.InvestigationIntent(
                         "Which value selected the branch?", "The state selected the branch",

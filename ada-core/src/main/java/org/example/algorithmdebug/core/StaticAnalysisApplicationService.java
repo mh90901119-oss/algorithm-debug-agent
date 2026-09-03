@@ -225,9 +225,9 @@ public final class StaticAnalysisApplicationService {
                             "totalCapturedBudget", Integer.toString(plan.tracepoints().stream()
                                     .mapToInt(org.example.algorithmdebug.contracts.JdwpTracepointSpec::maxCapturedHits).sum()),
                             "conditionalTracepointCount", Long.toString(plan.tracepoints().stream()
-                                    .filter(point -> point.condition() != null).count()),
-                            "localsTracepointCount", Long.toString(plan.tracepoints().stream()
-                                    .filter(point -> point.capture().locals()).count()),
+                                    .filter(point -> !point.conditions().isEmpty()).count()),
+                            "requestedValuePathCount", Integer.toString(plan.tracepoints().stream()
+                                    .mapToInt(point -> point.capture().valuePaths().size()).sum()),
                             "basedOnEvidenceCount", Integer.toString(
                                     plan.intent().basedOnEvidenceIds().size())));
             return new ArtifactBackedResult<>(new JdwpPlanSummary(

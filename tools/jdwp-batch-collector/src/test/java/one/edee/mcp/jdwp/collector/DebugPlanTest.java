@@ -1,17 +1,15 @@
 package one.edee.mcp.jdwp.collector;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class DebugPlanTest {
 
     @Test
-    void v4RequiresExactMethodDescriptorAndRejectsHistoricalSchemas() {
+    void v5RequiresExactMethodDescriptorAndRejectsHistoricalSchemas() {
         DebugPlan plan = validPlan();
         plan.tracepoints.getFirst().methodDescriptor = null;
 
@@ -22,16 +20,11 @@ class DebugPlanTest {
     }
 
     @Test
-    void normalizesProjectionEntriesDeterministically() {
+    void rejectsDuplicateProjectionEntries() {
         DebugPlan plan = validPlan();
-        plan.tracepoints.getFirst().capture.locals = true;
-        plan.tracepoints.getFirst().capture.localNames = new ArrayList<>(
-            List.of(" state ", "state", "input")
-        );
+        plan.tracepoints.getFirst().capture.valuePaths = List.of("state", "state");
 
-        plan.validate();
-
-        assertEquals(List.of("state", "input"), plan.tracepoints.getFirst().capture.localNames);
+        assertThrows(IllegalArgumentException.class, plan::validate);
     }
 
     @Test
@@ -55,10 +48,10 @@ class DebugPlanTest {
     void rejectsMalformedTypedConditionBeforeAttaching() {
         DebugPlan plan = validPlan();
         DebugPlan.Condition condition = new DebugPlan.Condition();
-        condition.localName = "waferNumber";
+        condition.valuePath = "waferNumber";
         condition.expectedType = "LONG";
         condition.expectedValue = "not-a-number";
-        plan.tracepoints.getFirst().condition = condition;
+        plan.tracepoints.getFirst().conditions.add(condition);
 
         assertThrows(IllegalArgumentException.class, plan::validate);
     }

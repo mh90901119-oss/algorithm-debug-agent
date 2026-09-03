@@ -92,7 +92,7 @@ not invent invocation IDs, parent IDs, or business entity mappings.
 Plan compilation failures return a bounded, single-line reason so the LLM can correct the exact field
 instead of guessing.
 
-## 5. JDWP v4
+## 5. JDWP Collector 4.0 / Plan v5
 
 Each tracepoint selects one exact method and executable source line. A generic optional condition
 reads a top-frame local, parameter, `this`, or a bounded instance-field path and compares one typed
@@ -104,8 +104,9 @@ Separate budgets control:
 - `maxCapturedHits`: maximum full snapshots.
 - `captureFirstMatchedHits`: consecutive first matched snapshots.
 - `captureEveryMatchedHits`: periodic matched-hit sampling after the first group.
-- `localNames` and `fieldPaths`: explicit state projection.
-- `maxFrames`, `maxDepth`, `maxItems`, and `maxStringLength`: snapshot expansion bounds.
+- `valuePaths`: exact local/`this` field paths selected by the LLM; the Collector never recursively expands an object graph.
+- `maxFrames` and `maxStringLength`: stack and scalar-string bounds; every requested path returns one explicit projection status.
+- `conditions`: at most four exact value-path predicates combined with AND before sampling and capture.
 
 While the event thread is suspended, the Collector copies only the selected detached values. It
 resumes the event set in `finally`, then the same Collector thread appends JSONL through one buffered
@@ -154,4 +155,5 @@ Workspace expected/actual files, Artifact integrity, and interaction JSONL.
 
 | Date | Version | Change |
 |---|---:|---|
-| 2026-09-03 | 2.0 | Replaced speculative observation/query design with the implemented CodePath v4, JDWP v4, one evidence query, direct answer, and non-locking single-session sequencing contracts. |
+| 2026-09-03 | 2.0 | Replaced speculative observation/query design with the implemented CodePath v4, JDWP Collector 4.0 / Plan v5, one evidence query, direct answer, and non-locking single-session sequencing contracts. |
+| 2026-09-04 | 2.1 | Fixed OpenCode Evidence Query schema drift by exposing the normalized JDWP `CAPTURED` and `REFERENCE_ONLY` projection statuses; Java query behavior and stored evidence are unchanged. |

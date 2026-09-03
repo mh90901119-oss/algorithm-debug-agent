@@ -19,7 +19,8 @@ public record EvidenceQueryFilter(
 
     private static final List<String> VALUE_STATUSES = List.of(
             "VALUE", "NULL", "UNAVAILABLE", "TRUNCATED",
-            "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY");
+            "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY",
+            "CAPTURED", "REFERENCE_ONLY");
 
     /** 校验字段长度、状态白名单和序号范围。 */
     public EvidenceQueryFilter {

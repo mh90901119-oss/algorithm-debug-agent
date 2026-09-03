@@ -52,9 +52,21 @@ next execution is still necessary. Do not pre-create paired CodePath and JDWP Pl
 `ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION` as a rejected interaction order, not as an algorithm or
 Collector failure, and do not retry it automatically.
 
+For any ToolResponse with `success=false`, do not diagnose the target UT from that call. Follow the
+specific bounded recovery message. If failure Manifest Artifacts are returned, read the Manifest for
+process and Collector facts; DFX logs remain human diagnostics and are not algorithm Evidence.
+
 When the user explicitly requests a runtime method path, use CodePath; JDWP state and line-hit
 observations do not replace Method Path Evidence. Use JDWP for named runtime values rather than as a
 substitute for a requested CodePath.
+
+For JDWP, build each tracepoint from the current Method Catalog and source, choose an executable line
+where the named value is in scope, and request only exact scalar or enum `valuePaths`. Up to four
+`conditions` are combined with AND and may use identifiers found in Algorithm Input. Interpret
+`CAPTURED`, `TRUNCATED`, `REFERENCE_ONLY`, and `UNAVAILABLE` explicitly; use a deeper path in a later
+Plan for `REFERENCE_ONLY`, and treat `UNAVAILABLE` as an evidence gap. Combine each value with its
+method declaration, source line, stack, runtime type, Plan intent, and Algorithm Input. The Collector
+does not infer business meaning from field names.
 
 For CodePath, submit exact Method Catalog keys plus only the scalar `arg[n](.field)*` and
 `return(.field)*` projections needed to distinguish the current hypothesis. Read the normalized

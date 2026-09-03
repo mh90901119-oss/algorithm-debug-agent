@@ -57,15 +57,15 @@ class RegisteredEvidenceQueryTest {
     void queriesJdwpHitsByTracepointAndValuePathWithPagination() throws Exception {
         register("jdwp-summary", "JDWP_SNAPSHOT_SUMMARY", "application/json", """
                 {"hits":[
-                  {"tracepointId":"point-1","hit":1,"values":[{"valuePath":"locals.waferId","kind":"STRING","scalarPreview":"W1"}],"provenance":{"sequence":7}},
-                  {"tracepointId":"point-1","hit":2,"values":[{"valuePath":"locals.waferId","kind":"STRING","scalarPreview":"W2"}],"provenance":{"sequence":8}},
-                  {"tracepointId":"point-2","hit":1,"values":[{"valuePath":"locals.waferId","kind":"STRING","scalarPreview":"W2"}],"provenance":{"sequence":9}}
+                  {"tracepointId":"point-1","capturedHit":1,"projections":[{"valuePath":"waferId","status":"CAPTURED","scalarValue":"W1"}],"provenance":{"sequence":7}},
+                  {"tracepointId":"point-1","capturedHit":2,"projections":[{"valuePath":"waferId","status":"CAPTURED","scalarValue":"W2"}],"provenance":{"sequence":8}},
+                  {"tracepointId":"point-2","capturedHit":1,"projections":[{"valuePath":"waferId","status":"CAPTURED","scalarValue":"W2"}],"provenance":{"sequence":9}}
                 ]}
                 """);
 
         var filter = new EvidenceQueryFilter(
-                Optional.empty(), Optional.of("point-1"), Optional.of("locals.waferId"),
-                Optional.empty(), Optional.of("STRING"), Optional.of(7L), Optional.of(8L));
+                Optional.empty(), Optional.of("point-1"), Optional.of("waferId"),
+                Optional.empty(), Optional.of("CAPTURED"), Optional.of(7L), Optional.of(8L));
         var first = new RegisteredEvidenceQuery(repository).query(
                 CaseArchiveRepositoryTest.manifest().caseId(), "jdwp-summary",
                 filter, 0, 1, 65_536);
@@ -77,8 +77,8 @@ class RegisteredEvidenceQueryTest {
         assertEquals(2, first.matchedRecords());
         assertEquals(1, first.returnedRecords());
         assertTrue(first.truncated());
-        assertTrue(first.recordsJsonl().contains("\"hit\":1"));
-        assertTrue(second.recordsJsonl().contains("\"hit\":2"));
+        assertTrue(first.recordsJsonl().contains("\"capturedHit\":1"));
+        assertTrue(second.recordsJsonl().contains("\"capturedHit\":2"));
         assertTrue(!second.truncated());
     }
 

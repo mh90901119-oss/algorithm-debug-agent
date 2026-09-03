@@ -8,6 +8,8 @@ $utf8WithoutBom = [System.Text.UTF8Encoding]::new($false)
 $repository = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $settingsPath = Join-Path $repository "config\agent-settings.json"
 $launcher = Join-Path $repository "bin\ada.cmd"
+$cliTargetDirectory = Join-Path $repository "algorithm-debug-cli\target"
+$codePathTargetDirectory = Join-Path $repository "tools\code-path-tracer-junit-launcher\target"
 $jdwpCollector = Join-Path $repository "tools\jdwp-collector\jdwp-batch-collector.jar"
 $manifestRelativePath = ".algorithm-debug-agent/install-manifest.json"
 
@@ -38,18 +40,14 @@ function Invoke-Main {
         return
     }
 
-    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
-        throw "Repository launcher is missing: bin\ada.cmd"
-    }
-    if (-not (Test-Path -LiteralPath $jdwpCollector -PathType Leaf)) {
-        throw "Repository JDWP Collector is missing: tools\jdwp-collector\jdwp-batch-collector.jar. Run scripts\package-jdwp-collector.ps1 before publishing the repository."
-    }
+    Assert-RepositoryRuntime
     foreach ($asset in $assets) {
         $source = Join-Path $repository $asset.Source
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             throw "Repository OpenCode asset is missing: $($asset.Source)"
         }
     }
+    $script:detectedOpenCodeVersion = Get-OpenCodeVersion
 
     $installationLines = @(
         "export const defaultLauncher = $(ConvertTo-Json -Compress $launcher)"
@@ -79,10 +77,11 @@ function Invoke-Main {
     $manifestBytes = [byte[]](New-InstallManifestBytes -ManagedFiles $managedFiles)
 
     if ($Mode -eq "Install") {
-        if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
-            Invoke-Uninstall -ConfigDirectory $configuration -Quiet
-        }
-        foreach ($directory in @($configuration, $workspaceDirectory, $dfxDirectory, $evalDirectory)) {
+        New-Item -ItemType Directory -Path $configuration -Force | Out-Null
+        Ensure-OpenCodePluginDependency -ConfigDirectory $configuration `
+            -OpenCodeVersion $detectedOpenCodeVersion
+        Invoke-Uninstall -ConfigDirectory $configuration -Quiet
+        foreach ($directory in @($workspaceDirectory, $dfxDirectory, $evalDirectory)) {
             New-Item -ItemType Directory -Path $directory -Force | Out-Null
         }
         foreach ($asset in $assets) {
@@ -112,6 +111,7 @@ function Invoke-Main {
     Assert-SameBytes -Expected $manifestBytes -Destination $manifestPath
     Assert-InstalledFilesUnmodified -ConfigDirectory $configuration -ManifestPath $manifestPath `
         -ExpectedRelativePaths @($managedFiles.RelativePath)
+    Assert-OpenCodePluginDependency -ConfigDirectory $configuration
 
     Assert-OpenCodeDiscovery -ConfigDirectory $configuration
     foreach ($asset in $assets) {
@@ -210,6 +210,123 @@ function Format-OptionalSetting {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return "CURRENT_ENVIRONMENT" }
     return $Value
+}
+
+function Assert-RepositoryRuntime {
+    if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) {
+        throw "Repository launcher is missing: bin\ada.cmd"
+    }
+    $cliArtifacts = @(Get-ChildItem -LiteralPath $cliTargetDirectory `
+        -Filter "algorithm-debug-cli-*-all.jar" -File -ErrorAction SilentlyContinue)
+    if ($cliArtifacts.Count -ne 1 -or $cliArtifacts[0].Length -le 0) {
+        throw "Exactly one built ADA CLI JAR is required. Run scripts\build-agent.ps1 before installation."
+    }
+    $codePathArtifacts = @(Get-ChildItem -LiteralPath $codePathTargetDirectory `
+        -Filter "code-path-tracer-junit-launcher-*.jar" -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike "original-*" })
+    if ($codePathArtifacts.Count -ne 1 -or $codePathArtifacts[0].Length -le 0) {
+        throw "Exactly one built CodePath Launcher JAR is required. Run scripts\build-agent.ps1 before installation."
+    }
+    if (-not (Test-Path -LiteralPath $jdwpCollector -PathType Leaf) `
+            -or (Get-Item -LiteralPath $jdwpCollector).Length -le 0) {
+        throw "Built JDWP Collector JAR is missing. Run scripts\build-agent.ps1 before installation."
+    }
+}
+
+function Get-OpenCodeVersion {
+    $opencode = Get-Command opencode -ErrorAction SilentlyContinue
+    if ($null -eq $opencode) {
+        throw "OpenCode command 'opencode' was not found on PATH. Install or repair OpenCode, then open a new terminal."
+    }
+    $version = (& opencode --version | Out-String).Trim()
+    $versionExitCode = $LASTEXITCODE
+    if ($versionExitCode -ne 0 -or $version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+        throw "OpenCode capability check failed for 'opencode --version' (exit code $versionExitCode). Repair the OpenCode installation and retry."
+    }
+    return $version
+}
+
+function Ensure-OpenCodePluginDependency {
+    param([string]$ConfigDirectory, [string]$OpenCodeVersion)
+
+    $packagePath = Join-Path $ConfigDirectory "package.json"
+    $modulePackagePath = Join-Path $ConfigDirectory "node_modules\@opencode-ai\plugin\package.json"
+    $requiredVersion = $OpenCodeVersion
+    if (Test-Path -LiteralPath $modulePackagePath -PathType Leaf) {
+        try {
+            $installedModule = Get-Content -LiteralPath $modulePackagePath -Raw -Encoding UTF8 |
+                ConvertFrom-Json -ErrorAction Stop
+            if ([string]$installedModule.version -match '^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+                $requiredVersion = [string]$installedModule.version
+            }
+        }
+        catch {
+            throw "Installed @opencode-ai/plugin package metadata is invalid: $($_.Exception.Message)"
+        }
+    }
+
+    if (Test-Path -LiteralPath $packagePath -PathType Leaf) {
+        try {
+            $package = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 |
+                ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw "OpenCode package.json is invalid: $($_.Exception.Message)"
+        }
+        if ($package -isnot [pscustomobject]) {
+            throw "OpenCode package.json must contain a JSON object"
+        }
+    }
+    else {
+        $package = [pscustomobject]@{}
+    }
+
+    $dependenciesProperty = $package.PSObject.Properties["dependencies"]
+    if ($null -eq $dependenciesProperty) {
+        $dependencies = [pscustomobject]@{}
+        $package | Add-Member -MemberType NoteProperty -Name "dependencies" -Value $dependencies
+    }
+    else {
+        $dependencies = $dependenciesProperty.Value
+        if ($dependencies -isnot [pscustomobject]) {
+            throw "OpenCode package.json field dependencies must contain a JSON object"
+        }
+    }
+
+    $pluginProperty = $dependencies.PSObject.Properties["@opencode-ai/plugin"]
+    if ($null -ne $pluginProperty) {
+        if ([string]::IsNullOrWhiteSpace([string]$pluginProperty.Value)) {
+            throw "OpenCode package.json contains an empty @opencode-ai/plugin dependency"
+        }
+        return
+    }
+
+    $dependencies | Add-Member -MemberType NoteProperty -Name "@opencode-ai/plugin" `
+        -Value $requiredVersion
+    $packageBytes = $utf8WithoutBom.GetBytes(($package | ConvertTo-Json -Depth 32) + "`n")
+    Install-Bytes -Destination $packagePath -Content $packageBytes
+    Write-Output "OPENCODE_PLUGIN_DEPENDENCY_DECLARED @opencode-ai/plugin@$requiredVersion"
+}
+
+function Assert-OpenCodePluginDependency {
+    param([string]$ConfigDirectory)
+
+    $packagePath = Join-Path $ConfigDirectory "package.json"
+    if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+        throw "OpenCode package.json is missing. Run Install to declare @opencode-ai/plugin."
+    }
+    try {
+        $package = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 |
+            ConvertFrom-Json -ErrorAction Stop
+    }
+    catch {
+        throw "OpenCode package.json is invalid: $($_.Exception.Message)"
+    }
+    $dependency = $package.PSObject.Properties["dependencies"]
+    if ($null -eq $dependency `
+            -or $null -eq $dependency.Value.PSObject.Properties["@opencode-ai/plugin"]) {
+        throw "OpenCode package.json does not declare @opencode-ai/plugin. Run Install again."
+    }
 }
 
 function New-InstallManifestBytes {
@@ -322,10 +439,25 @@ function Invoke-Uninstall {
         $legacyFiles = @($knownRelativePaths | Where-Object {
             Test-Path -LiteralPath (Join-Path $ConfigDirectory $_.Replace("/", "\"))
         })
-        if ($legacyFiles.Count -gt 0) {
-            throw "OpenCode installation manifest is missing while managed assets still exist. Run Install once with this Agent version, then run uninstall again."
+        $invalidLegacyFiles = @($legacyFiles | Where-Object {
+            -not (Test-Path -LiteralPath (Join-Path $ConfigDirectory $_.Replace("/", "\")) -PathType Leaf)
+        })
+        if ($invalidLegacyFiles.Count -gt 0) {
+            throw "A legacy Agent path is not a regular file: $($invalidLegacyFiles -join ', ')"
         }
-        Write-Output "OPENCODE_ADAPTER_ALREADY_UNINSTALLED $ConfigDirectory"
+        foreach ($relative in $legacyFiles) {
+            Remove-Item -LiteralPath (Join-Path $ConfigDirectory $relative.Replace("/", "\")) -Force
+        }
+        Remove-EmptyAgentDirectories -ConfigDirectory $ConfigDirectory
+        if (-not $Quiet) {
+            if ($legacyFiles.Count -gt 0) {
+                Write-Output "OPENCODE_LEGACY_ADAPTER_UNINSTALLED $ConfigDirectory"
+                Write-EffectivePaths
+            }
+            else {
+                Write-Output "OPENCODE_ADAPTER_ALREADY_UNINSTALLED $ConfigDirectory"
+            }
+        }
         return
     }
 
@@ -352,6 +484,16 @@ function Invoke-Uninstall {
         }
     }
     Remove-Item -LiteralPath $manifestPath -Force
+    Remove-EmptyAgentDirectories -ConfigDirectory $ConfigDirectory
+    if (-not $Quiet) {
+        Write-Output "OPENCODE_ADAPTER_UNINSTALLED $ConfigDirectory"
+        Write-EffectivePaths
+    }
+}
+
+function Remove-EmptyAgentDirectories {
+    param([string]$ConfigDirectory)
+
     $skillDirectory = Join-Path $ConfigDirectory "skills\algorithm-debug"
     if (Test-Path -LiteralPath $skillDirectory -PathType Container) {
         @(Get-ChildItem -LiteralPath $skillDirectory -Recurse -Directory -Force | Sort-Object FullName -Descending) |
@@ -367,10 +509,6 @@ function Invoke-Uninstall {
                 -and @(Get-ChildItem -LiteralPath $directory -Force).Count -eq 0) {
             Remove-Item -LiteralPath $directory -Force
         }
-    }
-    if (-not $Quiet) {
-        Write-Output "OPENCODE_ADAPTER_UNINSTALLED $ConfigDirectory"
-        Write-EffectivePaths
     }
 }
 
@@ -428,15 +566,7 @@ function Bytes-Equal {
 function Assert-OpenCodeDiscovery {
     param([string]$ConfigDirectory)
 
-    $opencode = Get-Command opencode -ErrorAction SilentlyContinue
-    if ($null -eq $opencode) {
-        throw "OpenCode command 'opencode' was not found on PATH. Install or repair OpenCode, then open a new terminal."
-    }
-    $version = (& opencode --version | Out-String).Trim()
-    $versionExitCode = $LASTEXITCODE
-    if ($versionExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($version)) {
-        throw "OpenCode capability check failed for 'opencode --version' (exit code $versionExitCode). Repair the OpenCode installation and retry."
-    }
+    $version = $script:detectedOpenCodeVersion
     Write-Verbose "Detected OpenCode $version; compatibility is determined by capability discovery"
     $discoveryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("ada-opencode-discovery-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $discoveryDirectory | Out-Null

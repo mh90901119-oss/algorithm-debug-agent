@@ -172,7 +172,7 @@ test("grades causal Plan lineage and conditional JDWP", () => {
       tracepoints: [{
         maxObservedHits: 20, maxCapturedHits: 5,
         captureFirstMatchedHits: 2, captureEveryMatchedHits: 3,
-        condition: { expectedValue: "W2" },
+        conditions: [{ valuePath: "candidate.id", expectedValue: "W2" }],
       }],
     }, toolResponse({ planId: "jdwp-plan-1" })),
     toolEvent("jdwp_collect", {}, toolResponse({
@@ -211,7 +211,7 @@ test("rejects a JDWP plan created before CodePath evidence in sequential refinem
       basedOnEvidenceIds: [], expectedObservations: ["W2 state"],
       tracepoints: [{
         maxObservedHits: 20, maxCapturedHits: 5,
-        condition: { expectedValue: "W2" },
+        conditions: [{ valuePath: "candidate.id", expectedValue: "W2" }],
       }],
     }, toolResponse({ planId: "jdwp-plan-1" })),
     toolEvent("codepath_collect", {}, toolResponse({

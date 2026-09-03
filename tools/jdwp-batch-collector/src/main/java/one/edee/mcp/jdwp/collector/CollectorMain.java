@@ -18,8 +18,8 @@ import java.util.Map;
  * Agent-owned JDWP Collector 命令行入口；不依赖 Spring、MCP 或目标算法代码。
  */
 public final class CollectorMain {
-    static final String COLLECTOR_VERSION = "3.0.0";
-    static final String RAW_TRACE_SCHEMA_VERSION = "2.0";
+    static final String COLLECTOR_VERSION = "4.0.0";
+    static final String RAW_TRACE_SCHEMA_VERSION = "3.0";
 
     private CollectorMain() {
     }
@@ -66,9 +66,9 @@ public final class CollectorMain {
             "exact-method-descriptor",
             "code-index",
             "typed-values",
-            "bounded-projection",
+            "precise-value-paths",
             "tracepoint-request-group",
-            "conditional-frame-values",
+            "and-conditions",
             "separate-hit-counters"
         ));
         data.put("sessionId", plan.sessionId);

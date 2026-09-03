@@ -1,6 +1,7 @@
 package one.edee.mcp.jdwp.collector;
 
 import com.sun.jdi.AbsentInformationException;
+import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.Location;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
@@ -17,7 +18,7 @@ import com.sun.jdi.request.ClassPrepareRequest;
 import com.sun.jdi.request.EventRequest;
 import com.sun.jdi.request.EventRequestManager;
 import one.edee.mcp.jdwp.core.FrameSnapshotter;
-import one.edee.mcp.jdwp.core.JdiValueSnapshotter;
+import one.edee.mcp.jdwp.core.JdiValuePathReader;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -25,7 +26,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -229,9 +229,8 @@ final class TracePlanExecutor {
             disableTracepoint(tracepointId);
             return null;
         }
-        StackFrameConditionEvaluator.Evaluation evaluation = tracepoint.condition == null
-            ? StackFrameConditionEvaluator.Evaluation.matched()
-            : conditionEvaluator.evaluate(event.thread(), tracepoint.condition);
+        StackFrameConditionEvaluator.Evaluation evaluation = conditionEvaluator.evaluate(
+            event.thread(), tracepoint.conditions);
         if (evaluation.status() == StackFrameConditionEvaluator.Status.UNAVAILABLE) {
             conditionUnavailableCounts.merge(tracepointId, 1, Integer::sum);
             conditionUnavailableReasons.computeIfAbsent(tracepointId, ignored -> new HashMap<>())
@@ -265,7 +264,7 @@ final class TracePlanExecutor {
         data.put("observedHit", observedHit);
         data.put("matchedHit", matchedHit);
         data.put("capturedHit", capturedHit);
-        if (tracepoint.condition != null) {
+        if (!tracepoint.conditions.isEmpty()) {
             data.put("conditionResult", "MATCHED");
         }
         data.put("thread", Map.of("id", thread.uniqueID(), "name", thread.name()));
@@ -276,19 +275,10 @@ final class TracePlanExecutor {
             "line", event.location().lineNumber(),
             "codeIndex", event.location().codeIndex()
         ));
-        if (tracepoint.capture.stack || tracepoint.capture.locals) {
-            int frameLimit = tracepoint.capture.stack ? tracepoint.capture.maxFrames : 1;
-            FrameSnapshotter frameSnapshotter = new FrameSnapshotter(
-                new JdiValueSnapshotter(tracepoint.capture.limits())
-            );
-            data.put("frames", frameSnapshotter.capture(
-                thread,
-                frameLimit,
-                tracepoint.capture.locals,
-                new LinkedHashSet<>(tracepoint.capture.localNames),
-                new LinkedHashSet<>(tracepoint.capture.fieldPaths)
-            ));
-        }
+        data.put("frames", tracepoint.capture.stack
+            ? new FrameSnapshotter().capture(thread, tracepoint.capture.maxFrames)
+            : List.of());
+        data.put("projections", captureProjections(thread, tracepoint.capture));
         if (observedHit >= tracepoint.maxObservedHits
                 || capturedHit >= tracepoint.maxCapturedHits) {
             disableTracepoint(tracepointId);
@@ -300,6 +290,20 @@ final class TracePlanExecutor {
             String tracepointId, int observedHit, int maxObservedHits) {
         if (observedHit >= maxObservedHits) {
             disableTracepoint(tracepointId);
+        }
+    }
+
+    private static List<JdiValuePathReader.Projection> captureProjections(
+            ThreadReference thread, DebugPlan.Capture capture) {
+        JdiValuePathReader reader = new JdiValuePathReader(capture.maxStringLength);
+        try {
+            var frame = thread.frame(0);
+            return capture.valuePaths.stream().map(path -> reader.read(frame, path)).toList();
+        } catch (IncompatibleThreadStateException failure) {
+            return capture.valuePaths.stream()
+                    .map(path -> JdiValuePathReader.Projection.unavailable(
+                            path, "THREAD_STATE_UNAVAILABLE"))
+                    .toList();
         }
     }
 
@@ -317,7 +321,7 @@ final class TracePlanExecutor {
 
     private Map<String, Object> baseEvent(String type) {
         Map<String, Object> event = new LinkedHashMap<>();
-        event.put("schemaVersion", "2.0");
+        event.put("schemaVersion", "3.0");
         event.put("sessionId", plan.sessionId);
         event.put("sequence", sequence.incrementAndGet());
         event.put("timestamp", Instant.now().toString());

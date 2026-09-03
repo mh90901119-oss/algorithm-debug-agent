@@ -33,24 +33,22 @@ public final class CollectorDebugPlanWriter {
                 .sorted(Comparator.comparing(point -> point.tracepointId()))
                 .map(point -> {
             var capture = point.capture();
-            var condition = point.condition();
             return new CollectorDebugPlan.Tracepoint(
                     point.tracepointId(), point.sourceAnchor().className(), point.line(),
                     point.sourceAnchor().methodName(), point.sourceAnchor().descriptor(),
                     point.maxObservedHits(), point.maxCapturedHits(),
                     point.captureFirstMatchedHits(), point.captureEveryMatchedHits(),
-                    condition == null ? null
-                    : new CollectorDebugPlan.Condition(
-                            condition.localName(), condition.fieldPath(),
-                            condition.operator().name(), condition.expectedType().name(),
-                            condition.expectedValue()),
+                    point.conditions().stream()
+                            .map(condition -> new CollectorDebugPlan.Condition(
+                                    condition.valuePath(), condition.operator().name(),
+                                    condition.expectedType().name(), condition.expectedValue()))
+                            .toList(),
                     new CollectorDebugPlan.Capture(
-                            capture.locals(), capture.stack(), capture.maxFrames(),
-                            capture.maxDepth(), capture.maxItems(), capture.maxStringLength(),
-                            capture.localNames(), capture.fieldPaths()));
+                            capture.stack(), capture.maxFrames(), capture.maxStringLength(),
+                            capture.valuePaths()));
                 }).toList();
         CollectorDebugPlan document = new CollectorDebugPlan(
-                "4.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
+                "5.0", plan.planId().value(), new CollectorDebugPlan.Target("127.0.0.1", port),
                 true, plan.budget().idleTimeoutMillis(), plan.budget().maxEvents(), points);
         try {
             return mapper.writeValueAsBytes(document);

@@ -96,7 +96,9 @@ try {
     }
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "JDWP manifest is missing" }
     $traceText = Get-Content -LiteralPath $trace -Raw -Encoding UTF8
-    if ($traceText -notmatch 'marker' -or $traceText -notmatch '42' `
+    if ($traceText -notmatch '"valuePath":"marker"' `
+            -or $traceText -notmatch '"status":"CAPTURED"' `
+            -or $traceText -notmatch '"scalarValue":"42"' `
             -or $traceText -notmatch '"conditionResult":"MATCHED"') {
         throw "JDWP raw trace does not contain the matched marker=42 snapshot"
     }

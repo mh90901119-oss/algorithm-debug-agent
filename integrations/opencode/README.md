@@ -31,6 +31,14 @@ is known are buffered and flushed after `analysis_begin`; only a Case-creation f
 Open the JSONL file directly to review Tool and Java CLI order. It is diagnostic metadata, not an
 Artifact or Evidence source. Recorder failures never replace the original ToolResponse.
 
+## Failure responses
+
+Target exceptions and assertion failures are successful Tool invocations with a structured
+`RunOutcomeSummary`. Agent, configuration, contract, and Collector failures use `success=false` and
+must not be interpreted as target-test evidence. Their message gives the bounded recovery action.
+When CodePath or JDWP has already archived a failure Manifest and baseline, the failure response
+returns those registered Artifact references; full DFX stack traces remain human-only diagnostics.
+
 ## Install
 
 ```powershell

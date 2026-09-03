@@ -62,7 +62,7 @@ try {
     try {
         # Maven and libraries may write non-fatal warnings to stderr. Preserve them and trust the exit code.
         $ErrorActionPreference = "Continue"
-        & $maven -Pcodepath-launcher package
+        & $maven -Pcodepath-launcher clean package
         $mavenExitCode = $LASTEXITCODE
     }
     finally {
