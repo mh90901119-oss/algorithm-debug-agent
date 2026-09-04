@@ -20,7 +20,6 @@ import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -175,14 +174,13 @@ public final class RunApplicationService {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "The Case does not belong to the requested project");
             }
             AnalysisRequest analysis = requireAnalysis(archive, caseId, analysisId);
-            ContextRecord context = requireContext(archive, caseId, analysis.contextId());
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
             executionLog.info(logContext, "RunApplicationService", "INPUT_PRECONDITION_VERIFIED",
                     "VERIFIED", "Algorithm input precondition was verified");
 
             RunId runId = ids.newRunId();
             RunRequest request = new RunRequest(
-                    SchemaVersions.RUN_REQUEST, caseId, context.contextId(), analysisId, runId,
+                    SchemaVersions.RUN_REQUEST, caseId, analysisId, runId,
                     manifest.targetTest(), "UNINSTRUMENTED", clock.instant());
             try {
                 archive.startRun(request);
@@ -229,7 +227,7 @@ public final class RunApplicationService {
                         failure);
             }
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Failed to read or write Case Workspace failed", failure);
+            throw new CaseRunException(failure.code(), "Failed to read or write the Case Workspace", failure);
         }
     }
 
@@ -368,7 +366,7 @@ public final class RunApplicationService {
         }
         return Optional.of(new RunResultFingerprint(
                 SchemaVersions.RUN_RESULT_FINGERPRINT,
-                request.caseId(), request.contextId(), request.runId(),
+                request.caseId(), request.analysisId(), request.runId(),
                 failureHash.orElseThrow()));
     }
 
@@ -382,78 +380,24 @@ public final class RunApplicationService {
                     ComparisonOutcome.NOT_COMPARED, "No valid target observation");
         }
         RunResultFingerprint fingerprint = current.orElseThrow();
-        Path fingerprintPath;
         try {
-            fingerprintPath = archive.createRunResultFingerprint(fingerprint);
+            Path fingerprintPath = archive.createRunResultFingerprint(fingerprint);
             references.add(artifacts.reference(
                     caseRoot, fingerprintPath,
                     runArtifactId(fingerprint.runId(), "result-fingerprint"),
                     "RUN_RESULT_FINGERPRINT",
                     "application/json", MAX_FINGERPRINT_BYTES));
+            return new ComparisonDecision(
+                    ComparisonOutcome.NOT_COMPARED,
+                    "Failure fingerprint archived for same-analysis dynamic comparison");
         } catch (WorkspaceException | CaseRunException failure) {
             throw new CaseRunException(
-                    "RUN_FINGERPRINT_WRITE_FAILED", "Failed to save or reference the Run result fingerprint", failure);
-        }
-
-        Optional<RunResultFingerprint> sameContext;
-        try {
-            sameContext = archive.findReproduction(
-                    fingerprint.caseId(), fingerprint.contextId());
-        } catch (WorkspaceException failure) {
-            throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_INVALID", "current Context reference is invalid", failure);
-        }
-        if (sameContext.isPresent()) {
-            return compare(sameContext.orElseThrow(), fingerprint,
-                    ReproductionComparator.Scope.SAME_CONTEXT);
-        }
-
-        Optional<RunResultFingerprint> previous;
-        try {
-            previous = archive.findLatestReproductionBefore(
-                    fingerprint.caseId(), fingerprint.contextId());
-        } catch (WorkspaceException failure) {
-            throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_INVALID", "Previous Context reference is invalid", failure);
-        }
-
-        RunResultFingerprint established;
-        try {
-            established = archive.createReproductionIfAbsent(fingerprint);
-        } catch (WorkspaceException failure) {
-            if (isInvalidReferenceFailure(failure)) {
-                throw new CaseRunException(
-                        "REPRODUCTION_REFERENCE_INVALID", "current Context reference is invalid", failure);
-            }
-            throw new CaseRunException(
-                    "REPRODUCTION_REFERENCE_WRITE_FAILED", "Failed to create the current Context reference", failure);
-        }
-        if (!established.equals(fingerprint)) {
-            return compare(established, fingerprint,
-                    ReproductionComparator.Scope.SAME_CONTEXT);
-        }
-        if (previous.isPresent()) {
-            return compare(previous.orElseThrow(), fingerprint,
-                    ReproductionComparator.Scope.CROSS_CONTEXT);
-        }
-        return new ComparisonDecision(
-                ComparisonOutcome.NOT_COMPARED,
-                "No prior reproduction reference; current run stored as context reference");
-    }
-
-    private ComparisonDecision compare(
-            RunResultFingerprint reference,
-            RunResultFingerprint current,
-            ReproductionComparator.Scope scope) {
-        try {
-            ReproductionComparator.Result result =
-                    reproductionComparator.compare(reference, current, scope);
-            return new ComparisonDecision(result.outcome(), result.summary());
-        } catch (RuntimeException failure) {
-            throw new CaseRunException(
-                    "RUN_COMPARISON_INCOMPARABLE", "Run result fingerprint cannot be compared reliably", failure);
+                    "RUN_FINGERPRINT_WRITE_FAILED",
+                    "Failed to save or reference the Run result fingerprint", failure);
         }
     }
+
+
 
     private static ComparisonDecision incomparable(String reasonCode) {
         return new ComparisonDecision(
@@ -461,11 +405,7 @@ public final class RunApplicationService {
                 "Comparison INCOMPARABLE; reason=" + reasonCode);
     }
 
-    private static boolean isInvalidReferenceFailure(WorkspaceException failure) {
-        return "CASE_DOCUMENT_INVALID".equals(failure.code())
-                || "CASE_ARCHIVE_IDENTITY_MISMATCH".equals(failure.code())
-                || "RUN_NOT_FOUND".equals(failure.code());
-    }
+
 
     private Optional<AgentFailureDiagnostic> referenceLogs(
             RunId runId,
@@ -544,16 +484,7 @@ public final class RunApplicationService {
         }
     }
 
-    private static ContextRecord requireContext(
-            CaseArchiveRepository archive,
-            CaseId caseId,
-            org.example.algorithmdebug.contracts.ContextId contextId) {
-        try {
-            return archive.requireContext(caseId, contextId);
-        } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Context does not exist or is invalid", failure);
-        }
-    }
+
 
     private static AgentFailureDiagnostic diagnostic(String code, Throwable failure) {
         return new AgentFailureDiagnostic(

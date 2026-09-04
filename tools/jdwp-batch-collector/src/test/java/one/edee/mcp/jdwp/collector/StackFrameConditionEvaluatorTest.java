@@ -38,10 +38,10 @@ class StackFrameConditionEvaluatorTest {
         when(waferType.fieldByName("id")).thenReturn(idField);
         when(wafer.getValue(idField)).thenReturn(id);
         when(id.value()).thenReturn("WAFER-1");
-        DebugPlan.Condition condition = condition("candidate", List.of("wafer", "id"));
+        DebugPlan.Condition condition = condition("candidate.wafer.id", "WAFER-1");
 
         StackFrameConditionEvaluator.Evaluation result =
-                new StackFrameConditionEvaluator().evaluate(thread, condition);
+                new StackFrameConditionEvaluator().evaluate(thread, List.of(condition));
 
         assertEquals(StackFrameConditionEvaluator.Status.MATCHED, result.status());
     }
@@ -55,18 +55,40 @@ class StackFrameConditionEvaluatorTest {
 
         StackFrameConditionEvaluator.Evaluation result =
                 new StackFrameConditionEvaluator().evaluate(
-                        thread, condition("candidate", List.of()));
+                        thread, List.of(condition("candidate", "WAFER-1")));
 
         assertEquals(StackFrameConditionEvaluator.Status.UNAVAILABLE, result.status());
         assertEquals("LOCAL_NOT_FOUND", result.reason());
     }
 
-    private static DebugPlan.Condition condition(String localName, List<String> path) {
+    @Test
+    void requiresEveryConditionToMatch() throws Exception {
+        ThreadReference thread = mock(ThreadReference.class);
+        StackFrame frame = mock(StackFrame.class);
+        LocalVariable waferNumber = mock(LocalVariable.class);
+        LocalVariable chamber = mock(LocalVariable.class);
+        StringReference waferValue = mock(StringReference.class);
+        StringReference chamberValue = mock(StringReference.class);
+        when(thread.frame(0)).thenReturn(frame);
+        when(frame.visibleVariableByName("waferNumber")).thenReturn(waferNumber);
+        when(frame.visibleVariableByName("chamber")).thenReturn(chamber);
+        when(frame.getValue(waferNumber)).thenReturn(waferValue);
+        when(frame.getValue(chamber)).thenReturn(chamberValue);
+        when(waferValue.value()).thenReturn("WAFER-1");
+        when(chamberValue.value()).thenReturn("PM2");
+
+        StackFrameConditionEvaluator.Evaluation result = new StackFrameConditionEvaluator().evaluate(
+                thread,
+                List.of(condition("waferNumber", "WAFER-1"), condition("chamber", "PM1")));
+
+        assertEquals(StackFrameConditionEvaluator.Status.NOT_MATCHED, result.status());
+    }
+
+    private static DebugPlan.Condition condition(String valuePath, String expectedValue) {
         DebugPlan.Condition condition = new DebugPlan.Condition();
-        condition.localName = localName;
-        condition.fieldPath = path;
+        condition.valuePath = valuePath;
         condition.expectedType = "STRING";
-        condition.expectedValue = "WAFER-1";
+        condition.expectedValue = expectedValue;
         return condition;
     }
 }

@@ -3,7 +3,8 @@
 The active chain is OpenCode/LLM -> algorithm-debug Agent -> Skill -> Custom Tool -> Java CLI ->
 deterministic Java services. OpenCode plans and explains; Java executes, validates, and archives.
 
-Every analysis starts with `analysis_begin -> algorithm_input_capture`. The second Tool locates
+Every newly opened analysis starts with `analysis_begin -> algorithm_input_capture`. A read-only
+follow-up already answered by immutable Case evidence does not open an empty Analysis. The second Tool locates
 exactly one direct `String` literal ending in `input.json` in the target test method, copies it to the
 current Analysis, and returns its ArtifactReference. `run_test`, CodePath plan creation, and JDWP plan
 creation reject an Analysis without a verified input capture. Unsupported or multiple inputs stop the
@@ -16,8 +17,8 @@ generates `lib/installation.mjs` in the OpenCode configuration directory. The To
 and algorithm-result paths from that generated module. It does not infer paths, read a target-project
 configuration file, or accept user path arguments.
 
-Temporary question, plan, and analysis-result files are internal bounded process transport. They are
-deleted after each Tool call. The internal Java CLI still receives resolved paths because it is a
+Temporary question and plan files are internal bounded process transport. They are deleted after
+each Tool call. The internal Java CLI still receives resolved paths because it is a
 subprocess boundary, not a user configuration interface.
 
 ## Case-local DFX
@@ -29,6 +30,16 @@ is known are buffered and flushed after `analysis_begin`; only a Case-creation f
 
 Open the JSONL file directly to review Tool and Java CLI order. It is diagnostic metadata, not an
 Artifact or Evidence source. Recorder failures never replace the original ToolResponse.
+
+## Failure responses
+
+Target exceptions and assertion failures are successful Tool invocations with a structured
+`RunOutcomeSummary`. Agent, configuration, contract, and Collector failures use `success=false` and
+must not be interpreted as target-test evidence. Their message gives the bounded recovery action.
+OpenCode-side input validation failures also return ToolResponse 2.0 with
+`ADA_TOOL_INPUT_INVALID`; they never escape as an unstructured JavaScript exception.
+When CodePath or JDWP has already archived a failure Manifest and baseline, the failure response
+returns those registered Artifact references; full DFX stack traces remain human-only diagnostics.
 
 ## Install
 

@@ -17,7 +17,6 @@ import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.CaseSessionRequest;
 import org.example.algorithmdebug.casecore.CaseSessionService;
 import org.example.algorithmdebug.casecore.CaseDigestReader;
-import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -106,7 +105,7 @@ class RunApplicationServiceTest {
                 new OpaqueIdGenerator(ids::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC));
         opened = sessions.open(new CaseSessionRequest(
                 Optional.empty(), PROJECT_ID, TARGET, "stub",
-                "为什么调度结果不对？", ContextMode.REUSE_LATEST));
+                "为什么调度结果不对？"));
         new AlgorithmInputApplicationService(
                 registrations, mapper, writer, new JavaTestAlgorithmInputLocator(),
                 Clock.fixed(TIME, ZoneOffset.UTC))
@@ -118,7 +117,7 @@ class RunApplicationServiceTest {
         org.example.algorithmdebug.contracts.AnalysisId analysisId =
                 new org.example.algorithmdebug.contracts.AnalysisId("analysis-2");
         archive().createAnalysis(new org.example.algorithmdebug.contracts.AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, opened.caseId(), opened.contextId(), analysisId,
+                SchemaVersions.ANALYSIS_REQUEST, opened.caseId(), analysisId,
                 "continue", TIME.plusSeconds(1)));
         AtomicInteger starts = new AtomicInteger();
         RunApplicationService service = new RunApplicationService(
@@ -233,12 +232,11 @@ class RunApplicationServiceTest {
                 opened.caseId(), "run-2-stdout").artifact().artifactId());
         assertTrue(Files.notExists(caseRoot.resolve(
                 "runs/run-2/run-result-fingerprint.json")));
-        assertTrue(Files.notExists(caseRoot.resolve(
-                "contexts/context-1/reproduction.json")));
+        assertTrue(Files.notExists(caseRoot.resolve("contexts")));
     }
 
     @Test
-    void staleMalformedReproductionDoesNotAffectPassingRunFacts()
+    void priorPassingRunDoesNotAffectSubsequentPassingRunFacts()
             throws Exception {
         AtomicInteger starts = new AtomicInteger();
         TargetTestExecutor executor = (spec, options) -> {
@@ -269,8 +267,6 @@ class RunApplicationServiceTest {
                 new OpaqueIdGenerator(runIds::removeFirst), Clock.fixed(TIME, ZoneOffset.UTC),
                 executor, new RunArtifactArchiver(), mavenExecutable);
         service.execute(workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
-        Files.writeString(caseRoot().resolve("contexts/context-1/reproduction.json"), "{broken");
-
         RunOutcomeSummary outcome = service.execute(
                 workspace, PROJECT_ID, opened.caseId(), opened.analysisId());
 
@@ -405,8 +401,7 @@ class RunApplicationServiceTest {
     private void assertNoFingerprintArchives(String runId) {
         assertTrue(Files.notExists(caseRoot().resolve(
                 "runs/" + runId + "/run-result-fingerprint.json")));
-        assertTrue(Files.notExists(caseRoot().resolve(
-                "contexts/context-1/reproduction.json")));
+        assertTrue(Files.notExists(caseRoot().resolve("contexts")));
     }
 
     private ProjectRegistration registration() {

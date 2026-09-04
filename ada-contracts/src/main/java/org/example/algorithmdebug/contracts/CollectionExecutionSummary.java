@@ -5,7 +5,6 @@ import java.util.List;
 /** 面向 CLI/模型的有界动态采集摘要，不泄露本机绝对路径。 */
 public record CollectionExecutionSummary(
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -19,7 +18,6 @@ public record CollectionExecutionSummary(
     /** 校验身份、状态和有界相对产物路径。 */
     public CollectionExecutionSummary {
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");

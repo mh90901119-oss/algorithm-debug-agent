@@ -66,7 +66,31 @@ public final class AdaMain {
 
     /** JVM 主入口；退出码由 {@link #run(String[], PrintStream, PrintStream)} 返回。 */
     public static void main(String[] arguments) {
-        System.exit(defaultApplication().run(arguments, System.out, System.err));
+        System.exit(launch(arguments, System.out, System.err, AdaMain::defaultApplication));
+    }
+
+    static int launch(
+            String[] arguments,
+            PrintStream stdout,
+            PrintStream stderr,
+            ApplicationBootstrap bootstrap) {
+        if (stdout == null || stderr == null || bootstrap == null) {
+            throw new IllegalArgumentException("CLI launch dependencies must not be null");
+        }
+        try {
+            return bootstrap.create().run(arguments, stdout, stderr);
+        } catch (CliStartupException failure) {
+            logBootstrapFailure(failure.code(), failure);
+            new CliResponseWriter().write(ToolResponse.failure(
+                    failure.code(), CliFailureMessages.forCode(failure.code()), List.of()), stdout);
+            return EXIT_INTERNAL_ERROR;
+        } catch (RuntimeException failure) {
+            logBootstrapFailure("CLI_BOOTSTRAP_FAILED", failure);
+            new CliResponseWriter().write(ToolResponse.failure(
+                    "CLI_BOOTSTRAP_FAILED",
+                    CliFailureMessages.forCode("CLI_BOOTSTRAP_FAILED"), List.of()), stdout);
+            return EXIT_INTERNAL_ERROR;
+        }
     }
 
     /**
@@ -126,33 +150,39 @@ public final class AdaMain {
         } catch (CaseRunException failure) {
             logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
-                    ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
+                    ToolResponse.failure(
+                            failure.code(), CliFailureMessages.forCaseRun(failure),
+                            failure.artifacts()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (ControlPlaneException failure) {
             logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
-                    ToolResponse.failure(failure.code(), safeDomainMessage(failure.code()), List.of()),
+                    ToolResponse.failure(
+                            failure.code(), CliFailureMessages.forCode(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (StaticAnalysisException failure) {
             logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
                     ToolResponse.failure(
-                            failure.code(), safeDomainMessage(failure.code()), List.of()),
+                            failure.code(), CliFailureMessages.forCode(failure.code()), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (PlanCompilationException failure) {
             logFailure(logContext, commandName, "PLAN_COMPILATION_FAILED", failure);
             responseWriter.write(
                     ToolResponse.failure(
-                            "PLAN_COMPILATION_FAILED", safeDomainMessage("PLAN_COMPILATION_FAILED"), List.of()),
+                            "PLAN_COMPILATION_FAILED",
+                            CliFailureMessages.forPlanCompilation(
+                                    "PLAN_COMPILATION_FAILED", failure), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
         } catch (RuntimeException failure) {
             logFailure(logContext, commandName, "INTERNAL_ERROR", failure);
             responseWriter.write(
-                    ToolResponse.failure("INTERNAL_ERROR", "Internal Agent error", List.of()),
+                    ToolResponse.failure(
+                            "INTERNAL_ERROR", CliFailureMessages.forCode("INTERNAL_ERROR"), List.of()),
                     stdout);
             return EXIT_INTERNAL_ERROR;
         }
@@ -211,6 +241,17 @@ public final class AdaMain {
             AgentLogContext context, String command, String code, Throwable failure) {
         executionLog.error(context, "AdaMain", "CLI_INVOCATION_FAILED", "FAILED",
                 "CLI invocation failed", Map.of("command", command, "code", code), failure);
+    }
+
+    private static void logBootstrapFailure(String code, RuntimeException failure) {
+        try {
+            AgentExecutionLog log = JavaExecutionLogRouter.fromEnvironment(
+                    Clock.systemDefaultZone(), System.getenv());
+            log.error(AgentLogContext.bootstrap(), "AdaMain", "CLI_BOOTSTRAP_FAILED", "FAILED",
+                    "CLI bootstrap failed", Map.of("code", code), failure);
+        } catch (RuntimeException ignored) {
+            // 日志失败不得破坏 stdout 的单 ToolResponse 协议。
+        }
     }
 
     private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
@@ -290,61 +331,14 @@ public final class AdaMain {
             ToolDoctorProbe doctorProbe) {
     }
 
-    private static String safeDomainMessage(String code) {
-        return switch (code) {
-            case "WORKSPACE_PATH_INVALID" -> "Workspace path is invalid";
-            case "WORKSPACE_MANIFEST_INVALID" -> "Workspace manifest is invalid";
-            case "WORKSPACE_SCHEMA_UNSUPPORTED" -> "Workspace schema version is unsupported";
-            case "WORKSPACE_WRITE_FAILED" -> "Workspace write failed";
-            case "PROJECT_NOT_MAVEN" -> "Project is not an independent Maven module";
-            case "PROJECT_ID_CONFLICT" -> "Project ID conflicts with an existing registration";
-            case "PROJECT_PATH_CONFLICT" -> "Project path conflicts with an existing registration";
-            case "PROJECT_REGISTRATION_INVALID" -> "Project registration is invalid";
-            case "CONFIG_INVALID" -> "Workspace configuration is invalid";
-            case "PROJECT_NOT_REGISTERED" -> "Project is not registered";
-            case "ADAPTER_NOT_FOUND" -> "No compatible adapter is available";
-            case "ADAPTER_AMBIGUOUS" -> "More than one adapter matches the project";
-            case "CASE_NOT_FOUND" -> "Case was not found";
-            case "CONTEXT_NOT_FOUND" -> "Case context was not found";
-            case "ANALYSIS_NOT_FOUND" -> "Case analysis was not found";
-            case "ALGORITHM_INPUT_NOT_FOUND" -> "Target UT does not declare one supported algorithm input";
-            case "ALGORITHM_INPUT_EXPRESSION_UNSUPPORTED" -> "Algorithm input path must be a direct String literal";
-            case "MULTIPLE_ALGORITHM_INPUTS_UNSUPPORTED" -> "Target UT declares multiple algorithm inputs";
-            case "ALGORITHM_INPUT_FILE_NOT_FOUND" -> "Configured algorithm input file was not found";
-            case "ALGORITHM_INPUT_NOT_REGULAR_FILE" -> "Configured algorithm input is not a regular file";
-            case "ALGORITHM_INPUT_TOO_LARGE" -> "Algorithm input exceeds the supported size limit";
-            case "ALGORITHM_INPUT_COPY_FAILED" -> "Algorithm input could not be archived";
-            case "ANALYSIS_INPUT_NOT_CAPTURED" -> "Capture the current Analysis algorithm input before running the UT";
-            case "ANALYSIS_RESULT_IDENTITY_MISMATCH" -> "Analysis result identity does not match the command";
-            case "ANALYSIS_RESULT_NOT_FOUND" -> "Analysis result was not found";
-            case "CASE_ARTIFACT_NOT_REGISTERED" -> "Artifact ID is not registered in this case";
-            case "CASE_ARTIFACT_PATH_INVALID" -> "Artifact path is invalid";
-            case "CASE_ARTIFACT_OFFSET_INVALID" -> "Artifact offset is invalid";
-            case "CASE_ARTIFACT_INTEGRITY_MISMATCH" -> "Artifact content no longer matches its registration";
-            case "CASE_ARTIFACT_NOT_UTF8" -> "Artifact is not valid UTF-8 text";
-            case "CASE_ARTIFACT_BUDGET_TOO_SMALL" -> "Artifact read budget is too small";
-            case "CASE_PROJECT_MISMATCH" -> "Case belongs to another project";
-            case "CASE_TARGET_TEST_MISMATCH" -> "Case belongs to another target test";
-            case "MAVEN_NOT_FOUND" -> "Maven executable is unavailable";
-            case "RUN_ARCHIVE_WRITE_FAILED" -> "Run outcome could not be archived";
-            case "STATIC_SOURCE_DRIFT" -> "Source changed relative to the analysis context";
-            case "STATIC_ANALYSIS_FAILED" -> "Static analysis could not be completed";
-            case "TARGET_TEST_NOT_FOUND" -> "Target test was not found in the current source";
-            case "STATIC_ARCHIVE_FAILED" -> "Static analysis artifact could not be archived";
-            case "PLAN_COMPILATION_FAILED" -> "Collection plan could not be compiled";
-            case "PLAN_ARCHIVE_FAILED" -> "Collection plan could not be archived";
-            case "JDWP_PLAN_COMPILATION_FAILED" -> "JDWP collection plan could not be compiled";
-            case "JDWP_PLAN_ARCHIVE_FAILED" -> "JDWP collection plan could not be archived";
-            case "JDWP_TOOL_NOT_CONFIGURED" -> "JDWP Collector is not configured";
-            case "JDWP_ATTACH_FAILED" -> "JDWP Collector could not attach to the target test";
-            case "JDWP_MANIFEST_INVALID" -> "JDWP Collector output is invalid";
-            case "JDWP_ARCHIVE_FAILED" -> "JDWP collection artifacts could not be archived";
-            default -> "Workspace operation failed";
-        };
-    }
 }
 
 @FunctionalInterface
 interface CommandExecution {
     Object execute(CliCommand command);
+}
+
+@FunctionalInterface
+interface ApplicationBootstrap {
+    AdaMain create();
 }

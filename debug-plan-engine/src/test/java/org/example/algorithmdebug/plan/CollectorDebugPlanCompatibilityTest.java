@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.List;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
@@ -47,12 +46,14 @@ class CollectorDebugPlanCompatibilityTest {
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(new JdwpTracepointSpec(
-                        "point-1", "fixture.Algorithm#schedule()V", anchor, 11, 3,
-                        JdwpCaptureSpec.stackOnly())),
-                JdwpCollectionBudget.defaults(), "检查调度决策变量",
+                        "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
+                        100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly())),
+                JdwpCollectionBudget.defaults(), "Inspect the decision state",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which value selected the branch?", "The state selected the branch",
+                        List.of(), List.of("Observed runtime state")),
                 Instant.parse("2026-08-18T00:00:00Z"));
     }
 }

@@ -11,7 +11,6 @@ public record MethodPathSummary(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
@@ -31,7 +30,6 @@ public record MethodPathSummary(
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");
@@ -54,7 +52,6 @@ public record MethodPathSummary(
             String schemaVersion,
             EvidenceId evidenceId,
             CaseId caseId,
-            ContextId contextId,
             AnalysisId analysisId,
             RunId runId,
             PlanId planId,
@@ -65,7 +62,7 @@ public record MethodPathSummary(
             List<PathAnomaly> anomalies,
             boolean truncated,
             Instant createdAt) {
-        this(schemaVersion, evidenceId, caseId, contextId, analysisId, runId, planId,
+        this(schemaVersion, evidenceId, caseId, analysisId, runId, planId,
                 collectionId, rawTrace, methods, observedPaths, anomalies,
                 Optional.empty(), truncated, createdAt);
     }
@@ -160,17 +157,19 @@ public record MethodPathSummary(
     /** 完整 Scope 调用中相同有序方法进入序列的聚类。 */
     public record PathVariant(
             String pathId,
-            List<Integer> invocationOrdinals,
+            int occurrenceCount,
+            List<Integer> representativeInvocationOrdinals,
             List<String> representativeMethodSequence) {
         public PathVariant {
             pathId = ContractChecks.requireBoundedText(pathId, "pathId", 64, false);
-            invocationOrdinals = ContractChecks.immutableList(
-                    invocationOrdinals, "invocationOrdinals");
+            representativeInvocationOrdinals = ContractChecks.immutableList(
+                    representativeInvocationOrdinals, "representativeInvocationOrdinals");
             representativeMethodSequence = ContractChecks.immutableList(
                     representativeMethodSequence, "representativeMethodSequence");
-            if (!pathId.matches("PATH_[0-9]+") || invocationOrdinals.isEmpty()
+            if (!pathId.matches("PATH_[0-9]+") || occurrenceCount < 1
                     || representativeMethodSequence.isEmpty()
-                    || invocationOrdinals.stream().anyMatch(value -> value == null || value < 1)
+                    || representativeInvocationOrdinals.size() > NormalizationBudget.MAX_HITS
+                    || representativeInvocationOrdinals.stream().anyMatch(value -> value == null || value < 1)
                     || representativeMethodSequence.stream().anyMatch(value ->
                     value == null || value.isBlank() || value.length() > 2_048)) {
                 throw new IllegalArgumentException("Path variant is invalid");

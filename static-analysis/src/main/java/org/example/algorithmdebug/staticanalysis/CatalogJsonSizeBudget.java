@@ -27,7 +27,6 @@ final class CatalogJsonSizeBudget {
         upperBoundBytes = TOP_LEVEL_STRUCTURAL_BYTES
                 + jsonStringUpperBound(SchemaVersions.METHOD_CATALOG)
                 + jsonStringUpperBound(request.caseId().value())
-                + jsonStringUpperBound(request.contextId().value())
                 + jsonStringUpperBound(request.analysisId().value())
                 + jsonStringUpperBound(request.targetTest().className())
                 + jsonStringUpperBound(request.targetTest().methodName())

@@ -11,13 +11,12 @@ public record CaseSessionRequest(
         ProjectId projectId,
         TargetTest targetTest,
         String adapterId,
-        String question,
-        ContextMode contextMode) {
+        String question) {
 
-    /** 校验身份、问题和显式 Context 模式，不扫描目标 Workspace。 */
+    /** 校验身份与问题，不扫描目标 Workspace。 */
     public CaseSessionRequest {
         if (caseId == null || projectId == null || targetTest == null
-                || adapterId == null || question == null || contextMode == null) {
+                || adapterId == null || question == null) {
             throw new IllegalArgumentException("CaseSessionRequest fields must not be null");
         }
         adapterId = adapterId.strip();

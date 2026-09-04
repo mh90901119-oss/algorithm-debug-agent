@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/evidence/evidence-bundle-v2.schema.json",
+  "title": "EvidenceBundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evidenceId",
+    "caseId",
+    "analysisId",
+    "facts",
+    "comparisonFacts",
+    "coveredDimensions",
+    "artifacts",
+    "truncated",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "evidenceId": {
+      "type": "string"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "analysisId": {
+      "type": "string"
+    },
+    "facts": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object"
+      }
+    },
+    "comparisonFacts": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object"
+      }
+    },
+    "coveredDimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object"
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

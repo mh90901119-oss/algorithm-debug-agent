@@ -3,7 +3,7 @@ name: algorithm-debug
 description: Use when a user asks about one specified Java/Maven algorithm UT, its exception or assertion failure, its Gantt result, runtime call path, internal state, or causal behavior across analysis rounds.
 metadata:
   owner: algorithm-debug-agent
-  version: "2.4"
+  version: "3.2"
 ---
 
 # Algorithm Debug Workflow
@@ -14,10 +14,16 @@ deterministic facts. Do not encode target-algorithm business semantics in tools.
 
 ## Case identity
 
-- One problem about one target UT is one Case. Pass the prior `caseId` for a follow-up; omit it for a
-  new Case. Use a new Context only after a deliberate source, UT, or input change.
-- Call `algorithm-debug_analysis_begin` for every user question. If the named UT does not exist,
-  report that fact and stop.
+- One problem about one target UT is one Case. Omit `caseId` for a new problem. For a follow-up that
+  needs fresh deterministic work, pass the prior `caseId`; `analysis_begin` then appends a new
+  `analysisId` without overwriting earlier evidence.
+- Do not call `algorithm-debug_analysis_begin` for a clarification or follow-up already answerable
+  from the current conversation and immutable Case evidence. Answer it directly without creating an
+  empty Analysis.
+- When a follow-up needs a new input verification, current-source analysis, UT Run, CodePath, JDWP,
+  Case audit, or final archived conclusion, call `algorithm-debug_analysis_begin` exactly once first.
+  A reported source/UT/input change uses the same Case and a new Analysis. If the named UT does not
+  exist, report that fact and stop.
 - Do not ask for Workspace, `projectId`, result directory, or tool JAR paths. Installed settings and
   project registration resolve them.
 - Reuse immutable Runs, Collections, Evidence, and Artifacts. A new analysis adds an `analysisId`; it
@@ -85,28 +91,78 @@ confidence; create it only when its expected observation can change the conclusi
 Choose one smallest next action after each evidence step. There is no fixed number of rounds,
 methods, tracepoints, or collections.
 
+Only one target-executing Tool may be active at a time. Never issue `algorithm-debug_run_test`,
+`algorithm-debug_codepath_collect`, or `algorithm-debug_jdwp_collect` in parallel, in one Tool batch,
+or before the previous target-executing Tool has returned. Wait for the complete ToolResponse, inspect
+its Summary, Validation, Evidence, and any required bounded query result, then decide whether another
+target execution is still necessary.
+
+Do not pre-create CodePath and JDWP Plans for speculative paired execution. Create the smallest Plan
+for the current evidence gap, collect it, evaluate it, and only then create a different Plan when a
+new concrete gap remains. `ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION` is a workflow rejection, not a
+target failure; do not retry it automatically.
+
+For every ToolResponse with `success=false`, treat the named error code and message as the
+authoritative Agent boundary. Never use that failed call as target-test evidence. When the response
+contains a failure Manifest Artifact, read that bounded Manifest to distinguish process start,
+exit, attach, and archive facts; do not read Collector logs as algorithm evidence. Follow only the
+specific recovery action in the message, and never modify the target project POM to repair an Agent
+installation or Collector failure.
+
 Use CodePath when the unresolved question is which implementation or path executed. Select exact
 `class#method(descriptor)` keys from the current Method Catalog. Use `scopeMethodKey` for a repeated
 operation whose invocation groups/path variants matter. Expand only across a specific unresolved
 boundary exposed by the previous validated summary.
 
+For each selected method, request only scalar values that can distinguish the current hypothesis.
+Use literal brackets in `arg[0]`, `arg[1].field.subfield`, `return`, or `return.field.subfield`;
+`arg0` is invalid. The zero-based argument index comes from the exact method descriptor and source
+declaration. Projection names must describe
+the source value (`waferId`, `candidateChamber`, `strategyName`) without claiming business meaning
+that the source does not establish. Do not request getters, collection indexes, Map keys, arbitrary
+expressions, or complete objects. An unavailable optional projection is a recorded fact; an
+unavailable required projection is an evidence gap, not permission to discard the method event.
+
+After collection, use Method Path Summary for execution counts and path variants. When individual
+argument/return values are needed, call `evidence_query` on the registered `CODEPATH_INVOCATIONS`
+Artifact with an exact `methodRef` and, when useful, one projection `valueName`/`scalarValue` pair.
+Do not page through the complete JSONL with `artifact_read`. For an
+incremental CodePath Plan, cite the prior Evidence ID in `basedOnEvidenceIds`; the rationale must name
+the concrete observation that was insufficient, and expected observations must state what result
+would change the next decision. This is the complete multi-collection linkage; do not invent a
+separate conversation state or invocation ID.
+
+When CodePath leaves a concrete value gap that requires JDWP, finish the CodePath Collection first,
+read its Evidence ID from the successful response, and include that exact ID in the JDWP Plan
+`basedOnEvidenceIds`. Never create the JDWP Plan before the CodePath Evidence exists.
+
+If the user explicitly requests a runtime method path, use CodePath and collect Method Path Evidence.
+JDWP state or line-hit evidence does not replace method-path evidence. Conversely, CodePath does not
+replace JDWP when the unresolved question requires a named runtime value.
+
 Use JDWP when the unresolved question is a named runtime value at a current executable source line.
-CodePath and JDWP are independent; do not require one before the other. Prefer focused `localNames`
-and `fieldPaths` projections.
+CodePath and JDWP are independent; do not require one before the other. Build each tracepoint from the
+current Method Catalog and source: select an executable line where the named state is in scope, then
+request only the exact scalar or enum `valuePaths` needed to distinguish the current hypothesis.
+Algorithm-input identifiers may be used as condition values, but the Collector never assigns business
+meaning to a field.
 
-For a repeated method, use a generic `condition` when an entity or state can identify relevant
-invocations:
+For a repeated method, use up to four `conditions` when entity and state values identify relevant
+invocations. All conditions are combined with AND:
 
-- `localName`: top-frame local/parameter name or `this`.
-- `fieldPath`: at most eight instance fields; no getter, method, array index, or collection scan.
+- `valuePath`: top-frame local/parameter name or `this`, followed by at most seven instance fields,
+  for example `candidate.wafer.id`.
 - `operator`: `EQUALS`.
 - `expectedType`: `STRING`, `LONG`, `DOUBLE`, `BOOLEAN`, `CHAR`, `ENUM`, or `NULL`.
 - `expectedValue`: typed scalar text, omitted only for `NULL`.
 
 Set `maxObservedHits` high enough to encounter the relevant invocation but no higher than needed.
-Set `maxCapturedHits` to the small number of full snapshots required. Use
-`captureOnMatchedHits` only when specific matched ordinals matter. Non-matching observations briefly
-suspend only the event thread and skip full stack/local/object expansion.
+Set `maxCapturedHits` to the bounded number of full snapshots required. Use
+`captureFirstMatchedHits` to retain the first matched state transitions and
+`captureEveryMatchedHits` to sample later matched transitions without guessing fixed hit ordinals.
+Non-matching observations briefly suspend only the event thread and skip snapshot creation. A capture
+`valuePath` reads exactly that path and never expands an object, collection, Map, or array. Select a
+deeper field path in a later Plan when the result is `REFERENCE_ONLY`.
 
 Read the Collector/Agent Manifest counters as separate facts: `observed` is breakpoint encounters,
 `matched` passed the condition, `captured` produced full snapshots, and `unavailable` means the
@@ -114,8 +170,15 @@ condition could not be evaluated. Read bounded unavailable-reason details before
 Never treat zero captured snapshots as proof that the expected state never existed when the Plan was
 truncated or condition evaluation was unavailable.
 
-After a Collection, read normalized Summary/Evidence first. Read Raw Trace only for a specific detail
-missing from normalized evidence. Do not repeat an effective Plan unchanged. A later Plan must answer
+After a Collection, read normalized Summary/Evidence first. Each requested path has one projection
+status: `CAPTURED` contains a scalar value, `TRUNCATED` contains a bounded prefix,
+`REFERENCE_ONLY` identifies a complex runtime object that needs a deeper path, and `UNAVAILABLE`
+contains the deterministic read-failure reason. Use `evidence_query` on the registered
+`JDWP_SNAPSHOT_SUMMARY` Artifact to select an exact `tracepointId`, `valueName`, `scalarValue`,
+`valueStatus`, or sequence window. Interpret the value with the Method Catalog declaration, current
+source, Algorithm Input, stack location, runtime type, and Plan intent; do not infer meaning from a
+field name alone. Read Raw Trace only for a specific detail missing from normalized evidence.
+Do not repeat an effective Plan unchanged. A later Plan must answer
 a materially different question or change a field named by deterministic validation.
 
 ## Evidence sufficiency and iteration
@@ -144,11 +207,18 @@ fallback log.
 
 ## Completion
 
-Call `algorithm-debug_case_audit`. Do not ignore missing controls, invalid Artifact registrations,
-integrity mismatches, malformed interaction JSONL, or empty Case directories.
+After every successful `analysis_begin`, call `algorithm-debug_case_audit` immediately before every
+final answer, including each early exit for a missing UT, unsupported input, target failure, or Agent
+or Tool failure. `Stop` in any earlier step means stop additional target execution or collection, not
+skip this audit. Do not ignore missing controls, invalid Artifact registrations, integrity mismatches,
+malformed interaction JSONL, or empty Case directories.
 
-Then call `algorithm-debug_analysis_complete` once with the current Case/Context/Analysis IDs, final
-answer, graded conclusions, referenced target Run IDs, Collection IDs, Evidence IDs, Artifact IDs,
-and remaining evidence gaps. `collectorExecutionRunId` is collector provenance and must not be placed
-in `referencedRunIds`. If completion rejects the payload, correct the same Analysis payload once;
-never open a replacement Analysis or submit a dummy result.
+Return the conclusion directly to the user; do not persist the model-authored answer in Workspace.
+Start the answer by copying the two lines in `analysis_begin.data.answerContext` verbatim. Never
+abbreviate either path with `...`, an ellipsis, or a suffix-only path. Then state which major
+capabilities were used (`algorithm input`, `run_test`, `static analysis`, `CodePath`, `JDWP`, and
+bounded evidence query). Keep claim classifications explicit in the answer and cite registered
+Artifact/Evidence IDs when they support a fact. `collectorExecutionRunId` is collector provenance,
+not a target Run ID.
+Use the full exact Run, Collection, Evidence, and Artifact IDs; never abbreviate an identifier to a
+prefix, suffix, or ellipsis.

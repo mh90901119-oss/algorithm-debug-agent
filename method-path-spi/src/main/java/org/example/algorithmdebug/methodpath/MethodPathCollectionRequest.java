@@ -6,7 +6,6 @@ import java.util.Objects;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 
@@ -15,7 +14,6 @@ import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
  */
 public record MethodPathCollectionRequest(
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         CodePathCollectionPlan plan,
@@ -29,13 +27,11 @@ public record MethodPathCollectionRequest(
     /** 校验身份、目录、class path 与 JUnit selector。 */
     public MethodPathCollectionRequest {
         caseId = Objects.requireNonNull(caseId, "caseId");
-        contextId = Objects.requireNonNull(contextId, "contextId");
         analysisId = Objects.requireNonNull(analysisId, "analysisId");
         runId = Objects.requireNonNull(runId, "runId");
         plan = Objects.requireNonNull(plan, "plan");
         collectionId = Objects.requireNonNull(collectionId, "collectionId");
-        if (!plan.caseId().equals(caseId) || !plan.contextId().equals(contextId)
-                || !plan.analysisId().equals(analysisId)) {
+        if (!plan.caseId().equals(caseId) || !plan.analysisId().equals(analysisId)) {
             throw new IllegalArgumentException("The collection request identity does not match the CodePath plan");
         }
         moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot").toAbsolutePath().normalize();

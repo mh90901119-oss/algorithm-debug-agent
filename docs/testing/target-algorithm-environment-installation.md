@@ -19,7 +19,8 @@ flowchart TD
     C --> W["配置的 Workspace"]
 ```
 
-安装器复制文件，不创建符号链接。因此仓库代码修改后必须重新构建、卸载并安装，OpenCode 才会使用新版本。
+安装器只复制 OpenCode 侧的 Agent、Skill、Command、Custom Tool 和 JS Runtime，不复制 Java JAR。
+`installation.mjs` 保存 Agent 仓库中 `bin/ada.cmd` 的绝对路径，Java 后端始终从该仓库运行。
 
 ## 2. 前提检查
 
@@ -61,7 +62,9 @@ Maven 的作用是让 Agent 在命令行精确执行同一个 UT，并为 CodePa
 mvn "-Dtest=com.example.AlgorithmTest#targetMethod" "-DfailIfNoTests=true" test
 ```
 
-这里的完整类名是测试源码 `package` 加类名，方法名是 `@Test` 方法。Maven 3.9.9 可用。若项目使用 Maven Wrapper，可将配置写为其可执行脚本；否则设置 `mavenExecutable` 或确保 `mvn` 在 `PATH`。
+这里的完整类名是测试源码 `package` 加类名，方法名是 `@Test` 方法。Maven 3.9.9 可用。
+若项目使用 Maven Wrapper，可配置其可执行脚本的绝对路径；否则将 `mavenExecutable` 留空并
+确保 `mvn` 在 `PATH`，或配置 Maven `mvn.cmd` 的绝对路径。
 
 命令失败时先解决目标项目的 Profile、Settings、镜像和依赖，不要让安装器修改目标 POM。只有该 UT 本身在 Maven 下确实缺少测试依赖时，才由目标项目维护者决定是否补充。
 
@@ -73,7 +76,8 @@ mvn "-Dtest=com.example.AlgorithmTest#targetMethod" "-DfailIfNoTests=true" test
 D:\tools\algorithm-debug-agent
 ```
 
-不要从临时下载目录安装后再删除仓库。当前安装副本包含运行 JAR，但重新构建、验证和卸载仍需要仓库脚本。
+不要从临时下载目录安装后再删除仓库。Java 运行 JAR 保留在仓库构建目录，运行、重新构建、
+验证和卸载都需要该稳定仓库路径。
 
 ## 4. 配置路径
 
@@ -91,7 +95,7 @@ D:\tools\algorithm-debug-agent
   "resultJsonDirectory": "D:\\log\\scheduler\\${runDate}\\gant",
   "agentJavaHome": "D:\\tools\\jdk-21",
   "targetJavaHome": "D:\\tools\\jdk-17",
-  "mavenExecutable": "mvn",
+  "mavenExecutable": "",
   "dfxEnabled": true
 }
 ```
@@ -120,7 +124,9 @@ D:\tools\algorithm-debug-agent
 - CodePath JUnit Launcher JAR。
 - JDWP Batch Collector JAR。
 
-目标算法不能从受限 Maven 镜像下载 CodePath/JDWP 依赖并不影响这一步，因为运行所需 JAR 随 Agent 安装副本提供，不要求加入目标算法 POM。Agent 自身构建依赖仍需在下载 ZIP 前构建好，或在目标电脑 Maven 仓库可用；正式仓库提交应包含安装所需归档资产的既定交付方式。
+目标算法不能从受限 Maven 镜像下载 CodePath/JDWP 依赖并不影响目标 UT，因为这些依赖不加入
+目标算法 POM。GitHub 源码 ZIP 不包含被忽略的 `target` 构建目录，所以目标电脑仍须成功执行
+本步骤；Agent 自身构建依赖必须能从目标电脑 Maven 仓库或配置的镜像取得。
 
 ## 6. 安装到 OpenCode
 
@@ -128,7 +134,14 @@ D:\tools\algorithm-debug-agent
 .\scripts\install-opencode.ps1 -Mode Install
 ```
 
-安装内容包括 Agent、Skill、Command、Custom Tool、JS Runtime、`bin/ada.cmd`、Java CLI 和 Collector。脚本创建 ownership manifest，后续卸载只处理本次安装拥有的文件。
+安装内容包括 Agent、Skill、Command、Custom Tool、JS Runtime 和指向仓库 `bin/ada.cmd` 的路径配置。
+Java CLI、CodePath Launcher 和 JDWP Collector 保留在 Agent 仓库。安装器在写入前检查三种 JAR
+已经构建，并创建 ownership manifest。
+
+Custom Tool 需要 `@opencode-ai/plugin`。安装器会保留现有 OpenCode `package.json`，仅在缺少时
+追加该依赖；已有旧版本依赖时先复用，再以实际能力发现判断是否兼容。卸载时保留该共享依赖，
+便于频繁重装且不影响其他 Custom Tool。受限网络环境如果既没有已安装依赖也无法访问包源，
+必须先解决 OpenCode 的包依赖来源。
 
 安装器不会：
 
@@ -199,17 +212,20 @@ projects/<projectId>/cases/<caseId>/
 
 ## 13. 运行真实 Eval
 
-在 Agent 仓库执行：
+切换到目标算法 Maven 模块，使它成为当前工作目录，再调用 Agent 仓库中的脚本：
 
 ```powershell
-.\scripts\run-agent-evals.ps1 -Suite Smoke
+Set-Location <TargetAlgorithmMavenModule>
+& "<AgentRepository>\scripts\run-agent-evals.ps1" -Suite Smoke
 ```
 
-Eval 的 `-Project` 若存在只表示 OpenCode 会话启动目录，不表示固定 Demo，也不改变产品运行逻辑。默认应在配置或 Suite 中使用可执行的验证项目。报告写入 `evalDirectory`。
+Eval 使用当前工作目录启动 OpenCode，不接收目标项目路径参数，也不会把验证项目写进 Suite。
+报告写入 `evalDirectory`。
 
 ## 14. 修改 Agent 后重新安装
 
-仓库源码修改不会自动影响 OpenCode 已安装副本：
+更新方式按修改内容区分：Java、CodePath 或 JDWP 代码只需重新构建；Skill、Agent Prompt、
+Custom Tool、JS Runtime 或路径配置发生变化时才需要重新安装。调试阶段可以稳定重复执行：
 
 ```powershell
 .\scripts\build-agent.ps1
@@ -217,6 +233,9 @@ Eval 的 `-Project` 若存在只表示 OpenCode 会话启动目录，不表示�
 .\scripts\install-opencode.ps1 -Mode Install
 .\scripts\install-opencode.ps1 -Mode Check
 ```
+
+也可以不单独执行卸载，`Install` 会调用相同卸载逻辑后写入最新副本。安装或卸载后重新打开
+OpenCode，使当前会话不再使用缓存定义。
 
 卸载不会删除 Workspace 或目标算法文件。详细规则见 [卸载与重新安装](opencode-uninstallation.md)。安装后调试见 [OpenCode Agent 调试](opencode-agent-debugging.md)。
 

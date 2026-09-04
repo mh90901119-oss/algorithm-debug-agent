@@ -23,27 +23,23 @@ record CollectorDebugPlan(
             String methodDescriptor,
             int maxObservedHits,
             int maxCapturedHits,
-            List<Integer> captureOnMatchedHits,
-            Condition condition,
+            int captureFirstMatchedHits,
+            int captureEveryMatchedHits,
+            List<Condition> conditions,
             Capture capture) {
     }
 
     record Condition(
-            String localName,
-            List<String> fieldPath,
+            String valuePath,
             String operator,
             String expectedType,
             String expectedValue) {
     }
 
     record Capture(
-            boolean locals,
             boolean stack,
             int maxFrames,
-            int maxDepth,
-            int maxItems,
             int maxStringLength,
-            List<String> localNames,
-            List<String> fieldPaths) {
+            List<String> valuePaths) {
     }
 }

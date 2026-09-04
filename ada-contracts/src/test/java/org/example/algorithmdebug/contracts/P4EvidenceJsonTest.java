@@ -25,7 +25,7 @@ class P4EvidenceJsonTest {
         EvidenceBuildRequest request = new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"),
                 List.of(new CollectionId("collection-1")), List.of(),
                 Set.of(EvidenceDimension.RUNTIME_STATE), 512 * 1024, 1024 * 1024,
@@ -41,7 +41,7 @@ class P4EvidenceJsonTest {
         JsonNode root = MAPPER.readTree(MAPPER.writeValueAsBytes(new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"),
                 List.of(), List.of(), Set.of(EvidenceDimension.TARGET_OUTCOME),
                 512 * 1024, 1024 * 1024, Instant.parse("2026-08-18T00:00:00Z"))));
@@ -54,13 +54,13 @@ class P4EvidenceJsonTest {
     @Test
     void allP4SchemasAreStrictObjects() throws Exception {
         for (String relative : List.of(
-                "trace/normalization-manifest-v1.schema.json",
-                "trace/method-path-summary-v2.schema.json",
-                "trace/jdwp-snapshot-summary-v1.schema.json",
-                "evidence/collection-validation-v1.schema.json",
-                "evidence/evidence-build-request-v1.schema.json",
-                "evidence/evidence-bundle-v1.schema.json",
-                "evidence/sufficiency-evaluation-v1.schema.json")) {
+                "trace/normalization-manifest-v2.schema.json",
+                "trace/method-path-summary-v4.schema.json",
+                "trace/jdwp-snapshot-summary-v4.schema.json",
+                "evidence/collection-validation-v2.schema.json",
+                "evidence/evidence-build-request-v2.schema.json",
+                "evidence/evidence-bundle-v2.schema.json",
+                "evidence/sufficiency-evaluation-v2.schema.json")) {
             JsonNode schema = schema(relative);
             assertEquals("object", schema.path("type").asText(), relative);
             assertFalse(schema.path("additionalProperties").asBoolean(true), relative);

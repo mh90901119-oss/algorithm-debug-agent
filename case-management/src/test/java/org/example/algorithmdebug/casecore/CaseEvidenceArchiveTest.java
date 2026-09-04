@@ -70,12 +70,11 @@ class CaseEvidenceArchiveTest {
         repository = new CaseArchiveRepository(
                 casesRoot, new BoundedDocumentMapper(), new AtomicDocumentWriter());
         repository.createCase(CaseArchiveRepositoryTest.manifest());
-        repository.createContext(CaseArchiveRepositoryTest.context());
         repository.createAnalysis(CaseArchiveRepositoryTest.analysis());
         repository.startRun(CaseArchiveRepositoryTest.run(RUN_ID, NOW));
         repository.completeRun(new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 ProcessOutcome.FAILED, TestOutcome.ERROR, GanttOutcome.ABSENT,
                 Optional.of(new TargetFailureDiagnostic(
                         FailureCategory.TEST_ERROR, "java.lang.IllegalStateException",
@@ -84,7 +83,7 @@ class CaseEvidenceArchiveTest {
         repository.createMethodCatalog(CaseArchiveRepositoryTest.methodCatalog());
         repository.createCodePathPlan(CaseArchiveRepositoryTest.codePathPlan());
         repository.startMethodPathCollection(new MethodPathCollectionRecord(
-                "1.0", CASE_ID, CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                "1.0", CASE_ID, ANALYSIS_ID,
                 RUN_ID, PLAN_ID, COLLECTION_ID, CaseArchiveRepositoryTest.manifest().targetTest(),
                 "CODEPATH", NOW));
     }
@@ -153,7 +152,7 @@ class CaseEvidenceArchiveTest {
         repository.createEvidenceRequest(request());
         MethodPathSummary mismatched = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                ANALYSIS_ID,
                 new RunId("run-other"), PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), List.of(), false, NOW);
 
@@ -168,7 +167,7 @@ class CaseEvidenceArchiveTest {
     void rejectsMethodPathSummaryBeyondFourMiBHardLimit() {
         repository.createEvidenceRequest(request());
         TraceProvenance provenance = new TraceProvenance(
-                CASE_ID, CaseArchiveRepositoryTest.context().contextId(), RUN_ID,
+                CASE_ID, RUN_ID,
                 COLLECTION_ID, rawArtifact(), 1, Optional.of(1L), Optional.empty(),
                 "RAW_OBSERVATION");
         List<MethodPathSummary.PathAnomaly> anomalies = IntStream.range(0, 2_500)
@@ -177,7 +176,7 @@ class CaseEvidenceArchiveTest {
                 .toList();
         MethodPathSummary oversized = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), anomalies, false, NOW);
 
@@ -186,24 +185,37 @@ class CaseEvidenceArchiveTest {
     }
 
     @Test
-    void permitsSameContextCollectionFromEarlierAnalysis() {
+    void permitsHistoricalCollectionFromEarlierAnalysisAsComparisonEvidence() {
         AnalysisId currentAnalysis = new AnalysisId("analysis-2");
         EvidenceId currentEvidence = new EvidenceId("evidence-2");
+        RunId currentRun = new RunId("run-2");
         repository.createAnalysis(new AnalysisRequest(
                 SchemaVersions.ANALYSIS_REQUEST, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), currentAnalysis,
+                currentAnalysis,
                 "基于上一轮证据继续分析", NOW.plusSeconds(1)));
+        repository.startRun(new org.example.algorithmdebug.contracts.RunRequest(
+                SchemaVersions.RUN_REQUEST, CASE_ID, currentAnalysis, currentRun,
+                CaseArchiveRepositoryTest.manifest().targetTest(), "UNINSTRUMENTED",
+                NOW.plusSeconds(2)));
+        repository.completeRun(new RunOutcomeSummary(
+                SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
+                currentAnalysis, currentRun,
+                ProcessOutcome.FAILED, TestOutcome.ERROR, GanttOutcome.ABSENT,
+                Optional.of(new TargetFailureDiagnostic(
+                        FailureCategory.TEST_ERROR, "java.lang.IllegalStateException",
+                        "no feasible result", "", "fixture.Algorithm.solve")),
+                Optional.empty(), ComparisonOutcome.NOT_COMPARED, "not compared", List.of()));
         repository.createEvidenceRequest(new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, currentEvidence, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), currentAnalysis,
-                RUN_ID,
-                List.of(COLLECTION_ID), List.of(), Set.of(EvidenceDimension.METHOD_PATH),
-                512 * 1024, 1024 * 1024, NOW.plusSeconds(2)));
+                currentAnalysis,
+                currentRun,
+                List.of(), List.of(COLLECTION_ID), Set.of(EvidenceDimension.METHOD_PATH),
+                512 * 1024, 1024 * 1024, NOW.plusSeconds(3)));
         MethodPathSummary reused = new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, currentEvidence, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 PLAN_ID, COLLECTION_ID, rawArtifact(),
-                List.of(), List.of(), List.of(), false, NOW.plusSeconds(3));
+                List.of(), List.of(), List.of(), false, NOW.plusSeconds(4));
 
         Path persisted = repository.createMethodPathSummary(reused);
 
@@ -213,7 +225,7 @@ class CaseEvidenceArchiveTest {
     private static EvidenceBuildRequest request() {
         return new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                ANALYSIS_ID,
                 RUN_ID,
                 List.of(COLLECTION_ID), List.of(), Set.of(EvidenceDimension.METHOD_PATH),
                 512 * 1024, 1024 * 1024, NOW);
@@ -222,7 +234,7 @@ class CaseEvidenceArchiveTest {
     private static MethodPathSummary summary() {
         return new MethodPathSummary(
                 SchemaVersions.METHOD_PATH_SUMMARY, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 PLAN_ID, COLLECTION_ID, rawArtifact(),
                 List.of(), List.of(), List.of(), false, NOW);
     }
@@ -230,7 +242,7 @@ class CaseEvidenceArchiveTest {
     private static NormalizationManifest manifest(ArtifactReference summaryArtifact) {
         return new NormalizationManifest(
                 SchemaVersions.NORMALIZATION_MANIFEST, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 PLAN_ID, COLLECTION_ID, "CODEPATH", "method-path-normalizer", "1.0",
                 NormalizationStatus.COMPLETE, rawArtifact(), Optional.of(summaryArtifact),
                 NormalizationBudget.defaults(), 1, 0, List.of(), Optional.empty(), "", NOW);
@@ -239,7 +251,7 @@ class CaseEvidenceArchiveTest {
     private static CollectionValidation validation() {
         return new CollectionValidation(
                 SchemaVersions.COLLECTION_VALIDATION, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID, RUN_ID,
+                ANALYSIS_ID, RUN_ID,
                 PLAN_ID, COLLECTION_ID, "CODEPATH", EvidenceValidationStatus.VALID,
                 List.of(), Set.of(EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION),
                 Optional.of(summaryArtifact()), NOW);
@@ -252,7 +264,7 @@ class CaseEvidenceArchiveTest {
                 Optional.empty());
         return new EvidenceBundle(
                 SchemaVersions.EVIDENCE_BUNDLE, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                ANALYSIS_ID,
                 List.of(fact), List.of(),
                 Set.of(EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION),
                 List.of(summaryArtifact()), false, NOW);
@@ -261,7 +273,7 @@ class CaseEvidenceArchiveTest {
     private static SufficiencyEvaluation sufficiency() {
         return new SufficiencyEvaluation(
                 SchemaVersions.SUFFICIENCY_EVALUATION, EVIDENCE_ID, CASE_ID,
-                CaseArchiveRepositoryTest.context().contextId(), ANALYSIS_ID,
+                ANALYSIS_ID,
                 SufficiencyStatus.SUFFICIENT,
                 Set.of(EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION),
                 Set.of(EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION),

@@ -1,5 +1,6 @@
 package org.example.algorithmdebug.codepath.launcher;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.takahirom.codepathtracer.CodePathTracer;
 import io.github.takahirom.codepathtracer.CodePathTracerAgent;
 import io.github.takahirom.codepathtracer.TraceEvent;
@@ -20,6 +21,7 @@ import org.junit.platform.launcher.listeners.TestExecutionSummary;
 
 /** 读取归档精确计划并受控运行一个 JUnit 方法的 CodePath Launcher。 */
 public final class ExternalJUnitTraceLauncher {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private ExternalJUnitTraceLauncher() {}
 
     /** 进程入口；目标失败和工具失败通过结构化 Summary 分开报告。 */
@@ -54,13 +56,8 @@ public final class ExternalJUnitTraceLauncher {
                     .traceEventGenerator(advice -> captureStopped.get() ? null : generator.generate(advice))
                     .filter(event -> !captureStopped.get() && generator.matches(event))
                     .formatter(event -> jsonEvent(sequence.incrementAndGet(), event, generator))
-                    .logger(line -> {
-                        try {
-                            if (!sink.append(line) || sink.limitReached()) captureStopped.set(true);
-                        }
-                        catch (IOException failure) { writeFailure.compareAndSet(null, failure); }
-                        return Unit.INSTANCE;
-                    })
+                    .logger(line -> appendTraceLine(
+                            sink, line, writeFailure, captureStopped))
                     .maxToStringLength(0)
                     .maxIndentDepth(1)
                     .build();
@@ -92,6 +89,24 @@ public final class ExternalJUnitTraceLauncher {
                 sinkResult.eventsWritten(), sinkResult.bytesWritten(), sinkResult.limit(), detail);
     }
 
+    static Unit appendTraceLine(
+            TraceJsonlSink sink,
+            String line,
+            AtomicReference<IOException> writeFailure,
+            AtomicBoolean captureStopped) {
+        try {
+            if (!sink.append(line) || sink.limitReached()) captureStopped.set(true);
+        } catch (IOException failure) {
+            writeFailure.compareAndSet(null, failure);
+            captureStopped.set(true);
+        } catch (RuntimeException failure) {
+            writeFailure.compareAndSet(
+                    null, new IOException("Trace sink rejected an event", failure));
+            captureStopped.set(true);
+        }
+        return Unit.INSTANCE;
+    }
+
     private static String jsonEvent(
             long eventId, TraceEvent event, PlannedTraceEventGenerator generator) {
         return "{\"eventId\":" + eventId
@@ -99,7 +114,8 @@ public final class ExternalJUnitTraceLauncher {
                 + "\",\"depth\":" + event.getDepth()
                 + ",\"className\":\"" + escape(event.getClassName())
                 + "\",\"methodName\":\"" + escape(generator.methodName(event))
-                + "\",\"descriptor\":\"" + escape(generator.descriptor(event)) + "\"}";
+                + "\",\"descriptor\":\"" + escape(generator.descriptor(event))
+                + "\",\"projections\":" + MAPPER.valueToTree(generator.projections(event)) + "}";
     }
 
     private static String escape(String value) {

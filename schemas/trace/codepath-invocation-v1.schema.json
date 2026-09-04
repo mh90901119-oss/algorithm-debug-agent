@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/trace/codepath-invocation-v1.schema.json",
+  "title": "CodePathInvocation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sequence",
+    "methodRef",
+    "enterEventId",
+    "exitEventId",
+    "depth",
+    "projections"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "methodRef": { "type": "string", "minLength": 3, "maxLength": 2048 },
+    "enterEventId": { "type": "integer", "minimum": 1 },
+    "exitEventId": { "type": "integer", "minimum": 1 },
+    "depth": { "type": "integer", "minimum": 0 },
+    "projections": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "required", "status", "value", "failureCode"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "path": { "type": "string", "minLength": 3, "maxLength": 512 },
+          "required": { "type": "boolean" },
+          "status": { "enum": ["VALUE", "NULL", "UNAVAILABLE", "TRUNCATED"] },
+          "value": { "type": ["string", "number", "boolean", "null"] },
+          "failureCode": { "type": ["string", "null"], "maxLength": 128 }
+        }
+      }
+    }
+  }
+}

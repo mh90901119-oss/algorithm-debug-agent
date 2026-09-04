@@ -58,8 +58,17 @@ Push-Location $repository
 try {
     $env:JAVA_HOME = $agentJavaHome
     $env:PATH = (Join-Path $agentJavaHome "bin") + [System.IO.Path]::PathSeparator + $oldPath
-    & $maven -Pcodepath-launcher package
-    if ($LASTEXITCODE -ne 0) { throw "Agent Maven build failed with exit code $LASTEXITCODE" }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Maven and libraries may write non-fatal warnings to stderr. Preserve them and trust the exit code.
+        $ErrorActionPreference = "Continue"
+        & $maven -Pcodepath-launcher clean package
+        $mavenExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($mavenExitCode -ne 0) { throw "Agent Maven build failed with exit code $mavenExitCode" }
     $sourceCollector = Join-Path $repository "tools\jdwp-batch-collector\target\jdwp-batch-collector.jar"
     $collectorDirectory = Join-Path $repository "tools\jdwp-collector"
     if (-not (Test-Path -LiteralPath $sourceCollector -PathType Leaf)) {

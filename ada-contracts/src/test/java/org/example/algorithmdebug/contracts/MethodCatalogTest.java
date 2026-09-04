@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 class MethodCatalogTest {
     private static final CaseId CASE = new CaseId("case-1");
-    private static final ContextId CONTEXT = new ContextId("context-1");
     private static final AnalysisId ANALYSIS = new AnalysisId("analysis-1");
     private static final TargetTest TARGET = new TargetTest("fixture.TargetTest", "caseUnderTest");
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
@@ -27,11 +26,11 @@ class MethodCatalogTest {
         assertThrows(IllegalArgumentException.class, () -> new MethodSelector("fixture.Service#run()", "fixture.Service", "run", "()"));
     }
     @Test void rejectsV1AndOversizedWarnings() {
-        assertThrows(IllegalArgumentException.class, () -> new MethodCatalog("1.0", CASE, CONTEXT, ANALYSIS, TARGET, List.of(target()), List.of(), List.of(), SnapshotCompleteness.COMPLETE, 1, 0, NOW));
-        assertThrows(IllegalArgumentException.class, () -> new MethodCatalog(SchemaVersions.METHOD_CATALOG, CASE, CONTEXT, ANALYSIS, TARGET, List.of(target()), List.of(), List.of("x".repeat(2_049)), SnapshotCompleteness.COMPLETE, 1, 0, NOW));
+        assertThrows(IllegalArgumentException.class, () -> new MethodCatalog("2.0", CASE, ANALYSIS, TARGET, List.of(target()), List.of(), List.of(), SnapshotCompleteness.COMPLETE, 1, 0, NOW));
+        assertThrows(IllegalArgumentException.class, () -> new MethodCatalog(SchemaVersions.METHOD_CATALOG, CASE, ANALYSIS, TARGET, List.of(target()), List.of(), List.of("x".repeat(2_049)), SnapshotCompleteness.COMPLETE, 1, 0, NOW));
     }
     private static MethodCatalog catalog(List<MethodCatalogEntry> entries, List<MethodCallEdge> edges, int methods, int edgeCount) {
-        return new MethodCatalog(SchemaVersions.METHOD_CATALOG, CASE, CONTEXT, ANALYSIS, TARGET, entries, edges, List.of(), SnapshotCompleteness.COMPLETE, methods, edgeCount, NOW);
+        return new MethodCatalog(SchemaVersions.METHOD_CATALOG, CASE, ANALYSIS, TARGET, entries, edges, List.of(), SnapshotCompleteness.COMPLETE, methods, edgeCount, NOW);
     }
     private static MethodCatalogEntry target() { return entry("fixture.TargetTest", "caseUnderTest", 0, true); }
     private static MethodCatalogEntry service() { return entry("fixture.Service", "solve", 1, false); }

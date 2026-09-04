@@ -20,8 +20,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
@@ -44,7 +42,6 @@ class StaticAnalysisApplicationServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final ProjectId PROJECT_ID = new ProjectId("project-1");
     private static final TargetTest TARGET = new TargetTest("fixture.TargetTest", "caseUnderTest");
@@ -54,7 +51,6 @@ class StaticAnalysisApplicationServiceTest {
 
     private Path workspace;
     private Path module;
-    private ContextRecord context;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -75,7 +71,6 @@ class StaticAnalysisApplicationServiceTest {
         Files.createDirectories(layout.projectCases(PROJECT_ID));
         BoundedDocumentMapper mapper = new BoundedDocumentMapper();
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
-        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
@@ -85,9 +80,8 @@ class StaticAnalysisApplicationServiceTest {
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
                 "fixture", "why", NOW));
-        archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, ANALYSIS_ID, "continue", NOW));
         new AlgorithmInputApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaTestAlgorithmInputLocator(), Clock.fixed(NOW, ZoneOffset.UTC))
@@ -113,10 +107,8 @@ class StaticAnalysisApplicationServiceTest {
 
         ArtifactBackedResult<CodePathPlanSummary> result = service().createCodePathPlan(
                 workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
-                new CodePathPlanRequest(
-                        new PlanId("plan-1"),
-                        List.of("fixture.TargetTest#caseUnderTest()V"), "定位",
-                        org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
+                codePathRequest(new PlanId("plan-1"),
+                        "fixture.TargetTest#caseUnderTest()V", "Locate the runtime path"));
 
         assertEquals(1, result.summary().selectorCount());
         assertEquals("analyses/analysis-1/plans/plan-1.json",
@@ -129,9 +121,8 @@ class StaticAnalysisApplicationServiceTest {
     @Test
     void mapsRejectedCodePathSelectionToPlanStageFailure() {
         service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
-        CodePathPlanRequest request = new CodePathPlanRequest(
-                new PlanId("plan-1"), List.of("fixture.Missing#run()V"), "定位",
-                org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
+        CodePathPlanRequest request = codePathRequest(
+                new PlanId("plan-1"), "fixture.Missing#run()V", "Locate the runtime path");
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
                 service().createCodePathPlan(
@@ -145,7 +136,7 @@ class StaticAnalysisApplicationServiceTest {
         service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
         CodePathPlanRequest request = new CodePathPlanRequest(
                 new PlanId("plan-missing-evidence"),
-                List.of("fixture.TargetTest#caseUnderTest()V"),
+                codePathMethods("fixture.TargetTest#caseUnderTest()V"), java.util.Optional.empty(),
                 "Verify the observed path",
                 new org.example.algorithmdebug.contracts.InvestigationIntent(
                         "Which path executed?", "One candidate path executed",
@@ -206,10 +197,10 @@ class StaticAnalysisApplicationServiceTest {
                 new JdwpPlanRequest(
                         new PlanId("jdwp-plan-1"),
                         List.of(new JdwpTracepointRequest(
-                                "target-entry", methodKey, 2, 3,
+                                "target-entry", methodKey, 2,
+                                3, 3, 3, 0, null,
                                 org.example.algorithmdebug.contracts.JdwpCaptureSpec.stackOnly())),
-                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(),
-                        "查看目标方法调用栈", NOW));
+                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(), "Inspect target method", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
 
         assertEquals(1, result.summary().tracepointCount());
         assertEquals("analyses/analysis-1/plans/jdwp-plan-1.json",
@@ -222,7 +213,8 @@ class StaticAnalysisApplicationServiceTest {
     void rejectsInvalidRationaleAtTheRequestBoundary() {
         assertThrows(IllegalArgumentException.class, () -> new CodePathPlanRequest(
                 new PlanId("plan-rationale"),
-                List.of("fixture.TargetTest#caseUnderTest()V"), "x".repeat(4_097),
+                codePathMethods("fixture.TargetTest#caseUnderTest()V"), java.util.Optional.empty(),
+                "x".repeat(4_097), codePathIntent(),
                 org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
@@ -234,9 +226,9 @@ class StaticAnalysisApplicationServiceTest {
         CaseRunException staticFailure = assertThrows(CaseRunException.class, () ->
                 service.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID));
 
-        CodePathPlanRequest request = new CodePathPlanRequest(
-                new PlanId("plan-archive"), List.of("fixture.TargetTest#caseUnderTest()V"), "定位",
-                org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
+        CodePathPlanRequest request = codePathRequest(
+                new PlanId("plan-archive"), "fixture.TargetTest#caseUnderTest()V",
+                "Locate the runtime path");
         service.createCodePathPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request);
         CaseRunException planFailure = assertThrows(CaseRunException.class, () ->
                 service.createCodePathPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
@@ -258,6 +250,29 @@ class StaticAnalysisApplicationServiceTest {
         return new CaseArchiveRepository(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID),
                 new BoundedDocumentMapper(), new AtomicDocumentWriter());
+    }
+
+    private static CodePathPlanRequest codePathRequest(
+            PlanId planId,
+            String methodKey,
+            String rationale) {
+        return new CodePathPlanRequest(
+                planId, codePathMethods(methodKey), java.util.Optional.empty(), rationale,
+                codePathIntent(), org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
+    }
+
+    private static List<org.example.algorithmdebug.plan.CodePathMethodRequest> codePathMethods(
+            String... methodKeys) {
+        return java.util.Arrays.stream(methodKeys)
+                .map(methodKey -> new org.example.algorithmdebug.plan.CodePathMethodRequest(
+                        methodKey, List.of()))
+                .toList();
+    }
+
+    private static org.example.algorithmdebug.contracts.InvestigationIntent codePathIntent() {
+        return new org.example.algorithmdebug.contracts.InvestigationIntent(
+                "Which path executed?", "The selected method executed", List.of(),
+                List.of("Observed method path"));
     }
 
     private static String portable(Path path) {

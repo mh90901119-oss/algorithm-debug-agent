@@ -6,7 +6,6 @@ import java.util.Optional;
  * 将一个派生事实定位回不可变 Raw Trace 的精确位置。
  *
  * @param caseId 所属 Case
- * @param contextId 采集时 Context
  * @param runId 采集运行
  * @param collectionId 采集身份
  * @param rawArtifact Raw Trace 引用
@@ -17,7 +16,6 @@ import java.util.Optional;
  */
 public record TraceProvenance(
         CaseId caseId,
-        ContextId contextId,
         RunId runId,
         CollectionId collectionId,
         ArtifactReference rawArtifact,
@@ -29,7 +27,6 @@ public record TraceProvenance(
     /** 校验身份、行号和工具事件定位。 */
     public TraceProvenance {
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         rawArtifact = ContractChecks.requireNonNull(rawArtifact, "rawArtifact");

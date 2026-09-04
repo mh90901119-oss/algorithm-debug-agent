@@ -28,13 +28,13 @@ test("records the real analysis_begin Tool and CLI order in its new Case", async
         return success({ registration: { projectId: "project-1" } })
       }
       return success({
-        caseId: "case-1", contextId: "context-1", analysisId: "analysis-1",
+        caseId: "case-1", analysisId: "analysis-1",
       })
     },
   })
 
   await runtime.analysisBegin({
-    question: "why", targetTest: "demo.Test#case1", contextMode: "reuse",
+    question: "why", targetTest: "demo.Test#case1",
   }, {
     directory: join(root, "target"), sessionID: "session-1",
     messageID: "message-1", agent: "algorithm-debug",

@@ -10,7 +10,6 @@ public record SufficiencyEvaluation(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         SufficiencyStatus status,
         Set<EvidenceDimension> requiredDimensions,
@@ -26,7 +25,6 @@ public record SufficiencyEvaluation(
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         status = ContractChecks.requireNonNull(status, "status");
         requiredDimensions = EvidenceBuildRequest.immutableDimensions(

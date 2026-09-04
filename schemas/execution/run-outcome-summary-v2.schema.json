@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/execution/run-outcome-summary-v2.schema.json",
+  "title": "RunOutcomeSummary v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventType",
+    "caseId",
+    "analysisId",
+    "runId",
+    "processOutcome",
+    "testOutcome",
+    "ganttOutcome",
+    "targetFailure",
+    "agentFailure",
+    "comparisonOutcome",
+    "comparisonSummary",
+    "artifacts"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "eventType": {
+      "const": "TARGET_TEST_RUN_COMPLETED"
+    },
+    "caseId": {
+      "$ref": "#/$defs/opaqueId"
+    },
+    "analysisId": {
+      "$ref": "#/$defs/opaqueId"
+    },
+    "runId": {
+      "$ref": "#/$defs/opaqueId"
+    },
+    "processOutcome": {
+      "enum": [
+        "SUCCEEDED",
+        "FAILED",
+        "TIMED_OUT",
+        "NOT_STARTED"
+      ]
+    },
+    "testOutcome": {
+      "enum": [
+        "PASSED",
+        "FAILED",
+        "ERROR",
+        "NOT_EXECUTED",
+        "UNKNOWN"
+      ]
+    },
+    "ganttOutcome": {
+      "enum": [
+        "PRESENT",
+        "ABSENT",
+        "INCOMPLETE"
+      ]
+    },
+    "targetFailure": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/targetFailure"
+        }
+      ]
+    },
+    "agentFailure": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/agentFailure"
+        }
+      ]
+    },
+    "comparisonOutcome": {
+      "enum": [
+        "NOT_COMPARED",
+        "MATCHED",
+        "CHANGED",
+        "INCOMPARABLE"
+      ]
+    },
+    "comparisonSummary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "targetFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "exceptionClass",
+        "normalizedMessage",
+        "cause",
+        "stableBusinessFrame"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "BUILD_FAILURE",
+            "TEST_FAILURE",
+            "TEST_ERROR",
+            "TEST_NOT_EXECUTED",
+            "UNKNOWN"
+          ]
+        },
+        "exceptionClass": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "normalizedMessage": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "cause": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "stableBusinessFrame": {
+          "type": "string",
+          "maxLength": 8192
+        }
+      }
+    },
+    "agentFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "exceptionClass"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "exceptionClass": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactId",
+        "artifactType",
+        "relativePath",
+        "mediaType",
+        "sha256",
+        "sizeBytes"
+      ],
+      "properties": {
+        "artifactId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "artifactType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "relativePath": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "testOutcome": {
+            "const": "PASSED"
+          }
+        },
+        "required": [
+          "testOutcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "targetFailure": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "testOutcome": {
+            "const": "FAILED"
+          }
+        },
+        "required": [
+          "testOutcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "targetFailure": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/targetFailure"
+              },
+              {
+                "properties": {
+                  "category": {
+                    "const": "TEST_FAILURE"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "testOutcome": {
+            "const": "ERROR"
+          }
+        },
+        "required": [
+          "testOutcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "targetFailure": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/targetFailure"
+              },
+              {
+                "properties": {
+                  "category": {
+                    "const": "TEST_ERROR"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "testOutcome": {
+            "const": "NOT_EXECUTED"
+          }
+        },
+        "required": [
+          "testOutcome"
+        ]
+      },
+      "then": {
+        "allOf": [
+          {
+            "anyOf": [
+              {
+                "properties": {
+                  "targetFailure": {
+                    "$ref": "#/$defs/targetFailure"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "agentFailure": {
+                    "$ref": "#/$defs/agentFailure"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "if": {
+              "properties": {
+                "targetFailure": {
+                  "type": "object"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "targetFailure": {
+                  "properties": {
+                    "category": {
+                      "enum": [
+                        "BUILD_FAILURE",
+                        "TEST_NOT_EXECUTED",
+                        "UNKNOWN"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ganttOutcome": {
+            "const": "PRESENT"
+          }
+        },
+        "required": [
+          "ganttOutcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "contains": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/artifact"
+                },
+                {
+                  "properties": {
+                    "artifactType": {
+                      "const": "GANTT"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ganttOutcome": {
+            "enum": [
+              "ABSENT",
+              "INCOMPLETE"
+            ]
+          }
+        },
+        "required": [
+          "ganttOutcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifacts": {
+            "not": {
+              "contains": {
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/artifact"
+                  },
+                  {
+                    "properties": {
+                      "artifactType": {
+                        "const": "GANTT"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -28,13 +28,11 @@ const runtime = createAlgorithmDebugRuntime({
 })
 
 export const analysis_begin = tool({
-  description: "Create a Case or append an analysis round for one Java/Maven target UT; returns the installed Agent result JSON directory and does not run the UT.",
+  description: "Create a Case or append an analysis round for one Java/Maven target UT; returns the installed Agent result JSON directory plus an answerContext block that must be copied verbatim into the final answer, and does not run the UT.",
   args: {
     question: tool.schema.string().describe("The user's current debugging question"),
     targetTest: tool.schema.string().describe("Target test as fully.qualified.Class#method"),
     caseId: tool.schema.string().optional().describe("Existing Case to continue; omit for a new Case"),
-    contextMode: tool.schema.enum(["reuse", "new"]).default("reuse")
-      .describe("Reuse the current Context unless a deliberate target change requires a new one"),
     adapterId: tool.schema.string().optional().describe("Optional target-algorithm Adapter id"),
   },
   execute: (args, context) => runtime.analysisBegin(args, context),
@@ -99,8 +97,16 @@ export const codepath_plan_create = tool({
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
-    selectedMethodKeys: tool.schema.array(tool.schema.string()).min(1).max(100)
-      .describe("Exact class#method(descriptor) keys selected from the current Method Catalog"),
+    methods: tool.schema.array(tool.schema.object({
+      methodKey: tool.schema.string()
+        .describe("Exact class#method(descriptor) key selected from the current Method Catalog"),
+      projections: tool.schema.array(tool.schema.object({
+        name: tool.schema.string().describe("Stable evidence field name"),
+        path: tool.schema.string().describe("Scalar path with literal brackets: arg[0], arg[1].field, return, or return.field; arg0 is invalid"),
+        required: tool.schema.boolean().describe("Whether an unreadable value is an evidence gap"),
+      })).max(32),
+    })).min(1).max(50)
+      .describe("Exact methods and bounded scalar projections needed to answer this plan question"),
     scopeMethodKey: tool.schema.string().optional()
       .describe("Optional selected method whose repeated invocations should be grouped into path variants"),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-path question"),
@@ -133,33 +139,31 @@ export const jdwp_plan_create = tool({
         .describe("Exact class#method(descriptor) key from the current Method Catalog"),
       line: tool.schema.number().int().positive()
         .describe("Current executable source line inside the selected method anchor"),
-      maxObservedHits: tool.schema.number().int().min(1).max(10000).default(100)
+      maxObservedHits: tool.schema.number().int().min(1).max(100000).default(1000)
         .describe("Maximum breakpoint observations before this tracepoint is disabled"),
-      maxCapturedHits: tool.schema.number().int().min(1).max(20).default(3)
+      maxCapturedHits: tool.schema.number().int().min(1).max(200).default(20)
         .describe("Maximum full snapshots written after condition matching"),
-      captureOnMatchedHits: tool.schema.array(tool.schema.number().int().min(1).max(10000)).max(20)
-        .optional().describe("Strictly increasing matched-hit ordinals to snapshot; omit to capture every matched hit"),
-      condition: tool.schema.object({
-        localName: tool.schema.string()
-          .describe("Top-frame local variable name or this"),
-        fieldPath: tool.schema.array(tool.schema.string()).max(8).default([])
-          .describe("Instance field names traversed without invoking methods"),
+      captureFirstMatchedHits: tool.schema.number().int().min(0).max(200).optional()
+        .describe("Capture the first N condition-matched hits consecutively"),
+      captureEveryMatchedHits: tool.schema.number().int().min(0).max(100000).optional()
+        .describe("After the first group, capture every Nth matched hit; zero disables periodic sampling"),
+      conditions: tool.schema.array(tool.schema.object({
+        valuePath: tool.schema.string()
+          .describe("Exact top-frame value path, for example candidate.wafer.id or this.state"),
         operator: tool.schema.literal("EQUALS").default("EQUALS"),
         expectedType: tool.schema.enum([
           "STRING", "LONG", "DOUBLE", "BOOLEAN", "CHAR", "ENUM", "NULL",
         ]),
         expectedValue: tool.schema.string().optional()
           .describe("Typed scalar literal; omit only when expectedType is NULL"),
-      }).optional().describe("Optional generic stack-frame value path condition"),
+      })).max(4).default([])
+        .describe("Optional AND conditions evaluated before a snapshot is captured"),
       capture: tool.schema.object({
-        locals: tool.schema.boolean().default(true),
         stack: tool.schema.boolean().default(true),
         maxFrames: tool.schema.number().int().min(1).max(64).default(8),
-        maxDepth: tool.schema.number().int().min(0).max(2).default(1),
-        maxItems: tool.schema.number().int().min(1).max(100).default(20),
         maxStringLength: tool.schema.number().int().min(16).max(1024).default(256),
-        localNames: tool.schema.array(tool.schema.string()).max(64).default([]),
-        fieldPaths: tool.schema.array(tool.schema.string()).max(128).default([]),
+        valuePaths: tool.schema.array(tool.schema.string()).max(128).default([])
+          .describe("Exact scalar or enum paths to read; complex values return REFERENCE_ONLY"),
       }).optional(),
     })).min(1).max(20),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-state question"),
@@ -193,31 +197,31 @@ export const artifact_read = tool({
   execute: (args, context) => runtime.artifactRead(args, context),
 })
 
-export const analysis_complete = tool({
-  description: "Append the final answer, graded claims, and explicit evidence references once. CONFIRMED_FACT, VALIDATOR_CONCLUSION, and SOURCE_INFERENCE require at least one evidenceReferenceId. On rejection correct this same Analysis payload once; never open a replacement Analysis or submit a dummy result.",
+export const evidence_query = tool({
+  description: "Query a verified CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY artifact without loading the full dataset. Filters are exact structural matches and do not infer business meaning.",
   args: {
     caseId: tool.schema.string(),
-    contextId: tool.schema.string(),
-    analysisId: tool.schema.string(),
-    finalAnswer: tool.schema.string().describe("Final user-facing answer; do not include hidden reasoning"),
-    conclusions: tool.schema.array(tool.schema.object({
-      classification: tool.schema.enum([
-        "CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE",
-        "LLM_HYPOTHESIS", "MISSING_EVIDENCE",
-      ]),
-      statement: tool.schema.string(),
-      evidenceReferenceIds: tool.schema.array(tool.schema.string()).default([])
-        .describe("Evidence IDs supporting the conclusion; required and non-empty for CONFIRMED_FACT, VALIDATOR_CONCLUSION, and SOURCE_INFERENCE; do not put artifact paths here"),
-    })).default([]),
-    referencedRunIds: tool.schema.array(tool.schema.string()).default([])
-      .describe("Archived target Run IDs from recentRuns, not collector execution run IDs"),
-    referencedCollectionIds: tool.schema.array(tool.schema.string()).default([])
-      .describe("Collection IDs cited by the answer"),
-    referencedEvidenceIds: tool.schema.array(tool.schema.string()).default([])
-      .describe("Evidence IDs from recentEvidence; do not put Artifact IDs here"),
-    referencedArtifactIds: tool.schema.array(tool.schema.string()).default([])
-      .describe("Registered Artifact IDs from artifactIds; do not put relative paths here"),
-    missingEvidence: tool.schema.array(tool.schema.string()).default([]),
+    artifactId: tool.schema.string()
+      .describe("Only use an Artifact whose artifactType is exactly CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY. Never pass Method Catalog, Evidence Bundle, Raw Trace, Run, or Manifest Artifact IDs"),
+    methodRef: tool.schema.string().optional()
+      .describe("Exact CodePath methodRef; not valid for JDWP summaries"),
+    tracepointId: tool.schema.string().optional()
+      .describe("Exact JDWP tracepointId; not valid for CodePath invocations"),
+    valueName: tool.schema.string().optional()
+      .describe("CodePath projection name or JDWP normalized valuePath"),
+    scalarValue: tool.schema.string().optional()
+      .describe("Exact scalar text matched in the same value entry as valueName"),
+    valueStatus: tool.schema.enum([
+      "VALUE", "NULL", "UNAVAILABLE", "TRUNCATED",
+      "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY",
+      "CAPTURED", "REFERENCE_ONLY",
+    ]).optional(),
+    sequenceFrom: tool.schema.number().int().positive().optional(),
+    sequenceTo: tool.schema.number().int().positive().optional(),
+    offset: tool.schema.number().int().min(0).default(0),
+    limit: tool.schema.number().int().positive().max(50).default(20),
+    maxBytes: tool.schema.number().int().positive().max(65536).default(16384)
+      .describe("Maximum returned UTF-8 bytes. Increase this value when one selected record does not fit"),
   },
-  execute: (args, context) => runtime.analysisComplete(args, context),
+  execute: (args, context) => runtime.evidenceQuery(args, context),
 })

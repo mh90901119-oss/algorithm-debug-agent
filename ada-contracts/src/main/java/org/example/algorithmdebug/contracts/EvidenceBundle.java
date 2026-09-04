@@ -9,7 +9,6 @@ public record EvidenceBundle(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         List<EvidenceFact> facts,
         List<EvidenceFact> comparisonFacts,
@@ -25,7 +24,6 @@ public record EvidenceBundle(
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         facts = boundedFacts(facts, "facts");
         comparisonFacts = boundedFacts(comparisonFacts, "comparisonFacts");

@@ -45,11 +45,4 @@ public record InvestigationIntent(
                     "expectedObservations must contain between 1 and 20 distinct entries");
         }
     }
-
-    /** 为缺少结构化字段的历史 Plan 构造最小只读意图。 */
-    public static InvestigationIntent legacy(String rationale) {
-        String text = ContractChecks.requireBoundedText(
-                rationale, "rationale", 4_096, false);
-        return new InvestigationIntent(text, text, List.of(), List.of(text));
-    }
 }

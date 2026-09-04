@@ -12,7 +12,6 @@ import org.example.algorithmdebug.core.CollectionApplicationService;
 import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
-import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.casecore.CaseWorkspaceAuditor;
 import org.example.algorithmdebug.casecore.GanttArtifactInspector;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -127,8 +126,7 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.CaseOpen open) {
             return caseService.open(
                     open.workspace(), open.projectId(), open.targetTest(),
-                    readQuestion(open.questionFile()), open.caseId(), open.adapterId(),
-                    open.contextMode());
+                    readQuestion(open.questionFile()), open.caseId(), open.adapterId());
         }
         if (command instanceof CliCommand.CaseInspect inspect) {
             return caseService.inspect(
@@ -184,10 +182,10 @@ public final class CliCommandExecutor {
                     read.workspace(), read.projectId(), read.caseId(), read.artifactId(),
                     read.offsetBytes(), read.maxBytes());
         }
-        if (command instanceof CliCommand.AnalysisComplete complete) {
-            return caseService.completeAnalysis(
-                    complete.workspace(), complete.projectId(), complete.caseId(),
-                    complete.analysisId(), readAnalysisResult(complete.resultFile()));
+        if (command instanceof CliCommand.EvidenceQuery query) {
+            return caseService.queryEvidence(
+                    query.workspace(), query.projectId(), query.caseId(), query.artifactId(),
+                    query.filter(), query.offset(), query.limit(), query.maxBytes());
         }
         throw new IllegalArgumentException("Unsupported CLI command type");
     }
@@ -249,18 +247,6 @@ public final class CliCommandExecutor {
                     .readValue(json, JdwpPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("request-file is not valid JdwpPlanRequest JSON", failure);
-        }
-    }
-
-    /** 严格读取 256 KiB 内的 AnalysisResult JSON。 */
-    static AnalysisResult readAnalysisResult(Path path) {
-        byte[] bytes = readBoundedFile(path, "result-file", MAX_ANALYSIS_RESULT_BYTES);
-        String json = decodeUtf8(bytes, "result-file");
-        try {
-            return new ObjectMapper().registerModule(new JavaTimeModule())
-                    .readValue(json, AnalysisResult.class);
-        } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("result-file is not valid AnalysisResult JSON", failure);
         }
     }
 

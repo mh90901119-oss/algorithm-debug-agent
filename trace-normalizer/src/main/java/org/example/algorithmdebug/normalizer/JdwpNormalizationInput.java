@@ -26,7 +26,6 @@ public record JdwpNormalizationInput(
             throw new IllegalArgumentException("JDWP normalization input must not be null");
         }
         if (!collection.caseId().equals(plan.caseId())
-                || !collection.contextId().equals(plan.contextId())
                 || !collection.analysisId().equals(plan.analysisId())
                 || !collection.planId().equals(plan.planId())
                 || !collection.targetTest().equals(plan.targetTest())) {

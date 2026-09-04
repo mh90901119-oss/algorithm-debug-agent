@@ -1,7 +1,9 @@
 # ADR-010：Context 显式分组与 CodePath 精确方法采集
 
-- 状态：Accepted
+- 状态：Superseded by ADR-015（精确 CodePath 条款继续有效）
 - 日期：2026-08-18
+
+> 当前状态：Context 创建、复用和基线条款已失效；精确方法 CodePath、预算和 SourceAnchor 条款继续有效。
 
 ## 背景
 

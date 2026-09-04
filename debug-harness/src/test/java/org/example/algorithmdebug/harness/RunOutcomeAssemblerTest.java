@@ -5,7 +5,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.FailureCategory;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.ProcessOutcome;
@@ -198,8 +197,7 @@ class RunOutcomeAssemblerTest {
 
     private RunRequest request() {
         return new RunRequest(
-                SchemaVersions.RUN_REQUEST, new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"),
+                SchemaVersions.RUN_REQUEST, new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
                 new TargetTest("a.b.TargetTest", "runs"), "UNINSTRUMENTED", TIME);
     }
 

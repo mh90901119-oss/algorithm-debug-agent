@@ -7,12 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -54,12 +54,17 @@ class CodePathCommandFactoryTest {
     private MethodPathCollectionRequest request(Path java) {
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"),
-                new CaseId("case-1"), new ContextId("ctx-1"), new AnalysisId("analysis-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new TargetTest("fixture.Test", "case1"),
-                List.of(new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V")),
-                CollectionBudget.defaults(), "定位目标方法", Instant.EPOCH);
+                List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(
+                        new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V"),
+                        List.of())),
+                Optional.empty(), CollectionBudget.defaults(), "Locate the target method",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which path executed?", "The selected method executed", List.of(),
+                        List.of("Observed method path")), Instant.EPOCH);
         return new MethodPathCollectionRequest(
-                plan.caseId(), plan.contextId(), plan.analysisId(), new RunId("run-1"), plan,
+                plan.caseId(), plan.analysisId(), new RunId("run-1"), plan,
                 new CollectionId("collection-1"), directory, directory, java,
                 List.of("classes", "test-classes"), "fixture.Test#case1");
     }

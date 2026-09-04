@@ -10,6 +10,7 @@ $previousLocalAppData = $env:LOCALAPPDATA
 $env:USERPROFILE = Join-Path $temporaryRoot "profile"
 $env:LOCALAPPDATA = Join-Path $temporaryRoot "local-app-data"
 $configRoot = Join-Path $env:USERPROFILE ".config\opencode"
+$packagePath = Join-Path $configRoot "package.json"
 
 try {
     $strictUtf8 = [System.Text.UTF8Encoding]::new($false, $true)
@@ -25,10 +26,28 @@ try {
         }
     }
     New-Item -ItemType Directory -Path (Join-Path $configRoot "agents") -Force | Out-Null
+    [System.IO.File]::WriteAllText(
+        $packagePath,
+        "{`n  `"private`": true`n}`n",
+        [System.Text.UTF8Encoding]::new($false))
     $existingAgent = Join-Path $configRoot "agents\algorithm-debug.md"
     [System.IO.File]::WriteAllText($existingAgent, "existing user agent", [System.Text.UTF8Encoding]::new($false))
 
+    & $uninstaller
+    if (Test-Path -LiteralPath $existingAgent) {
+        throw "Legacy uninstall left the known Agent file"
+    }
+    & $uninstaller
+
     & $installer -Mode Install
+
+    $installedPackage = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($installedPackage.private -ne $true) {
+        throw "Installer did not preserve the existing OpenCode package.json"
+    }
+    if ($null -eq $installedPackage.dependencies.'@opencode-ai/plugin') {
+        throw "Installer did not declare @opencode-ai/plugin"
+    }
 
     $backups = @(Get-ChildItem -LiteralPath (Join-Path $configRoot "agents") -Filter "algorithm-debug.md.ada-backup-*" -File)
     if ($backups.Count -ne 0) { throw "Installer left a random backup after a successful atomic install" }
@@ -43,6 +62,45 @@ try {
     if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
         throw "Installer did not create the ownership manifest"
     }
+
+    # 模拟旧版本曾安装、但当前版本已经删除的 Agent 专属 Skill 文件。
+    # 新版本必须依据旧清单安全清理它，不能要求旧清单与当前文件集合完全相同。
+    $removedLegacyAsset = Join-Path $configRoot "skills\algorithm-debug\references\removed-v1.md"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $removedLegacyAsset) -Force | Out-Null
+    [System.IO.File]::WriteAllText($removedLegacyAsset, "legacy managed asset", [System.Text.UTF8Encoding]::new($false))
+    $legacyManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $legacyManifest.managedFiles += [pscustomobject]@{
+        relativePath = "skills/algorithm-debug/references/removed-v1.md"
+        sha256 = (Get-FileHash -LiteralPath $removedLegacyAsset -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [System.IO.File]::WriteAllText(
+        $manifestPath,
+        ($legacyManifest | ConvertTo-Json -Depth 8),
+        [System.Text.UTF8Encoding]::new($false))
+
+    & $installer -Mode Install
+    if (Test-Path -LiteralPath $removedLegacyAsset) {
+        throw "Installer did not remove an obsolete managed asset during upgrade"
+    }
+    & $installer -Mode Check
+
+    $foreignAsset = Join-Path $configRoot "unrelated-user-config.txt"
+    [System.IO.File]::WriteAllText($foreignAsset, "preserve", [System.Text.UTF8Encoding]::new($false))
+    $validManifestBytes = [System.IO.File]::ReadAllBytes($manifestPath)
+    $foreignManifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $foreignManifest.managedFiles += [pscustomobject]@{
+        relativePath = "unrelated-user-config.txt"
+        sha256 = (Get-FileHash -LiteralPath $foreignAsset -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    [System.IO.File]::WriteAllText(
+        $manifestPath,
+        ($foreignManifest | ConvertTo-Json -Depth 8),
+        [System.Text.UTF8Encoding]::new($false))
+    $foreignPathRejected = $false
+    try { & $uninstaller } catch { $foreignPathRejected = $_.Exception.Message -match "outside the Agent-owned namespace" }
+    if (-not $foreignPathRejected) { throw "Uninstaller accepted a managed path outside the Agent-owned namespace" }
+    if (-not (Test-Path -LiteralPath $foreignAsset -PathType Leaf)) { throw "Uninstaller removed an unrelated user file" }
+    [System.IO.File]::WriteAllBytes($manifestPath, $validManifestBytes)
 
     $installationModule = [System.IO.File]::ReadAllText((Join-Path $configRoot "lib\installation.mjs"))
     $expectedLauncher = (Join-Path $RepositoryRoot "bin\ada.cmd").Replace("\", "\\")
@@ -91,6 +149,11 @@ try {
     }
     if (-not (Test-Path -LiteralPath $sentinel -PathType Leaf)) { throw "Uninstaller removed unrelated OpenCode data" }
     if (-not (Test-Path -LiteralPath $workspaceSentinel -PathType Leaf)) { throw "Uninstaller removed Workspace data" }
+    $packageAfterUninstall = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($packageAfterUninstall.private -ne $true `
+            -or $null -eq $packageAfterUninstall.dependencies.'@opencode-ai/plugin') {
+        throw "Uninstaller changed the shared OpenCode package.json"
+    }
     & $uninstaller
 
     & $installer -Mode Install

@@ -41,8 +41,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
@@ -78,7 +76,6 @@ import org.junit.jupiter.api.io.TempDir;
 class JdwpCollectionApplicationServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final ProjectId PROJECT_ID = new ProjectId("project-1");
     private static final PlanId PLAN_ID = new PlanId("jdwp-plan-1");
@@ -91,7 +88,6 @@ class JdwpCollectionApplicationServiceTest {
     private Path maven;
     private Path java;
     private Path collectorJar;
-    private ContextRecord context;
     private BoundedDocumentMapper mapper;
     private AtomicDocumentWriter writer;
 
@@ -120,7 +116,6 @@ class JdwpCollectionApplicationServiceTest {
         writer = new AtomicDocumentWriter();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Files.createDirectories(layout.projectCases(PROJECT_ID));
-        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
@@ -129,9 +124,8 @@ class JdwpCollectionApplicationServiceTest {
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
                 "fixture", "why", NOW));
-        archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, ANALYSIS_ID, "continue", NOW));
         new AlgorithmInputApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaTestAlgorithmInputLocator(), fixedClock())
@@ -145,8 +139,10 @@ class JdwpCollectionApplicationServiceTest {
         staticAnalysis.createJdwpPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new JdwpPlanRequest(PLAN_ID, List.of(new JdwpTracepointRequest(
                         "target-entry", catalog.entries().getFirst().methodKey(),
-                        anchor.startLine(), 3, JdwpCaptureSpec.stackOnly())),
-                        JdwpCollectionBudget.defaults(), "查看调用栈", NOW));
+                        anchor.startLine(), 3, 3, 3, 0, List.of(),
+                        new JdwpCaptureSpec(
+                                true, 8, 256, List.of("algorithmInput")))),
+                        JdwpCollectionBudget.defaults(), "Inspect target call", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
     }
 
     @Test
@@ -194,7 +190,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 122)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "fixture write failed", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -239,7 +235,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 106)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "Failed to write the test artifact", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -270,7 +266,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 112)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "测试产物写入失败", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -293,6 +289,9 @@ class JdwpCollectionApplicationServiceTest {
                 service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
 
         assertEquals("JDWP_ATTACH_FAILED", failure.code());
+        assertEquals(List.of("JDWP_MANIFEST", "COLLECTION_BASELINE"),
+                failure.artifacts().stream().map(
+                        org.example.algorithmdebug.contracts.ArtifactReference::artifactType).toList());
         assertTrue(failure.getCause() instanceof org.example.algorithmdebug.jdwp.JdwpAdapterException);
         Path root = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                 .resolve("case-1/collections/collection-fixed");
@@ -302,6 +301,9 @@ class JdwpCollectionApplicationServiceTest {
         assertEquals("JDWP_ATTACH_FAILED", manifest.agentFailure().orElseThrow().code());
         assertTrue(Files.isRegularFile(root.resolve("collector-plan.json")));
         assertTrue(Files.isRegularFile(root.resolve("validation/baseline-check.json")));
+        failure.artifacts().forEach(reference -> assertTrue(Files.isRegularFile(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1").resolve(reference.relativePath()))));
     }
 
     @Test
@@ -320,7 +322,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 108)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "测试日志写入失败", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -352,7 +354,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 110)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "fixture write failed", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -373,17 +375,14 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
-    void rejectsV2ManifestWithoutTheRequiredCollectorCapabilities() throws Exception {
+    void rejectsManifestWithoutTheRequiredCollectorCapabilities() throws Exception {
         JdwpCollectionApplicationService service = service(request -> {
             try {
                 writeExternalArtifacts(request, "{\"schedule\":1}");
                 Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
                 Files.writeString(external, Files.readString(external)
-                        .replace("\"schemaVersion\":\"1.0\"",
-                                "\"schemaVersion\":\"2.0\","
-                                + "\"collectorVersion\":\"2.0.0\","
-                                + "\"rawTraceSchemaVersion\":\"2.0\","
-                                + "\"capabilities\":[\"exact-method-descriptor\"]"));
+                        .replace("\"collectorVersion\":\"4.0.0\"",
+                                "\"collectorVersion\":\"2.0.0\""));
                 return new JdwpExecutionResult(
                         request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
                         Optional.of(successfulRun(request.targetOptions().stdoutLog(),
@@ -392,7 +391,7 @@ class JdwpCollectionApplicationServiceTest {
                                 request.collectorStderrLog(), 112)));
             } catch (java.io.IOException failure) {
                 throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                        "TEST_IO", "fixture write failed", failure);
+                        "TEST_IO", "Failed to write the test fixture", failure);
             }
         });
 
@@ -400,6 +399,82 @@ class JdwpCollectionApplicationServiceTest {
                 service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
 
         assertEquals("JDWP_MANIFEST_INVALID", failure.code());
+    }
+
+    @Test
+    void rejectsLegacyCollectorManifestBeforeNormalizingTrace() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"schemaVersion\":\"2.0\"",
+                                "\"schemaVersion\":\"1.0\""));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 111)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 112)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the test fixture", failure);
+            }
+        });
+
+        CaseRunException failure = assertThrows(CaseRunException.class, () ->
+                service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
+
+        assertEquals("JDWP_MANIFEST_INVALID", failure.code());
+    }
+
+    @Test
+    void rejectsManifestWithMissingHitCounters() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"matchedHitCounts\":{\"target-entry\":1},", ""));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 113)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 114)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the test fixture", failure);
+            }
+        });
+
+        assertEquals("JDWP_MANIFEST_INVALID", assertThrows(CaseRunException.class,
+                () -> service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID)).code());
+    }
+
+    @Test
+    void rejectsManifestWithNonMonotonicHitCounters() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"capturedHitCounts\":{\"target-entry\":1}",
+                                "\"capturedHitCounts\":{\"target-entry\":2}"));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 115)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 116)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the test fixture", failure);
+            }
+        });
+
+        assertEquals("JDWP_MANIFEST_INVALID", assertThrows(CaseRunException.class,
+                () -> service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID)).code());
     }
 
     private JdwpCollectionApplicationService service(JdwpCollectionExecutor executor) {
@@ -416,15 +491,20 @@ class JdwpCollectionApplicationServiceTest {
             throws java.io.IOException {
         Files.createDirectories(request.collectorOutputDirectory());
         Files.writeString(request.rawTracePath(), """
-                {"schemaVersion":"1.0","sessionId":"jdwp-plan-1","sequence":1,"timestamp":"2026-08-18T00:00:00Z","eventType":"tracepoint_hit","tracepointId":"target-entry","hit":1,"thread":{"id":1,"name":"main"},"location":{"className":"fixture.TargetTest","methodName":"caseUnderTest","line":3,"codeIndex":0},"frames":[{"index":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","line":3}]}
+                {"schemaVersion":"3.0","sessionId":"jdwp-plan-1","sequence":1,"timestamp":"2026-08-18T00:00:00Z","eventType":"tracepoint_hit","tracepointId":"target-entry","observedHit":1,"matchedHit":1,"capturedHit":1,"thread":{"id":1,"name":"main"},"location":{"className":"fixture.TargetTest","methodName":"caseUnderTest","methodDescriptor":"()V","line":3,"codeIndex":0},"frames":[{"index":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","methodDescriptor":"()V","line":3,"codeIndex":0}],"projections":[{"valuePath":"algorithmInput","status":"CAPTURED","kind":"STRING","runtimeType":"java.lang.String","scalarValue":"input/caseinput.json","valueTruncated":false,"objectId":7}]}
                 """);
         Files.writeString(request.collectorOutputDirectory().resolve("collection-manifest.json"), """
-                {"schemaVersion":"1.0","sessionId":"jdwp-plan-1",
+                {"schemaVersion":"2.0","collectorVersion":"4.0.0","rawTraceSchemaVersion":"3.0",
+                 "capabilities":["exact-method-descriptor","code-index","typed-values","precise-value-paths","and-conditions","separate-hit-counters","tracepoint-request-group"],
+                 "sessionId":"jdwp-plan-1",
                  "target":{"host":"127.0.0.1","port":51234},
                  "plan":"C:/raw/collector-plan.json","trace":"C:/raw/raw-trace.jsonl",
                  "startedAt":"2026-08-18T00:00:00Z","finishedAt":"2026-08-18T00:00:01Z",
                  "completionReason":"vm_death","eventCount":1,
-                 "hitCounts":{"target-entry":1},
+                 "observedHitCounts":{"target-entry":1},
+                 "matchedHitCounts":{"target-entry":1},
+                 "capturedHitCounts":{"target-entry":1},
+                 "conditionUnavailableCounts":{},"conditionUnavailableReasons":{},
                  "installedLocations":{"target-entry":1}}
                 """);
         Files.writeString(request.targetOptions().stdoutLog(), "target\n");
@@ -449,7 +529,7 @@ class JdwpCollectionApplicationServiceTest {
                             request.collectorStderrLog(), collectorPid)));
         } catch (java.io.IOException failure) {
             throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                    "TEST_IO", "测试产物写入失败", failure);
+                    "TEST_IO", "Failed to write the test fixture", failure);
         }
     }
 
@@ -474,7 +554,7 @@ class JdwpCollectionApplicationServiceTest {
         RunId runId = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(successfulBaselineOutcome(runId));
     }
@@ -483,11 +563,11 @@ class JdwpCollectionApplicationServiceTest {
         RunId runId = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 runId, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.FAILED,
+                ANALYSIS_ID, runId, ProcessOutcome.FAILED,
                 TestOutcome.ERROR, GanttOutcome.ABSENT,
                 Optional.of(new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
                         org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
@@ -499,11 +579,10 @@ class JdwpCollectionApplicationServiceTest {
                 "java.lang.IllegalStateException", message, "",
                 "fixture.Algorithm.solve(Algorithm.java:42)");
         RunResultFingerprint fingerprint = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, runId,
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, ANALYSIS_ID, runId,
                 new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
                         .sha256(diagnostic));
         archive.createRunResultFingerprint(fingerprint);
-        archive.createReproductionIfAbsent(fingerprint);
     }
 
     private void writeFailureReport(String message) throws Exception {
@@ -539,7 +618,7 @@ class JdwpCollectionApplicationServiceTest {
     private static RunOutcomeSummary successfulBaselineOutcome(RunId runId) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
+                ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
                 TestOutcome.PASSED, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(),
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
     }

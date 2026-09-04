@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/trace/jdwp-raw-event-v3.schema.json",
+  "title": "JDWP Raw JSONL Event v3",
+  "type": "object",
+  "required": ["schemaVersion", "sessionId", "sequence", "timestamp", "eventType"],
+  "properties": {
+    "schemaVersion": {"const": "3.0"},
+    "sessionId": {"type": "string", "minLength": 1},
+    "sequence": {"type": "integer", "minimum": 1},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "eventType": {"enum": ["collector_started", "tracepoint_hit", "collector_finished"]},
+    "vm": {"type": "string"},
+    "reason": {"type": "string"},
+    "tracepointId": {"type": "string", "minLength": 1},
+    "hit": {"type": "integer", "minimum": 1},
+    "observedHit": {"type": "integer", "minimum": 1},
+    "matchedHit": {"type": "integer", "minimum": 1},
+    "capturedHit": {"type": "integer", "minimum": 1},
+    "conditionResult": {"const": "MATCHED"},
+    "thread": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {"id": {"type": "integer", "minimum": 0}, "name": {"type": "string"}}
+    },
+    "location": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName", "methodDescriptor", "line", "codeIndex"],
+      "properties": {
+        "className": {"type": "string", "minLength": 1},
+        "methodName": {"type": "string", "minLength": 1},
+        "methodDescriptor": {"type": "string", "minLength": 3},
+        "line": {"type": "integer", "minimum": 1},
+        "codeIndex": {"type": "integer", "minimum": 0}
+      }
+    },
+    "frames": {
+      "type": "array", "maxItems": 64,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["index", "className", "methodName", "methodDescriptor", "line", "codeIndex"],
+        "properties": {
+          "index": {"type": "integer", "minimum": 0},
+          "className": {"type": "string", "minLength": 1},
+          "methodName": {"type": "string", "minLength": 1},
+          "methodDescriptor": {"type": "string", "minLength": 3},
+          "line": {"type": "integer", "minimum": -1},
+          "codeIndex": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "projections": {
+      "type": "array", "maxItems": 128,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["valuePath", "status", "kind", "runtimeType", "scalarValue", "valueTruncated", "objectId", "reason"],
+        "properties": {
+          "valuePath": {"type": "string", "minLength": 1, "maxLength": 2048},
+          "status": {"enum": ["CAPTURED", "TRUNCATED", "REFERENCE_ONLY", "UNAVAILABLE"]},
+          "kind": {"type": ["string", "null"]},
+          "runtimeType": {"type": ["string", "null"]},
+          "scalarValue": {"type": ["string", "null"]},
+          "valueTruncated": {"type": "boolean"},
+          "objectId": {"type": ["integer", "null"], "minimum": 0},
+          "reason": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

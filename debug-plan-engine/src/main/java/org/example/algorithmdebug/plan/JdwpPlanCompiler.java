@@ -20,7 +20,7 @@ public final class JdwpPlanCompiler {
     /**
      * 解析方法身份、校验源码路径和断点行范围，并生成确定性排序的 Agent JDWP Plan。
      *
-     * @param catalog 当前 Case/Context 的静态方法目录
+     * @param catalog 当前 Case/Analysis 的静态方法目录
      * @param request 大模型提出的采集意图
      * @param moduleRoot 已登记 Maven 算法模块根目录
      * @return 可归档且只包含当前 Collector 能力的计划
@@ -50,7 +50,7 @@ public final class JdwpPlanCompiler {
         try {
             return new JdwpCollectionPlan(
                     SchemaVersions.JDWP_COLLECTION_PLAN,
-                    request.planId(), catalog.caseId(), catalog.contextId(), catalog.analysisId(),
+                    request.planId(), catalog.caseId(), catalog.analysisId(),
                     catalog.targetTest(), points,
                     request.budget(), request.rationale(), request.intent(), request.requestedAt());
         } catch (IllegalArgumentException failure) {
@@ -73,7 +73,8 @@ public final class JdwpPlanCompiler {
             return new JdwpTracepointSpec(
                     request.tracepointId(), entry.methodKey(), anchor,
                     request.line(), request.maxObservedHits(), request.maxCapturedHits(),
-                    request.captureOnMatchedHits(), request.condition(), request.capture());
+                    request.captureFirstMatchedHits(), request.captureEveryMatchedHits(),
+                    request.conditions(), request.capture());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException(
                     "JDWP tracepoint is invalid " + request.tracepointId() + ": " + failure.getMessage(),

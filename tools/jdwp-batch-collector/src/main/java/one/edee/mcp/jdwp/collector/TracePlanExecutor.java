@@ -1,6 +1,7 @@
 package one.edee.mcp.jdwp.collector;
 
 import com.sun.jdi.AbsentInformationException;
+import com.sun.jdi.IncompatibleThreadStateException;
 import com.sun.jdi.Location;
 import com.sun.jdi.ReferenceType;
 import com.sun.jdi.ThreadReference;
@@ -17,7 +18,7 @@ import com.sun.jdi.request.ClassPrepareRequest;
 import com.sun.jdi.request.EventRequest;
 import com.sun.jdi.request.EventRequestManager;
 import one.edee.mcp.jdwp.core.FrameSnapshotter;
-import one.edee.mcp.jdwp.core.JdiValueSnapshotter;
+import one.edee.mcp.jdwp.core.JdiValuePathReader;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -25,7 +26,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +42,7 @@ final class TracePlanExecutor {
     private final DebugPlan plan;
     private final JsonlTraceWriter writer;
     private final AtomicLong sequence = new AtomicLong();
+    private final AtomicLong capturedEvents = new AtomicLong();
     private final Map<String, DebugPlan.Tracepoint> tracepointsById;
     private final StackFrameConditionEvaluator conditionEvaluator = new StackFrameConditionEvaluator();
     private final Map<String, Integer> observedHitCounts = new HashMap<>();
@@ -69,6 +70,7 @@ final class TracePlanExecutor {
             "vmName", safeVmName(),
             "tracepointCount", plan.tracepoints.size()
         ));
+        writer.flush();
         if (plan.resumeOnAttach) {
             vm.resume();
         }
@@ -76,7 +78,7 @@ final class TracePlanExecutor {
         long lastEventAt = System.currentTimeMillis();
         String completion = "vm_disconnected";
         try {
-            while (sequence.get() < plan.maxEvents) {
+            while (capturedEvents.get() < plan.maxEvents) {
                 long remaining = plan.idleTimeoutMillis - (System.currentTimeMillis() - lastEventAt);
                 if (remaining <= 0) {
                     completion = "idle_timeout";
@@ -88,10 +90,12 @@ final class TracePlanExecutor {
                 }
                 lastEventAt = System.currentTimeMillis();
                 boolean terminal = false;
+                List<Map<String, Object>> pendingWrites = new ArrayList<>();
                 try {
                     for (Event event : eventSet) {
                         if (event instanceof BreakpointEvent breakpointEvent) {
-                            captureBreakpoint(breakpointEvent);
+                            Map<String, Object> captured = captureBreakpoint(breakpointEvent);
+                            if (captured != null) pendingWrites.add(captured);
                         } else if (event instanceof ClassPrepareEvent classPrepareEvent) {
                             installForPreparedClass(classPrepareEvent.referenceType());
                         } else if (event instanceof VMDeathEvent) {
@@ -109,11 +113,15 @@ final class TracePlanExecutor {
                         terminal = true;
                     }
                 }
+                for (Map<String, Object> pending : pendingWrites) {
+                    writer.write(pending);
+                }
+                if (!pendingWrites.isEmpty()) writer.flush();
                 if (terminal) {
                     break;
                 }
             }
-            if (sequence.get() >= plan.maxEvents) {
+            if (capturedEvents.get() >= plan.maxEvents) {
                 completion = "max_events";
             }
         } catch (InterruptedException interrupted) {
@@ -123,6 +131,7 @@ final class TracePlanExecutor {
             completion = "vm_disconnected";
         }
         writeLifecycle("collector_finished", Map.of("reason", completion));
+        writer.flush();
         return new CollectionResult(
             completion,
             sequence.get(),
@@ -207,47 +216,49 @@ final class TracePlanExecutor {
             + '|' + location.codeIndex();
     }
 
-    private void captureBreakpoint(BreakpointEvent event) throws IOException {
+    private Map<String, Object> captureBreakpoint(BreakpointEvent event) {
         Object property = event.request().getProperty(TRACEPOINT_PROPERTY);
         if (!(property instanceof String tracepointId)) {
-            return;
+            return null;
         }
         DebugPlan.Tracepoint tracepoint = tracepointsById.get(tracepointId);
         if (tracepoint == null) {
-            return;
+            return null;
         }
         int observedHit = observedHitCounts.merge(tracepointId, 1, Integer::sum);
         if (observedHit > tracepoint.maxObservedHits) {
             disableTracepoint(tracepointId);
-            return;
+            return null;
         }
-        StackFrameConditionEvaluator.Evaluation evaluation = tracepoint.condition == null
-            ? StackFrameConditionEvaluator.Evaluation.matched()
-            : conditionEvaluator.evaluate(event.thread(), tracepoint.condition);
+        StackFrameConditionEvaluator.Evaluation evaluation = conditionEvaluator.evaluate(
+            event.thread(), tracepoint.conditions);
         if (evaluation.status() == StackFrameConditionEvaluator.Status.UNAVAILABLE) {
             conditionUnavailableCounts.merge(tracepointId, 1, Integer::sum);
             conditionUnavailableReasons.computeIfAbsent(tracepointId, ignored -> new HashMap<>())
                 .merge(evaluation.reason(), 1, Integer::sum);
             disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
-            return;
+            return null;
         }
         if (evaluation.status() == StackFrameConditionEvaluator.Status.NOT_MATCHED) {
             disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
-            return;
+            return null;
         }
         int matchedHit = matchedHitCounts.merge(tracepointId, 1, Integer::sum);
-        boolean captureSelected = tracepoint.captureOnMatchedHits.isEmpty()
-            || tracepoint.captureOnMatchedHits.contains(matchedHit);
+        boolean captureSelected = matchedHit <= tracepoint.captureFirstMatchedHits
+            || (tracepoint.captureEveryMatchedHits > 0
+                && matchedHit % tracepoint.captureEveryMatchedHits == 0);
         if (!captureSelected) {
             disableAtObservationLimit(tracepointId, observedHit, tracepoint.maxObservedHits);
-            return;
+            return null;
         }
         int capturedHit = capturedHitCounts.getOrDefault(tracepointId, 0);
-        if (capturedHit >= tracepoint.maxCapturedHits) {
+        if (capturedHit >= tracepoint.maxCapturedHits
+                || capturedEvents.get() >= plan.maxEvents) {
             disableTracepoint(tracepointId);
-            return;
+            return null;
         }
         capturedHit = capturedHitCounts.merge(tracepointId, 1, Integer::sum);
+        capturedEvents.incrementAndGet();
 
         ThreadReference thread = event.thread();
         Map<String, Object> data = baseEvent("tracepoint_hit");
@@ -256,7 +267,7 @@ final class TracePlanExecutor {
         data.put("observedHit", observedHit);
         data.put("matchedHit", matchedHit);
         data.put("capturedHit", capturedHit);
-        if (tracepoint.condition != null) {
+        if (!tracepoint.conditions.isEmpty()) {
             data.put("conditionResult", "MATCHED");
         }
         data.put("thread", Map.of("id", thread.uniqueID(), "name", thread.name()));
@@ -267,30 +278,35 @@ final class TracePlanExecutor {
             "line", event.location().lineNumber(),
             "codeIndex", event.location().codeIndex()
         ));
-        if (tracepoint.capture.stack || tracepoint.capture.locals) {
-            int frameLimit = tracepoint.capture.stack ? tracepoint.capture.maxFrames : 1;
-            FrameSnapshotter frameSnapshotter = new FrameSnapshotter(
-                new JdiValueSnapshotter(tracepoint.capture.limits())
-            );
-            data.put("frames", frameSnapshotter.capture(
-                thread,
-                frameLimit,
-                tracepoint.capture.locals,
-                new LinkedHashSet<>(tracepoint.capture.localNames),
-                new LinkedHashSet<>(tracepoint.capture.fieldPaths)
-            ));
-        }
-        writer.write(data);
+        data.put("frames", tracepoint.capture.stack
+            ? new FrameSnapshotter().capture(thread, tracepoint.capture.maxFrames)
+            : List.of());
+        data.put("projections", captureProjections(thread, tracepoint.capture));
         if (observedHit >= tracepoint.maxObservedHits
                 || capturedHit >= tracepoint.maxCapturedHits) {
             disableTracepoint(tracepointId);
         }
+        return data;
     }
 
     private void disableAtObservationLimit(
             String tracepointId, int observedHit, int maxObservedHits) {
         if (observedHit >= maxObservedHits) {
             disableTracepoint(tracepointId);
+        }
+    }
+
+    private static List<JdiValuePathReader.Projection> captureProjections(
+            ThreadReference thread, DebugPlan.Capture capture) {
+        JdiValuePathReader reader = new JdiValuePathReader(capture.maxStringLength);
+        try {
+            var frame = thread.frame(0);
+            return capture.valuePaths.stream().map(path -> reader.read(frame, path)).toList();
+        } catch (IncompatibleThreadStateException failure) {
+            return capture.valuePaths.stream()
+                    .map(path -> JdiValuePathReader.Projection.unavailable(
+                            path, "THREAD_STATE_UNAVAILABLE"))
+                    .toList();
         }
     }
 
@@ -308,7 +324,7 @@ final class TracePlanExecutor {
 
     private Map<String, Object> baseEvent(String type) {
         Map<String, Object> event = new LinkedHashMap<>();
-        event.put("schemaVersion", "2.0");
+        event.put("schemaVersion", "3.0");
         event.put("sessionId", plan.sessionId);
         event.put("sequence", sequence.incrementAndGet());
         event.put("timestamp", Instant.now().toString());

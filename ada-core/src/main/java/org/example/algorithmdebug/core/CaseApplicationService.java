@@ -6,9 +6,9 @@ import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.CaseDigestReader;
 import org.example.algorithmdebug.casecore.CaseSessionRequest;
 import org.example.algorithmdebug.casecore.CaseSessionService;
-import org.example.algorithmdebug.casecore.ContextMode;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.RegisteredArtifactReader;
+import org.example.algorithmdebug.casecore.RegisteredEvidenceQuery;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
@@ -16,8 +16,9 @@ import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.AnalysisId;
-import org.example.algorithmdebug.contracts.AnalysisResult;
 import org.example.algorithmdebug.contracts.ArtifactTextExcerpt;
+import org.example.algorithmdebug.contracts.EvidenceQueryFilter;
+import org.example.algorithmdebug.contracts.EvidenceQueryResult;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.TargetTest;
@@ -74,7 +75,6 @@ public final class CaseApplicationService {
     /**
      * 新建或继续一个 Case Analysis，不运行 Maven，也不扫描源码、输入或 POM。
      *
-     * @param contextMode 显式决定复用最近 Context 或创建新 Context
      */
     public CaseOpenResult open(
             Path workspaceRoot,
@@ -82,10 +82,8 @@ public final class CaseApplicationService {
             TargetTest targetTest,
             String question,
             Optional<CaseId> caseId,
-            Optional<String> adapterId,
-            ContextMode contextMode) {
-        if (targetTest == null || question == null || caseId == null || adapterId == null
-                || contextMode == null) {
+            Optional<String> adapterId) {
+        if (targetTest == null || question == null || caseId == null || adapterId == null) {
             throw new IllegalArgumentException("Case open parameters must not be null");
         }
         try {
@@ -98,10 +96,10 @@ public final class CaseApplicationService {
                     archive, new CaseDigestReader(archive), ids, clock).open(
                     new CaseSessionRequest(
                             caseId, projectId, targetTest,
-                            selection.adapter().descriptor().adapterId(), question, contextMode));
+                            selection.adapter().descriptor().adapterId(), question));
             CaseOpenResult result = new CaseOpenResult(
-                    opened.caseId(), opened.contextId(), opened.analysisId(),
-                    opened.caseCreated(), opened.contextCreated(),
+                    opened.caseId(), opened.analysisId(),
+                    opened.caseCreated(),
                     Optional.ofNullable(registration.resultJsonDirectory()), opened.digest());
             AgentLogContext logContext = AgentLogContext.forCase(
                     workspaceRoot, projectId, result.caseId()).withAnalysis(result.analysisId());
@@ -110,9 +108,6 @@ public final class CaseApplicationService {
             executionLog.info(logContext, "CaseApplicationService",
                     result.caseCreated() ? "CASE_CREATED" : "CASE_REUSED",
                     result.caseCreated() ? "CREATED" : "REUSED", "Case identity was resolved");
-            executionLog.info(logContext, "CaseApplicationService",
-                    result.contextCreated() ? "CONTEXT_CREATED" : "CONTEXT_REUSED",
-                    result.contextCreated() ? "CREATED" : "REUSED", "Case context was resolved");
             executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_CREATED",
                     "CREATED", "Analysis was created");
             executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_COMPLETED",
@@ -144,34 +139,6 @@ public final class CaseApplicationService {
         }
     }
 
-    /** 原子完成一轮 Analysis，只归档最终回答、分级结论和显式引用。 */
-    public AnalysisResult completeAnalysis(
-            Path workspaceRoot, ProjectId projectId, CaseId caseId,
-            AnalysisId analysisId, AnalysisResult result) {
-        if (caseId == null || analysisId == null || result == null) {
-            throw new IllegalArgumentException("analysis complete parameters must not be null");
-        }
-        if (!caseId.equals(result.caseId()) || !analysisId.equals(result.analysisId())) {
-            throw new CaseRunException(
-                    "ANALYSIS_RESULT_IDENTITY_MISMATCH", "The Analysis result does not match the command identity");
-        }
-        try {
-            AgentLogContext logContext = AgentLogContext.forCase(
-                    workspaceRoot, projectId, caseId).withAnalysis(analysisId);
-            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_COMPLETE_STARTED",
-                    "STARTED", "Analysis completion started");
-            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
-            requireRegistration(layout, projectId);
-            CaseArchiveRepository archive = archive(layout, projectId);
-            archive.completeAnalysis(result);
-            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_COMPLETE_COMPLETED",
-                    "COMPLETED", "Analysis completion was archived");
-            return result;
-        } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Failed to complete Analysis", failure);
-        }
-    }
-
     /** 只按已注册 Artifact ID 读取有界 UTF-8 片段。 */
     public ArtifactTextExcerpt readArtifact(
             Path workspaceRoot, ProjectId projectId, CaseId caseId,
@@ -190,6 +157,31 @@ public final class CaseApplicationService {
             return excerpt;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "Read Artifact failed", failure);
+        }
+    }
+
+    /** 查询已注册 CodePath/JDWP 派生证据中的有界记录集合。 */
+    public EvidenceQueryResult queryEvidence(
+            Path workspaceRoot, ProjectId projectId, CaseId caseId,
+            String artifactId, EvidenceQueryFilter filter,
+            int offset, int limit, int maxBytes) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withArtifact(artifactId);
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            requireRegistration(layout, projectId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            EvidenceQueryResult result = new RegisteredEvidenceQuery(archive).query(
+                    caseId, artifactId, filter, offset, limit, maxBytes);
+            executionLog.info(logContext, "CaseApplicationService",
+                    result.truncated() ? "EVIDENCE_QUERY_TRUNCATED" : "EVIDENCE_QUERY_COMPLETED",
+                    result.truncated() ? "PARTIAL" : "COMPLETED",
+                    "Evidence query completed; scanned=" + result.scannedRecords()
+                            + "; matched=" + result.matchedRecords()
+                            + "; returned=" + result.returnedRecords());
+            return result;
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(failure.code(), "Evidence Query failed", failure);
         }
     }
 

@@ -10,8 +10,10 @@
 - 执行 Maven/JUnit，区分目标测试不存在、目标代码异常、断言失败和 Agent/环境故障。
 - 成功 Run 从配置的日期化结果目录捕获新增或变化的 JSON Gantt，并保留原文件名。
 - 生成有界方法目录和源码调用关系，帮助 LLM 找到动态采集边界。
-- 按 LLM 提交的结构化意图执行 CodePath 与 JDWP；JDWP 支持栈帧值路径条件过滤。
-- 将原始 Trace、派生摘要、校验、证据和最终分析追加归档到 Workspace。
+- 按 LLM 提交的结构化意图执行 CodePath 与 JDWP；CodePath 支持参数/返回值标量投影，JDWP 支持栈帧值路径条件和有界周期采样。
+- 通过 `evidence_query` 从已校验的 CodePath/JDWP 派生数据中分页筛选目标方法、断点和变量值。
+- 同一 OpenCode 会话的普通 Run、CodePath 和 JDWP 严格顺序执行，不使用文件锁；最终回答直接返回用户，不归档模型文本。
+- 将原始 Trace、派生摘要、校验和证据追加归档到 Workspace；模型最终回答直接返回用户，不写入 Workspace。
 - 以 10 个真实 OpenCode Smoke Case 回归成功、失败、静态、动态、完整性和跨实体因果场景。
 
 ## 安装前提
@@ -75,7 +77,6 @@ com.example.scheduler.SchedulerTest#shouldScheduleAllWafers：
 projects/<projectId>/cases/<caseId>/
   case.json
   input/<original-input-name>
-  contexts/<contextId>/context.json
   analyses/<analysisId>/
   runs/<runId>/
   collections/<collectionId>/

@@ -9,57 +9,61 @@ public record JdwpSnapshotSummary(
         String schemaVersion,
         EvidenceId evidenceId,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         PlanId planId,
         CollectionId collectionId,
         ArtifactReference rawTrace,
         List<TracepointHit> hits,
-        List<CollectorLimitFact> limits,
+        List<String> limitations,
         boolean truncated,
         Instant createdAt) {
 
-    /** 校验身份、引用和摘要硬上限。 */
     public JdwpSnapshotSummary {
-        if (!SchemaVersions.JDWP_SNAPSHOT_SUMMARY.equals(schemaVersion)
-                && !SchemaVersions.JDWP_SNAPSHOT_SUMMARY_V1.equals(schemaVersion)) {
+        if (!SchemaVersions.JDWP_SNAPSHOT_SUMMARY.equals(schemaVersion)) {
             throw new IllegalArgumentException("Unsupported JdwpSnapshotSummary schemaVersion");
         }
         evidenceId = ContractChecks.requireNonNull(evidenceId, "evidenceId");
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         planId = ContractChecks.requireNonNull(planId, "planId");
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");
         rawTrace = ContractChecks.requireNonNull(rawTrace, "rawTrace");
         hits = ContractChecks.immutableList(hits, "hits");
-        limits = ContractChecks.immutableList(limits, "limits");
-        if (hits.size() > NormalizationBudget.MAX_HITS || limits.size() > 1_024) {
+        limitations = ContractChecks.immutableBoundedStrings(
+                limitations, "limitations", 256);
+        long projectionCount = hits.stream().mapToLong(hit -> hit.projections().size()).sum();
+        if (hits.size() > NormalizationBudget.MAX_HITS
+                || projectionCount > NormalizationBudget.MAX_VALUE_FACTS
+                || limitations.size() > 128) {
             throw new IllegalArgumentException("JDWP summary entries exceed the hard limit");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
 
-    /** 一次 tracepoint 命中的线程、位置、栈和值事实。 */
+    /** 一次命中中经过采样后的调用栈和精确值投影。 */
     public record TracepointHit(
-            String tracepointId, int hit, String threadName, String location,
-            Optional<String> methodDescriptor, Optional<Long> codeIndex,
-            List<StackFrame> frames, List<ValueFact> values, TraceProvenance provenance) {
-
-        /** 兼容 1.0 摘要和既有调用方。 */
-        public TracepointHit(
-                String tracepointId, int hit, String threadName, String location,
-                List<StackFrame> frames, List<ValueFact> values, TraceProvenance provenance) {
-            this(tracepointId, hit, threadName, location, Optional.empty(), Optional.empty(),
-                    frames, values, provenance);
-        }
+            String tracepointId,
+            int observedHit,
+            int matchedHit,
+            int capturedHit,
+            String threadName,
+            String location,
+            Optional<String> methodDescriptor,
+            Optional<Long> codeIndex,
+            List<StackFrame> frames,
+            List<ProjectionFact> projections,
+            TraceProvenance provenance) {
 
         public TracepointHit {
             tracepointId = ContractChecks.requireOpaqueId(tracepointId, "tracepointId");
-            if (hit < 1) throw new IllegalArgumentException("hit must be positive");
-            threadName = ContractChecks.requireBoundedText(threadName, "threadName", 512, false);
+            if (observedHit < 1 || matchedHit < 1 || capturedHit < 1
+                    || matchedHit > observedHit || capturedHit > matchedHit) {
+                throw new IllegalArgumentException("JDWP hit counters are invalid");
+            }
+            threadName = ContractChecks.requireBoundedText(
+                    threadName, "threadName", 512, false);
             location = ContractChecks.requireBoundedText(location, "location", 1_024, false);
             methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
                     .map(value -> ContractChecks.requireBoundedText(
@@ -69,10 +73,10 @@ public record JdwpSnapshotSummary(
                 throw new IllegalArgumentException("codeIndex must not be negative");
             }
             frames = ContractChecks.immutableList(frames, "frames");
-            values = ContractChecks.immutableList(values, "values");
+            projections = ContractChecks.immutableList(projections, "projections");
             if (frames.size() > NormalizationBudget.MAX_FRAMES_PER_HIT
-                    || values.size() > NormalizationBudget.MAX_VALUE_FACTS) {
-                throw new IllegalArgumentException("Hit summaries exceed the hard limit");
+                    || projections.size() > 128) {
+                throw new IllegalArgumentException("JDWP hit entries exceed the hard limit");
             }
             provenance = ContractChecks.requireNonNull(provenance, "provenance");
         }
@@ -87,13 +91,10 @@ public record JdwpSnapshotSummary(
             int line,
             Optional<Long> codeIndex) {
 
-        /** 兼容 1.0 摘要和既有调用方。 */
-        public StackFrame(int index, String className, String methodName, int line) {
-            this(index, className, methodName, Optional.empty(), line, Optional.empty());
-        }
-
         public StackFrame {
-            if (index < 0 || line < -1) throw new IllegalArgumentException("frame position is invalid");
+            if (index < 0 || line < -1) {
+                throw new IllegalArgumentException("frame position is invalid");
+            }
             className = ContractChecks.requireBoundedText(className, "className", 1_024, false);
             methodName = ContractChecks.requireBoundedText(methodName, "methodName", 512, false);
             methodDescriptor = methodDescriptor == null ? Optional.empty() : methodDescriptor
@@ -106,36 +107,64 @@ public record JdwpSnapshotSummary(
         }
     }
 
-    /** 一个已经由 Collector 捕获的通用值路径与有界预览。 */
-    public record ValueFact(
-            String valuePath, String kind, Optional<String> runtimeType,
-            String scalarPreview, boolean previewTruncated,
-            List<String> collectorMarkers, TraceProvenance provenance) {
-        public ValueFact {
+    /** 计划中一个精确值路径的确定性读取结果。 */
+    public record ProjectionFact(
+            String valuePath,
+            ProjectionStatus status,
+            Optional<String> kind,
+            Optional<String> runtimeType,
+            Optional<String> scalarValue,
+            boolean valueTruncated,
+            Optional<Long> objectId,
+            Optional<String> reason,
+            TraceProvenance provenance) {
+
+        public ProjectionFact {
             valuePath = ContractChecks.requireBoundedText(valuePath, "valuePath", 2_048, false);
-            kind = ContractChecks.requireBoundedText(kind, "kind", 64, false);
-            runtimeType = ContractChecks.requireNonNull(runtimeType, "runtimeType")
-                    .map(value -> ContractChecks.requireBoundedText(
-                            value, "runtimeType value", 1_024, false));
-            scalarPreview = ContractChecks.requireBoundedText(
-                    scalarPreview, "scalarPreview", NormalizationBudget.MAX_SCALAR_CHARS, true);
-            collectorMarkers = ContractChecks.immutableBoundedStrings(
-                    collectorMarkers, "collectorMarkers", 256);
-            if (collectorMarkers.size() > 16) {
-                throw new IllegalArgumentException("collectorMarkers must not exceed 16 entries");
+            status = ContractChecks.requireNonNull(status, "status");
+            kind = bounded(kind, "kind", 64);
+            runtimeType = bounded(runtimeType, "runtimeType", 1_024);
+            scalarValue = bounded(scalarValue, "scalarValue", NormalizationBudget.MAX_SCALAR_CHARS);
+            objectId = objectId == null ? Optional.empty() : objectId;
+            if (objectId.isPresent() && objectId.orElseThrow() < 0) {
+                throw new IllegalArgumentException("objectId must not be negative");
             }
+            reason = bounded(reason, "reason", 256);
+            validateProjection(status, kind, scalarValue, valueTruncated, reason);
             provenance = ContractChecks.requireNonNull(provenance, "provenance");
+        }
+
+        private static Optional<String> bounded(
+                Optional<String> value, String name, int maximum) {
+            return value == null ? Optional.empty() : value.map(text ->
+                    ContractChecks.requireBoundedText(text, name, maximum, true));
+        }
+
+        private static void validateProjection(
+                ProjectionStatus status,
+                Optional<String> kind,
+                Optional<String> scalarValue,
+                boolean valueTruncated,
+                Optional<String> reason) {
+            if (status == ProjectionStatus.UNAVAILABLE
+                    && (reason.isEmpty() || kind.isPresent() || scalarValue.isPresent())) {
+                throw new IllegalArgumentException("UNAVAILABLE projection fields are invalid");
+            }
+            if (status == ProjectionStatus.REFERENCE_ONLY
+                    && (kind.isEmpty() || scalarValue.isPresent() || reason.isEmpty())) {
+                throw new IllegalArgumentException("REFERENCE_ONLY projection fields are invalid");
+            }
+            if (status == ProjectionStatus.TRUNCATED
+                    && (kind.isEmpty() || scalarValue.isEmpty() || !valueTruncated
+                    || reason.isEmpty())) {
+                throw new IllegalArgumentException("TRUNCATED projection fields are invalid");
+            }
+            if (status == ProjectionStatus.CAPTURED
+                    && (kind.isEmpty() || valueTruncated || reason.isPresent())) {
+                throw new IllegalArgumentException("CAPTURED projection fields are invalid");
+            }
         }
     }
 
-    /** Collector 主动披露的截断、循环、剩余或错误事实。 */
-    public record CollectorLimitFact(String valuePath, String marker, String detail,
-                                     TraceProvenance provenance) {
-        public CollectorLimitFact {
-            valuePath = ContractChecks.requireBoundedText(valuePath, "valuePath", 2_048, false);
-            marker = ContractChecks.requireBoundedText(marker, "marker", 128, false);
-            detail = ContractChecks.requireBoundedText(detail, "detail", 1_024, true);
-            provenance = ContractChecks.requireNonNull(provenance, "provenance");
-        }
-    }
+    public enum ProjectionStatus { CAPTURED, TRUNCATED, REFERENCE_ONLY, UNAVAILABLE }
 }

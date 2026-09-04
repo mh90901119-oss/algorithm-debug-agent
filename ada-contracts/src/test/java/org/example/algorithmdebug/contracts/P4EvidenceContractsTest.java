@@ -36,7 +36,7 @@ class P4EvidenceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"),
                 List.of(duplicate), List.of(duplicate),
                 Set.of(EvidenceDimension.TARGET_OUTCOME),
@@ -48,7 +48,7 @@ class P4EvidenceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new EvidenceBuildRequest(
                 SchemaVersions.EVIDENCE_BUILD_REQUEST,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 new RunId("run-1"),
                 List.of(), List.of(), Set.of(),
                 512L * 1024, 1024L * 1024, NOW));
@@ -65,7 +65,7 @@ class P4EvidenceContractsTest {
         EvidenceBundle bundle = new EvidenceBundle(
                 SchemaVersions.EVIDENCE_BUNDLE,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 List.of(targetFailure), List.of(),
                 Set.of(EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.VALIDATION),
                 List.of(), false, NOW);
@@ -75,14 +75,16 @@ class P4EvidenceContractsTest {
     }
 
     @Test
-    void jdwpValueFactPreservesCapturedAlgorithmValue() {
+    void jdwpProjectionPreservesCapturedAlgorithmValue() {
         TraceProvenance provenance = provenance(7, 9L);
-        JdwpSnapshotSummary.ValueFact fact = new JdwpSnapshotSummary.ValueFact(
-                "locals.context.fields.algorithmState", "STRING", Optional.of("java.lang.String"),
-                "algorithm-input-value", false, List.of(), provenance);
+        JdwpSnapshotSummary.ProjectionFact fact = new JdwpSnapshotSummary.ProjectionFact(
+                "context.algorithmState", JdwpSnapshotSummary.ProjectionStatus.CAPTURED,
+                Optional.of("STRING"), Optional.of("java.lang.String"),
+                Optional.of("algorithm-input-value"), false,
+                Optional.empty(), Optional.empty(), provenance);
 
-        assertEquals("algorithm-input-value", fact.scalarPreview());
-        assertEquals("locals.context.fields.algorithmState", fact.valuePath());
+        assertEquals("algorithm-input-value", fact.scalarValue().orElseThrow());
+        assertEquals("context.algorithmState", fact.valuePath());
     }
 
     @Test
@@ -95,14 +97,14 @@ class P4EvidenceContractsTest {
         assertThrows(IllegalArgumentException.class, () -> new EvidenceBundle(
                 SchemaVersions.EVIDENCE_BUNDLE,
                 new EvidenceId("evidence-1"), new CaseId("case-1"),
-                new ContextId("context-1"), new AnalysisId("analysis-1"),
+                new AnalysisId("analysis-1"),
                 List.of(hypothesis), List.of(), Set.of(EvidenceDimension.RUNTIME_STATE),
                 List.of(), false, NOW));
     }
 
     private static TraceProvenance provenance(long line, long sequence) {
         return new TraceProvenance(
-                new CaseId("case-1"), new ContextId("context-1"), new RunId("run-1"),
+                new CaseId("case-1"), new RunId("run-1"),
                 new CollectionId("collection-1"),
                 new ArtifactReference(
                         "raw-1", "JDWP_RAW_TRACE", "collections/collection-1/raw/jdwp.jsonl",

@@ -15,8 +15,6 @@ import org.example.algorithmdebug.contracts.ClaimClassification;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.CollectionValidation;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
 import org.example.algorithmdebug.contracts.EvidenceId;
@@ -38,7 +36,6 @@ class EvidenceBundleBuilderTest {
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final String HASH = "a".repeat(64);
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final RunId RUN_ID = new RunId("run-1");
     private static final EvidenceId EVIDENCE_ID = new EvidenceId("evidence-1");
@@ -50,8 +47,6 @@ class EvidenceBundleBuilderTest {
         ArtifactReference gantt = artifact("gantt", "GANTT", "runs/run-1/gantt.json");
         ArtifactReference outcomeArtifact = artifact(
                 "outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json");
-        ArtifactReference contextArtifact = artifact(
-                "context", "CONTEXT_RECORD", "contexts/context-1/context.json");
         ArtifactReference summaryArtifact = artifact(
                 "method-summary", "METHOD_PATH_SUMMARY",
                 "collections/collection-1/derived/evidence-1/summary.json");
@@ -62,7 +57,7 @@ class EvidenceBundleBuilderTest {
                 EvidenceDimension.TARGET_OUTCOME, EvidenceDimension.SCHEDULE_RESULT,
                 EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION));
         EvidenceBuildSources sources = new EvidenceBuildSources(
-                outcome(gantt), outcomeArtifact, context(), contextArtifact,
+                outcome(gantt), outcomeArtifact,
                 Optional.empty(), Optional.empty(), List.of(new ValidatedCollectionSource(
                         validation(EvidenceValidationStatus.VALID, summaryArtifact),
                         validationArtifact)));
@@ -100,6 +95,16 @@ class EvidenceBundleBuilderTest {
     }
 
     @org.junit.jupiter.api.Test
+    void doesNotClaimValidationCoverageWithoutACurrentCollection() {
+        EvidenceBuildRequest request = request(
+                List.of(), List.of(), Set.of(EvidenceDimension.VALIDATION));
+
+        var bundle = new EvidenceBundleBuilder().build(request, sources(List.of()));
+
+        assertTrue(!bundle.coveredDimensions().contains(EvidenceDimension.VALIDATION));
+    }
+
+    @org.junit.jupiter.api.Test
     void comparisonCollectionNeverCoversCurrentDynamicDimension() {
         CollectionId oldCollection = new CollectionId("collection-old");
         ArtifactReference summary = artifact(
@@ -107,7 +112,7 @@ class EvidenceBundleBuilderTest {
                 "collections/collection-old/derived/evidence-old/summary.json");
         CollectionValidation oldValidation = validation(
                 EvidenceValidationStatus.VALID, summary,
-                new ContextId("context-old"), oldCollection);
+                oldCollection);
         EvidenceBuildRequest request = request(List.of(), List.of(oldCollection), Set.of(
                 EvidenceDimension.METHOD_PATH, EvidenceDimension.VALIDATION));
 
@@ -124,7 +129,7 @@ class EvidenceBundleBuilderTest {
     void targetExceptionWithoutGanttCoversOutcomeButNotScheduleResult() {
         RunOutcomeSummary failed = new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, RUN_ID, ProcessOutcome.FAILED,
+                ANALYSIS_ID, RUN_ID, ProcessOutcome.FAILED,
                 TestOutcome.ERROR, GanttOutcome.ABSENT,
                 Optional.of(new TargetFailureDiagnostic(
                         FailureCategory.TEST_ERROR, "java.lang.IllegalStateException",
@@ -135,9 +140,8 @@ class EvidenceBundleBuilderTest {
                 EvidenceDimension.VALIDATION));
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 failed, artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.of(new RunResultFingerprint(
-                        SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, RUN_ID,
+                        SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, ANALYSIS_ID, RUN_ID,
                         HASH)),
                 Optional.of(artifact("fingerprint", "RUN_RESULT_FINGERPRINT",
                         "runs/run-1/fingerprint.json")), List.of());
@@ -152,13 +156,12 @@ class EvidenceBundleBuilderTest {
     void agentFailureDoesNotMasqueradeAsTargetOutcome() {
         RunOutcomeSummary agentFailed = new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, RUN_ID, ProcessOutcome.NOT_STARTED,
+                ANALYSIS_ID, RUN_ID, ProcessOutcome.NOT_STARTED,
                 TestOutcome.NOT_EXECUTED, GanttOutcome.ABSENT, Optional.empty(),
                 Optional.of(new AgentFailureDiagnostic("ARCHIVE_FAILED", "archive failed")),
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
         EvidenceBuildSources sources = new EvidenceBuildSources(
                 agentFailed, artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.empty(), Optional.empty(), List.of());
 
         var bundle = new EvidenceBundleBuilder().build(
@@ -180,7 +183,7 @@ class EvidenceBundleBuilderTest {
                 "old-summary", "METHOD_PATH_SUMMARY", longPath);
         CollectionValidation oldValidation = validation(
                 EvidenceValidationStatus.VALID, oldSummary,
-                new ContextId("context-old"), oldCollection);
+                oldCollection);
         EvidenceBuildSources buildSources = sources(List.of(new ValidatedCollectionSource(
                 oldValidation,
                 artifact("old-validation", "COLLECTION_VALIDATION",
@@ -217,8 +220,7 @@ class EvidenceBundleBuilderTest {
             Set<EvidenceDimension> dimensions,
             long maxBundleBytes) {
         return new EvidenceBuildRequest(
-                SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, CONTEXT_ID,
-                ANALYSIS_ID, RUN_ID, current, comparison, dimensions,
+                SchemaVersions.EVIDENCE_BUILD_REQUEST, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, RUN_ID, current, comparison, dimensions,
                 64 * 1024, maxBundleBytes, NOW);
     }
 
@@ -226,35 +228,28 @@ class EvidenceBundleBuilderTest {
         ArtifactReference gantt = artifact("gantt", "GANTT", "runs/run-1/gantt.json");
         return new EvidenceBuildSources(
                 outcome(gantt), artifact("outcome", "RUN_OUTCOME_SUMMARY", "runs/run-1/outcome.json"),
-                context(), artifact("context", "CONTEXT_RECORD", "contexts/context-1/context.json"),
                 Optional.empty(), Optional.empty(), collections);
     }
 
     private static RunOutcomeSummary outcome(ArtifactReference gantt) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, RUN_ID, ProcessOutcome.SUCCEEDED,
+                ANALYSIS_ID, RUN_ID, ProcessOutcome.SUCCEEDED,
                 TestOutcome.PASSED, GanttOutcome.PRESENT, Optional.empty(), Optional.empty(),
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of(gantt));
     }
 
-    private static ContextRecord context() {
-        return new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
-    }
-
     private static CollectionValidation validation(
             EvidenceValidationStatus status, ArtifactReference summary) {
-        return validation(status, summary, CONTEXT_ID, COLLECTION_ID);
+        return validation(status, summary, COLLECTION_ID);
     }
 
     private static CollectionValidation validation(
             EvidenceValidationStatus status,
             ArtifactReference summary,
-            ContextId contextId,
             CollectionId collectionId) {
         return new CollectionValidation(
-                SchemaVersions.COLLECTION_VALIDATION, EVIDENCE_ID, CASE_ID, contextId,
-                ANALYSIS_ID, RUN_ID, new org.example.algorithmdebug.contracts.PlanId("plan-1"),
+                SchemaVersions.COLLECTION_VALIDATION, EVIDENCE_ID, CASE_ID, ANALYSIS_ID, RUN_ID, new org.example.algorithmdebug.contracts.PlanId("plan-1"),
                 collectionId, "CODEPATH", status,
                 status == EvidenceValidationStatus.VALID ? List.of() : List.of(
                         new ValidationFinding(

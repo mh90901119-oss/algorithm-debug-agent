@@ -11,6 +11,11 @@ import { defaultLauncher, evalDirectory } from "../integrations/opencode/lib/ins
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url))
 const MAX_CAPTURE_BYTES = 16 * 1024 * 1024
 const DEFAULT_TIMEOUT_MILLIS = 10 * 60 * 1000
+const TARGET_EXECUTION_COMMANDS = new Set([
+  "run execute",
+  "collection codepath execute",
+  "collection jdwp execute",
+])
 
 function requireNonBlank(value, label) {
   if (typeof value !== "string" || value.trim() === "") {
@@ -95,6 +100,7 @@ export function validateSuite(suite) {
     }
     for (const flag of [
       "requirePlanIntent", "requireJdwpCondition", "requireAllCollectionsSuccessful",
+      "requireSequentialDynamicRefinement",
     ]) {
       if (item[flag] !== undefined && typeof item[flag] !== "boolean") {
         throw new TypeError(`cases[${index}].${flag} must be boolean`)
@@ -317,6 +323,25 @@ function findIdentifier(value, name, depth = 0) {
   return null
 }
 
+export function auditTargetExecutionOrder(events) {
+  const issues = []
+  const active = new Map()
+  for (const event of events) {
+    if (!TARGET_EXECUTION_COMMANDS.has(event?.commandName)) continue
+    if (event.eventType === "CLI_PROCESS_STARTED") {
+      for (const operation of active.values()) {
+        issues.push(
+          `Target execution CLI overlap: ${event.commandName} started while ${operation} was active`,
+        )
+      }
+      active.set(event.invocationId, event.commandName)
+    } else if (["CLI_PROCESS_COMPLETED", "CLI_PROCESS_FAILED"].includes(event.eventType)) {
+      active.delete(event.invocationId)
+    }
+  }
+  return issues
+}
+
 async function auditInteraction(path) {
   const issues = []
   const events = []
@@ -334,6 +359,7 @@ async function auditInteraction(path) {
       }
     }
     if (events.length === 0) issues.push("Case interaction.jsonl contains no events")
+    issues.push(...auditTargetExecutionOrder(events))
   }
   return { schemaVersion: "1.0", passed: issues.length === 0, eventCount: events.length, issues, events }
 }

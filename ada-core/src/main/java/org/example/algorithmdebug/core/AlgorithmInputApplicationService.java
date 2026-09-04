@@ -88,7 +88,6 @@ public final class AlgorithmInputApplicationService {
                 throw new CaseRunException("CASE_PROJECT_MISMATCH", "Case belongs to another Project");
             }
             var analysis = archive.requireAnalysis(caseId, analysisId);
-            var context = archive.requireContext(caseId, analysis.contextId());
             Optional<AlgorithmInputCapture> existing = archive.findAlgorithmInputCapture(caseId, analysisId);
             if (existing.isPresent()) {
                 AlgorithmInputCapture verified = archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
@@ -158,7 +157,7 @@ public final class AlgorithmInputApplicationService {
                         "ALGORITHM_INPUT_SOURCE_PARSE_FAILED", "Target UT source is outside the module");
             }
             AlgorithmInputCapture capture = new AlgorithmInputCapture(
-                    SchemaVersions.ALGORITHM_INPUT_CAPTURE, caseId, context.contextId(), analysisId,
+                    SchemaVersions.ALGORITHM_INPUT_CAPTURE, caseId, analysisId,
                     manifest.targetTest(), location.variableName(),
                     moduleRoot.relativize(normalizedSource).toString().replace('\\', '/'),
                     location.sourceLine(), location.pathKind(), source.getFileName().toString(),

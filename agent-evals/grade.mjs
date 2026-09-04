@@ -1,9 +1,3 @@
-const CONFIRMED_CLASSIFICATIONS = new Set([
-  "CONFIRMED_FACT",
-  "VALIDATOR_CONCLUSION",
-  "SOURCE_INFERENCE",
-])
-
 export function normalizeToolName(name) {
   if (typeof name !== "string") {
     return ""
@@ -76,7 +70,6 @@ export function parseOpenCodeJsonl(raw) {
   const callsNamed = (name) => toolCalls.filter((call) => call.name === name)
   const successfulData = (call) => call?.response?.success === true ? call.response.data : null
   const beginCalls = callsNamed("analysis_begin")
-  const completionCalls = callsNamed("analysis_complete")
 
   return {
     eventCount: events.length,
@@ -87,7 +80,6 @@ export function parseOpenCodeJsonl(raw) {
       .filter((call) => call.name === "codepath_collect" || call.name === "jdwp_collect")
       .map(successfulData)
       .filter(Boolean),
-    analysisCompletion: completionCalls.at(-1) ?? null,
     finalAnswer: textParts.at(-1) ?? "",
   }
 }
@@ -96,11 +88,43 @@ function includesTool(toolNames, expected) {
   return toolNames.includes(expected)
 }
 
-function assertionReferences(completion) {
-  const conclusions = Array.isArray(completion?.input?.conclusions)
-    ? completion.input.conclusions
-    : []
-  return { conclusions, confirmed: conclusions.filter((item) => CONFIRMED_CLASSIFICATIONS.has(item?.classification)) }
+function traceabilityIds(trace) {
+  const values = new Set()
+  const visit = value => {
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    if (!value || typeof value !== "object") return
+    for (const [key, item] of Object.entries(value)) {
+      if (typeof item === "string"
+          && /(?:artifact|evidence|collection|run)Id$/u.test(key)
+          && key !== "collectorExecutionRunId") values.add(item)
+      else visit(item)
+    }
+  }
+  trace.toolCalls.forEach(call => visit(call.response?.data))
+  return [...values]
+}
+
+function collectionEvidenceIds(call) {
+  const values = new Set()
+  const visit = (value, key = "") => {
+    if (Array.isArray(value)) {
+      value.forEach(item => visit(item, key))
+      return
+    }
+    if (value && typeof value === "object") {
+      Object.entries(value).forEach(([childKey, child]) => visit(child, childKey))
+      return
+    }
+    if (typeof value !== "string") return
+    if (key === "evidenceId" && value.startsWith("evidence-")) values.add(value)
+    const pathMatch = value.match(/(?:^|\/)evidence\/(evidence-[^/]+)(?:\/|$)/u)
+    if (pathMatch) values.add(pathMatch[1])
+  }
+  visit(call?.response?.data)
+  return values
 }
 
 export function gradeCase(evalCase, trace, runtime) {
@@ -207,15 +231,35 @@ export function gradeCase(evalCase, trace, runtime) {
       if (!Array.isArray(input.expectedObservations) || input.expectedObservations.length === 0) {
         correctnessFailures.push(`${call.name} is missing expectedObservations`)
       }
-      const references = Array.isArray(input.basedOnEvidenceIds) ? input.basedOnEvidenceIds : []
-      if (references.length < (evalCase.minimumPlanEvidenceReferences ?? 0)) {
-        evidenceFailures.push(
-          `${call.name} plan evidence lineage has ${references.length} references; expected at least ${evalCase.minimumPlanEvidenceReferences}`,
-        )
-      }
     }
     if (planCalls.length === 0) {
       correctnessFailures.push("Structured Plan intent was required but no Plan was created")
+    }
+    const minimumReferences = evalCase.minimumPlanEvidenceReferences ?? 0
+    const hasIncrementalLineage = planCalls
+      .filter((call) => call.response?.success === true)
+      .some((call) => Array.isArray(call.input?.basedOnEvidenceIds)
+        && call.input.basedOnEvidenceIds.length >= minimumReferences)
+    if (minimumReferences > 0 && !hasIncrementalLineage) {
+      evidenceFailures.push(
+        `No successful incremental Plan references at least ${minimumReferences} prior Evidence IDs`,
+      )
+    }
+  }
+
+  if (evalCase.requireSequentialDynamicRefinement) {
+    const codePathCollectIndex = trace.toolCalls.findIndex(call =>
+      call.name === "codepath_collect" && call.response?.success === true)
+    const jdwpPlanIndex = trace.toolCalls.findIndex(call =>
+      call.name === "jdwp_plan_create" && call.response?.success === true)
+    if (codePathCollectIndex < 0 || jdwpPlanIndex < 0 || jdwpPlanIndex <= codePathCollectIndex) {
+      correctnessFailures.push("JDWP Plan must be created after successful CodePath Evidence")
+    } else {
+      const codePathEvidence = collectionEvidenceIds(trace.toolCalls[codePathCollectIndex])
+      const lineage = trace.toolCalls[jdwpPlanIndex].input?.basedOnEvidenceIds
+      if (!Array.isArray(lineage) || !lineage.some(id => codePathEvidence.has(id))) {
+        evidenceFailures.push("JDWP Plan does not reference the preceding CodePath Evidence ID")
+      }
     }
   }
 
@@ -223,42 +267,46 @@ export function gradeCase(evalCase, trace, runtime) {
     const jdwpPlans = trace.toolCalls.filter((call) => call.name === "jdwp_plan_create")
     const conditionalPoints = jdwpPlans.flatMap((call) =>
       Array.isArray(call.input?.tracepoints) ? call.input.tracepoints : [])
-      .filter((point) => point?.condition
+      .filter((point) => Array.isArray(point?.conditions) && point.conditions.length > 0
         && Number.isInteger(point.maxObservedHits)
         && Number.isInteger(point.maxCapturedHits))
     if (conditionalPoints.length === 0) {
       correctnessFailures.push("A bounded JDWP condition was required but none was planned")
     }
     for (const pattern of evalCase.requiredJdwpConditionValuePatterns ?? []) {
-      const values = conditionalPoints.map((point) => point.condition.expectedValue ?? "")
+      const values = conditionalPoints.flatMap((point) =>
+        point.conditions.map(condition => condition.expectedValue ?? ""))
       if (!values.some((value) => new RegExp(pattern, "iu").test(value))) {
         correctnessFailures.push(`No JDWP condition value matches required pattern: ${pattern}`)
       }
     }
   }
 
-  const completion = trace.analysisCompletion
-  if (evalCase.requireAnalysisComplete !== false) {
-    if (!completion) {
-      correctnessFailures.push("analysis_complete was not called")
-    } else if (completion.executionStatus !== "completed" || completion.response?.success !== true) {
-      correctnessFailures.push("analysis_complete did not complete successfully")
-    }
+  if (toolNames.includes("analysis_complete")) {
+    correctnessFailures.push("analysis_complete must not be called; return the answer directly")
   }
 
   if (evalCase.requireEvidenceReferences) {
-    const { conclusions, confirmed } = assertionReferences(completion)
-    if (conclusions.length === 0 || confirmed.length === 0) {
-      evidenceFailures.push("analysis_complete did not contain an evidence-backed confirmed conclusion")
-    }
-    for (const [index, conclusion] of confirmed.entries()) {
-      if (!Array.isArray(conclusion.evidenceReferenceIds) || conclusion.evidenceReferenceIds.length === 0) {
-        evidenceFailures.push(`Confirmed conclusion ${index} has no evidence reference`)
-      }
+    const ids = traceabilityIds(trace)
+    if (ids.length === 0 || !ids.some(id => trace.finalAnswer.includes(id))) {
+      evidenceFailures.push("Final answer does not cite an observed Run, Collection, Evidence, or Artifact ID")
     }
   }
 
   const answer = trace.finalAnswer
+  if (evalCase.requireAnswerContext !== false) {
+    const caseDirectory = trace.analysisIdentity?.caseDirectory
+    const analysisDirectory = trace.analysisIdentity?.analysisDirectory
+    if (typeof caseDirectory !== "string" || !answer.includes(caseDirectory)) {
+      correctnessFailures.push("Final answer does not identify the current Case directory")
+    }
+    if (typeof analysisDirectory !== "string" || !answer.includes(analysisDirectory)) {
+      correctnessFailures.push("Final answer does not identify the current Analysis directory")
+    }
+    if (!/(?:\b(?:(?:major|agent)\s+)?capabilities(?:\s+actually)?\s+used\b|\bworkflow\s+used\b|使用的.*功能|主要功能)/iu.test(answer)) {
+      correctnessFailures.push("Final answer does not summarize the Agent capabilities used")
+    }
+  }
   for (const pattern of evalCase.requiredAnswerPatterns ?? []) {
     if (!new RegExp(pattern, "iu").test(answer)) {
       correctnessFailures.push(`Final answer does not match required pattern: ${pattern}`)
@@ -281,11 +329,6 @@ export function gradeCase(evalCase, trace, runtime) {
   if (beginCount > 1) {
     efficiencyWarnings.push(`analysis_begin was called ${beginCount} times`)
   }
-  const completionIndex = toolNames.lastIndexOf("analysis_complete")
-  if (completionIndex >= 0 && completionIndex < toolNames.length - 1) {
-    efficiencyWarnings.push("Tools were called after analysis_complete")
-  }
-
   return {
     caseId: evalCase.id,
     passed: correctnessFailures.length === 0 && evidenceFailures.length === 0,

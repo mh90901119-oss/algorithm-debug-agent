@@ -10,7 +10,7 @@
 
 | 阶段 | 状态 | 交付 |
 | --- | --- | --- |
-| 1. Case 与 Run | 完成 | 追加式 Case/Context/Analysis/Run、Maven/JUnit、失败指纹、原名 Gantt |
+| 1. Case 与 Run | 完成 | 追加式 Case/Analysis/Run、Maven/JUnit、失败指纹、原名 Gantt |
 | 2. OpenCode 集成 | 完成 | Agent、Skill、Command、13 个 Tool、CLI Adapter、安装/卸载 |
 | 3. 静态与 CodePath | 完成 | 方法目录、调用关系、精确方法路径、Raw/Derived/Validation |
 | 4. JDWP | 完成 | Agent-owned Collector、断点、局部变量、字段、有界预算、基线校验 |

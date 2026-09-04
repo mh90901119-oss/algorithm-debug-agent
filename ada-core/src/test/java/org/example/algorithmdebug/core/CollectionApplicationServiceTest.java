@@ -42,8 +42,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.ComparisonOutcome;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.GanttOutcome;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProcessOutcome;
@@ -75,7 +73,6 @@ class CollectionApplicationServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-08-18T00:00:00Z");
     private static final CaseId CASE_ID = new CaseId("case-1");
-    private static final ContextId CONTEXT_ID = new ContextId("context-1");
     private static final AnalysisId ANALYSIS_ID = new AnalysisId("analysis-1");
     private static final ProjectId PROJECT_ID = new ProjectId("project-1");
     private static final PlanId PLAN_ID = new PlanId("plan-1");
@@ -88,7 +85,6 @@ class CollectionApplicationServiceTest {
     private Path workspace;
     private Path module;
     private Path scheduleOutput;
-    private ContextRecord context;
     private BoundedDocumentMapper mapper;
     private AtomicDocumentWriter writer;
 
@@ -112,7 +108,6 @@ class CollectionApplicationServiceTest {
         writer = new AtomicDocumentWriter();
         WorkspaceLayout layout = WorkspaceLayout.of(workspace);
         Files.createDirectories(layout.projectCases(PROJECT_ID));
-        context = new ContextRecord(SchemaVersions.CONTEXT_RECORD, CASE_ID, CONTEXT_ID, NOW);
         new ProjectRegistrationRepository(mapper, writer).create(layout, new ProjectRegistration(
                 SchemaVersions.PROJECT_REGISTRATION, PROJECT_ID, "fixture",
                 portable(temporaryDirectory), portable(module), portable(module), "pom.xml", "MAVEN",
@@ -121,9 +116,8 @@ class CollectionApplicationServiceTest {
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE_ID, PROJECT_ID, TARGET,
                 "fixture", "why", NOW));
-        archive.createContext(context);
         archive.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID, "continue", NOW));
+                SchemaVersions.ANALYSIS_REQUEST, CASE_ID, ANALYSIS_ID, "continue", NOW));
 
         new AlgorithmInputApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
@@ -137,7 +131,13 @@ class CollectionApplicationServiceTest {
         staticAnalysis.createCodePathPlan(
                 workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new CodePathPlanRequest(
-                        PLAN_ID, List.of("fixture.TargetTest#caseUnderTest()V"), "定位",
+                        PLAN_ID,
+                        List.of(new org.example.algorithmdebug.plan.CodePathMethodRequest(
+                                "fixture.TargetTest#caseUnderTest()V", List.of())),
+                        java.util.Optional.empty(), "Locate the runtime path",
+                        new org.example.algorithmdebug.contracts.InvestigationIntent(
+                                "Which path executed?", "The target test executed", List.of(),
+                                List.of("Observed method path")),
                         org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
@@ -159,6 +159,9 @@ class CollectionApplicationServiceTest {
                 service.executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID));
 
         assertEquals("MAVEN_NOT_FOUND", failure.code());
+        assertEquals(List.of("CODEPATH_MANIFEST", "COLLECTION_BASELINE"),
+                failure.artifacts().stream().map(
+                        org.example.algorithmdebug.contracts.ArtifactReference::artifactType).toList());
         assertEquals(0, collectorCalls.get());
         Path collection = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                 .resolve("case-1/collections/collection-fixed");
@@ -171,6 +174,9 @@ class CollectionApplicationServiceTest {
         assertFalse(manifest.processStarted());
         assertEquals(-1, manifest.exitCode());
         assertEquals("MAVEN_NOT_FOUND", manifest.agentFailure().orElseThrow().code());
+        failure.artifacts().forEach(reference -> assertTrue(Files.isRegularFile(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1").resolve(reference.relativePath()))));
     }
 
     @Test
@@ -358,8 +364,8 @@ class CollectionApplicationServiceTest {
     private MethodPathCollector collector(
             CollectionCompletion completion, Optional<String> ganttJson) {
         return collector(completion, ganttJson, """
-                {"eventId":1,"eventType":"METHOD_ENTER","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V"}
-                {"eventId":2,"eventType":"METHOD_EXIT","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V"}
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V","projections":[]}
+                {"eventId":2,"eventType":"METHOD_EXIT","depth":0,"className":"fixture.TargetTest","methodName":"caseUnderTest","descriptor":"()V","projections":[]}
                 """, 2, completion == CollectionCompletion.TRUNCATED
                 ? List.of("EVENT_BUDGET_EXCEEDED") : List.of());
     }
@@ -385,7 +391,7 @@ class CollectionApplicationServiceTest {
                     Files.writeString(scheduleOutput.resolve("result.json"), ganttJson.orElseThrow());
                 }
                 MethodPathManifest manifest = new MethodPathManifest(
-                        "2.0", request.caseId(), request.contextId(), request.analysisId(),
+                        "3.0", request.caseId(), request.analysisId(),
                         request.runId(), request.plan().planId(), request.collectionId(),
                         "code-path-tracer", "0.1.0", completion, "COMPLETE", true,
                         completion == CollectionCompletion.TARGET_FAILED ? 2 : 0, false,
@@ -408,7 +414,7 @@ class CollectionApplicationServiceTest {
         RunId baselineRun = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 baselineRun, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(successfulBaselineOutcome(baselineRun));
     }
@@ -417,11 +423,11 @@ class CollectionApplicationServiceTest {
         RunId baselineRun = new RunId("baseline-run");
         CaseArchiveRepository archive = archive();
         archive.startRun(new RunRequest(
-                SchemaVersions.RUN_REQUEST, CASE_ID, CONTEXT_ID, ANALYSIS_ID,
+                SchemaVersions.RUN_REQUEST, CASE_ID, ANALYSIS_ID,
                 baselineRun, TARGET, "UNINSTRUMENTED", NOW));
         archive.completeRun(new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, baselineRun, ProcessOutcome.FAILED,
+                ANALYSIS_ID, baselineRun, ProcessOutcome.FAILED,
                 TestOutcome.ERROR, GanttOutcome.ABSENT,
                 Optional.of(new org.example.algorithmdebug.contracts.TargetFailureDiagnostic(
                         org.example.algorithmdebug.contracts.FailureCategory.TEST_ERROR,
@@ -433,11 +439,10 @@ class CollectionApplicationServiceTest {
                 "java.lang.IllegalStateException", message, "",
                 "fixture.Algorithm.solve(Algorithm.java:42)");
         RunResultFingerprint fingerprint = new RunResultFingerprint(
-                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, CONTEXT_ID, baselineRun,
+                SchemaVersions.RUN_RESULT_FINGERPRINT, CASE_ID, ANALYSIS_ID, baselineRun,
                 new org.example.algorithmdebug.harness.TargetFailureFingerprinter()
                         .sha256(diagnostic));
         archive.createRunResultFingerprint(fingerprint);
-        archive.createReproductionIfAbsent(fingerprint);
     }
 
     private void writeFailureReport(String message) throws Exception {
@@ -465,7 +470,7 @@ class CollectionApplicationServiceTest {
     private static RunOutcomeSummary successfulBaselineOutcome(RunId runId) {
         return new RunOutcomeSummary(
                 SchemaVersions.RUN_OUTCOME_SUMMARY, "TARGET_TEST_RUN_COMPLETED", CASE_ID,
-                CONTEXT_ID, ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
+                ANALYSIS_ID, runId, ProcessOutcome.SUCCEEDED,
                 TestOutcome.PASSED, GanttOutcome.ABSENT, Optional.empty(), Optional.empty(),
                 ComparisonOutcome.NOT_COMPARED, "not compared", List.of());
     }

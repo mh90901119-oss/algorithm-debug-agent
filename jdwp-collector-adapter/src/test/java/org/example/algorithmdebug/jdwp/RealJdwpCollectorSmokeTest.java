@@ -34,9 +34,9 @@ class RealJdwpCollectorSmokeTest {
     void lockedCollectorAttachesCapturesAndResumesMinimalTarget() throws Exception {
         String configured = System.getProperty("jdwp.collector.jar", "");
         Assumptions.assumeTrue(!configured.isBlank(),
-                "需要 -Djdwp.collector.jar 运行真实 Collector Smoke");
+                "Real Collector smoke requires -Djdwp.collector.jar");
         Path collectorJar = Path.of(configured).toAbsolutePath().normalize();
-        Assumptions.assumeTrue(Files.isRegularFile(collectorJar), "Collector JAR 不存在");
+        Assumptions.assumeTrue(Files.isRegularFile(collectorJar), "Collector JAR is missing");
         int port = new LoopbackPortAllocator().allocate();
         Path plan = Files.writeString(
                 directory.resolve("collector-plan.json"), collectorPlan(port, tracepointLine()));
@@ -66,7 +66,9 @@ class RealJdwpCollectorSmokeTest {
                         && "compute-entry".equals(event.path("tracepointId").asText())
                         && "MATCHED".equals(event.path("conditionResult").asText())
                         && "(I)I".equals(event.path("location").path("methodDescriptor").asText())
-                        && event.path("location").path("codeIndex").isIntegralNumber()));
+                        && event.path("location").path("codeIndex").isIntegralNumber()
+                        && "value".equals(event.path("projections").get(0).path("valuePath").asText())
+                        && "21".equals(event.path("projections").get(0).path("scalarValue").asText())));
         assertTrue(Files.isRegularFile(
                 request.collectorOutputDirectory().resolve("collection-manifest.json")));
     }
@@ -119,13 +121,13 @@ class RealJdwpCollectorSmokeTest {
                 return index + 1;
             }
         }
-        throw new IllegalStateException("找不到真实 JDWP Smoke tracepoint 行");
+        throw new IllegalStateException("Real JDWP smoke tracepoint line was not found");
     }
 
     private static String collectorPlan(int port, int line) {
         return """
                 {
-                  "schemaVersion": "2.0",
+                  "schemaVersion": "5.0",
                   "sessionId": "real-jdwp-smoke",
                   "target": {"host": "127.0.0.1", "port": %d},
                   "resumeOnAttach": true,
@@ -139,8 +141,9 @@ class RealJdwpCollectorSmokeTest {
                     "methodDescriptor": "(I)I",
                     "maxObservedHits": 1,
                     "maxCapturedHits": 1,
-                    "captureOnMatchedHits": [1],
-                    "condition": {
+                    "captureFirstMatchedHits": 1,
+                    "captureEveryMatchedHits": 0,
+                    "conditions": [{
                       "localName": "value",
                       "fieldPath": [],
                       "operator": "EQUALS",
@@ -148,11 +151,8 @@ class RealJdwpCollectorSmokeTest {
                       "expectedValue": "21"
                     },
                     "capture": {
-                      "locals": false,
                       "stack": true,
                       "maxFrames": 4,
-                      "maxDepth": 1,
-                      "maxItems": 10,
                       "maxStringLength": 128
                     }
                   }]
@@ -164,7 +164,7 @@ class RealJdwpCollectorSmokeTest {
         try {
             return JSON.readTree(line);
         } catch (Exception failure) {
-            throw new IllegalArgumentException("真实 Collector 输出了非法 JSONL", failure);
+            throw new IllegalArgumentException("Real Collector emitted invalid JSONL", failure);
         }
     }
 

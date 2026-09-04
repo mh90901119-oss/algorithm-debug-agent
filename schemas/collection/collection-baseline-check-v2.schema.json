@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/collection-baseline-check-v2.schema.json",
+  "title": "Collection Baseline Check v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "analysisId",
+    "runId",
+    "collectionId",
+    "outcome",
+    "referenceRunId",
+    "evidenceUsable",
+    "summary",
+    "checkedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "analysisId": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "collectionId": {
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "MATCHED",
+        "CHANGED",
+        "INCOMPARABLE",
+        "NOT_COMPARED"
+      ]
+    },
+    "referenceRunId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidenceUsable": {
+      "type": "boolean"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

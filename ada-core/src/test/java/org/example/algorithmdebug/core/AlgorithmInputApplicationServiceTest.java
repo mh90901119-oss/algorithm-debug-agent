@@ -19,8 +19,6 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
@@ -34,7 +32,6 @@ class AlgorithmInputApplicationServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-27T00:00:00Z");
     private static final ProjectId PROJECT = new ProjectId("project-1");
     private static final CaseId CASE = new CaseId("case-1");
-    private static final ContextId CONTEXT = new ContextId("context-1");
     private static final TargetTest TARGET = new TargetTest("fixture.TargetTest", "runs");
 
     @TempDir Path temporaryDirectory;
@@ -68,8 +65,6 @@ class AlgorithmInputApplicationServiceTest {
         CaseArchiveRepository archive = archive();
         archive.createCase(new CaseManifest(
                 SchemaVersions.CASE_MANIFEST, CASE, PROJECT, TARGET, "fixture", "why", NOW));
-        archive.createContext(new ContextRecord(
-                SchemaVersions.CONTEXT_RECORD, CASE, CONTEXT, NOW));
         createAnalysis("analysis-1", NOW);
     }
 
@@ -124,7 +119,7 @@ class AlgorithmInputApplicationServiceTest {
 
     private void createAnalysis(String id, Instant at) {
         archive().createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, CASE, CONTEXT, new AnalysisId(id), "continue", at));
+                SchemaVersions.ANALYSIS_REQUEST, CASE, new AnalysisId(id), "continue", at));
     }
 
     private static String portable(Path path) {

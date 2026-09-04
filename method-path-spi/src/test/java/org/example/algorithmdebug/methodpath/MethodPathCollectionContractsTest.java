@@ -13,7 +13,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -77,7 +76,7 @@ class MethodPathCollectionContractsTest {
 
     private static MethodPathCollectionRequest request(Path root) {
         return new MethodPathCollectionRequest(
-                new CaseId("case-1"), new ContextId("ctx-1"), new AnalysisId("analysis-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new RunId("run-1"), plan(), new CollectionId("collection-1"),
                 root, root, Path.of("java"), List.of("target/classes"), "fixture.Test#case1");
     }
@@ -85,16 +84,20 @@ class MethodPathCollectionContractsTest {
     private static CodePathCollectionPlan plan() {
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"),
-                new CaseId("case-1"), new ContextId("ctx-1"), new AnalysisId("analysis-1"),
+                new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new TargetTest("fixture.Test", "case1"),
-                List.of(new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V")),
-                CollectionBudget.defaults(), "定位目标方法", Instant.EPOCH);
+                List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(
+                        new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V"),
+                        List.of())),
+                java.util.Optional.empty(), CollectionBudget.defaults(), "Locate the target method",
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which path executed?", "The selected method executed", List.of(),
+                        List.of("Observed method path")), Instant.EPOCH);
     }
 
     private static MethodPathManifest failureManifest(Optional<AgentFailureDiagnostic> diagnostic) {
         return new MethodPathManifest(
-                "2.0", new CaseId("case-1"), new ContextId("ctx-1"),
-                new AnalysisId("analysis-1"), new RunId("run-1"), new PlanId("plan-1"),
+                "3.0", new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "algorithm-debug-agent", "0.1.0",
                 CollectionCompletion.AGENT_FAILED,
                 "REQUEST_ARCHIVED", false, -1, false, "NOT_EXECUTED", 0, 0, 0, 0,
@@ -105,7 +108,7 @@ class MethodPathCollectionContractsTest {
 
     private static MethodPathManifest successManifest(CaseId caseId) {
         return new MethodPathManifest(
-                "2.0", caseId, new ContextId("ctx-1"), new AnalysisId("analysis-1"),
+                "3.0", caseId, new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"), new CollectionId("collection-1"),
                 "code-path-tracer", "0.1.0",
                 CollectionCompletion.SUCCESS, "COMPLETE", true, 0, false,

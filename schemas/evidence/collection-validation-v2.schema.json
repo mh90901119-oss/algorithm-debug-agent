@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/evidence/collection-validation-v2.schema.json",
+  "title": "CollectionValidation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evidenceId",
+    "caseId",
+    "analysisId",
+    "runId",
+    "planId",
+    "collectionId",
+    "collectorType",
+    "status",
+    "findings",
+    "coveredDimensions",
+    "summaryArtifact",
+    "validatedAt"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "2.0"
+    },
+    "evidenceId": {
+      "type": "string"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "analysisId": {
+      "type": "string"
+    },
+    "runId": {
+      "type": "string"
+    },
+    "planId": {
+      "type": "string"
+    },
+    "collectionId": {
+      "type": "string"
+    },
+    "collectorType": {
+      "enum": [
+        "CODEPATH",
+        "JDWP"
+      ]
+    },
+    "status": {
+      "enum": [
+        "VALID",
+        "INCONCLUSIVE",
+        "CONTRADICTED",
+        "INVALID"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "object"
+      }
+    },
+    "coveredDimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "summaryArtifact": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "validatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

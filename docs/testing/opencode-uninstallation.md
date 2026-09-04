@@ -10,7 +10,6 @@
 
 - `algorithm-debug` Agent、Skill 和 Command。
 - Algorithm Debug Custom Tool 与 JS Runtime。
-- `bin/ada.cmd`、Java CLI 和 Collector 运行资产。
 - 本次安装生成的 manifest 和可安全删除的空父目录。
 
 ## 不删除内容
@@ -19,11 +18,13 @@
 - `dfxDirectory` 和 `evalDirectory`。
 - 目标算法仓库、源码、POM、Maven 仓库或算法 Gantt。
 - OpenCode 中其他 Agent、Skill、Command、Tool 或用户配置。
+- Agent 仓库中的 `bin/ada.cmd`、Java CLI、CodePath Launcher 和 JDWP Collector。
+- OpenCode 的 `package.json`、`node_modules` 和已有 `@opencode-ai/plugin`，便于重复安装并避免影响其他 Tool。
 - 安装后被用户修改、Hash 已变化的受管文件；脚本会报告并保留。
 
 ## 为什么修改代码后需要卸载
 
-安装采用文件复制，不是符号链接。直接再次 Install 可能遇到“已存在且内容不匹配”，这是防止覆盖未知用户修改。标准过程：
+OpenCode 侧采用文件复制，Java 后端仍从 Agent 仓库运行。标准过程：
 
 ```powershell
 .\scripts\build-agent.ps1
@@ -33,6 +34,9 @@
 ```
 
 如果卸载报告受管文件已被修改，先人工确认该文件来源。不要强行删除整个 OpenCode 配置目录。
+
+没有 Manifest 的早期安装只清理当前版本明确列举的 Agent 专属文件；无法确认归属的历史随机
+文件不会自动删除。重复执行卸载会返回已卸载状态。
 
 ## 验证卸载与恢复
 

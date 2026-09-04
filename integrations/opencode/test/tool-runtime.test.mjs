@@ -28,6 +28,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         temporaryFiles.push({ path, content: await readFile(path, "utf8") })
       }
     }
+    if (args[0] === "case" && args[1] === "open") {
+      return success({
+        caseId: "case-1", analysisId: "analysis-1",
+        digest: { projectId: "demo-project" },
+      })
+    }
     return success({ command: args.slice(0, 3).join(" ") })
   }
   const runtime = createAlgorithmDebugRuntime({
@@ -38,9 +44,21 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   })
   const context = { directory: "D:/large-system/algorithm-module" }
 
-  await runtime.analysisBegin({
-    question: "why did it fail?", targetTest: "a.b.Test#case1", contextMode: "reuse",
-  }, context)
+  const begin = JSON.parse(await runtime.analysisBegin({
+    question: "why did it fail?", targetTest: "a.b.Test#case1",
+  }, context))
+  assert.equal(begin.data.caseDirectory, "projects/demo-project/cases/case-1")
+  assert.equal(
+    begin.data.analysisDirectory,
+    "projects/demo-project/cases/case-1/analyses/analysis-1",
+  )
+  assert.equal(
+    begin.data.answerContext,
+    [
+      "Case directory: projects/demo-project/cases/case-1",
+      "Analysis directory: projects/demo-project/cases/case-1/analyses/analysis-1",
+    ].join("\n"),
+  )
   await runtime.algorithmInputCapture({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.caseInspect({ caseId: "case-1" }, context)
   await runtime.caseAudit({ caseId: "case-1" }, context)
@@ -52,7 +70,10 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   await runtime.staticAnalyze({ caseId: "case-1", analysisId: "analysis-1" }, context)
   await runtime.codePathPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
-    selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+    methods: [{
+      methodKey: "fixture.Algorithm#schedule()V",
+      projections: [{ name: "waferId", path: "arg[0].waferId", required: true }],
+    }],
     scopeMethodKey: "fixture.Algorithm#schedule()V",
     rationale: "Observe invocation path variants",
     questionToAnswer: "Which invocation path executed?",
@@ -66,12 +87,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     tracepoints: [{
       methodKey: "fixture.Algorithm#schedule()V", line: 12,
       maxObservedHits: 500, maxCapturedHits: 2,
-      captureOnMatchedHits: [1, 2],
-      condition: {
-        localName: "candidate", fieldPath: ["wafer", "id"],
+      captureFirstMatchedHits: 2, captureEveryMatchedHits: 0,
+      conditions: [{
+        valuePath: "candidate.wafer.id",
         expectedType: "STRING", expectedValue: "WAFER-1",
-      },
-      capture: { localNames: ["state"], fieldPaths: ["state.current"] },
+      }],
+      capture: { valuePaths: ["state.current"] },
     }],
     rationale: "Observe selected state transitions",
     questionToAnswer: "Which state selected the branch?",
@@ -83,22 +104,17 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   await runtime.artifactRead({
     caseId: "case-1", artifactId: "run-1-stdout", offsetBytes: 7, maxBytes: 1024,
   }, context)
-  await runtime.analysisComplete({
-    caseId: "case-1", contextId: "context-1", analysisId: "analysis-1",
-    finalAnswer: "answer",
-    conclusions: [{
-      classification: "CONFIRMED_FACT", statement: "observed",
-      evidenceReferenceIds: ["evidence-1"],
-    }],
-    referencedRunIds: ["run-1"], referencedCollectionIds: ["collection-1"],
-    referencedEvidenceIds: ["evidence-1"], referencedArtifactIds: ["artifact-1"],
-    missingEvidence: [],
+  await runtime.evidenceQuery({
+    caseId: "case-1", artifactId: "codepath-invocations",
+    methodRef: "fixture.Algorithm#schedule()V", valueName: "waferId",
+    scalarValue: "WAFER-1", valueStatus: "VALUE",
+    sequenceFrom: 2, sequenceTo: 8, offset: 1, limit: 10, maxBytes: 32768,
   }, context)
 
   const businessCalls = calls.filter(call => !["workspace", "project"].includes(call.args[0]))
   assert.deepEqual(businessCalls.map(call => withoutTemporaryPath(call.args)), [
     ["case", "open", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
-      "--test", "a.b.Test#case1", "--question-file", "<temp>", "--context-mode", "reuse"],
+      "--test", "a.b.Test#case1", "--question-file", "<temp>"],
     ["input", "capture", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1", "--analysis-id", "analysis-1"],
     ["case", "inspect", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
@@ -123,14 +139,21 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
     ["artifact", "read", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1", "--artifact-id", "run-1-stdout", "--offset-bytes", "7",
       "--max-bytes", "1024"],
-    ["analysis", "complete", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
-      "--case-id", "case-1", "--analysis-id", "analysis-1", "--result-file", "<temp>"],
+    ["evidence", "query", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
+      "--case-id", "case-1", "--artifact-id", "codepath-invocations",
+      "--method-ref", "fixture.Algorithm#schedule()V", "--value-name", "waferId",
+      "--scalar-value", "WAFER-1", "--value-status", "VALUE",
+      "--sequence-from", "2", "--sequence-to", "8",
+      "--offset", "1", "--limit", "10", "--max-bytes", "32768"],
   ])
   assert.deepEqual(temporaryFiles.map(value => value.content), [
     "why did it fail?",
     JSON.stringify({
       planId: "codepath-plan-1",
-      selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+      methods: [{
+        methodKey: "fixture.Algorithm#schedule()V",
+        projections: [{ name: "waferId", path: "arg[0].waferId", required: true }],
+      }],
       scopeMethodKey: "fixture.Algorithm#schedule()V",
       rationale: "Observe invocation path variants",
       intent: {
@@ -148,19 +171,18 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         tracepointId: "tracepoint-1",
         methodKey: "fixture.Algorithm#schedule()V", line: 12,
         maxObservedHits: 500, maxCapturedHits: 2,
-        captureOnMatchedHits: [1, 2],
+        captureFirstMatchedHits: 2, captureEveryMatchedHits: 0,
         capture: {
-          locals: true, stack: true, maxFrames: 8, maxDepth: 1,
-          maxItems: 20, maxStringLength: 256,
-          localNames: ["state"], fieldPaths: ["state.current"],
+          stack: true, maxFrames: 8, maxStringLength: 256,
+          valuePaths: ["state.current"],
         },
-        condition: {
-          localName: "candidate", fieldPath: ["wafer", "id"], operator: "EQUALS",
+        conditions: [{
+          valuePath: "candidate.wafer.id", operator: "EQUALS",
           expectedType: "STRING", expectedValue: "WAFER-1",
-        },
+        }],
       }],
       budget: {
-        maxEvents: 100, maxBytes: 16777216, timeoutMillis: 300000,
+        maxEvents: 500, maxBytes: 33554432, timeoutMillis: 300000,
         idleTimeoutMillis: 120000,
       },
       rationale: "Observe selected state transitions",
@@ -171,17 +193,6 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         expectedObservations: ["Runtime state value"],
       },
       requestedAt: "2026-08-19T00:00:00.000Z",
-    }),
-    JSON.stringify({
-      schemaVersion: "1.0", caseId: "case-1", contextId: "context-1",
-      analysisId: "analysis-1", finalAnswer: "answer",
-      conclusions: [{
-        classification: "CONFIRMED_FACT", statement: "observed",
-        evidenceReferenceIds: ["evidence-1"],
-      }],
-      referencedRunIds: ["run-1"], referencedCollectionIds: ["collection-1"],
-      referencedEvidenceIds: ["evidence-1"], referencedArtifactIds: ["artifact-1"],
-      missingEvidence: [], completedAt: "2026-08-19T00:00:00.000Z",
     }),
   ])
   for (const file of temporaryFiles) {
@@ -236,7 +247,7 @@ test("stops before the business command when project preparation fails", async (
   assert.equal(calls.length, 2)
 })
 
-test("passes explicit Case and Adapter identity while defaulting to Context reuse", async t => {
+test("passes explicit Case and Adapter identity", async t => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "ada-tool-runtime-options-test-"))
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
   const calls = []
@@ -261,7 +272,7 @@ test("passes explicit Case and Adapter identity while defaulting to Context reus
   ])
   assert.deepEqual(withoutTemporaryPath(calls.at(-1)), [
     "case", "open", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
-    "--test", "a.b.Test#case1", "--question-file", "<temp>", "--context-mode", "reuse",
+    "--test", "a.b.Test#case1", "--question-file", "<temp>",
     "--case-id", "case-1", "--adapter", "maven-junit",
   ])
 })
@@ -283,7 +294,7 @@ test("removes a temporary request when CLI execution throws", async t => {
 
   const response = await runtime.codePathPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
-    selectedMethodKeys: ["fixture.Algorithm#schedule()V"], rationale: "Observe path",
+    methods: [{ methodKey: "fixture.Algorithm#schedule()V", projections: [] }], rationale: "Observe path",
   }, { directory: "D:/module" })
 
   assert.equal(JSON.parse(response).code, "ADA_CLI_EXECUTION_FAILED")
@@ -291,7 +302,7 @@ test("removes a temporary request when CLI execution throws", async t => {
   await assert.rejects(stat(requestPath))
 })
 
-test("rejects an oversized plan before project preparation", async () => {
+test("returns a structured failure for an oversized plan before project preparation", async () => {
   let calls = 0
   const runtime = createAlgorithmDebugRuntime({
     execute: async () => { calls += 1; return success({}) },
@@ -299,15 +310,18 @@ test("rejects an oversized plan before project preparation", async () => {
     resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
-  await assert.rejects(runtime.codePathPlanCreate({
+  const response = JSON.parse(await runtime.codePathPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
-    selectedMethodKeys: ["fixture.Algorithm#schedule()V"],
+    methods: [{ methodKey: "fixture.Algorithm#schedule()V", projections: [] }],
     rationale: "x".repeat(65_537),
-  }, { directory: "D:/module" }), RangeError)
+  }, { directory: "D:/module" }))
+  assert.equal(response.success, false)
+  assert.equal(response.code, "ADA_TOOL_INPUT_INVALID")
+  assert.match(response.message, /request\.json exceeds 65536 bytes/u)
   assert.equal(calls, 0)
 })
 
-test("rejects invalid sparse JDWP hits before project preparation", async () => {
+test("returns a structured failure for an empty JDWP sampling policy", async () => {
   let calls = 0
   const runtime = createAlgorithmDebugRuntime({
     execute: async () => { calls += 1; return success({}) },
@@ -315,15 +329,158 @@ test("rejects invalid sparse JDWP hits before project preparation", async () => 
     resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
-  await assert.rejects(runtime.jdwpPlanCreate({
+  const response = JSON.parse(await runtime.jdwpPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
     tracepoints: [{
-      methodKey: "fixture.Algorithm#schedule()V", line: 12, maxHits: 5,
-      captureOnHits: [3, 1],
+      methodKey: "fixture.Algorithm#schedule()V", line: 12,
+      captureFirstMatchedHits: 0, captureEveryMatchedHits: 0,
     }],
     rationale: "Observe state",
-  }, { directory: "D:/module" }), /captureOnMatchedHits/)
+  }, { directory: "D:/module" }))
+  assert.equal(response.success, false)
+  assert.equal(response.code, "ADA_TOOL_INPUT_INVALID")
+  assert.match(response.message, /select at least one matched hit/u)
   assert.equal(calls, 0)
+})
+
+test("derives JDWP sampling and locals defaults from explicit budgets and projections", async t => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "ada-jdwp-defaults-test-"))
+  t.after(() => rm(temporaryRoot, { recursive: true, force: true }))
+  let request
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async args => {
+      if (args[0] === "workspace") return success({ created: false })
+      if (args[0] === "project") {
+        return success({ registration: { projectId: "demo-project" }, created: false })
+      }
+      request = JSON.parse(await readFile(args[args.indexOf("--request-file") + 1], "utf8"))
+      return success({ planId: "jdwp-plan-1" })
+    },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results", temporaryRoot,
+  })
+
+  await runtime.jdwpPlanCreate({
+    caseId: "case-1", analysisId: "analysis-1",
+    tracepoints: [{
+      methodKey: "fixture.Algorithm#schedule()V", line: 12,
+      maxObservedHits: 3, maxCapturedHits: 1,
+      capture: { valuePaths: ["state"] },
+    }],
+    rationale: "Observe one state",
+  }, { directory: "D:/module" })
+
+  assert.equal(request.tracepoints[0].captureFirstMatchedHits, 1)
+  assert.equal(request.tracepoints[0].captureEveryMatchedHits, 3)
+  assert.deepEqual(request.tracepoints[0].capture.valuePaths, ["state"])
+})
+
+test("rejects a JDWP collection while a CodePath target execution is active", async () => {
+  let releaseCodePath
+  let codePathStarted
+  const release = new Promise(resolve => { releaseCodePath = resolve })
+  const started = new Promise(resolve => { codePathStarted = resolve })
+  const businessCalls = []
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async args => {
+      if (args[0] === "workspace") return success({ created: false })
+      if (args[0] === "project") {
+        return success({ registration: { projectId: "demo-project" }, created: false })
+      }
+      businessCalls.push(args.slice(0, 3).join(" "))
+      if (args[1] === "codepath") {
+        codePathStarted()
+        await release
+      }
+      return success({
+        caseId: "case-1", analysisId: "analysis-1", runId: "collector-run-1",
+        planId: "plan-1", collectionId: "collection-1", completion: "SUCCESS",
+      })
+    },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results",
+  })
+  const context = { directory: "D:/project" }
+
+  const codePath = runtime.codePathCollect(
+    { caseId: "case-1", planId: "codepath-plan-1" }, context)
+  await started
+  const jdwp = JSON.parse(await runtime.jdwpCollect(
+    { caseId: "case-1", planId: "jdwp-plan-1" }, context))
+  releaseCodePath()
+  await codePath
+
+  assert.equal(jdwp.success, false)
+  assert.equal(jdwp.code, "ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+  assert.match(jdwp.message, /jdwp_collect cannot start while codepath_collect is active/u)
+  assert.doesNotMatch(jdwp.message, /inspect local Agent logs/u)
+  assert.deepEqual(businessCalls, ["collection codepath execute"])
+})
+
+test("rejects a CodePath collection while an uninstrumented target run is active", async () => {
+  let releaseRun
+  let runStarted
+  const release = new Promise(resolve => { releaseRun = resolve })
+  const started = new Promise(resolve => { runStarted = resolve })
+  const businessCalls = []
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async args => {
+      if (args[0] === "workspace") return success({ created: false })
+      if (args[0] === "project") {
+        return success({ registration: { projectId: "demo-project" }, created: false })
+      }
+      businessCalls.push(args.slice(0, 3).join(" "))
+      if (args[0] === "run") {
+        runStarted()
+        await release
+      }
+      return success({ completion: "SUCCESS" })
+    },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results",
+  })
+  const context = { directory: "D:/project" }
+
+  const run = runtime.runTest({ caseId: "case-1", analysisId: "analysis-1" }, context)
+  await started
+  const codePath = JSON.parse(await runtime.codePathCollect(
+    { caseId: "case-1", planId: "codepath-plan-1" }, context))
+  releaseRun()
+  await run
+
+  assert.equal(codePath.code, "ADA_TARGET_EXECUTION_SEQUENCE_VIOLATION")
+  assert.match(codePath.message, /codepath_collect cannot start while run_test is active/u)
+  assert.deepEqual(businessCalls, ["run execute --workspace"])
+})
+
+test("releases target execution state after a CLI failure response", async () => {
+  const businessCalls = []
+  const runtime = createAlgorithmDebugRuntime({
+    execute: async args => {
+      if (args[0] === "workspace") return success({ created: false })
+      if (args[0] === "project") {
+        return success({ registration: { projectId: "demo-project" }, created: false })
+      }
+      businessCalls.push(args.slice(0, 3).join(" "))
+      if (args[1] === "codepath") throw new Error("collector failed")
+      return success({ completion: "SUCCESS" })
+    },
+    workspaceDirectory: "D:/ada-workspace",
+    resultJsonDirectory: "D:/algorithm-results",
+  })
+  const context = { directory: "D:/project" }
+
+  const codePath = JSON.parse(await runtime.codePathCollect(
+    { caseId: "case-1", planId: "codepath-plan-1" }, context))
+  const jdwp = JSON.parse(await runtime.jdwpCollect(
+    { caseId: "case-1", planId: "jdwp-plan-1" }, context))
+
+  assert.equal(codePath.code, "ADA_CLI_EXECUTION_FAILED")
+  assert.equal(jdwp.success, true)
+  assert.deepEqual(businessCalls, [
+    "collection codepath execute",
+    "collection jdwp execute",
+  ])
 })
 
 function withoutTemporaryPath(args) {

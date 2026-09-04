@@ -19,7 +19,6 @@ import javax.tools.ToolProvider;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CallResolutionKind;
 import org.example.algorithmdebug.contracts.CaseId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.TargetTest;
@@ -387,7 +386,6 @@ class JavaSourceCallGraphAnalyzerTest {
                 temporaryDirectory,
                 new TargetTest("fixture.TargetTest", "caseUnderTest"),
                 new CaseId("case-1"),
-                new ContextId("ctx-1"),
                 new AnalysisId("analysis-1"),
                 budget,
                 Instant.parse("2026-08-18T00:00:00Z"));

@@ -70,7 +70,7 @@ OpenCode 是唯一对话运行时。Java CLI 是被 Tool 调用的确定性后�
 10. `jdwp_plan_create`
 11. `jdwp_collect`
 12. `artifact_read`
-13. `analysis_complete`
+13. `evidence_query`
 
 Tool 不包含业务推理。它负责参数 Schema、有界临时请求文件、调用 CLI、解析结构化响应、Case 交互日志和用户可理解错误。路径来自安装期配置及当前工作目录，不要求用户在问题中传路径。
 
@@ -84,7 +84,7 @@ Tool 不包含业务推理。它负责参数 Schema、有界临时请求文件�
 6. LLM 写出可证伪的因果假设。
 7. CodePath 验证执行路径，JDWP 在必要时按实体条件验证状态。
 8. Validator/Evidence Engine 判断覆盖、冲突、截断和基线。
-9. `case_audit` 后由 `analysis_complete` 保存分级结论。
+9. `case_audit` 后，LLM 在回答开头列出 Case/Analysis 相对目录和本轮实际使用的能力，然后直接向用户返回结论，不归档模型回答。
 
 这套顺序不编码晶圆、腔室或调度策略语义。算法输入和源码帮助 LLM 形成业务假设，动态工具只验证必要事实。
 

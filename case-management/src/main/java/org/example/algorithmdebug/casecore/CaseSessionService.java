@@ -2,18 +2,15 @@ package org.example.algorithmdebug.casecore;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
-import org.example.algorithmdebug.contracts.ContextId;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 
-/** 实现显式 Case 续接规则，追加 Context/Analysis，但绝不扫描或运行目标项目。 */
+/** 实现显式 Case 续接规则并追加 Analysis，但绝不扫描或运行目标项目。 */
 public final class CaseSessionService {
 
     private final CaseArchiveRepository repository;
@@ -36,7 +33,7 @@ public final class CaseSessionService {
         this.clock = clock;
     }
 
-    /** 新建或续接 Case，并为本次问题创建 Analysis；该方法不访问目标 Workspace。 */
+    /** 新建或续接 Case，并为本次确定性调查创建 Analysis。 */
     public CaseOpenResult open(CaseSessionRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
@@ -52,27 +49,12 @@ public final class CaseSessionService {
             validateExistingCase(repository.requireCase(caseId), request);
         }
 
-        Optional<ContextId> previous = caseCreated
-                ? Optional.empty() : digestReader.read(caseId).latestContextId();
-        boolean contextCreated = caseCreated || request.contextMode() == ContextMode.CREATE_NEW;
-        ContextId contextId;
-        if (contextCreated) {
-            contextId = ids.newContextId();
-            repository.createContext(new ContextRecord(
-                    SchemaVersions.CONTEXT_RECORD, caseId, contextId, now));
-        } else {
-            contextId = previous.orElseThrow(() -> new WorkspaceException(
-                    "CONTEXT_NOT_FOUND", "The existing Case has no reusable Context"));
-        }
-
         AnalysisId analysisId = ids.newAnalysisId();
         repository.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, caseId, contextId,
-                analysisId, request.question(), now));
+                SchemaVersions.ANALYSIS_REQUEST, caseId, analysisId, request.question(), now));
         CaseDigest digest = digestReader.read(caseId);
         return new CaseOpenResult(
-                caseId, contextId, analysisId, caseCreated, contextCreated,
-                java.util.Optional.empty(), digest);
+                caseId, analysisId, caseCreated, java.util.Optional.empty(), digest);
     }
 
     private static void validateExistingCase(CaseManifest manifest, CaseSessionRequest request) {

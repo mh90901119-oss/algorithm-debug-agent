@@ -1,13 +1,10 @@
 package org.example.algorithmdebug.casecore;
 
 import org.example.algorithmdebug.contracts.AnalysisRequest;
-import org.example.algorithmdebug.contracts.AnalysisResult;
-import org.example.algorithmdebug.contracts.AnalysisResultSummary;
 import org.example.algorithmdebug.contracts.ArchiveWarning;
 import org.example.algorithmdebug.contracts.CaseDigest;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
-import org.example.algorithmdebug.contracts.ContextRecord;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
@@ -54,14 +51,10 @@ public final class CaseDigestReader {
         CaseManifest manifest = repository.requireCase(caseId);
         CaseArchiveLayout layout = repository.layout(caseId);
         List<ArchiveWarning> warnings = new ArrayList<>();
-        List<ContextRecord> contexts = readContexts(layout, warnings);
         List<AnalysisEntry> analyses = readAnalyses(layout, warnings);
         List<RunEntry> runs = readRuns(layout, warnings);
         List<CollectionEntry> collections = readCollections(layout, warnings);
         List<EvidenceEntry> evidence = readEvidence(layout, warnings);
-
-        contexts.sort(Comparator.comparing(ContextRecord::createdAt)
-                .thenComparing(value -> value.contextId().value()));
         analyses.sort(Comparator.comparing((AnalysisEntry value) -> value.request().createdAt())
                 .thenComparing(value -> value.request().analysisId().value()));
         runs.sort(Comparator.comparing((RunEntry value) -> value.request().createdAt())
@@ -91,12 +84,6 @@ public final class CaseDigestReader {
                 .sorted(Comparator.comparing((EvidenceEntry value) -> value.request().createdAt())
                         .thenComparing(value -> value.request().evidenceId().value()).reversed())
                 .limit(MAX_ITEMS).map(value -> value.sufficiency().orElseThrow()).toList();
-        List<AnalysisResultSummary> recentResults = analyses.stream()
-                .filter(value -> value.result().isPresent())
-                .sorted(Comparator.comparing((AnalysisEntry value) ->
-                                value.result().orElseThrow().completedAt())
-                        .thenComparing(value -> value.request().analysisId().value()).reversed())
-                .limit(MAX_ITEMS).map(value -> summarize(value.result().orElseThrow())).toList();
         AnalysisRequest latestAnalysis = analyses.isEmpty() ? null : analyses.getLast().request();
         String question = latestAnalysis == null
                 ? manifest.initialQuestion() : latestAnalysis.question();
@@ -104,9 +91,6 @@ public final class CaseDigestReader {
                 || incompleteRunCount(runs) > MAX_ITEMS
                 || completedCollectionCount(collections) > MAX_ITEMS
                 || completedEvidenceCount(evidence) > MAX_ITEMS
-                || completedAnalysisCount(analyses) > MAX_ITEMS
-                || analyses.stream().flatMap(value -> value.result().stream())
-                        .anyMatch(CaseDigestReader::resultSummaryTruncated)
                 || warnings.size() > MAX_ITEMS;
 
         return new CaseDigest(
@@ -114,7 +98,6 @@ public final class CaseDigestReader {
                 manifest.caseId(),
                 manifest.projectId(),
                 manifest.targetTest(),
-                contexts.isEmpty() ? Optional.empty() : Optional.of(contexts.getLast().contextId()),
                 latestAnalysis == null ? Optional.empty() : Optional.of(latestAnalysis.analysisId()),
                 excerpt(question),
                 completed.isEmpty() ? Optional.empty() : Optional.of(completed.getFirst().runId()),
@@ -122,28 +105,10 @@ public final class CaseDigestReader {
                 incomplete,
                 recentCollections,
                 recentEvidence,
-                recentResults,
                 warnings.stream().limit(MAX_ITEMS).toList(),
-                contexts.size(), analyses.size(), runs.size(), collections.size(), evidence.size(),
-                completedAnalysisCount(analyses), truncated);
+                analyses.size(), runs.size(), collections.size(), evidence.size(), truncated);
     }
 
-    private List<ContextRecord> readContexts(
-            CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
-        List<ContextRecord> values = new ArrayList<>();
-        for (Path directory : repository.childDirectories(layout.contextsRoot())) {
-            Path document = directory.resolve("context.json");
-            readChild(layout, document, ContextRecord.class, warnings).ifPresent(value -> {
-                if (value.caseId().equals(caseId(layout))
-                        && value.contextId().value().equals(directory.getFileName().toString())) {
-                    values.add(value);
-                } else {
-                    warning(layout, document, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
-                }
-            });
-        }
-        return values;
-    }
 
     private List<AnalysisEntry> readAnalyses(
             CaseArchiveLayout layout, List<ArchiveWarning> warnings) {
@@ -153,18 +118,7 @@ public final class CaseDigestReader {
             readChild(layout, document, AnalysisRequest.class, warnings).ifPresent(value -> {
                 if (value.caseId().equals(caseId(layout))
                         && value.analysisId().value().equals(directory.getFileName().toString())) {
-                    Path resultDocument = directory.resolve("analysis-result.json");
-                    Optional<AnalysisResult> result = Files.isRegularFile(
-                            resultDocument, LinkOption.NOFOLLOW_LINKS)
-                            ? readChild(layout, resultDocument, AnalysisResult.class, warnings)
-                            : Optional.empty();
-                    if (result.isPresent() && (!result.orElseThrow().caseId().equals(value.caseId())
-                            || !result.orElseThrow().contextId().equals(value.contextId())
-                            || !result.orElseThrow().analysisId().equals(value.analysisId()))) {
-                        warning(layout, resultDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
-                        result = Optional.empty();
-                    }
-                    values.add(new AnalysisEntry(value, result));
+                    values.add(new AnalysisEntry(value));
                 } else {
                     warning(layout, document, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
                 }
@@ -191,7 +145,6 @@ public final class CaseDigestReader {
                 CollectionExecutionSummary item = summary.orElseThrow();
                 if (!item.caseId().equals(caseId(layout))
                         || !item.collectionId().equals(entry.collectionId())
-                        || !item.contextId().equals(entry.contextId())
                         || !item.analysisId().equals(entry.analysisId())) {
                     warning(layout, summaryDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
                     summary = Optional.empty();
@@ -212,14 +165,12 @@ public final class CaseDigestReader {
         try {
             MethodPathCollectionRecord value = repository.mapper().readJson(
                     document, MethodPathCollectionRecord.class);
-            return collectionEntry(layout, directory, document, value.caseId(), value.contextId(),
-                    value.analysisId(), value.collectionId(), value.createdAt(), warnings);
+            return collectionEntry(layout, directory, document, value.caseId(), value.analysisId(), value.collectionId(), value.createdAt(), warnings);
         } catch (RuntimeException ignored) {
             try {
                 JdwpCollectionRecord value = repository.mapper().readJson(
                         document, JdwpCollectionRecord.class);
-                return collectionEntry(layout, directory, document, value.caseId(), value.contextId(),
-                        value.analysisId(), value.collectionId(), value.createdAt(), warnings);
+                return collectionEntry(layout, directory, document, value.caseId(), value.analysisId(), value.collectionId(), value.createdAt(), warnings);
             } catch (RuntimeException failure) {
                 warning(layout, document, "CASE_CHILD_DOCUMENT_INVALID", warnings);
                 return Optional.empty();
@@ -229,8 +180,7 @@ public final class CaseDigestReader {
 
     private static Optional<CollectionEntry> collectionEntry(
             CaseArchiveLayout layout, Path directory, Path document,
-            CaseId caseId, org.example.algorithmdebug.contracts.ContextId contextId,
-            org.example.algorithmdebug.contracts.AnalysisId analysisId,
+            CaseId caseId, org.example.algorithmdebug.contracts.AnalysisId analysisId,
             CollectionId collectionId, java.time.Instant createdAt,
             List<ArchiveWarning> warnings) {
         if (!caseId.equals(caseId(layout))
@@ -239,7 +189,7 @@ public final class CaseDigestReader {
             return Optional.empty();
         }
         return Optional.of(new CollectionEntry(
-                collectionId, contextId, analysisId, createdAt, Optional.empty()));
+                collectionId, analysisId, createdAt, Optional.empty()));
     }
 
     private List<EvidenceEntry> readEvidence(
@@ -264,7 +214,6 @@ public final class CaseDigestReader {
             if (sufficiency.isPresent()) {
                 SufficiencyEvaluation result = sufficiency.orElseThrow();
                 if (!result.caseId().equals(item.caseId())
-                        || !result.contextId().equals(item.contextId())
                         || !result.analysisId().equals(item.analysisId())
                         || !result.evidenceId().equals(item.evidenceId())) {
                     warning(layout, sufficiencyDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
@@ -299,7 +248,6 @@ public final class CaseDigestReader {
             if (outcome.isPresent()) {
                 RunOutcomeSummary summary = outcome.orElseThrow();
                 if (!summary.caseId().equals(runRequest.caseId())
-                        || !summary.contextId().equals(runRequest.contextId())
                         || !summary.analysisId().equals(runRequest.analysisId())
                         || !summary.runId().equals(runRequest.runId())) {
                     warning(layout, outcomeDocument, "CASE_CHILD_IDENTITY_MISMATCH", warnings);
@@ -361,28 +309,6 @@ public final class CaseDigestReader {
         return (int) values.stream().filter(value -> value.sufficiency().isPresent()).count();
     }
 
-    private static int completedAnalysisCount(List<AnalysisEntry> values) {
-        return (int) values.stream().filter(value -> value.result().isPresent()).count();
-    }
-
-    private static AnalysisResultSummary summarize(AnalysisResult value) {
-        return new AnalysisResultSummary(
-                value.caseId(), value.contextId(), value.analysisId(), excerpt(value.finalAnswer()),
-                value.conclusions().stream().limit(5).toList(),
-                value.referencedRunIds().stream().limit(20).toList(),
-                value.referencedCollectionIds().stream().limit(20).toList(),
-                value.referencedEvidenceIds().stream().limit(20).toList(),
-                value.missingEvidence().stream().limit(10).toList(), value.completedAt());
-    }
-
-    private static boolean resultSummaryTruncated(AnalysisResult value) {
-        return value.finalAnswer().length() > MAX_EXCERPT || value.conclusions().size() > 5
-                || value.referencedRunIds().size() > 20
-                || value.referencedCollectionIds().size() > 20
-                || value.referencedEvidenceIds().size() > 20
-                || value.missingEvidence().size() > 10;
-    }
-
     private static String excerpt(String question) {
         return question.length() <= MAX_EXCERPT ? question : question.substring(0, MAX_EXCERPT);
     }
@@ -390,17 +316,16 @@ public final class CaseDigestReader {
     private record RunEntry(RunRequest request, Optional<RunOutcomeSummary> outcome) {
     }
 
-    private record AnalysisEntry(AnalysisRequest request, Optional<AnalysisResult> result) {
+    private record AnalysisEntry(AnalysisRequest request) {
     }
 
     private record CollectionEntry(
             CollectionId collectionId,
-            org.example.algorithmdebug.contracts.ContextId contextId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             java.time.Instant createdAt,
             Optional<CollectionExecutionSummary> summary) {
         CollectionEntry withSummary(Optional<CollectionExecutionSummary> value) {
-            return new CollectionEntry(collectionId, contextId, analysisId, createdAt, value);
+            return new CollectionEntry(collectionId, analysisId, createdAt, value);
         }
     }
 

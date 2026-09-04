@@ -86,7 +86,7 @@ public final class CodePathProcessCollector implements MethodPathCollector {
             long events = summary == null ? 0 : summary.eventsWritten();
             long bytes = Files.size(raw);
             MethodPathManifest manifest = new MethodPathManifest(
-                    "2.0", request.caseId(), request.contextId(), request.analysisId(), request.runId(),
+                    "3.0", request.caseId(), request.analysisId(), request.runId(),
                     request.plan().planId(), request.collectionId(), "code-path-tracer",
                     configuration.toolVersion(),
                     completion, "COMPLETE", true, observedExitCode, !finished,

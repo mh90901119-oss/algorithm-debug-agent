@@ -27,7 +27,7 @@
       "additionalProperties": false,
       "required": [
         "id", "question", "targetTest", "requiredTools", "forbiddenTools",
-        "requiredAnswerPatterns", "forbiddenAnswerPatterns", "requireAnalysisComplete",
+        "requiredAnswerPatterns", "forbiddenAnswerPatterns", "requireAnswerContext",
         "requireEvidenceReferences", "allowCodePath", "allowJdwp", "maxTargetTestExecutions"
       ],
       "properties": {
@@ -49,7 +49,7 @@
         "expectedExceptionClass": { "type": "string", "minLength": 1, "maxLength": 1024 },
         "requiredAnswerPatterns": { "$ref": "#/$defs/stringArray" },
         "forbiddenAnswerPatterns": { "$ref": "#/$defs/stringArray" },
-        "requireAnalysisComplete": { "type": "boolean" },
+        "requireAnswerContext": { "type": "boolean" },
         "requireEvidenceReferences": { "type": "boolean" },
         "allowCodePath": { "type": "boolean" },
         "allowJdwp": { "type": "boolean" },

@@ -11,13 +11,13 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.jar.JarOutputStream;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -144,18 +144,26 @@ class CodePathProcessCollectorTest {
             throws Exception {
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"),
-                new CaseId("case-1"), new ContextId("context-1"),
-                new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "case1"),
-                List.of(new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V")),
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.TargetTest", "case1"),
+                List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(
+                        new MethodSelector("fixture.Service#solve()V", "fixture.Service", "solve", "()V"),
+                        List.of())),
+                Optional.empty(),
                 new CollectionBudget(100, 1_024 * 1_024, timeoutMillis),
-                rationale, Instant.EPOCH);
+                rationale, intent(), Instant.EPOCH);
         return new MethodPathCollectionRequest(
-                plan.caseId(), plan.contextId(), plan.analysisId(), new RunId("run-1"), plan,
+                plan.caseId(), plan.analysisId(), new RunId("run-1"), plan,
                 new CollectionId("collection-1"), directory, collection, javaExecutable(),
                 Arrays.stream(System.getProperty("java.class.path").split(
                         java.util.regex.Pattern.quote(java.io.File.pathSeparator)))
                         .filter(value -> !value.isBlank()).toList(),
                 plan.targetTest().selector());
+    }
+
+    private org.example.algorithmdebug.contracts.InvestigationIntent intent() {
+        return new org.example.algorithmdebug.contracts.InvestigationIntent(
+                "Which path executed?", "The selected method executed", List.of(),
+                List.of("Observed method path"));
     }
 
     private static Path javaExecutable() {

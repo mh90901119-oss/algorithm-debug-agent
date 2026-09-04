@@ -8,12 +8,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CollectionId;
-import org.example.algorithmdebug.contracts.ContextId;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -40,15 +40,19 @@ class CodePathRealProjectSmokeTest {
                 + "Lorg/example/scheduler/wafer/WaferScheduleResult;";
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-smoke"),
-                new CaseId("case-smoke"), new ContextId("ctx-smoke"),
-                new AnalysisId("analysis-smoke"),
+                new CaseId("case-smoke"), new AnalysisId("analysis-smoke"),
                 new TargetTest("org.example.scheduler.wafer.SimpleWaferSchedulerTest",
                         "parallelModeAllowsJobsToAlternateOnSharedChamber"),
-                List.of(new MethodSelector(
-                        "org.example.scheduler.wafer.SimpleWaferScheduler#schedule" + descriptor,
-                        "org.example.scheduler.wafer.SimpleWaferScheduler", "schedule", descriptor)),
+                List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(
+                        new MethodSelector(
+                                "org.example.scheduler.wafer.SimpleWaferScheduler#schedule" + descriptor,
+                                "org.example.scheduler.wafer.SimpleWaferScheduler", "schedule", descriptor),
+                        List.of())),
+                Optional.empty(),
                 new CollectionBudget(100_000, 16L * 1024 * 1024, 120_000),
-                "smoke", Instant.EPOCH);
+                "smoke", new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "Which path executed?", "The scheduler method executed", List.of(),
+                        List.of("Observed method path")), Instant.EPOCH);
         List<String> classpath = new MavenTestClasspathResolver().resolve(
                 Path.of(System.getProperty("ada.maven", "mvn")), module, collection);
         CodePathToolConfiguration tool = new CodePathToolConfiguration(
@@ -56,7 +60,7 @@ class CodePathRealProjectSmokeTest {
                 "org.example.algorithmdebug.codepath.launcher.ExternalJUnitTraceLauncher");
 
         var result = new CodePathProcessCollector(tool).collect(new MethodPathCollectionRequest(
-                plan.caseId(), plan.contextId(), plan.analysisId(), new RunId("run-smoke"), plan,
+                plan.caseId(), plan.analysisId(), new RunId("run-smoke"), plan,
                 new CollectionId("collection-smoke"), module, collection, java, classpath,
                 plan.targetTest().selector()));
 

@@ -16,7 +16,7 @@ public record JdwpCollectionBudget(
 
     /** 校验预算与当前 Collector MVP 的保守使用边界。 */
     public JdwpCollectionBudget {
-        if (maxEvents < 1 || maxEvents > 1_000
+        if (maxEvents < 1 || maxEvents > 5_000
                 || maxBytes < 1 || maxBytes > 50L * 1024 * 1024
                 || timeoutMillis < 1_000 || timeoutMillis > 20 * 60_000L
                 || idleTimeoutMillis < 1_000 || idleTimeoutMillis > timeoutMillis) {
@@ -26,6 +26,6 @@ public record JdwpCollectionBudget(
 
     /** 返回小规模、stack-only 采集的默认预算。 */
     public static JdwpCollectionBudget defaults() {
-        return new JdwpCollectionBudget(100, 16L * 1024 * 1024, 5 * 60_000L, 120_000L);
+        return new JdwpCollectionBudget(500, 32L * 1024 * 1024, 5 * 60_000L, 120_000L);
     }
 }

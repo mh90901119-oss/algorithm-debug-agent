@@ -19,7 +19,7 @@ class AlgorithmInputCaptureJsonTest {
         AnalysisId analysisId = new AnalysisId("analysis-1");
         AlgorithmInputCapture capture = new AlgorithmInputCapture(
                 SchemaVersions.ALGORITHM_INPUT_CAPTURE,
-                new CaseId("case-1"), new ContextId("context-1"), analysisId,
+                new CaseId("case-1"), analysisId,
                 new TargetTest("fixture.AlgorithmTest", "runsAlgorithm"),
                 "inputPath", "src/test/java/fixture/AlgorithmTest.java", 17,
                 AlgorithmInputPathKind.RELATIVE, "case-input.json",
@@ -31,7 +31,7 @@ class AlgorithmInputCaptureJsonTest {
                 Instant.parse("2026-08-27T00:00:00Z"));
 
         Path schema = Path.of(System.getProperty("maven.multiModuleProjectDirectory", ".."),
-                "schemas", "case", "algorithm-input-capture-v1.schema.json");
+                "schemas", "case", "algorithm-input-capture-v2.schema.json");
         JsonSchemaTestSupport.assertValid(schema, MAPPER.writeValueAsString(capture));
     }
 }

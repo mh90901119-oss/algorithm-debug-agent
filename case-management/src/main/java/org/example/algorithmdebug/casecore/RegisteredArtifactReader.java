@@ -34,7 +34,7 @@ public final class RegisteredArtifactReader {
                 || artifactId.contains("/") || artifactId.contains("\\")
                 || artifactId.contains(":") || offsetBytes < 0
                 || maxBytes < 1 || maxBytes > MAX_EXCERPT_BYTES) {
-            throw new IllegalArgumentException("Artifact Readparameters are invalid");
+            throw new IllegalArgumentException("Artifact Read parameters are invalid");
         }
         ArtifactReference registered = repository.requireArtifactRegistration(
                 caseId, artifactId).artifact();

@@ -121,18 +121,20 @@ final class CollectionPostProcessingService {
                 new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
                         "Collection has no completed uninstrumented reference run"));
         EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
+                evidenceId, collection.caseId(), collection.analysisId(),
                 evidenceRunId, collection.collectionId(), EvidenceDimension.METHOD_PATH, budget);
         archive.createEvidenceRequest(request);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
         Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/codepath.jsonl");
+        Path invocationPath = layout.collectionRoot(collection.collectionId())
+                .resolve("derived/codepath-invocations.jsonl");
         ArtifactReference raw = describe(
                 collection.caseId(), rawPath, collection.collectionId().value() + "-raw",
                 "CODEPATH_RAW_TRACE", "application/x-ndjson");
         Instant now = clock.instant();
         NormalizationResult<MethodPathSummary> normalized = new MethodPathNormalizer().normalize(
                 new CodePathNormalizationInput(
-                        collection, plan, raw, rawPath, evidenceId, budget,
+                        collection, plan, raw, rawPath, invocationPath, evidenceId, budget,
                         collectorManifest.completion() == CollectionCompletion.TRUNCATED, now));
         if (normalized.summary().isEmpty()) {
             archive.createNormalizationManifest(normalizationManifest(
@@ -143,6 +145,13 @@ final class CollectionPostProcessingService {
                     "CodePath Raw Trace normalization failed");
         }
         MethodPathSummary summary = normalized.summary().orElseThrow();
+        if (Files.exists(invocationPath)) {
+            ArtifactReference invocations = describe(
+                    collection.caseId(), invocationPath,
+                    collection.collectionId().value() + "-codepath-invocations",
+                    "CODEPATH_INVOCATIONS", "application/x-ndjson");
+            archive.registerArtifact(collection.caseId(), invocations, now);
+        }
         Path summaryPath = archive.createMethodPathSummary(summary);
         ArtifactReference summaryReference = describe(
                 collection.caseId(), summaryPath, evidenceId.value() + "-method-path-summary",
@@ -163,14 +172,14 @@ final class CollectionPostProcessingService {
             JdwpCollectionManifest collectorManifest,
             CollectionBaselineCheck baseline) {
         NormalizationBudget budget = budget(
-                plan.budget().maxBytes(), plan.budget().maxEvents(),
+                plan.budget().maxBytes(), plan.budget().maxEvents() + 2L,
                 plan.budget().maxEvents());
         EvidenceId evidenceId = ids.newEvidenceId();
         var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
                 new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
                         "Collection has no completed uninstrumented reference run"));
         EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
+                evidenceId, collection.caseId(), collection.analysisId(),
                 evidenceRunId, collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget);
         archive.createEvidenceRequest(request);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
@@ -222,19 +231,15 @@ final class CollectionPostProcessingService {
         ArtifactReference outcomeReference = describe(
                 request.caseId(), layout.runOutcome(request.runId()),
                 request.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
-        var context = archive.requireContext(request.caseId(), request.contextId());
-        ArtifactReference contextReference = describe(
-                request.caseId(), layout.contextDocument(request.contextId()),
-                request.contextId().value() + "-context", "CONTEXT_RECORD", "application/json");
-        Optional<RunResultFingerprint> fingerprint = archive.findReproduction(
-                        request.caseId(), request.contextId())
+        Optional<RunResultFingerprint> fingerprint = archive.findLatestRunResultFingerprint(
+                        request.caseId(), request.analysisId())
                 .filter(value -> value.runId().equals(request.runId()));
         Optional<ArtifactReference> fingerprintReference = fingerprint.map(value -> describe(
                 request.caseId(), layout.runResultFingerprint(value.runId()),
                 value.runId().value() + "-fingerprint", "RUN_RESULT_FINGERPRINT",
                 "application/json"));
         var sources = new EvidenceBuildSources(
-                runOutcome, outcomeReference, context, contextReference,
+                runOutcome, outcomeReference,
                 fingerprint, fingerprintReference,
                 List.of(new ValidatedCollectionSource(validation, validationReference)));
         var bundle = new EvidenceBundleBuilder().build(request, sources);
@@ -263,14 +268,13 @@ final class CollectionPostProcessingService {
     private EvidenceBuildRequest request(
             EvidenceId evidenceId,
             org.example.algorithmdebug.contracts.CaseId caseId,
-            org.example.algorithmdebug.contracts.ContextId contextId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
             EvidenceDimension dynamicDimension,
             NormalizationBudget budget) {
         return new EvidenceBuildRequest(
-                SchemaVersions.EVIDENCE_BUILD_REQUEST, evidenceId, caseId, contextId, analysisId,
+                SchemaVersions.EVIDENCE_BUILD_REQUEST, evidenceId, caseId, analysisId,
                 runId, List.of(collectionId), List.of(), Set.of(
                         EvidenceDimension.TARGET_OUTCOME,
                         EvidenceDimension.VALIDATION,
@@ -299,7 +303,7 @@ final class CollectionPostProcessingService {
             NormalizationResult<?> result,
             Instant createdAt) {
         return normalizationManifest(
-                evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
+                evidenceId, collection.caseId(), collection.analysisId(),
                 collection.runId(), collection.planId(), collection.collectionId(), collectorType,
                 normalizerName, raw, summary, budget, result, createdAt);
     }
@@ -315,7 +319,7 @@ final class CollectionPostProcessingService {
             NormalizationResult<?> result,
             Instant createdAt) {
         return normalizationManifest(
-                evidenceId, collection.caseId(), collection.contextId(), collection.analysisId(),
+                evidenceId, collection.caseId(), collection.analysisId(),
                 collection.runId(), collection.planId(), collection.collectionId(), collectorType,
                 normalizerName, raw, summary, budget, result, createdAt);
     }
@@ -323,7 +327,6 @@ final class CollectionPostProcessingService {
     private static NormalizationManifest normalizationManifest(
             EvidenceId evidenceId,
             org.example.algorithmdebug.contracts.CaseId caseId,
-            org.example.algorithmdebug.contracts.ContextId contextId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.PlanId planId,
@@ -336,7 +339,7 @@ final class CollectionPostProcessingService {
             NormalizationResult<?> result,
             Instant createdAt) {
         return new NormalizationManifest(
-                SchemaVersions.NORMALIZATION_MANIFEST, evidenceId, caseId, contextId, analysisId,
+                SchemaVersions.NORMALIZATION_MANIFEST, evidenceId, caseId, analysisId,
                 runId, planId, collectionId, collectorType, normalizerName, NORMALIZER_VERSION,
                 result.status(), raw, summary, budget, result.inputRecordCount(),
                 result.emittedFactCount(), result.truncationReasons(), result.failureCode(),

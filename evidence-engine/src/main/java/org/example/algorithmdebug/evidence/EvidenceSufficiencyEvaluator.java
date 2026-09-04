@@ -12,7 +12,7 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SufficiencyStatus;
 
-/** 判断调用方声明的证据维度是否已被当前 Context 的确定性事实覆盖。 */
+/** 判断调用方声明的证据维度是否已被当前 Analysis 的确定性事实覆盖。 */
 public final class EvidenceSufficiencyEvaluator {
 
     /** 评估覆盖、缺口和阻断矛盾；不判断业务根因是否正确。 */
@@ -22,7 +22,11 @@ public final class EvidenceSufficiencyEvaluator {
             throw new IllegalArgumentException("request and bundle must not be null");
         }
         validateIdentity(request, bundle);
-        Set<EvidenceDimension> covered = Set.copyOf(bundle.coveredDimensions());
+        HashSet<EvidenceDimension> effectiveCoverage = new HashSet<>(bundle.coveredDimensions());
+        if (bundle.truncated()) {
+            effectiveCoverage.remove(EvidenceDimension.VALIDATION);
+        }
+        Set<EvidenceDimension> covered = Set.copyOf(effectiveCoverage);
         HashSet<EvidenceDimension> missing = new HashSet<>(request.requiredDimensions());
         missing.removeAll(covered);
         List<String> contradictions = bundle.facts().stream()
@@ -41,7 +45,7 @@ public final class EvidenceSufficiencyEvaluator {
         }
         return new SufficiencyEvaluation(
                 SchemaVersions.SUFFICIENCY_EVALUATION, request.evidenceId(),
-                request.caseId(), request.contextId(), request.analysisId(), status,
+                request.caseId(), request.analysisId(), status,
                 request.requiredDimensions(), covered, Set.copyOf(missing),
                 List.copyOf(contradictions), bundle.createdAt());
     }
@@ -50,7 +54,6 @@ public final class EvidenceSufficiencyEvaluator {
             EvidenceBuildRequest request, EvidenceBundle bundle) {
         if (!request.evidenceId().equals(bundle.evidenceId())
                 || !request.caseId().equals(bundle.caseId())
-                || !request.contextId().equals(bundle.contextId())
                 || !request.analysisId().equals(bundle.analysisId())) {
             throw new IllegalArgumentException("The Evidence Bundle identity does not match the build request");
         }

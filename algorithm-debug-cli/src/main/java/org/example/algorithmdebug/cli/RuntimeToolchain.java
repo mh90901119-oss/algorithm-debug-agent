@@ -41,7 +41,8 @@ record RuntimeToolchain(
     private static Path requireFile(Path value, String role) {
         Path normalized = value.toAbsolutePath().normalize();
         if (!Files.isRegularFile(normalized)) {
-            throw new IllegalArgumentException(role + " is missing: " + normalized);
+            throw new CliStartupException(
+                    "CLI_TOOLCHAIN_FILE_MISSING", role + " is missing: " + normalized);
         }
         return normalized;
     }

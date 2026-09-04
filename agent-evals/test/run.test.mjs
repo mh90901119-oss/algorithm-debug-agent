@@ -2,7 +2,13 @@ import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import test from "node:test"
 
-import { buildOpenCodeArguments, prepareSpawn, runProcess, validateSuite } from "../run.mjs"
+import {
+  auditTargetExecutionOrder,
+  buildOpenCodeArguments,
+  prepareSpawn,
+  runProcess,
+  validateSuite,
+} from "../run.mjs"
 
 test("loads the versioned smoke suite and keeps the target module outside checked-in cases", async () => {
   const suiteUrl = new URL("../suites/smoke.json", import.meta.url)
@@ -35,10 +41,35 @@ test("loads the versioned smoke suite and keeps the target module outside checke
   const causal = suite.cases.find((item) => item.id === "cross-wafer-causal")
   assert.equal(causal.requirePlanIntent, true)
   assert.equal(causal.requireJdwpCondition, true)
-  assert.equal(causal.minimumPlanEvidenceReferences, 1)
+  assert.equal(Object.hasOwn(causal, "minimumPlanEvidenceReferences"), false)
   assert.equal(causal.requiredTools.includes("codepath_collect"), true)
   assert.equal(causal.requiredTools.includes("jdwp_collect"), true)
+  assert.match(causal.question, /CodePath.*runtime method path.*JDWP.*state/iu)
+  const forbiddenCausalPatterns = causal.forbiddenAnswerPatterns.map((pattern) => new RegExp(pattern, "iu"))
+  assert.equal(forbiddenCausalPatterns.some((pattern) => pattern.test("A-W2 alone does not cause the delay")), false)
+  assert.equal(forbiddenCausalPatterns.some((pattern) => pattern.test("A-W2 alone caused the delay")), true)
   assert.doesNotMatch(codePath.requiredAnswerPatterns.join("|"), /鏂规硶|杩愯/u)
+})
+
+test("loads fifty unique real-session quality cases across all evidence categories", async () => {
+  const suiteUrl = new URL("../suites/quality-50.json", import.meta.url)
+  const suite = JSON.parse(await readFile(suiteUrl, "utf8"))
+
+  assert.doesNotThrow(() => validateSuite(suite))
+  assert.equal(suite.cases.length, 50)
+  assert.equal(new Set(suite.cases.map(item => item.id)).size, 50)
+  for (const prefix of [
+    "passing", "missing-ut", "input-boundary", "loop-guard", "assertion",
+    "static", "codepath", "jdwp", "integrity", "causal",
+  ]) {
+    assert.equal(suite.cases.filter(item => item.id.startsWith(`${prefix}-`)).length, 5)
+  }
+  assert.equal(suite.cases.filter(item => item.allowCodePath === true).length >= 10, true)
+  assert.equal(suite.cases.filter(item => item.allowJdwp === true).length >= 10, true)
+  assert.equal(suite.cases.filter(item => item.requireSequentialDynamicRefinement === true).length, 5)
+  assert.equal(suite.cases
+    .filter(item => item.requireSequentialDynamicRefinement === true)
+    .every(item => /CodePath.*JDWP|JDWP.*CodePath/iu.test(item.question)), true)
 })
 
 test("builds a real OpenCode run command from TargetModule and one user-style case question", () => {
@@ -103,4 +134,40 @@ test("closes stdin for non-interactive child processes", async () => {
   assert.equal(result.timedOut, false)
   assert.equal(result.exitCode, 0)
   assert.equal(result.stdout, "STDIN_CLOSED")
+})
+
+test("detects overlapping target execution CLI intervals and ignores ordinary CLI calls", () => {
+  const events = [
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "read-1", commandName: "artifact read" },
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "codepath-1",
+      commandName: "collection codepath execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "read-1", commandName: "artifact read" },
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "jdwp-1",
+      commandName: "collection jdwp execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "codepath-1",
+      commandName: "collection codepath execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "jdwp-1",
+      commandName: "collection jdwp execute" },
+  ]
+
+  assert.deepEqual(auditTargetExecutionOrder(events), [
+    "Target execution CLI overlap: collection jdwp execute started while collection codepath execute was active",
+  ])
+})
+
+test("accepts sequential baseline, CodePath, and JDWP target execution intervals", () => {
+  const events = [
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "run-1", commandName: "run execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "run-1", commandName: "run execute" },
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "codepath-1",
+      commandName: "collection codepath execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "codepath-1",
+      commandName: "collection codepath execute" },
+    { eventType: "CLI_PROCESS_STARTED", invocationId: "jdwp-1",
+      commandName: "collection jdwp execute" },
+    { eventType: "CLI_PROCESS_COMPLETED", invocationId: "jdwp-1",
+      commandName: "collection jdwp execute" },
+  ]
+
+  assert.deepEqual(auditTargetExecutionOrder(events), [])
 })

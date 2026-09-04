@@ -7,7 +7,6 @@ import java.util.Optional;
 public record CollectionBaselineCheck(
         String schemaVersion,
         CaseId caseId,
-        ContextId contextId,
         AnalysisId analysisId,
         RunId runId,
         CollectionId collectionId,
@@ -19,11 +18,10 @@ public record CollectionBaselineCheck(
 
     /** 校验确认性证据只可能来自 MATCHED 检查。 */
     public CollectionBaselineCheck {
-        if (!"1.0".equals(schemaVersion)) {
+        if (!SchemaVersions.COLLECTION_BASELINE_CHECK.equals(schemaVersion)) {
             throw new IllegalArgumentException("Unsupported CollectionBaselineCheck version");
         }
         caseId = ContractChecks.requireNonNull(caseId, "caseId");
-        contextId = ContractChecks.requireNonNull(contextId, "contextId");
         analysisId = ContractChecks.requireNonNull(analysisId, "analysisId");
         runId = ContractChecks.requireNonNull(runId, "runId");
         collectionId = ContractChecks.requireNonNull(collectionId, "collectionId");

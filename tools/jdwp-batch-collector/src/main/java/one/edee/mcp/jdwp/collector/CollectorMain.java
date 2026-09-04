@@ -7,6 +7,7 @@ import one.edee.mcp.jdwp.core.JdiSocketAttacher;
 import one.edee.mcp.jdwp.core.JdwpEndpoint;
 
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -18,8 +19,9 @@ import java.util.Map;
  * Agent-owned JDWP Collector 命令行入口；不依赖 Spring、MCP 或目标算法代码。
  */
 public final class CollectorMain {
-    static final String COLLECTOR_VERSION = "3.0.0";
-    static final String RAW_TRACE_SCHEMA_VERSION = "2.0";
+    static final String COLLECTOR_VERSION = "4.0.0";
+    static final String RAW_TRACE_SCHEMA_VERSION = "3.0";
+    static final long MAX_PLAN_BYTES = 1024L * 1024;
 
     private CollectorMain() {
     }
@@ -36,7 +38,7 @@ public final class CollectorMain {
 
     static void run(Arguments arguments) throws Exception {
         ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
-        DebugPlan plan = mapper.readValue(arguments.plan().toFile(), DebugPlan.class);
+        DebugPlan plan = readPlan(mapper, arguments.plan());
         plan.validate();
 
         Files.createDirectories(arguments.outputDirectory());
@@ -66,9 +68,9 @@ public final class CollectorMain {
             "exact-method-descriptor",
             "code-index",
             "typed-values",
-            "bounded-projection",
+            "precise-value-paths",
             "tracepoint-request-group",
-            "conditional-frame-values",
+            "and-conditions",
             "separate-hit-counters"
         ));
         data.put("sessionId", plan.sessionId);
@@ -98,6 +100,17 @@ public final class CollectorMain {
             result.completionReason(),
             result.eventCount()
         );
+    }
+
+    static DebugPlan readPlan(ObjectMapper mapper, Path path) throws java.io.IOException {
+        if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(path)) {
+            throw new java.io.IOException("JDWP plan must be a regular non-symbolic-link file");
+        }
+        long size = Files.size(path);
+        if (size < 1 || size > MAX_PLAN_BYTES) {
+            throw new java.io.IOException("JDWP plan size must be between 1 byte and 1 MiB");
+        }
+        return mapper.readValue(Files.readAllBytes(path), DebugPlan.class);
     }
 
     record Arguments(Path plan, Path outputDirectory) {
