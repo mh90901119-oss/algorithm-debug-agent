@@ -76,7 +76,24 @@ class CaseArchiveRepositoryTest {
         assertEquals(manifest, repository.requireCase(CASE_ID));
         assertEquals(analysis, repository.requireAnalysis(CASE_ID, ANALYSIS_ID));
         assertEquals(run, repository.requireRunRequest(CASE_ID, run.runId()));
-        assertTrue(Files.isDirectory(repository.runRawDirectory(CASE_ID, run.runId())));
+        Path raw = repository.caseRoot(CASE_ID).resolve("runs/run-1/raw");
+        assertFalse(Files.exists(raw));
+        assertEquals(raw, repository.runRawDirectory(CASE_ID, run.runId()));
+        assertTrue(Files.isDirectory(raw));
+    }
+
+    @Test
+    void shouldRemoveNewCaseDirectoriesWhenTheInitialAtomicWriteFails() {
+        AtomicDocumentWriter failingWriter = new AtomicDocumentWriter((source, target) -> {
+            throw new java.io.IOException("simulated move failure");
+        });
+        CaseArchiveRepository failingRepository = new CaseArchiveRepository(
+                repository.caseRoot(CASE_ID).getParent(),
+                new BoundedDocumentMapper(), failingWriter);
+
+        assertThrows(WorkspaceException.class, () -> failingRepository.createCase(manifest()));
+
+        assertFalse(Files.exists(failingRepository.caseRoot(CASE_ID)));
     }
 
     @Test

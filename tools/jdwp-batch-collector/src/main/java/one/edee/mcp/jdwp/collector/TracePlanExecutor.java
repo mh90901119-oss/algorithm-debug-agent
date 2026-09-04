@@ -42,6 +42,7 @@ final class TracePlanExecutor {
     private final DebugPlan plan;
     private final JsonlTraceWriter writer;
     private final AtomicLong sequence = new AtomicLong();
+    private final AtomicLong capturedEvents = new AtomicLong();
     private final Map<String, DebugPlan.Tracepoint> tracepointsById;
     private final StackFrameConditionEvaluator conditionEvaluator = new StackFrameConditionEvaluator();
     private final Map<String, Integer> observedHitCounts = new HashMap<>();
@@ -77,7 +78,7 @@ final class TracePlanExecutor {
         long lastEventAt = System.currentTimeMillis();
         String completion = "vm_disconnected";
         try {
-            while (sequence.get() < plan.maxEvents) {
+            while (capturedEvents.get() < plan.maxEvents) {
                 long remaining = plan.idleTimeoutMillis - (System.currentTimeMillis() - lastEventAt);
                 if (remaining <= 0) {
                     completion = "idle_timeout";
@@ -120,7 +121,7 @@ final class TracePlanExecutor {
                     break;
                 }
             }
-            if (sequence.get() >= plan.maxEvents) {
+            if (capturedEvents.get() >= plan.maxEvents) {
                 completion = "max_events";
             }
         } catch (InterruptedException interrupted) {
@@ -251,11 +252,13 @@ final class TracePlanExecutor {
             return null;
         }
         int capturedHit = capturedHitCounts.getOrDefault(tracepointId, 0);
-        if (capturedHit >= tracepoint.maxCapturedHits) {
+        if (capturedHit >= tracepoint.maxCapturedHits
+                || capturedEvents.get() >= plan.maxEvents) {
             disableTracepoint(tracepointId);
             return null;
         }
         capturedHit = capturedHitCounts.merge(tracepointId, 1, Integer::sum);
+        capturedEvents.incrementAndGet();
 
         ThreadReference thread = event.thread();
         Map<String, Object> data = baseEvent("tracepoint_hit");

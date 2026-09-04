@@ -77,11 +77,12 @@ class CaseWorkspaceAuditorTest {
         Path collection = fixture.caseRoot().resolve("collections/collection-1");
         Files.createDirectories(collection.resolve("logs"));
         Files.createDirectories(collection.resolve("validation"));
-        Files.writeString(collection.resolve("collection-request.json"), "{}");
-        Files.writeString(collection.resolve("manifest.json"), "{}");
+        Files.writeString(collection.resolve("collection-request.json"), control("collection-1"));
+        Files.writeString(collection.resolve("manifest.json"), control("collection-1"));
+        Files.writeString(collection.resolve("collection-summary.json"), "{\"completion\":\"SUCCESS\"}");
         Files.writeString(collection.resolve("logs/stdout.log"), "launcher output");
         Files.writeString(collection.resolve("logs/stderr.log"), "launcher failure");
-        Files.writeString(collection.resolve("validation/baseline-check.json"), "{}");
+        Files.writeString(collection.resolve("validation/baseline-check.json"), control("collection-1"));
 
         var audit = new CaseWorkspaceAuditor().audit(
                 fixture.workspace(), PROJECT_ID, CASE_ID);
@@ -90,11 +91,27 @@ class CaseWorkspaceAuditorTest {
         assertTrue(audit.issues().isEmpty());
     }
 
+    @Test
+    void rejectsMalformedOrMisplacedControlDocuments() throws Exception {
+        Fixture fixture = fixture();
+        Files.writeString(fixture.caseRoot().resolve("case.json"),
+                "{\"schemaVersion\":\"1.0\",\"caseId\":\"other-case\"}");
+
+        var audit = new CaseWorkspaceAuditor().audit(
+                fixture.workspace(), PROJECT_ID, CASE_ID);
+
+        assertFalse(audit.passed());
+        assertTrue(audit.issues().stream().anyMatch(issue ->
+                issue.code().equals("CONTROL_DOCUMENT_IDENTITY_MISMATCH")
+                        && issue.relativePath().equals("case.json")));
+    }
+
     private Fixture fixture() throws Exception {
         Path workspace = temporaryDirectory.resolve("workspace");
         Path casesRoot = workspace.resolve("projects/project-1/cases");
         Path caseRoot = Files.createDirectories(casesRoot.resolve("case-1"));
-        Files.writeString(caseRoot.resolve("case.json"), "{}");
+        Files.writeString(caseRoot.resolve("case.json"),
+                "{\"schemaVersion\":\"1.0\",\"caseId\":\"case-1\"}");
         Files.writeString(caseRoot.resolve("interaction.jsonl"), "{\"event\":\"case.opened\"}\n");
         Path gantt = caseRoot.resolve("gantt/result.json");
         Files.createDirectories(gantt.getParent());
@@ -110,5 +127,10 @@ class CaseWorkspaceAuditorTest {
     }
 
     private record Fixture(Path workspace, Path caseRoot, Path gantt) {
+    }
+
+    private static String control(String collectionId) {
+        return "{\"schemaVersion\":\"1.0\",\"caseId\":\"case-1\","
+                + "\"collectionId\":\"" + collectionId + "\"}";
     }
 }

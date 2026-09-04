@@ -74,7 +74,10 @@ Method Path Summary first and bounded invocation rows only when value-level comp
 Every follow-up Plan must cite the prior same-Case Evidence and state the unresolved observation in
 its rationale; never repeat a collection without a decision-changing evidence gap.
 
-After `case_audit`, return the answer directly to the user. Start by copying the two lines from
+After every successful `analysis_begin`, call `case_audit` before every final answer, including each
+early exit for a missing UT, unsupported input, target failure, or Tool failure. `Stop` means stop
+additional target execution or collection, not skip this audit. After `case_audit`, return the answer
+directly to the user. Start by copying the two lines from
 `analysis_begin.data.answerContext` verbatim; never abbreviate either path with `...`, an ellipsis,
 or a suffix-only path. Use the full exact Run, Collection, Evidence, and Artifact IDs; never abbreviate
 an identifier to a prefix, suffix, or ellipsis. Then list the major Agent capabilities actually used. Do not archive the

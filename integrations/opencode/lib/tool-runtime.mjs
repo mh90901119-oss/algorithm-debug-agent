@@ -321,8 +321,12 @@ export function createAlgorithmDebugRuntime({
       await observe(scope, facts.success ? "toolCompleted" : "toolFailed", facts)
       return response
     } catch (error) {
-      await observe(scope, "toolFailed", { code: "ADA_TOOL_RUNTIME_EXCEPTION" })
-      throw error
+      const code = error instanceof TypeError || error instanceof RangeError
+        ? "ADA_TOOL_INPUT_INVALID" : "ADA_TOOL_RUNTIME_EXCEPTION"
+      await observe(scope, "toolFailed", { code })
+      return failure(code, code === "ADA_TOOL_INPUT_INVALID"
+        ? `${boundedErrorMessage(error)} Correct the Tool input before retrying. This tool result is not target-test evidence.`
+        : runtimeFailureMessage(code))
     }
   }
 
@@ -558,14 +562,6 @@ function distinctTextArray(value, name, maximum, allowEmpty) {
   return values
 }
 
-function integerArray(value, name, maximum) {
-  if (!Array.isArray(value) || value.length > maximum) {
-    throw new TypeError(`${name} must be an array with at most ${maximum} entries`)
-  }
-  return value.map((item, index) => integerInRange(
-    item, `${name}[${index}]`, 1, Number.MAX_SAFE_INTEGER))
-}
-
 function booleanValue(value, name) {
   if (typeof value !== "boolean") throw new TypeError(`${name} must be a boolean`)
   return value
@@ -726,6 +722,12 @@ function nonBlank(value) {
   return typeof value === "string" && value.trim().length > 0
 }
 
+function boundedErrorMessage(error) {
+  const value = error instanceof Error ? error.message : "Tool input validation failed"
+  const singleLine = String(value).replaceAll("\r", " ").replaceAll("\n", " ").trim()
+  return singleLine.slice(0, 512) || "Tool input validation failed"
+}
+
 function failure(code, message = runtimeFailureMessage(code)) {
   return JSON.stringify({
     schemaVersion: "2.0",
@@ -743,6 +745,7 @@ function runtimeFailureMessage(code) {
     ADA_PROJECT_REGISTRATION_INVALID_RESPONSE: "Project registration returned an invalid response, so no analysis operation started. Report the Agent failure. This tool result is not target-test evidence.",
     ADA_TEMP_FILE_OPERATION_FAILED: "The OpenCode adapter could not create its bounded request file. Report the Agent file-operation failure. This tool result is not target-test evidence.",
     ADA_CLI_EXECUTION_FAILED: "The OpenCode adapter could not complete the Agent CLI invocation. Report the Agent failure and inspect local DFX logs. This tool result is not target-test evidence.",
+    ADA_TOOL_RUNTIME_EXCEPTION: "The OpenCode Tool runtime failed before a valid Agent response was available. Report the Agent failure and inspect local DFX logs. This tool result is not target-test evidence.",
   }
   return messages[code]
     ?? `${String(code).toLowerCase().replaceAll("_", " ")}. This tool result is not target-test evidence.`

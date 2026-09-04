@@ -46,6 +46,20 @@ class EvidenceSufficiencyEvaluatorTest {
     }
 
     @org.junit.jupiter.api.Test
+    void truncatedBundleCannotClaimCompleteValidationCoverage() {
+        EvidenceBuildRequest request = request(Set.of(EvidenceDimension.VALIDATION));
+        EvidenceBundle truncated = new EvidenceBundle(
+                SchemaVersions.EVIDENCE_BUNDLE, EVIDENCE_ID, CASE_ID, ANALYSIS_ID,
+                List.of(), List.of(), Set.of(EvidenceDimension.VALIDATION),
+                List.of(), true, NOW);
+
+        var evaluation = new EvidenceSufficiencyEvaluator().evaluate(request, truncated);
+
+        assertEquals(SufficiencyStatus.INSUFFICIENT, evaluation.status());
+        assertEquals(Set.of(EvidenceDimension.VALIDATION), evaluation.missingDimensions());
+    }
+
+    @org.junit.jupiter.api.Test
     void blockingCollectionContradictionWinsOverMissingDimensions() {
         EvidenceFact contradiction = new EvidenceFact(
                 ClaimClassification.VALIDATOR_CONCLUSION, EvidenceDimension.VALIDATION,

@@ -95,6 +95,16 @@ class EvidenceBundleBuilderTest {
     }
 
     @org.junit.jupiter.api.Test
+    void doesNotClaimValidationCoverageWithoutACurrentCollection() {
+        EvidenceBuildRequest request = request(
+                List.of(), List.of(), Set.of(EvidenceDimension.VALIDATION));
+
+        var bundle = new EvidenceBundleBuilder().build(request, sources(List.of()));
+
+        assertTrue(!bundle.coveredDimensions().contains(EvidenceDimension.VALIDATION));
+    }
+
+    @org.junit.jupiter.api.Test
     void comparisonCollectionNeverCoversCurrentDynamicDimension() {
         CollectionId oldCollection = new CollectionId("collection-old");
         ArtifactReference summary = artifact(

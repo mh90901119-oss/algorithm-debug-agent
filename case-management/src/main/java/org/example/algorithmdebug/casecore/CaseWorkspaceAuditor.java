@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.casecore;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.example.algorithmdebug.contracts.CaseArtifactRegistration;
 import org.example.algorithmdebug.contracts.CaseAuditIssue;
 import org.example.algorithmdebug.contracts.CaseId;
@@ -47,6 +48,7 @@ public final class CaseWorkspaceAuditor {
         checkScopes(root.resolve("runs"), "run-outcome.json", "RUN", caseId, expected, issues);
         checkLog(root.resolve("interaction.jsonl"), caseId, issues);
         checkJavaLogs(root.resolve("logs"), caseId, issues);
+        checkControlDocuments(root, actual, caseId, issues);
         int checked = checkArtifacts(root, caseId, expected, issues);
         actual.stream().filter(CaseWorkspaceAuditor::isKnownControlFile).forEach(expected::add);
         Set<String> tracked = new HashSet<>(expected);
@@ -158,6 +160,46 @@ public final class CaseWorkspaceAuditor {
         }
     }
 
+    private void checkControlDocuments(
+            Path root, List<String> actual, CaseId caseId, List<CaseAuditIssue> issues) {
+        actual.stream().filter(CaseWorkspaceAuditor::isBoundedJsonControlFile).forEach(relative -> {
+            try {
+                JsonNode document = mapper.readJson(root.resolve(relative), JsonNode.class);
+                if (!document.isObject()
+                        || !document.path("schemaVersion").isTextual()
+                        || document.path("schemaVersion").asText().isBlank()) {
+                    throw new IllegalArgumentException("schemaVersion is missing");
+                }
+                checkIdentity(document, "caseId", caseId.value(), relative, issues);
+                String[] segments = relative.split("/");
+                if (relative.startsWith("analyses/") && segments.length > 2) {
+                    checkIdentity(document, "analysisId", segments[1], relative, issues);
+                } else if (relative.startsWith("runs/") && segments.length > 2) {
+                    checkIdentity(document, "runId", segments[1], relative, issues);
+                } else if (relative.startsWith("collections/") && segments.length > 2) {
+                    checkIdentity(document, "collectionId", segments[1], relative, issues);
+                } else if (relative.startsWith("evidence/") && segments.length > 2) {
+                    checkIdentity(document, "evidenceId", segments[1], relative, issues);
+                }
+            } catch (RuntimeException failure) {
+                issues.add(issue("CONTROL_DOCUMENT_INVALID", "CASE", caseId.value(),
+                        "CONTROL_DOCUMENT", relative,
+                        "Case control document is invalid or exceeds its bounded size"));
+            }
+        });
+    }
+
+    private static void checkIdentity(
+            JsonNode document, String field, String expected, String relative,
+            List<CaseAuditIssue> issues) {
+        if (!document.path(field).isTextual()
+                || !expected.equals(document.path(field).asText())) {
+            issues.add(issue("CONTROL_DOCUMENT_IDENTITY_MISMATCH", field, expected,
+                    "CONTROL_DOCUMENT", relative,
+                    "Case control document identity does not match its path"));
+        }
+    }
+
     private static void require(Path root, CaseId caseId, String path, String type,
             List<String> expected, List<CaseAuditIssue> issues) {
         expected.add(path);
@@ -186,6 +228,16 @@ public final class CaseWorkspaceAuditor {
                 || path.matches("collections/[^/]+/validation/(baseline-check|post-processing-failure)\\.json")
                 || path.matches("evidence/[^/]+/(evidence-build-request|evidence-bundle|sufficiency-evaluation)\\.json")
                 || path.matches("artifacts/[^/]+\\.json");
+    }
+
+    private static boolean isBoundedJsonControlFile(String path) {
+        return isKnownControlFile(path)
+                && path.endsWith(".json")
+                && !path.matches("artifacts/[^/]+\\.json")
+                && !path.matches("analyses/[^/]+/method-catalog\\.json")
+                && !path.matches("collections/[^/]+/collection-summary\\.json")
+                && !path.matches("collections/[^/]+/collector-plan\\.json")
+                && !path.matches("collections/[^/]+/validation/post-processing-failure\\.json");
     }
     private static CaseAuditIssue issue(String code, String scope, String id, String type, String path, String message) {
         return new CaseAuditIssue(code, scope, id, type, path, message);

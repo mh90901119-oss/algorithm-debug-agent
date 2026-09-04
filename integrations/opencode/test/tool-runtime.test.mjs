@@ -302,7 +302,7 @@ test("removes a temporary request when CLI execution throws", async t => {
   await assert.rejects(stat(requestPath))
 })
 
-test("rejects an oversized plan before project preparation", async () => {
+test("returns a structured failure for an oversized plan before project preparation", async () => {
   let calls = 0
   const runtime = createAlgorithmDebugRuntime({
     execute: async () => { calls += 1; return success({}) },
@@ -310,15 +310,18 @@ test("rejects an oversized plan before project preparation", async () => {
     resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
-  await assert.rejects(runtime.codePathPlanCreate({
+  const response = JSON.parse(await runtime.codePathPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
     methods: [{ methodKey: "fixture.Algorithm#schedule()V", projections: [] }],
     rationale: "x".repeat(65_537),
-  }, { directory: "D:/module" }), RangeError)
+  }, { directory: "D:/module" }))
+  assert.equal(response.success, false)
+  assert.equal(response.code, "ADA_TOOL_INPUT_INVALID")
+  assert.match(response.message, /request\.json exceeds 65536 bytes/u)
   assert.equal(calls, 0)
 })
 
-test("rejects an empty JDWP matched-hit sampling policy before project preparation", async () => {
+test("returns a structured failure for an empty JDWP sampling policy", async () => {
   let calls = 0
   const runtime = createAlgorithmDebugRuntime({
     execute: async () => { calls += 1; return success({}) },
@@ -326,14 +329,17 @@ test("rejects an empty JDWP matched-hit sampling policy before project preparati
     resultJsonDirectory: "D:/algorithm-results", temporaryRoot: tmpdir(),
   })
 
-  await assert.rejects(runtime.jdwpPlanCreate({
+  const response = JSON.parse(await runtime.jdwpPlanCreate({
     caseId: "case-1", analysisId: "analysis-1",
     tracepoints: [{
       methodKey: "fixture.Algorithm#schedule()V", line: 12,
       captureFirstMatchedHits: 0, captureEveryMatchedHits: 0,
     }],
     rationale: "Observe state",
-  }, { directory: "D:/module" }), /select at least one matched hit/)
+  }, { directory: "D:/module" }))
+  assert.equal(response.success, false)
+  assert.equal(response.code, "ADA_TOOL_INPUT_INVALID")
+  assert.match(response.message, /select at least one matched hit/u)
   assert.equal(calls, 0)
 })
 

@@ -4,13 +4,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +15,7 @@ import org.example.algorithmdebug.adapter.AdapterException;
 import org.example.algorithmdebug.adapter.RunMode;
 import org.example.algorithmdebug.adapter.TargetProjectAdapter;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
+import org.example.algorithmdebug.casecore.ArtifactIntegrityChecker;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
@@ -586,7 +584,7 @@ public final class JdwpCollectionApplicationService {
         try {
             artifacts.add(new ArtifactReference(
                     id, type, normalizedRoot.relativize(normalized).toString().replace('\\', '/'),
-                    mediaType, existingSha(normalized).orElseThrow(), Files.size(normalized)));
+                    mediaType, new ArtifactIntegrityChecker().sha256(normalized), Files.size(normalized)));
         } catch (IOException failure) {
             throw new CaseRunException("COLLECTION_ARTIFACT_INVALID", "Failed to describe JDWP artifact", failure);
         }
@@ -637,25 +635,6 @@ public final class JdwpCollectionApplicationService {
                 ? Optional.of(run.exitCode().getAsInt()) : Optional.empty()).orElse(-1);
     }
 
-    private static Optional<String> existingSha(Path path) {
-        if (!Files.isRegularFile(path)) {
-            return Optional.empty();
-        }
-        try {
-            return Optional.of(sha(Files.readAllBytes(path)));
-        } catch (IOException failure) {
-            return Optional.empty();
-        }
-    }
-
-    private static String sha(byte[] bytes) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
-        } catch (NoSuchAlgorithmException failure) {
-            throw new IllegalStateException("JDK does not provide SHA-256", failure);
-        }
-    }
-
     private record CaptureContext(
             org.example.algorithmdebug.adapter.ScheduleResultSource source,
             OutputDirectorySnapshotter snapshotter,
@@ -681,19 +660,20 @@ public final class JdwpCollectionApplicationService {
             Map<String, Map<String, Integer>> conditionUnavailableReasons,
             Map<String, Integer> installedLocations) {
         private ExternalCollectorManifest {
-            capabilities = capabilities == null ? List.of() : List.copyOf(capabilities);
-            observedHitCounts = observedHitCounts == null ? Map.of() : Map.copyOf(observedHitCounts);
-            matchedHitCounts = matchedHitCounts == null
-                    ? observedHitCounts : Map.copyOf(matchedHitCounts);
-            capturedHitCounts = capturedHitCounts == null
-                    ? matchedHitCounts : Map.copyOf(capturedHitCounts);
-            conditionUnavailableCounts = conditionUnavailableCounts == null
-                    ? Map.of() : Map.copyOf(conditionUnavailableCounts);
-            conditionUnavailableReasons = conditionUnavailableReasons == null
-                    ? Map.of() : conditionUnavailableReasons.entrySet().stream().collect(
+            if (capabilities == null || observedHitCounts == null || matchedHitCounts == null
+                    || capturedHitCounts == null || conditionUnavailableCounts == null
+                    || conditionUnavailableReasons == null || installedLocations == null) {
+                throw new IllegalArgumentException("External JDWP Manifest required counters are missing");
+            }
+            capabilities = List.copyOf(capabilities);
+            observedHitCounts = Map.copyOf(observedHitCounts);
+            matchedHitCounts = Map.copyOf(matchedHitCounts);
+            capturedHitCounts = Map.copyOf(capturedHitCounts);
+            conditionUnavailableCounts = Map.copyOf(conditionUnavailableCounts);
+            conditionUnavailableReasons = conditionUnavailableReasons.entrySet().stream().collect(
                     java.util.stream.Collectors.toUnmodifiableMap(
                             Map.Entry::getKey, entry -> Map.copyOf(entry.getValue())));
-            installedLocations = installedLocations == null ? Map.of() : Map.copyOf(installedLocations);
+            installedLocations = Map.copyOf(installedLocations);
             if (target == null || plan == null || plan.isBlank() || trace == null || trace.isBlank()
                     || startedAt == null || finishedAt == null || finishedAt.isBefore(startedAt)
                     || completionReason == null || completionReason.isBlank()
@@ -713,9 +693,25 @@ public final class JdwpCollectionApplicationService {
                             reasons.size() > 16 || reasons.values().stream().anyMatch(
                                     value -> value == null || value < 0))
                     || installedLocations.values().stream().anyMatch(
-                            value -> value == null || value < 0)) {
+                            value -> value == null || value < 0)
+                    || !observedHitCounts.keySet().containsAll(matchedHitCounts.keySet())
+                    || !matchedHitCounts.keySet().containsAll(capturedHitCounts.keySet())
+                    || !observedHitCounts.keySet().containsAll(conditionUnavailableCounts.keySet())
+                    || exceeds(matchedHitCounts, observedHitCounts)
+                    || exceeds(capturedHitCounts, matchedHitCounts)
+                    || exceeds(conditionUnavailableCounts, observedHitCounts)) {
                 throw new IllegalArgumentException("External JDWP Manifest counts are invalid");
             }
+        }
+
+        private static boolean exceeds(
+                Map<String, Integer> values, Map<String, Integer> ceilings) {
+            for (Map.Entry<String, Integer> entry : values.entrySet()) {
+                if (entry.getValue() > ceilings.get(entry.getKey())) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         static ExternalCollectorManifest empty(String sessionId) {

@@ -166,7 +166,7 @@ public final class CollectionEvidenceValidator {
                 || !normalization.summaryArtifact().orElseThrow().equals(input.summaryReference());
         if (mismatch) add(findings, finding(
                 "COLLECTION_IDENTITY_MISMATCH", EvidenceValidationStatus.INVALID,
-                "Collection, Plan, Manifest, summaryor Baseline identity does not match",
+                "Collection, Plan, Manifest, Summary, or Baseline identity does not match",
                 input.summaryReference()));
     }
 
@@ -217,7 +217,7 @@ public final class CollectionEvidenceValidator {
                         .equals(input.summaryReference());
         if (mismatch) add(findings, finding(
                 "COLLECTION_IDENTITY_MISMATCH", EvidenceValidationStatus.INVALID,
-                "Collection, Plan, Manifest, summaryor Baseline identity does not match",
+                "Collection, Plan, Manifest, Summary, or Baseline identity does not match",
                 input.summaryReference()));
     }
 

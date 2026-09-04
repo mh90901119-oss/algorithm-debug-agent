@@ -12,7 +12,7 @@ public final class DebugPlan {
     public Target target = new Target();
     public boolean resumeOnAttach = true;
     public long idleTimeoutMillis = 120_000;
-    public int maxEvents = 100_000;
+    public int maxEvents = 5_000;
     public List<Tracepoint> tracepoints = new ArrayList<>();
 
     public void validate() {
@@ -27,7 +27,9 @@ public final class DebugPlan {
         if (idleTimeoutMillis < 1_000) {
             throw new IllegalArgumentException("idleTimeoutMillis must be at least 1000");
         }
-        if (maxEvents < 1) throw new IllegalArgumentException("maxEvents must be positive");
+        if (maxEvents < 1 || maxEvents > 5_000) {
+            throw new IllegalArgumentException("maxEvents must be between 1 and 5000");
+        }
         if (tracepoints == null || tracepoints.isEmpty() || tracepoints.size() > 20) {
             throw new IllegalArgumentException("tracepoints must contain between 1 and 20 entries");
         }
@@ -41,12 +43,12 @@ public final class DebugPlan {
     }
 
     public static final class Target {
-        public String host = "localhost";
+        public String host = "127.0.0.1";
         public int port = 5005;
 
         void validate() {
-            if (host == null || host.isBlank()) {
-                throw new IllegalArgumentException("target.host must not be blank");
+            if (!"127.0.0.1".equals(host)) {
+                throw new IllegalArgumentException("target.host must be 127.0.0.1");
             }
             if (port < 1 || port > 65_535) {
                 throw new IllegalArgumentException("target.port must be between 1 and 65535");
@@ -183,7 +185,7 @@ public final class DebugPlan {
                         }
                     }
                     case "CHAR" -> {
-                        if (expectedValue.codePointCount(0, expectedValue.length()) != 1) {
+                        if (expectedValue.length() != 1) {
                             throw new IllegalArgumentException(
                                     "condition CHAR value must contain one character: " + tracepointId);
                         }

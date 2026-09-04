@@ -56,13 +56,8 @@ public final class ExternalJUnitTraceLauncher {
                     .traceEventGenerator(advice -> captureStopped.get() ? null : generator.generate(advice))
                     .filter(event -> !captureStopped.get() && generator.matches(event))
                     .formatter(event -> jsonEvent(sequence.incrementAndGet(), event, generator))
-                    .logger(line -> {
-                        try {
-                            if (!sink.append(line) || sink.limitReached()) captureStopped.set(true);
-                        }
-                        catch (IOException failure) { writeFailure.compareAndSet(null, failure); }
-                        return Unit.INSTANCE;
-                    })
+                    .logger(line -> appendTraceLine(
+                            sink, line, writeFailure, captureStopped))
                     .maxToStringLength(0)
                     .maxIndentDepth(1)
                     .build();
@@ -92,6 +87,24 @@ public final class ExternalJUnitTraceLauncher {
                 outcome, junit.getTestsFoundCount(), junit.getTestsSucceededCount(),
                 junit.getTestsAbortedCount(), junit.getTestsFailedCount(),
                 sinkResult.eventsWritten(), sinkResult.bytesWritten(), sinkResult.limit(), detail);
+    }
+
+    static Unit appendTraceLine(
+            TraceJsonlSink sink,
+            String line,
+            AtomicReference<IOException> writeFailure,
+            AtomicBoolean captureStopped) {
+        try {
+            if (!sink.append(line) || sink.limitReached()) captureStopped.set(true);
+        } catch (IOException failure) {
+            writeFailure.compareAndSet(null, failure);
+            captureStopped.set(true);
+        } catch (RuntimeException failure) {
+            writeFailure.compareAndSet(
+                    null, new IOException("Trace sink rejected an event", failure));
+            captureStopped.set(true);
+        }
+        return Unit.INSTANCE;
     }
 
     private static String jsonEvent(

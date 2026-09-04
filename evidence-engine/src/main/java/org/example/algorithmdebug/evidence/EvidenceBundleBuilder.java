@@ -49,7 +49,7 @@ public final class EvidenceBundleBuilder {
         sources.runFingerprintArtifact().ifPresent(value -> addArtifact(artifacts, value));
 
         addBaseFacts(sources, facts, covered);
-        boolean allCurrentValid = true;
+        boolean allCurrentValid = !current.isEmpty();
         boolean diagnosticsTruncated = false;
         for (ValidatedCollectionSource source : current) {
             addArtifact(artifacts, source.validationArtifact());

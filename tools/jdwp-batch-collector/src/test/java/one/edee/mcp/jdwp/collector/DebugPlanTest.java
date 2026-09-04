@@ -3,10 +3,17 @@ package one.edee.mcp.jdwp.collector;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class DebugPlanTest {
+
+    @TempDir
+    Path temporaryDirectory;
 
     @Test
     void v5RequiresExactMethodDescriptorAndRejectsHistoricalSchemas() {
@@ -54,6 +61,38 @@ class DebugPlanTest {
         plan.tracepoints.getFirst().conditions.add(condition);
 
         assertThrows(IllegalArgumentException.class, plan::validate);
+    }
+
+    @Test
+    void enforcesLoopbackEventAndUtf16CharBounds() {
+        DebugPlan plan = validPlan();
+        plan.target.host = "localhost";
+        assertThrows(IllegalArgumentException.class, plan::validate);
+
+        plan = validPlan();
+        plan.maxEvents = 5_001;
+        assertThrows(IllegalArgumentException.class, plan::validate);
+
+        plan = validPlan();
+        DebugPlan.Condition condition = new DebugPlan.Condition();
+        condition.valuePath = "marker";
+        condition.expectedType = "CHAR";
+        condition.expectedValue = "\uD83D\uDE00";
+        plan.tracepoints.getFirst().conditions.add(condition);
+        assertThrows(IllegalArgumentException.class, plan::validate);
+    }
+
+    @Test
+    void readsOnlyBoundedRegularPlanFiles() throws Exception {
+        Path empty = temporaryDirectory.resolve("empty.json");
+        Files.write(empty, new byte[0]);
+        assertThrows(java.io.IOException.class,
+                () -> CollectorMain.readPlan(new ObjectMapper(), empty));
+
+        Path oversized = temporaryDirectory.resolve("oversized.json");
+        Files.write(oversized, new byte[(int) CollectorMain.MAX_PLAN_BYTES + 1]);
+        assertThrows(java.io.IOException.class,
+                () -> CollectorMain.readPlan(new ObjectMapper(), oversized));
     }
 
     static DebugPlan validPlan() {

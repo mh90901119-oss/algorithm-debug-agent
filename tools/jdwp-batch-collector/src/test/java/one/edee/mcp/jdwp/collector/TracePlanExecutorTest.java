@@ -86,6 +86,7 @@ class TracePlanExecutorTest {
         DebugPlan.Tracepoint point = plan.tracepoints.getFirst();
         point.maxObservedHits = 2;
         point.maxCapturedHits = 1;
+        plan.maxEvents = 1;
         point.captureFirstMatchedHits = 0;
         point.captureEveryMatchedHits = 2;
         point.capture.stack = false;
@@ -122,17 +123,19 @@ class TracePlanExecutorTest {
         when(queue.remove(anyLong())).thenReturn(events).thenThrow(new VMDisconnectedException());
 
         Path trace = execute(vm, plan);
-        List<JsonNode> hits = Files.readAllLines(trace).stream()
+        List<JsonNode> records = Files.readAllLines(trace).stream()
                 .map(line -> {
                     try {
                         return new ObjectMapper().readTree(line);
                     } catch (Exception failure) {
                         throw new IllegalStateException(failure);
                     }
-                })
+                }).toList();
+        List<JsonNode> hits = records.stream()
                 .filter(json -> "tracepoint_hit".equals(json.path("eventType").asText()))
                 .toList();
 
+        assertEquals(3, records.size());
         assertEquals(1, hits.size());
         assertEquals(2, hits.getFirst().path("hit").asInt());
     }

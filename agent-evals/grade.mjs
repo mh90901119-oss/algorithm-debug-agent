@@ -303,7 +303,7 @@ export function gradeCase(evalCase, trace, runtime) {
     if (typeof analysisDirectory !== "string" || !answer.includes(analysisDirectory)) {
       correctnessFailures.push("Final answer does not identify the current Analysis directory")
     }
-    if (!/(?:\b(?:(?:major|agent)\s+)?capabilities(?:\s+actually)?\s+used\b|使用的.*功能|主要功能)/iu.test(answer)) {
+    if (!/(?:\b(?:(?:major|agent)\s+)?capabilities(?:\s+actually)?\s+used\b|\bworkflow\s+used\b|使用的.*功能|主要功能)/iu.test(answer)) {
       correctnessFailures.push("Final answer does not summarize the Agent capabilities used")
     }
   }

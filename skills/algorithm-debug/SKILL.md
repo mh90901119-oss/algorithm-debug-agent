@@ -3,7 +3,7 @@ name: algorithm-debug
 description: Use when a user asks about one specified Java/Maven algorithm UT, its exception or assertion failure, its Gantt result, runtime call path, internal state, or causal behavior across analysis rounds.
 metadata:
   owner: algorithm-debug-agent
-  version: "3.1"
+  version: "3.2"
 ---
 
 # Algorithm Debug Workflow
@@ -207,8 +207,11 @@ fallback log.
 
 ## Completion
 
-Call `algorithm-debug_case_audit`. Do not ignore missing controls, invalid Artifact registrations,
-integrity mismatches, malformed interaction JSONL, or empty Case directories.
+After every successful `analysis_begin`, call `algorithm-debug_case_audit` immediately before every
+final answer, including each early exit for a missing UT, unsupported input, target failure, or Agent
+or Tool failure. `Stop` in any earlier step means stop additional target execution or collection, not
+skip this audit. Do not ignore missing controls, invalid Artifact registrations, integrity mismatches,
+malformed interaction JSONL, or empty Case directories.
 
 Return the conclusion directly to the user; do not persist the model-authored answer in Workspace.
 Start the answer by copying the two lines in `analysis_begin.data.answerContext` verbatim. Never

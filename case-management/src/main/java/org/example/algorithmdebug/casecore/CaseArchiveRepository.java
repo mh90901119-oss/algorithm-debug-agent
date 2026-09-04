@@ -30,7 +30,6 @@ import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 
 import java.io.IOException;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -82,12 +81,8 @@ public final class CaseArchiveRepository {
         }
         CaseArchiveLayout layout = layout(manifest.caseId());
         try {
-            Files.createDirectories(casesRoot);
-            Files.createDirectory(layout.caseRoot());
-            writer.writeNew(layout.caseDocument(), mapper.writeJson(manifest));
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+            writer.writeNewWithParents(layout.caseDocument(), mapper.writeJson(manifest));
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -99,11 +94,9 @@ public final class CaseArchiveRepository {
         requireCase(checked.caseId());
         CaseArchiveLayout layout = layout(checked.caseId());
         try {
-            Files.createDirectories(layout.analysisRoot(checked.analysisId()));
-            writer.writeNew(layout.analysisDocument(checked.analysisId()), mapper.writeJson(checked));
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+            writer.writeNewWithParents(
+                    layout.analysisDocument(checked.analysisId()), mapper.writeJson(checked));
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -161,13 +154,12 @@ public final class CaseArchiveRepository {
             throw new IllegalArgumentException("source and maximumBytes are required");
         }
         CaseArchiveLayout layout = layout(caseId);
-        Path directory = layout.caseInputRoot();
         try {
-            Files.createDirectories(directory);
             Path target = layout.caseInputArtifact(source.getFileName().toString());
-            writer.writeNew(target, maximumBytes, output -> Files.copy(source, output));
+            writer.writeNewWithParents(
+                    target, maximumBytes, output -> Files.copy(source, output));
             return target;
-        } catch (IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw new WorkspaceException(
                     "ALGORITHM_INPUT_COPY_FAILED", "Unable to copy the algorithm input", failure);
         }
@@ -301,10 +293,9 @@ public final class CaseArchiveRepository {
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, mapper.writeJson(checked));
+            writer.writeNewWithParents(document, mapper.writeJson(checked));
             return document;
-        } catch (IOException | SecurityException | WorkspaceException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -384,10 +375,9 @@ public final class CaseArchiveRepository {
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, mapper.writeJson(checked));
+            writer.writeNewWithParents(document, mapper.writeJson(checked));
             return document;
-        } catch (IOException | SecurityException | WorkspaceException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -440,12 +430,10 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
         try {
-            Files.createDirectories(root);
-            writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
+            writer.writeNewWithParents(
+                    layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
             return root;
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -461,12 +449,10 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.collectionRoot(checked.collectionId());
         try {
-            Files.createDirectories(root);
-            writer.writeNew(layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
+            writer.writeNewWithParents(
+                    layout.collectionRequest(checked.collectionId()), mapper.writeJson(checked));
             return root;
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -506,10 +492,9 @@ public final class CaseArchiveRepository {
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, mapper.writeJson(checked));
+            writer.writeNewWithParents(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException | IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -546,10 +531,9 @@ public final class CaseArchiveRepository {
         }
         Path document = layout(checked.caseId()).collectionBaselineCheck(checked.collectionId());
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, mapper.writeJson(checked));
+            writer.writeNewWithParents(document, mapper.writeJson(checked));
             return document;
-        } catch (WorkspaceException | IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -569,13 +553,10 @@ public final class CaseArchiveRepository {
         CaseArchiveLayout layout = layout(checked.caseId());
         Path root = layout.evidenceRoot(checked.evidenceId());
         try {
-            Files.createDirectories(root);
             Path document = layout.evidenceBuildRequest(checked.evidenceId());
-            writer.writeNew(document, mapper.writeJson(checked));
+            writer.writeNewWithParents(document, mapper.writeJson(checked));
             return document;
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -677,14 +658,9 @@ public final class CaseArchiveRepository {
                     "CASE_ARCHIVE_IDENTITY_MISMATCH", "RunRequest target UT does not match Case");
         }
         CaseArchiveLayout layout = layout(checked.caseId());
-        Path runRoot = layout.runRoot(checked.runId());
         try {
-            Files.createDirectories(runRoot);
-            Files.createDirectory(layout.runRaw(checked.runId()));
-            writer.writeNew(layout.runRequest(checked.runId()), mapper.writeJson(checked));
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+            writer.writeNewWithParents(layout.runRequest(checked.runId()), mapper.writeJson(checked));
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
@@ -807,7 +783,13 @@ public final class CaseArchiveRepository {
     /** @return 指定 Run 中可写入原始产物的已创建目录 */
     public Path runRawDirectory(CaseId caseId, RunId runId) {
         requireRunRequest(caseId, runId);
-        return layout(caseId).runRaw(runId);
+        Path raw = layout(caseId).runRaw(runId);
+        try {
+            Files.createDirectories(raw);
+            return raw;
+        } catch (IOException | SecurityException failure) {
+            throw archiveWriteFailure(failure);
+        }
     }
 
     CaseArchiveLayout layout(CaseId caseId) {
@@ -843,24 +825,18 @@ public final class CaseArchiveRepository {
 
     private void createChildDocument(Path document, Object value) {
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, mapper.writeJson(value));
-        } catch (FileAlreadyExistsException | WorkspaceException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException | SecurityException failure) {
+            writer.writeNewWithParents(document, mapper.writeJson(value));
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }
 
     private Path createP4Document(Path document, Object value, long maximumBytes) {
         try {
-            Files.createDirectories(document.getParent());
-            writer.writeNew(document, maximumBytes,
+            writer.writeNewWithParents(document, maximumBytes,
                     output -> mapper.writeJsonArtifact(output, value));
             return document;
-        } catch (WorkspaceException | SecurityException failure) {
-            throw archiveWriteFailure(failure);
-        } catch (IOException failure) {
+        } catch (WorkspaceException failure) {
             throw archiveWriteFailure(failure);
         }
     }

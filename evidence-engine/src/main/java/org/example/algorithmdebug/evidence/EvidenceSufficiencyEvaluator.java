@@ -22,7 +22,11 @@ public final class EvidenceSufficiencyEvaluator {
             throw new IllegalArgumentException("request and bundle must not be null");
         }
         validateIdentity(request, bundle);
-        Set<EvidenceDimension> covered = Set.copyOf(bundle.coveredDimensions());
+        HashSet<EvidenceDimension> effectiveCoverage = new HashSet<>(bundle.coveredDimensions());
+        if (bundle.truncated()) {
+            effectiveCoverage.remove(EvidenceDimension.VALIDATION);
+        }
+        Set<EvidenceDimension> covered = Set.copyOf(effectiveCoverage);
         HashSet<EvidenceDimension> missing = new HashSet<>(request.requiredDimensions());
         missing.removeAll(covered);
         List<String> contradictions = bundle.facts().stream()

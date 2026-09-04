@@ -36,7 +36,7 @@ public record JdwpValueCondition(
                     }
                 }
                 case CHAR -> {
-                    if (value.codePointCount(0, value.length()) != 1) {
+                    if (value.length() != 1) {
                         throw new IllegalArgumentException(
                                 "CHAR expectedValue must contain one character");
                     }

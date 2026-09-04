@@ -428,6 +428,55 @@ class JdwpCollectionApplicationServiceTest {
         assertEquals("JDWP_MANIFEST_INVALID", failure.code());
     }
 
+    @Test
+    void rejectsManifestWithMissingHitCounters() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"matchedHitCounts\":{\"target-entry\":1},", ""));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 113)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 114)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the test fixture", failure);
+            }
+        });
+
+        assertEquals("JDWP_MANIFEST_INVALID", assertThrows(CaseRunException.class,
+                () -> service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID)).code());
+    }
+
+    @Test
+    void rejectsManifestWithNonMonotonicHitCounters() throws Exception {
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Path external = request.collectorOutputDirectory().resolve("collection-manifest.json");
+                Files.writeString(external, Files.readString(external)
+                        .replace("\"capturedHitCounts\":{\"target-entry\":1}",
+                                "\"capturedHitCounts\":{\"target-entry\":2}"));
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 115)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 116)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the test fixture", failure);
+            }
+        });
+
+        assertEquals("JDWP_MANIFEST_INVALID", assertThrows(CaseRunException.class,
+                () -> service.execute(workspace, PROJECT_ID, CASE_ID, PLAN_ID)).code());
+    }
+
     private JdwpCollectionApplicationService service(JdwpCollectionExecutor executor) {
         return new JdwpCollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,

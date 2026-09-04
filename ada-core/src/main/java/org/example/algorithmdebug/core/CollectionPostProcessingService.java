@@ -172,7 +172,7 @@ final class CollectionPostProcessingService {
             JdwpCollectionManifest collectorManifest,
             CollectionBaselineCheck baseline) {
         NormalizationBudget budget = budget(
-                plan.budget().maxBytes(), plan.budget().maxEvents(),
+                plan.budget().maxBytes(), plan.budget().maxEvents() + 2L,
                 plan.budget().maxEvents());
         EvidenceId evidenceId = ids.newEvidenceId();
         var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->

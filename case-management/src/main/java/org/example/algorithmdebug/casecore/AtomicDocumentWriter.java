@@ -5,10 +5,13 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.List;
 
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
@@ -92,6 +95,43 @@ public final class AtomicDocumentWriter {
         }
     }
 
+    /** 创建缺失的父目录并原子写入；写入失败时只清理本次创建且仍为空的目录。 */
+    void writeNewWithParents(Path target, byte[] content) {
+        if (content == null) {
+            throw new IllegalArgumentException("content must not be null");
+        }
+        writeNewWithParents(target, Math.max(1L, content.length), output -> output.write(content));
+    }
+
+    /** 流式版本的父目录托管写入。 */
+    void writeNewWithParents(
+            Path target, long maximumBytes, StreamContentWriter contentWriter) {
+        if (target == null || contentWriter == null || maximumBytes < 1) {
+            throw new IllegalArgumentException("target, maximumBytes and contentWriter is invalid");
+        }
+        Path parent = target.toAbsolutePath().normalize().getParent();
+        if (parent == null) {
+            throw new WorkspaceException("WORKSPACE_PATH_INVALID", "Document parent path is missing");
+        }
+        List<Path> created = missingDirectories(parent);
+        Throwable primaryFailure = null;
+        try {
+            Files.createDirectories(parent);
+            writeNew(target, maximumBytes, contentWriter);
+        } catch (IOException | SecurityException failure) {
+            primaryFailure = failure;
+            throw new WorkspaceException(
+                    "WORKSPACE_WRITE_FAILED", "Failed to create Workspace document parent", failure);
+        } catch (RuntimeException | Error failure) {
+            primaryFailure = failure;
+            throw failure;
+        } finally {
+            if (primaryFailure != null) {
+                cleanupCreatedDirectories(created, primaryFailure);
+            }
+        }
+    }
+
     /** 通过同目录临时文件原子替换一个已存在的控制文档。 */
     public void replace(Path target, byte[] content) {
         if (target == null || content == null) {
@@ -148,6 +188,29 @@ public final class AtomicDocumentWriter {
             }
             throw new WorkspaceException(
                     "WORKSPACE_WRITE_FAILED", "Failed to clean up temporary Workspace document: " + temporary, cleanupFailure);
+        }
+    }
+
+    private static List<Path> missingDirectories(Path parent) {
+        ArrayList<Path> result = new ArrayList<>();
+        for (Path candidate = parent;
+                candidate != null && !Files.exists(candidate, LinkOption.NOFOLLOW_LINKS);
+                candidate = candidate.getParent()) {
+            result.add(candidate);
+        }
+        return List.copyOf(result);
+    }
+
+    private static void cleanupCreatedDirectories(List<Path> directories, Throwable primaryFailure) {
+        for (Path directory : directories) {
+            try {
+                Files.deleteIfExists(directory);
+            } catch (DirectoryNotEmptyException ignored) {
+                return;
+            } catch (IOException | SecurityException cleanupFailure) {
+                primaryFailure.addSuppressed(cleanupFailure);
+                return;
+            }
         }
     }
 

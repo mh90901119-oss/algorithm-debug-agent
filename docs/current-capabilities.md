@@ -9,6 +9,7 @@
 - 安装 `algorithm-debug` Agent、Skill、Command 和 13 个 Custom Tool。
 - 不绑定 OpenCode 版本号，以安装后的实际发现和加载检查判断兼容性。
 - JS Adapter 调用 `bin/ada.cmd`，Java CLI 输出单一结构化 ToolResponse。
+- Tool 输入错误也返回 `success=false` 的 ToolResponse，不再以未结构化 JS 异常中断模型决策。
 - `analysis_begin` 返回 Case、Analysis ID、配置的算法结果目录和可逐字复制的相对目录。
 - 模型结论直接返回用户，不写入 Workspace。
 
@@ -36,11 +37,14 @@
 - `arg0`、Getter、任意表达式、容器扫描和完整对象展开不支持。
 - 原始 enter/exit 事件归档后，Normalizer 生成 `codepath-invocations.jsonl` 和 Method Path Summary。
 - 单个投影不可读不会丢弃调用事件；必填投影缺失会形成 Evidence gap。
+- Trace 写入失败后立即停止继续格式化事件，保留首次写入错误作为工具失败原因。
 - Plan 错误返回具体、单行、有界的英文原因。
 
 ### JDWP Collector 4.0 / Plan v5
 
 - 支持精确方法/行断点、显式局部变量、`this` 和普通实例字段的精确值路径。
+- `maxEvents` 只限制 `tracepoint_hit` 快照数；Collector 的启动和结束记录固定另计，Normalizer 按同一口径读取。
+- Collector 只接受 `127.0.0.1`、1 MiB 内计划和完整且单调的观察/匹配/采集计数。
 - 单个 Tracepoint 支持最多四个 `EQUALS` 条件，全部满足才采集；条件与投影共用同一值路径读取规则。
 - 分离 `maxObservedHits`、`maxCapturedHits`、首批匹配采样和周期匹配采样。
 - 暂停期间只复制选定值，`finally` 恢复事件集，恢复后由同一 Collector 线程顺序写 JSONL。
@@ -79,4 +83,6 @@
 - Artifact SHA 只证明已注册文件在读取时未被替换或损坏，不证明两次业务结果相同。
 - 失败 UT 的动态复现只比较结构化失败指纹；成功 Gantt 不作为动态采集通用门禁。
 - Raw Trace 只读；Normalizer、Validator 和 Evidence Engine 确定性地产生派生证据。
+- 零个当前 Collection 不产生 Validation 覆盖；Evidence Bundle 截断时不能宣称 Validation 充分。
 - 截断、冲突、条件不可用和缺失值必须显式呈现，不能伪装成确认事实。
+- `case_audit` 校验版本化有界控制 JSON 的 Schema 与路径身份，并报告损坏文件和空目录；非版本化运行摘要仍参与已知文件审计。

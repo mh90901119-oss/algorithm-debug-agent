@@ -62,8 +62,12 @@ final class CliFailureMessages {
                     "Artifact content no longer matches its registration; stop using it and regenerate current evidence";
             case "CASE_EVIDENCE_QUERY_SCAN_LIMIT_EXCEEDED" ->
                     "Evidence query scan limit was exceeded; narrow the exact filters or sequence range before querying again";
+            case "CASE_EVIDENCE_QUERY_ARTIFACT_UNSUPPORTED" ->
+                    "Evidence query supports only CODEPATH_INVOCATIONS and JDWP_SNAPSHOT_SUMMARY Artifacts; "
+                            + "use artifact_read for other registered Artifacts or select one of those two Artifact types";
             case "CASE_EVIDENCE_QUERY_BUDGET_TOO_SMALL", "CASE_EVIDENCE_QUERY_RECORD_TOO_LARGE" ->
-                    "Evidence query output budget cannot return the selected record; narrow the filters or request a smaller page";
+                    "Evidence query output budget cannot return the selected record; increase maxBytes up to 65536 "
+                            + "or create a narrower collection projection";
             case "CLI_TOOLCHAIN_FILE_MISSING" ->
                     "A configured Java or Maven executable is missing; update agent-settings.json, reinstall the OpenCode integration, and run installer Check";
             case "CLI_BOOTSTRAP_FAILED" ->
@@ -92,4 +96,3 @@ final class CliFailureMessages {
         return normalized + NOT_TARGET_EVIDENCE;
     }
 }
-

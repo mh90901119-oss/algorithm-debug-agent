@@ -85,6 +85,27 @@ class JdiValuePathReaderTest {
     }
 
     @Test
+    void rejectsStaticFieldsInsteadOfReadingGlobalState() throws Exception {
+        StackFrame frame = mock(StackFrame.class);
+        LocalVariable variable = mock(LocalVariable.class);
+        ObjectReference object = mock(ObjectReference.class);
+        ReferenceType type = mock(ReferenceType.class);
+        Field field = mock(Field.class);
+        when(frame.visibleVariableByName("context")).thenReturn(variable);
+        when(frame.getValue(variable)).thenReturn(object);
+        when(object.referenceType()).thenReturn(type);
+        when(type.fieldByName("globalState")).thenReturn(field);
+        when(field.isStatic()).thenReturn(true);
+
+        JdiValuePathReader.Projection result =
+                new JdiValuePathReader(256).read(frame, "context.globalState");
+
+        assertEquals(JdiValuePathReader.ProjectionStatus.UNAVAILABLE, result.status());
+        assertEquals("FIELD_STATIC_UNSUPPORTED", result.reason());
+        verify(object, never()).getValue(field);
+    }
+
+    @Test
     void reportsProjectionFailureWithoutDiscardingTheHit() throws Exception {
         StackFrame frame = mock(StackFrame.class);
         LocalVariable variable = mock(LocalVariable.class);

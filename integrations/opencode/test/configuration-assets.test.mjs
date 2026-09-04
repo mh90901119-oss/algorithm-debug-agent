@@ -54,6 +54,9 @@ test("evidence query exposes every normalized JDWP projection status", async () 
   for (const status of ["CAPTURED", "TRUNCATED", "REFERENCE_ONLY", "UNAVAILABLE"]) {
     assert.match(toolSource, new RegExp(`valueStatus:[\\s\\S]{0,300}"${status}"`, "u"))
   }
+  assert.match(toolSource, /artifactId:[\s\S]{0,300}artifactType is exactly CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY/su)
+  assert.match(toolSource, /Never pass Method Catalog, Evidence Bundle, Raw Trace, Run, or Manifest Artifact IDs/su)
+  assert.match(toolSource, /maxBytes:[\s\S]{0,200}Increase this value when one selected record does not fit/su)
 })
 
 test("Skill enforces input-first causal search and current conditional JDWP fields", async () => {
@@ -85,6 +88,10 @@ test("Skill enforces input-first causal search and current conditional JDWP fiel
   assert.match(skill, /full exact.*Run.*Collection.*Evidence.*Artifact.*never abbreviate/su)
   assert.match(agent, /full exact.*Run.*Collection.*Evidence.*Artifact.*never abbreviate/su)
   assert.match(agent, /runtime method path.*CodePath/su)
+  for (const instructions of [skill, agent]) {
+    assert.match(instructions, /After every successful `analysis_begin`.*case_audit.*early exit/su)
+    assert.match(instructions, /Stop.*target execution.*not.*audit/su)
+  }
   assert.doesNotMatch(skill, /for every user question|new Context/iu)
   assert.doesNotMatch(skill, /wafer-demo|wafer-demo-v1|captureOnHits|captureOnMatchedHits|`maxHits`/iu)
 })

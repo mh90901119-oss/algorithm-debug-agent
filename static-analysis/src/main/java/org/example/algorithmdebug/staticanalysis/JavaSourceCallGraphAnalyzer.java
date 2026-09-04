@@ -132,7 +132,7 @@ public final class JavaSourceCallGraphAnalyzer {
             EdgeScan edgeScan = collectEdges(parsed, trees, types, elements, methodScan, guard);
             return selectReachable(request, discovery, diagnostics, methodScan, edgeScan, guard);
         } catch (IOException exception) {
-            throw new StaticAnalysisException("Read Java sourcefailed", exception);
+            throw new StaticAnalysisException("Failed to read Java source", exception);
         } catch (RuntimeException exception) {
             if (exception instanceof StaticAnalysisException staticException) {
                 throw staticException;
@@ -433,7 +433,7 @@ public final class JavaSourceCallGraphAnalyzer {
         try (InputStream input = Files.newInputStream(path)) {
             return input.readNBytes(maximum);
         } catch (IOException exception) {
-            throw new StaticAnalysisException("Read Java sourcefailed: " + path.getFileName(), exception);
+            throw new StaticAnalysisException("Failed to read Java source: " + path.getFileName(), exception);
         }
     }
 

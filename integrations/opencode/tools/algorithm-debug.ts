@@ -201,7 +201,8 @@ export const evidence_query = tool({
   description: "Query a verified CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY artifact without loading the full dataset. Filters are exact structural matches and do not infer business meaning.",
   args: {
     caseId: tool.schema.string(),
-    artifactId: tool.schema.string(),
+    artifactId: tool.schema.string()
+      .describe("Only use an Artifact whose artifactType is exactly CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY. Never pass Method Catalog, Evidence Bundle, Raw Trace, Run, or Manifest Artifact IDs"),
     methodRef: tool.schema.string().optional()
       .describe("Exact CodePath methodRef; not valid for JDWP summaries"),
     tracepointId: tool.schema.string().optional()
@@ -219,7 +220,8 @@ export const evidence_query = tool({
     sequenceTo: tool.schema.number().int().positive().optional(),
     offset: tool.schema.number().int().min(0).default(0),
     limit: tool.schema.number().int().positive().max(50).default(20),
-    maxBytes: tool.schema.number().int().positive().max(65536).default(16384),
+    maxBytes: tool.schema.number().int().positive().max(65536).default(16384)
+      .describe("Maximum returned UTF-8 bytes. Increase this value when one selected record does not fit"),
   },
   execute: (args, context) => runtime.evidenceQuery(args, context),
 })

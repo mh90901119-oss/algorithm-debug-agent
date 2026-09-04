@@ -75,7 +75,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["maxEvents", "maxBytes", "timeoutMillis", "idleTimeoutMillis"],
       "properties": {
-        "maxEvents": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "maxEvents": {"type": "integer", "minimum": 1, "maximum": 5000, "description": "Maximum tracepoint_hit snapshots; collector lifecycle records are not included."},
         "maxBytes": {"type": "integer", "minimum": 1, "maximum": 52428800},
         "timeoutMillis": {"type": "integer", "minimum": 1000, "maximum": 1200000},
         "idleTimeoutMillis": {"type": "integer", "minimum": 1000, "maximum": 1200000}

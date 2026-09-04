@@ -45,9 +45,8 @@ public final class JdiValuePathReader {
                 }
                 Field field = object.referenceType().fieldByName(segments[index]);
                 if (field == null) return Resolution.unavailable("FIELD_NOT_FOUND");
-                value = field.isStatic()
-                        ? field.declaringType().getValue(field)
-                        : object.getValue(field);
+                if (field.isStatic()) return Resolution.unavailable("FIELD_STATIC_UNSUPPORTED");
+                value = object.getValue(field);
             }
             return Resolution.available(value);
         } catch (AbsentInformationException failure) {

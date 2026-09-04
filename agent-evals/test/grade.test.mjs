@@ -92,6 +92,17 @@ test("accepts a natural capabilities summary with an intervening qualifier", () 
   assert.equal(grade.passed, true)
 })
 
+test("accepts a workflow summary that names the capabilities used", () => {
+  const raw = assertionTrace().replace(
+    "Agent capabilities used: algorithm input, run_test.",
+    "Workflow used: algorithm input capture, one baseline Run, and static analysis.",
+  )
+  const grade = gradeCase(assertionCase, parseOpenCodeJsonl(raw), {
+    openCodeExitCode: 0, sourceModified: false,
+  })
+  assert.equal(grade.passed, true)
+})
+
 test("rejects a final answer that omits its evidence identifier", () => {
   const raw = assertionTrace().replace("Evidence: run-1-surefire.", "Evidence was inspected.")
   const grade = gradeCase(assertionCase, parseOpenCodeJsonl(raw), {

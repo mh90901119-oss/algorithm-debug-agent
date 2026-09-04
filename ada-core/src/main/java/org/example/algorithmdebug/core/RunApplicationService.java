@@ -227,7 +227,7 @@ public final class RunApplicationService {
                         failure);
             }
         } catch (WorkspaceException failure) {
-            throw new CaseRunException(failure.code(), "Failed to read or write Case Workspace failed", failure);
+            throw new CaseRunException(failure.code(), "Failed to read or write the Case Workspace", failure);
         }
     }
 
