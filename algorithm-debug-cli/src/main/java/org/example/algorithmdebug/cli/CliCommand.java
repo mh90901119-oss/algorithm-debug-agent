@@ -218,19 +218,12 @@ public sealed interface CliCommand
             ProjectId projectId,
             CaseId caseId,
             String artifactId,
-            org.example.algorithmdebug.contracts.EvidenceQueryFilter filter,
-            int offset,
-            int limit,
-            int maxBytes) implements CliCommand {
+            Path requestFile) implements CliCommand {
         /** 校验查询身份、条件和输出预算。 */
         public EvidenceQuery {
             require(workspace, "workspace"); require(projectId, "projectId");
             require(caseId, "caseId"); require(artifactId, "artifactId");
-            require(filter, "filter");
-            if (offset < 0 || limit < 1 || limit > 50
-                    || maxBytes < 1 || maxBytes > 65_536) {
-                throw new IllegalArgumentException("Evidence Query budget is invalid");
-            }
+            require(requestFile, "requestFile");
         }
     }
 

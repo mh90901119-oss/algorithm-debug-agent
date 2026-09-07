@@ -1,6 +1,6 @@
 # 工具验证基线
 
-更新日期：2026-09-01。本文定义交付前必须验证的事实，不保存容易失效的历史通过次数；具体结果记录在 [最终审计](../audits/2026-09-01-input-first-conditional-runtime-evidence-final-audit.md)。
+更新日期：2026-09-06。本文件定义交付前必须执行的检查，不保存易失效的历史通过次数。
 
 ## 1. Java Reactor
 
@@ -8,14 +8,15 @@
 mvn -Pcodepath-launcher test
 ```
 
-要求：
+必须覆盖：
 
-- 根 Reactor 与 CodePath Launcher Profile 全部测试通过。
-- Case 输入首次复制、后续复用和变化拒绝有回归测试。
-- Gantt 原名捕获且动态 Collection 不复制 Gantt。
-- CodePath/JDWP Plan 意图和 Evidence 谱系校验通过。
-- JDWP 条件路径、类型比较、观察/匹配/捕获计数和预算通过。
-- Workspace 不创建无用目录，Case 审计能发现空目录和未跟踪文件。
+- Case 输入复制、复用和变化拒绝。
+- 普通 UT、失败指纹、Gantt 原名捕获和动态 Collection 不复制 Gantt。
+- CodePath Plan v6 的 TRACE/AGGREGATE、精确方法插桩、Scope 条件和 ordinal 窗口。
+- TRACE 调用顺序与投影；AGGREGATE 方法、边、深度、投影分布、值基数和输出预算。
+- AGGREGATE 不创建 Invocation 文件，并能通过注册 Artifact ID 使用 `evidence_query SUMMARY/COUNT`。
+- JDWP 条件、投影、观察/匹配/采集计数、采样和预算。
+- Artifact、Normalizer、Validator、Evidence、失败基线和 Case 审计闭环。
 
 ## 2. OpenCode Adapter 与 Eval Harness
 
@@ -23,12 +24,7 @@ mvn -Pcodepath-launcher test
 node --test integrations/opencode/test/*.test.mjs agent-evals/test/*.test.mjs
 ```
 
-要求：
-
-- 13 个 Tool 的参数、调用和响应契约通过。
-- 安装器能力发现包含 `algorithm_input_capture`。
-- 文档不存在已删除链接、旧归档路径或旧 Eval 数量。
-- Eval Grader 检查 Plan 意图、Evidence 谱系和条件化 JDWP，而不是只检查答案文本。
+必须覆盖 Tool 参数和响应契约、目标执行串行、AGGREGATE 到 TRACE 的模型指引、错误 next action、临时请求清理和 Eval 的证据 lineage 检查。
 
 ## 3. 构建、安装与卸载
 
@@ -40,16 +36,11 @@ node --test integrations/opencode/test/*.test.mjs agent-evals/test/*.test.mjs
 .\scripts\install-opencode.ps1 -Mode Check
 ```
 
-要求：
+必须生成 Java CLI、CodePath Launcher 和 JDWP Collector。安装验证不得写死目标算法模块路径；卸载只删除 ownership manifest 中仍匹配安装 Hash 的文件并保留 Workspace。
 
-- 构建产出 Java CLI、CodePath Launcher 和 JDWP Collector。
-- 临时安装验证不写死开发机算法模块路径。
-- 卸载只删除 ownership manifest 中仍匹配安装 Hash 的文件，保留 Workspace 和无关配置。
-- 重新安装后 OpenCode 能发现 Agent、Skill 和全部关键 Tool；不校验固定 OpenCode 版本。
+## 4. 本地动态工具
 
-## 4. 本地 Launcher 与 JDWP
-
-在一个可独立 Maven 执行目标 UT 的算法模块目录运行：
+在可独立用 Maven 执行目标 UT 的算法模块目录运行：
 
 ```powershell
 D:\path\to\algorithm-debug-agent\scripts\verify-ada-launcher.ps1
@@ -61,7 +52,7 @@ D:\path\to\algorithm-debug-agent\scripts\verify-ada-launcher.ps1
 .\scripts\verify-jdwp-loopback.ps1
 ```
 
-JDWP 验证要求 loopback attach 成功，并确认条件匹配快照以及 `observedHitCounts`、`matchedHitCounts`、`capturedHitCounts` 分离记录。
+CodePath 必须证明未选择方法不会被插桩、高频 AGGREGATE 输出有界、TRACE 可保持调用顺序。JDWP 必须证明 loopback attach、条件快照和三类命中计数。
 
 ## 5. 真实 OpenCode E2E
 
@@ -69,14 +60,4 @@ JDWP 验证要求 loopback attach 成功，并确认条件匹配快照以及 `ob
 .\scripts\run-agent-evals.ps1 -Suite Smoke
 ```
 
-10 个 Case 必须逐项检查：
-
-- Eval PASS/FAIL 与失败原因。
-- Case `case_audit` 结果。
-- 预期控制文件、输入、Run、Collection、Derived 和 Evidence 是否存在。
-- 不应存在的可选文件和空目录是否未生成。
-- `interaction.jsonl` 是否包含真实 Tool 顺序和关联 ID。
-- Case Java 日志是否存在未解释异常或工具故障。
-- 跨实体因果 Case 是否使用结构化 Plan 意图、Evidence 谱系和条件化 JDWP。
-
-若环境无法执行某项，审计必须记录命令、阻塞原因和剩余风险，不能以编译通过替代。
+逐 Case 检查 PASS/FAIL、`case_audit`、应有和不应有文件、Artifact 完整性、`interaction.jsonl` 工具顺序及 Case Java 日志。环境无法执行的检查必须记录命令、阻塞原因和剩余风险，不能以编译通过替代行为验证。

@@ -185,8 +185,7 @@ public final class CollectionApplicationService {
                     archive, caseId, caseRoot, collectionRoot, collectionId, failure);
         }
         archive.createCollectionBaselineCheck(baseline);
-        CollectionPostProcessingResult postProcessing = Files.isRegularFile(
-                collectionRoot.resolve("raw/codepath.jsonl"))
+        CollectionPostProcessingResult postProcessing = Files.isRegularFile(result.rawTrace())
                 ? new CollectionPostProcessingService(
                         layout.projectCases(projectId), archive, mapper, writer, ids, clock)
                         .processCodePath(record, plan, result.manifest(), baseline)
@@ -199,13 +198,39 @@ public final class CollectionApplicationService {
                 caseRoot, collectionRoot, collectionId));
         artifacts.addAll(postProcessing.artifacts());
         artifacts = List.copyOf(artifacts);
+        String primaryType = plan.captureMode()
+                == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                ? "METHOD_PATH_SUMMARY" : "CODEPATH_INVOCATIONS";
+        Optional<String> primaryArtifactId = artifacts.stream()
+                .filter(artifact -> primaryType.equals(artifact.artifactType()))
+                .map(ArtifactReference::artifactId).findFirst();
+        boolean completeCoverage = (result.manifest().completion() == CollectionCompletion.SUCCESS
+                || result.manifest().completion() == CollectionCompletion.TARGET_FAILED)
+                && result.manifest().truncationReasons().isEmpty();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 caseId, plan.analysisId(), runId, planId, collectionId,
                 result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
                         result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
                         && postProcessing.confirmationUsable(),
                 artifacts.stream().map(ArtifactReference::relativePath).toList(),
-                artifacts.stream().map(ArtifactReference::artifactId).toList());
+                artifacts.stream().map(ArtifactReference::artifactId).toList(),
+                completeCoverage
+                        ? org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE
+                        : org.example.algorithmdebug.contracts.EvidenceSourceCoverage.PARTIAL,
+                result.manifest().truncationReasons(), primaryArtifactId,
+                primaryArtifactId.isPresent() ? "evidence_query" : "",
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                        ? List.of(org.example.algorithmdebug.contracts.EvidenceQueryMode.SUMMARY,
+                                org.example.algorithmdebug.contracts.EvidenceQueryMode.COUNT)
+                        : List.of(org.example.algorithmdebug.contracts.EvidenceQueryMode.SUMMARY,
+                                org.example.algorithmdebug.contracts.EvidenceQueryMode.FILTER,
+                                org.example.algorithmdebug.contracts.EvidenceQueryMode.WINDOW,
+                                org.example.algorithmdebug.contracts.EvidenceQueryMode.COUNT),
+                primaryArtifactId.isEmpty()
+                        ? "Inspect validation and collection limitations before recollecting"
+                        : plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                        ? "Query SUMMARY then COUNT; create a narrower TRACE Plan only for unresolved order or correlation"
+                        : "Query SUMMARY then narrow with FILTER, COUNT, or WINDOW as required");
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
         executionLog.info(logContext, "CollectionApplicationService", "COLLECTION_COMPLETED",
@@ -338,7 +363,7 @@ public final class CollectionApplicationService {
             Instant startedAt) {
         MethodPathManifest observed = observedResult == null ? null : observedResult.manifest();
         return new MethodPathManifest(
-                "3.0", record.caseId(), record.analysisId(), record.runId(),
+                "4.0", record.caseId(), record.analysisId(), record.runId(),
                 record.planId(), record.collectionId(), "code-path-tracer", "unavailable",
                 completion, "FAILED",
                 observed == null ? processStarted : observed.processStarted(),
@@ -351,6 +376,9 @@ public final class CollectionApplicationService {
                 observed == null ? 0 : observed.testsFailed(),
                 observed == null ? 0 : observed.capturedEventCount(),
                 existingSize(collectionRoot.resolve("raw/codepath.jsonl")),
+                observed == null
+                        ? org.example.algorithmdebug.methodpath.CodePathScopeFilterSummary.disabled()
+                        : observed.scopeFilter(),
                 List.of(), Optional.of(new AgentFailureDiagnostic(
                         code, "Collection failed at " + failedStage,
                         failure.getClass().getName())),

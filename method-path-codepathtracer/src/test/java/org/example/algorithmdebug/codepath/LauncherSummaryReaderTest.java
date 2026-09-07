@@ -17,7 +17,9 @@ class LauncherSummaryReaderTest {
         Path stdout = Files.writeString(temp.resolve("stdout.log"), "noise\n"
                 + "ADA_CODEPATH_SUMMARY={\"outcome\":\"TARGET_FAILED\",\"testsFound\":1,"
                 + "\"testsSucceeded\":0,\"testsAborted\":0,\"testsFailed\":1,"
-                + "\"eventsWritten\":8,\"bytesWritten\":800,\"limit\":\"NONE\",\"detail\":\"assertion\"}\n");
+                + "\"eventsWritten\":8,\"bytesWritten\":800,\"limit\":\"NONE\",\"detail\":\"assertion\","
+                + "\"scopeFilterEnabled\":true,\"scopeInvocationsObserved\":5,"
+                + "\"scopeInvocationsMatched\":2,\"scopeConditionUnavailableInvocations\":1}\n");
 
         CodePathLauncherSummary summary = new LauncherSummaryReader().read(stdout);
 
@@ -25,6 +27,9 @@ class LauncherSummaryReaderTest {
                 CodePathProcessCollector.completion(false, 2, summary));
         assertEquals(CollectionCompletion.TOOL_FAILED,
                 CodePathProcessCollector.completion(false, 2, null));
+        assertEquals(5, summary.scopeInvocationsObserved());
+        assertEquals(2, summary.scopeInvocationsMatched());
+        assertEquals(1, summary.scopeConditionUnavailableInvocations());
     }
 
     @Test

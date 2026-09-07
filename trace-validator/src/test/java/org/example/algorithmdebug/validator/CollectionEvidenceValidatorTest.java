@@ -262,11 +262,12 @@ class CollectionEvidenceValidatorTest {
                 Optional.of(summaryReference), NormalizationBudget.defaults(), 1, 1,
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(), "", NOW);
         MethodPathManifest manifest = new MethodPathManifest(
-                "3.0", CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID,
+                "4.0", CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID, COLLECTION_ID,
                 "code-path-tracer", "1.0",
                 partial ? CollectionCompletion.TRUNCATED : CollectionCompletion.SUCCESS,
                 "COMPLETE", true, 0, false, "PASSED", 1, 1, 0, 0, 1,
                 rawReference.sizeBytes(),
+                org.example.algorithmdebug.methodpath.CodePathScopeFilterSummary.disabled(),
                 partial ? List.of("COLLECTOR_TRUNCATED") : List.of(), Optional.empty(),
                 "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log", NOW, NOW);
         CollectionBaselineCheck baseline = new CollectionBaselineCheck(

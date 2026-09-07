@@ -33,12 +33,16 @@ class LauncherSummaryTest {
     void structuredLineRoundTripsWithoutDependingOnProcessExitCode() {
         LauncherSummary expected = new LauncherSummary(
                 LauncherOutcome.TARGET_FAILED, 3, 1, 0, 1, 42, 4096,
-                TraceJsonlSink.Limit.EVENTS, "assert \"x\"\nfailed");
+                TraceJsonlSink.Limit.EVENTS, "assert \"x\"\nfailed",
+                true, 8, 3, 1);
 
         String line = expected.toStructuredLine();
         LauncherSummary actual = LauncherSummary.parseStructuredLine(line);
 
         assertTrue(line.startsWith(LauncherSummary.LINE_PREFIX));
         assertEquals(expected, actual);
+        assertEquals(8, actual.scopeInvocationsObserved());
+        assertEquals(3, actual.scopeInvocationsMatched());
+        assertEquals(1, actual.scopeConditionUnavailableInvocations());
     }
 }

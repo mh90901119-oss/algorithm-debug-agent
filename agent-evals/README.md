@@ -12,6 +12,10 @@ OpenCode 会话，解析 JSONL Tool Trace，并用确定性规则审计 Agent �
 组合场景要求 CodePath Collection 先完成，JDWP Plan 再引用其完整 Evidence ID。Harness
 还检查动态目标执行区间没有重叠。
 
+复杂因果 Smoke Case 还检查模型是否实际使用 `SUMMARY`、`FILTER`、JDWP `CHANGES` 和
+CodePath `scopeConditions`。这些断言验证“大数据先索引再缩小”的通用工作流，不校验目标
+算法的业务语义。
+
 ## 运行
 
 从目标算法 Maven 模块目录执行：

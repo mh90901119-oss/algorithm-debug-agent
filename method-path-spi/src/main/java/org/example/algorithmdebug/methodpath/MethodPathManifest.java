@@ -33,6 +33,7 @@ public record MethodPathManifest(
         long testsFailed,
         long capturedEventCount,
         long capturedBytes,
+        CodePathScopeFilterSummary scopeFilter,
         List<String> truncationReasons,
         Optional<AgentFailureDiagnostic> agentFailure,
         String rawTrace,
@@ -43,7 +44,9 @@ public record MethodPathManifest(
 
     /** 校验身份、Hash、计数、完成状态和可移植路径。 */
     public MethodPathManifest {
-        if (!"3.0".equals(schemaVersion)) throw new IllegalArgumentException("Unsupported MethodPathManifest version");
+        if (!("4.0".equals(schemaVersion) || "5.0".equals(schemaVersion))) {
+            throw new IllegalArgumentException("Unsupported MethodPathManifest version");
+        }
         caseId = Objects.requireNonNull(caseId);
         analysisId = Objects.requireNonNull(analysisId); runId = Objects.requireNonNull(runId);
         planId = Objects.requireNonNull(planId); collectionId = Objects.requireNonNull(collectionId);
@@ -53,6 +56,7 @@ public record MethodPathManifest(
                 || "PROCESS_COMPLETED".equals(stage) || "COMPLETE".equals(stage)
                 || "FAILED".equals(stage))) throw new IllegalArgumentException("stage is invalid");
         if (capturedEventCount < 0 || capturedBytes < 0) throw new IllegalArgumentException("Collection counts are invalid");
+        scopeFilter = Objects.requireNonNull(scopeFilter, "scopeFilter");
         if (!("PASSED".equals(targetOutcome) || "FAILED".equals(targetOutcome)
                 || "NOT_EXECUTED".equals(targetOutcome))) {
             throw new IllegalArgumentException("targetOutcome is invalid");

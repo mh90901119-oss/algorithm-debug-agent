@@ -95,6 +95,35 @@ class EvidenceBundleBuilderTest {
     }
 
     @org.junit.jupiter.api.Test
+    void classifiesInconclusiveCollectionFindingsAsMissingEvidence() {
+        ArtifactReference summary = artifact(
+                "jdwp-summary", "JDWP_SNAPSHOT_SUMMARY",
+                "collections/collection-1/derived/evidence-1/summary.json");
+        CollectionValidation validation = new CollectionValidation(
+                SchemaVersions.COLLECTION_VALIDATION, EVIDENCE_ID, CASE_ID, ANALYSIS_ID,
+                RUN_ID, new org.example.algorithmdebug.contracts.PlanId("plan-1"),
+                COLLECTION_ID, "JDWP", EvidenceValidationStatus.INCONCLUSIVE,
+                List.of(new ValidationFinding(
+                        "NO_USEFUL_FACTS", EvidenceValidationStatus.INCONCLUSIVE,
+                        "The JDWP summary contains no analyzable hit facts",
+                        List.of(summary), Optional.empty())),
+                Set.of(), Optional.of(summary), NOW);
+        EvidenceBuildSources sources = sources(List.of(new ValidatedCollectionSource(
+                validation, artifact("validation", "COLLECTION_VALIDATION",
+                        "collections/collection-1/derived/evidence-1/validation.json"))));
+
+        var bundle = new EvidenceBundleBuilder().build(
+                request(List.of(COLLECTION_ID), List.of(), Set.of(
+                        EvidenceDimension.RUNTIME_STATE, EvidenceDimension.VALIDATION)),
+                sources);
+
+        assertTrue(bundle.facts().stream()
+                .filter(fact -> "COLLECTION_INCONCLUSIVE".equals(fact.code())
+                        || "NO_USEFUL_FACTS".equals(fact.code()))
+                .allMatch(fact -> fact.classification() == ClaimClassification.MISSING_EVIDENCE));
+    }
+
+    @org.junit.jupiter.api.Test
     void doesNotClaimValidationCoverageWithoutACurrentCollection() {
         EvidenceBuildRequest request = request(
                 List.of(), List.of(), Set.of(EvidenceDimension.VALIDATION));

@@ -1,5 +1,7 @@
+[CmdletBinding()]
 param(
     [string]$Suite = "Smoke",
+    [Alias("CaseId")]
     [string]$Case,
     [string]$Model,
     [int]$TimeoutSeconds = 600,

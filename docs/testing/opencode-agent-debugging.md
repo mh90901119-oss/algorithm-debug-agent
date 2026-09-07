@@ -1,23 +1,23 @@
 # OpenCode Agent 调试指南
 
-## 1. 先区分源码与安装副本
+## 1. 先区分运行 Agent 与开发 Agent
 
-OpenCode 默认加载 `openCodeConfigDirectory` 中的复制文件，不直接运行 Agent 仓库源码：
+`algorithm-debug` 只分析目标算法 UT，并显式使用 `bash: deny`。正常分析、目标 UT 执行、静态
+分析和动态采集都通过 Custom Tool 完成；该 Agent 不修改、构建、安装或修复自身。发现 Agent
+源码、安装副本或运行环境问题时，保留失败 ToolResponse 和 Case 信息，然后切换 OpenCode
+Build Agent，或在外部 PowerShell 中处理。
 
-```text
-仓库源码 -> build -> install -> OpenCode 安装副本
-```
+OpenCode 侧文件与 Java 后端的生效方式不同：
 
-因此在代码仓修改 Java、Skill、Tool 或脚本后，OpenCode 仍可能运行旧版本。正确循环：
+| 修改内容 | 生效操作 |
+| --- | --- |
+| Java CLI、Core、CodePath Launcher、JDWP Collector | 使用 Build Agent 或 PowerShell 执行 `.\scripts\build-agent.ps1`；下一次 Tool 调用使用新 JAR |
+| Agent Prompt、Skill、Command、Custom Tool、JS Runtime、安装路径配置 | 执行 `.\scripts\install-opencode.ps1 -Mode Install` 并重新打开 OpenCode |
+| 目标算法源码 | 使用正常编辑能力修改，再由 `run_test` 重新编译和执行，不通过 Bash 运行目标 UT |
 
-```powershell
-.\scripts\build-agent.ps1
-.\scripts\uninstall-opencode.ps1
-.\scripts\install-opencode.ps1 -Mode Install
-.\scripts\install-opencode.ps1 -Mode Check
-```
-
-不建议复制单个文件覆盖，因为 Java JAR、JS Tool、Skill 和安装清单可能失配。
+安装器复制 OpenCode 侧资产和指向仓库 `bin/ada.cmd` 的路径配置；Java JAR 保留在仓库构建目录。
+因此纯 Java 修改不需要卸载或重新安装。不要复制单个安装文件覆盖，避免 Skill、Tool、JS Runtime
+和 ownership manifest 失配。
 
 ## 2. Agent 执行一个 UT 的实际调用
 
@@ -99,7 +99,8 @@ mvn "-Dtest=com.example.AlgorithmTest#targetMethod" "-DfailIfNoTests=true" test
 | --- | --- | --- |
 | OpenCode 看不到 Agent | 安装层 | Check，确认 `openCodeConfigDirectory` |
 | 看得到 Skill 但 Tool 缺失 | 安装/Tool API | 重新安装，查看能力发现错误 |
-| 修改代码后行为不变 | 安装副本过期 | build + uninstall + install |
+| 修改 Java 后行为不变 | JAR 未重新构建 | 使用 Build Agent 或 PowerShell 执行 `build-agent.ps1` |
+| 修改 Agent/Skill/JS 后行为不变 | OpenCode 安装副本或当前会话缓存过期 | Install 后重新打开 OpenCode |
 | IDE UT 成功但 Agent 失败 | Maven 环境差异 | 手动运行同一 Maven 命令 |
 | `NO_TESTS` | UT 名称或模块目录错误 | 确认 package、类、方法和 OpenCode 启动目录 |
 | `NO_JSON_CHANGED` | 结果路径/算法行为 | 检查解析后的日期目录和 UT 是否产生结果 |

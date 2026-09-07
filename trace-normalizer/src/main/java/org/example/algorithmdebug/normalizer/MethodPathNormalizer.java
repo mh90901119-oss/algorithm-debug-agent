@@ -269,7 +269,12 @@ public final class MethodPathNormalizer {
                     input.collection().caseId(), input.collection().analysisId(), input.collection().runId(),
                     input.collection().planId(), input.collection().collectionId(),
                     input.rawTrace(), methodFacts, pathFacts, anomalyFacts,
-                    scopeFact, summaryTruncated, input.createdAt());
+                    scopeFact, org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE,
+                    "SELECTED_METHOD_DEPTH",
+                    reasons.isEmpty()
+                            ? org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE
+                            : org.example.algorithmdebug.contracts.EvidenceSourceCoverage.PARTIAL,
+                    List.copyOf(reasons), List.of(), summaryTruncated, input.createdAt());
             long emitted = (long) methodFacts.size() + pathFacts.size() + anomalyFacts.size();
             if (scopeFact.isPresent()) {
                 emitted += 1L + scopeFact.orElseThrow().invocations().size()

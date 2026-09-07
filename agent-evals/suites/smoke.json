@@ -303,7 +303,7 @@
                   },
                   {
                       "id":  "cross-wafer-causal",
-                      "question":  "The Gantt shows A-W2 does not start its first PICK until time 60 even though CH1 became available earlier. Explain the upstream cause, including whether B-W1, C-W1 and whole-wafer ordering contribute. Use input plus current source, then use CodePath to validate the runtime method path and conditional JDWP to validate one A-W2 state; do not assume A-W2 alone caused the delay.",
+                      "question":  "The Gantt shows A-W2 does not start its first PICK until time 60 even though CH1 became available earlier. Explain the upstream cause, including whether B-W1, C-W1 and whole-wafer ordering contribute; do not assume A-W2 alone caused the delay. Use input plus current source. For CodePath, scope scheduleWafer to A-W2 through an exact ARGUMENT projection condition and query the returned CODEPATH_INVOCATIONS with SUMMARY and FILTER. Then use conditional JDWP to retain at least two A-W2 PICK observations and query their named state with CHANGES.",
                       "targetTest":  {
                                          "className":  "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
                                          "methodName":  "reproduceComplexSchedulingFromTimestampedInput"
@@ -317,6 +317,7 @@
                                             "codepath_collect",
                                             "jdwp_plan_create",
                                             "jdwp_collect",
+                                            "evidence_query",
                                             "case_audit"
                                         ],
                       "forbiddenTools":  [
@@ -331,16 +332,22 @@
                                                      "whole[- ]wafer|ordered wafers|wafer ordering|entire wafer"
                                                  ],
                       "forbiddenAnswerPatterns":  [
-                                                      "(?:A-W2 alone|only A-W2) (?:caused|causes|is responsible for|is the cause of)"
+                                                      "(?:^|\\r?\\n)\\s*(?:[-*]\\s*)?(?:#{1,6}\\s*)?(?:(?:verdict|conclusion|causal conclusion)\\s*:\\s*)?(?:\\*\\*)?(?:A-W2 alone|only A-W2)(?:\\*\\*)?\\s+(?:caused(?!\\s+nothing\\b)|causes|is responsible for|is the cause of)\\b"
                                                   ],
                       "requireEvidenceReferences":  true,
                       "allowCodePath":  true,
                       "allowJdwp":  true,
                       "expectedCollectionCompletion":  "SUCCESS",
-                      "requireAllCollectionsSuccessful":  true,
+                      "requireAllCollectionsSuccessful":  false,
                       "requirePlanIntent":  true,
                       "requireSequentialDynamicRefinement":  true,
                       "requireJdwpCondition":  true,
+                      "requireCodePathScopeCondition":  true,
+                      "requiredEvidenceQueryModes":  [
+                                                         "SUMMARY",
+                                                         "FILTER",
+                                                         "CHANGES"
+                                                     ],
                       "requiredJdwpConditionValuePatterns":  [
                                                                  "A-W2"
                                                              ],

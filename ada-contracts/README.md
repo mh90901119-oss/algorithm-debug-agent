@@ -22,9 +22,11 @@ Algorithm Debug Agent 的稳定基础契约模块。它定义跨模块、跨进�
 - `DoctorCheck`、`DoctorReport`；
 - `ToolResponse<T>`；
 - `CaseManifest`、`AnalysisRequest`、`RunRequest`；
-- `MethodCatalog`、精确 `CodePathCollectionPlan`、`MethodPathSummary` 和 JDWP 计划/采集契约；
+- `MethodCatalog`、带入口参数范围条件的 `CodePathCollectionPlan`、`MethodPathSummary` 和 JDWP
+  计划/采集契约；
 - `CaseDigest`、`CaseOpenResult`：有界恢复最近 Run、Collection、Evidence 与 Analysis 结果；
-- `EvidenceQueryFilter`、`EvidenceQueryResult`：定义有界动态证据查询条件和返回统计；
+- `EvidenceQueryRequest`、`EvidenceQueryResult`：定义概览、过滤、窗口、计数、变化查询，以及
+  源覆盖、查询覆盖和确定性后续动作；
 - `CaseArtifactRegistration`、`ArtifactTextExcerpt`：登记 Case 内不可变产物并返回可续读的有界 UTF-8
   片段；Artifact ID 在整个 Case 内唯一；
 - `RunOutcomeSummary`、`TargetFailureDiagnostic`、`AgentFailureDiagnostic` 及正交结果枚举。

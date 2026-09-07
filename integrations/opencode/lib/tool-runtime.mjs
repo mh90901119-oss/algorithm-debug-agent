@@ -254,36 +254,15 @@ export function createAlgorithmDebugRuntime({
     evidenceQuery(input, context) {
       return runObservedTool("evidence_query", input, context, scope => {
         const caseId = requiredText(input.caseId, "caseId")
-        const options = [
-          "--case-id", caseId,
-          "--artifact-id", requiredText(input.artifactId, "artifactId"),
-        ]
-        for (const [field, option] of [
-          ["methodRef", "--method-ref"], ["tracepointId", "--tracepoint-id"],
-          ["valueName", "--value-name"], ["scalarValue", "--scalar-value"],
-          ["valueStatus", "--value-status"],
-        ]) {
-          if (input[field] !== undefined && input[field] !== null) {
-            options.push(option, requiredText(input[field], field))
-          }
-        }
-        for (const [field, option] of [
-          ["sequenceFrom", "--sequence-from"], ["sequenceTo", "--sequence-to"],
-        ]) {
-          if (input[field] !== undefined && input[field] !== null) {
-            options.push(option, String(integerInRange(
-              input[field], field, 1, Number.MAX_SAFE_INTEGER)))
-          }
-        }
-        options.push(
-          "--offset", String(integerInRange(input.offset ?? 0, "offset", 0, Number.MAX_SAFE_INTEGER)),
-          "--limit", String(integerInRange(input.limit ?? 20, "limit", 1, 50)),
-          "--max-bytes", String(integerInRange(
-            input.maxBytes ?? DEFAULT_ARTIFACT_BYTES, "maxBytes", 1, MAXIMUM_ARTIFACT_BYTES)),
-        )
-        return invoke({
-          command: ["evidence", "query"], identity: { caseId }, options,
-        }, context, scope)
+        const requestJson = JSON.stringify(evidenceQueryRequest(input))
+        return invokeWithTextFile({
+          command: ["evidence", "query"], identity: { caseId },
+          options: [
+            "--case-id", caseId,
+            "--artifact-id", requiredText(input.artifactId, "artifactId"),
+          ],
+        }, context, "--request-file", "request.json", requestJson,
+        REQUEST_LIMIT_BYTES, scope)
       })
     },
   })
@@ -407,15 +386,138 @@ function codePathPlanRequest(input, now, createId) {
   if (scopeMethodKey && !methodKeys.has(scopeMethodKey)) {
     throw new TypeError("scopeMethodKey must be included in methods")
   }
+  const rawConditions = input.scopeConditions ?? []
+  if (!Array.isArray(rawConditions) || rawConditions.length > 4) {
+    throw new RangeError("scopeConditions must contain at most 4 entries")
+  }
+  if (rawConditions.length > 0 && !scopeMethodKey) {
+    throw new TypeError("scopeConditions require scopeMethodKey")
+  }
+  const scopeProjections = new Map((methods.find(
+    method => method.methodKey === scopeMethodKey)?.projections ?? [])
+    .map(projection => [projection.name, projection]))
+  const conditionNames = new Set()
+  const scopeConditions = rawConditions.map((condition, index) => {
+    const projectionName = requiredText(
+      condition?.projectionName, `scopeConditions[${index}].projectionName`)
+    if (conditionNames.has(projectionName)) {
+      throw new TypeError("scopeConditions must not repeat projectionName")
+    }
+    conditionNames.add(projectionName)
+    const projection = scopeProjections.get(projectionName)
+    if (!projection || !projection.path.startsWith("arg[")) {
+      throw new TypeError(
+        `scopeConditions[${index}] must reference an ARGUMENT projection on scopeMethodKey`)
+    }
+    const expectedType = requiredEnum(condition.expectedType,
+      `scopeConditions[${index}].expectedType`,
+      ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "NULL"])
+    const expectedValue = condition.expectedValue
+    const valid = expectedType === "NULL" ? expectedValue === undefined || expectedValue === null
+      : expectedType === "STRING" ? typeof expectedValue === "string"
+        : expectedType === "BOOLEAN" ? typeof expectedValue === "boolean"
+          : expectedType === "INTEGER" ? Number.isSafeInteger(expectedValue)
+            : typeof expectedValue === "number" && Number.isFinite(expectedValue)
+    if (!valid) {
+      throw new TypeError(`scopeConditions[${index}].expectedValue does not match expectedType`)
+    }
+    return { projectionName, expectedType, expectedValue: expectedType === "NULL" ? null : expectedValue }
+  })
   const request = {
     planId: requiredText(createId("codepath-plan"), "generated codepath planId"),
     methods,
   }
   if (scopeMethodKey) request.scopeMethodKey = scopeMethodKey
+  request.scopeConditions = scopeConditions
+  request.captureMode = requiredEnum(input.captureMode ?? "TRACE", "captureMode",
+    ["TRACE", "AGGREGATE"])
+  const scopeStartOrdinal = integerInRange(
+    input.scopeStartOrdinal ?? 1, "scopeStartOrdinal", 1, 1_000_000)
+  const maxMatchedScopes = integerInRange(
+    input.maxMatchedScopes ?? 10_000, "maxMatchedScopes", 1, 10_000)
+  if (!scopeMethodKey && (scopeStartOrdinal !== 1 || maxMatchedScopes !== 10_000)) {
+    throw new TypeError("A non-default scope window requires scopeMethodKey")
+  }
+  request.scopeStartOrdinal = scopeStartOrdinal
+  request.maxMatchedScopes = maxMatchedScopes
   request.rationale = requiredText(input.rationale, "rationale")
   request.intent = investigationIntent(input)
-  request.budget = { maxEvents: 100_000, maxBytes: 16_777_216, timeoutMillis: 300_000 }
+  request.budget = {
+    maxEvents: 100_000,
+    maxBytes: 16_777_216,
+    timeoutMillis: integerInRange(
+      input.timeoutMillis ?? 300_000, "timeoutMillis", 1, 1_200_000),
+  }
   request.requestedAt = timestamp(now)
+  return request
+}
+
+function evidenceQueryRequest(input) {
+  const mode = requiredEnum(input.mode ?? "SUMMARY", "mode",
+    ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"])
+  const sourceFilter = input.filter ?? {}
+  if (!sourceFilter || typeof sourceFilter !== "object" || Array.isArray(sourceFilter)) {
+    throw new TypeError("filter must be an object")
+  }
+  const filter = {}
+  for (const field of ["methodRef", "tracepointId", "valueName", "scalarValue", "valueStatus"]) {
+    if (sourceFilter[field] !== undefined && sourceFilter[field] !== null) {
+      filter[field] = requiredText(sourceFilter[field], `filter.${field}`)
+    }
+  }
+  for (const field of ["sequenceFrom", "sequenceTo"]) {
+    if (sourceFilter[field] !== undefined && sourceFilter[field] !== null) {
+      filter[field] = integerInRange(
+        sourceFilter[field], `filter.${field}`, 1, Number.MAX_SAFE_INTEGER)
+    }
+  }
+  const rawPredicates = input.predicates ?? []
+  if (!Array.isArray(rawPredicates) || rawPredicates.length > 8) {
+    throw new RangeError("predicates must contain at most 8 entries")
+  }
+  const predicateNames = new Set()
+  const predicates = rawPredicates.map((predicate, index) => {
+    const valueName = requiredText(predicate?.valueName, `predicates[${index}].valueName`)
+    if (predicateNames.has(valueName)) throw new TypeError("predicates must not repeat valueName")
+    predicateNames.add(valueName)
+    const value = { valueName }
+    if (predicate.scalarValue !== undefined && predicate.scalarValue !== null) {
+      value.scalarValue = requiredText(predicate.scalarValue, `predicates[${index}].scalarValue`)
+    }
+    if (predicate.valueStatus !== undefined && predicate.valueStatus !== null) {
+      value.valueStatus = requiredText(predicate.valueStatus, `predicates[${index}].valueStatus`)
+    }
+    if (value.scalarValue === undefined && value.valueStatus === undefined) {
+      throw new TypeError(`predicates[${index}] requires scalarValue or valueStatus`)
+    }
+    return value
+  })
+  const changeValueNames = distinctTextArray(
+    input.changeValueNames ?? [], "changeValueNames", 16, true)
+  const request = {
+    mode,
+    filter,
+    predicates,
+    beforeRecords: integerInRange(input.beforeRecords ?? 0, "beforeRecords", 0, 50),
+    afterRecords: integerInRange(input.afterRecords ?? 0, "afterRecords", 0, 50),
+    topN: integerInRange(input.topN ?? 10, "topN", 1, 50),
+    changeValueNames,
+    offset: integerInRange(input.offset ?? 0, "offset", 0, Number.MAX_SAFE_INTEGER),
+    limit: integerInRange(input.limit ?? 20, "limit", 1, 50),
+    maxBytes: integerInRange(
+      input.maxBytes ?? DEFAULT_ARTIFACT_BYTES, "maxBytes", 1, MAXIMUM_ARTIFACT_BYTES),
+  }
+  if (input.anchorSequence !== undefined && input.anchorSequence !== null) {
+    request.anchorSequence = integerInRange(
+      input.anchorSequence, "anchorSequence", 1, Number.MAX_SAFE_INTEGER)
+  }
+  if (input.groupBy !== undefined && input.groupBy !== null) {
+    request.groupBy = requiredEnum(input.groupBy, "groupBy",
+      ["METHOD_REF", "TRACEPOINT_ID", "PROJECTION_VALUE", "VALUE_STATUS"])
+  }
+  if (input.groupValueName !== undefined && input.groupValueName !== null) {
+    request.groupValueName = requiredText(input.groupValueName, "groupValueName")
+  }
   return request
 }
 
@@ -692,6 +794,13 @@ function boundedText(value, name, maximumBytes) {
 
 function requiredText(value, name) {
   if (!nonBlank(value)) throw new TypeError(`${name} must be a non-empty string`)
+  return value
+}
+
+function requiredEnum(value, name, supported) {
+  if (!supported.includes(value)) {
+    throw new TypeError(`${name} is not supported`)
+  }
   return value
 }
 

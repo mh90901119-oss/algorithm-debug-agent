@@ -22,6 +22,17 @@ public final class CodePathProcessFixtureMain {
             emit(trace, "TARGET_SUCCEEDED", 1, 1, 0, 0, "EVENTS", "", 0, true);
             return;
         }
+        if (archived.contains("\"rationale\":\"truncated-with-reason\"")) {
+            String line = "{\"eventId\":1}\n";
+            java.nio.file.Files.writeString(trace, line);
+            System.out.println("ADA_CODEPATH_SUMMARY={\"outcome\":\"TARGET_SUCCEEDED\","
+                    + "\"testsFound\":1,\"testsSucceeded\":1,\"testsAborted\":0,\"testsFailed\":0,"
+                    + "\"eventsWritten\":1,\"bytesWritten\":"
+                    + line.getBytes(java.nio.charset.StandardCharsets.UTF_8).length
+                    + ",\"limit\":\"EVENTS\",\"detail\":\"\","
+                    + "\"reasonCodes\":[\"VALUE_CARDINALITY_LIMIT_REACHED\"]}");
+            return;
+        }
         if (archived.contains("\"rationale\":\"target-failed\"")) {
             emit(trace, "TARGET_FAILED", 1, 0, 0, 1, "NONE", "assertion failed", 2, true);
             return;

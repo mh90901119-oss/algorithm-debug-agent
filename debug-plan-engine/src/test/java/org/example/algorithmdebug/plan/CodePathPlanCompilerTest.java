@@ -9,7 +9,10 @@ import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
+import org.example.algorithmdebug.contracts.CodePathCaptureMode;
 import org.example.algorithmdebug.contracts.CodePathProjectionSource;
+import org.example.algorithmdebug.contracts.CodePathScalarType;
+import org.example.algorithmdebug.contracts.CodePathScopeCondition;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.MethodCatalog;
@@ -97,6 +100,65 @@ class CodePathPlanCompilerTest {
                 catalog, new CodePathPlanRequest(new PlanId("unknown"), methods(target),
                         Optional.of("fixture.Missing#run()V"), "invalid scope",
                         intent(), CollectionBudget.defaults(), NOW)));
+    }
+
+    @Test
+    void compilesScopeConditionsOnlyAgainstArgumentProjectionsOnTheScopeMethod() {
+        String scope = "fixture.Algorithm#solve(Lfixture/Context;)V";
+        MethodCatalog catalog = catalog(List.of(entry(
+                "fixture.Algorithm", "solve", "(Lfixture/Context;)V", 1)));
+        List<CodePathMethodRequest> methods = List.of(new CodePathMethodRequest(scope, List.of(
+                new CodePathProjectionRequest("waferId", "arg[0].wafer.id", true))));
+
+        CodePathCollectionPlan plan = new CodePathPlanCompiler().compile(catalog,
+                new CodePathPlanRequest(new PlanId("scoped"), methods, Optional.of(scope),
+                        List.of(new CodePathScopeCondition(
+                                "waferId", CodePathScalarType.STRING, "W-17")),
+                        "isolate one repeated scheduling scope", intent(),
+                        CollectionBudget.defaults(), NOW));
+
+        assertEquals("waferId", plan.scopeConditions().getFirst().projectionName());
+        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
+                catalog, new CodePathPlanRequest(new PlanId("unknown-projection"), methods,
+                        Optional.of(scope), List.of(new CodePathScopeCondition(
+                                "jobId", CodePathScalarType.STRING, "J-1")),
+                        "invalid condition", intent(), CollectionBudget.defaults(), NOW)));
+    }
+
+    @Test
+    void compilesAggregateModeAndMatchedScopeOrdinalWindow() {
+        String scope = "fixture.Algorithm#solve(Lfixture/Context;)V";
+        MethodCatalog catalog = catalog(List.of(entry(
+                "fixture.Algorithm", "solve", "(Lfixture/Context;)V", 1)));
+        List<CodePathMethodRequest> methods = List.of(new CodePathMethodRequest(scope, List.of(
+                new CodePathProjectionRequest("entity", "arg[0].id", true))));
+
+        CodePathCollectionPlan plan = new CodePathPlanCompiler().compile(catalog,
+                new CodePathPlanRequest(new PlanId("aggregate-window"), methods,
+                        Optional.of(scope), List.of(new CodePathScopeCondition(
+                                "entity", CodePathScalarType.STRING, "E-17")),
+                        CodePathCaptureMode.AGGREGATE, 100, 20,
+                        "measure the selected path before tracing detail", intent(),
+                        CollectionBudget.defaults(), NOW));
+
+        assertEquals(CodePathCaptureMode.AGGREGATE, plan.captureMode());
+        assertEquals(100, plan.scopeStartOrdinal());
+        assertEquals(20, plan.maxMatchedScopes());
+    }
+
+    @Test
+    void rejectsScopeConditionsWithoutAScopeMethod() {
+        String method = "fixture.Algorithm#solve(Lfixture/Context;)V";
+        MethodCatalog catalog = catalog(List.of(entry(
+                "fixture.Algorithm", "solve", "(Lfixture/Context;)V", 1)));
+        List<CodePathMethodRequest> methods = List.of(new CodePathMethodRequest(method, List.of(
+                new CodePathProjectionRequest("waferId", "arg[0].wafer.id", true))));
+
+        assertThrows(PlanCompilationException.class, () -> new CodePathPlanCompiler().compile(
+                catalog, new CodePathPlanRequest(new PlanId("missing-scope"), methods,
+                        Optional.empty(), List.of(new CodePathScopeCondition(
+                                "waferId", CodePathScalarType.STRING, "W-17")),
+                        "invalid condition", intent(), CollectionBudget.defaults(), NOW)));
     }
 
     @Test

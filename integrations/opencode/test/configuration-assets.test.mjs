@@ -27,6 +27,12 @@ test("Agent and Skill assets are valid UTF-8 without forbidden control character
   assert.doesNotMatch(skill, /analysis_complete/u)
   assert.match(agent, /bash:\s*deny/u)
   assert.match(agent, /Never call `bash`/u)
+  for (const instructions of [agent, skill]) {
+    assert.match(instructions, /AGENT_OR_ENVIRONMENT_FAILURE/u)
+    assert.match(instructions, /Build Agent or PowerShell/u)
+    assert.match(instructions, /must not modify, build, install, or repair the Agent itself/iu)
+    assert.match(instructions, /target UT.*must not be classified as an Agent failure/isu)
+  }
   assert.match(skill, /interaction\.jsonl/u)
   assert.match(skill, /must not be used as Evidence/u)
 })

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/tool/evidence-query-result-v2.schema.json",
+  "title": "EvidenceQueryResult v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "artifact", "recordType", "mode", "outcome",
+    "sourceCoverage", "request", "scannedRecords", "matchedRecords",
+    "returnedRecords", "queryMoreAvailable", "limitations", "nextAction", "recordsJsonl"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "2.0"},
+    "artifact": {"$ref": "#/$defs/artifact"},
+    "recordType": {"enum": ["CODEPATH_INVOCATION", "METHOD_PATH_SUMMARY", "JDWP_SNAPSHOT"]},
+    "mode": {"enum": ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"]},
+    "outcome": {"enum": ["MATCHED", "NO_MATCH", "UNSUPPORTED_MODE"]},
+    "sourceCoverage": {"enum": ["COMPLETE", "PARTIAL", "UNKNOWN"]},
+    "request": {"$ref": "#/$defs/request"},
+    "scannedRecords": {"type": "integer", "minimum": 0},
+    "matchedRecords": {"type": "integer", "minimum": 0},
+    "returnedRecords": {"type": "integer", "minimum": 0, "maximum": 50},
+    "queryMoreAvailable": {"type": "boolean"},
+    "limitations": {
+      "type": "array", "maxItems": 32,
+      "items": {"type": "string", "maxLength": 256}
+    },
+    "nextAction": {
+      "enum": [
+        "REFINE_QUERY", "INSPECT_MATCHED_RECORDS", "NARROW_OR_PAGE",
+        "RECOLLECT_WITH_BETTER_SCOPE", "TREAT_AS_SCOPED_ABSENCE", "VERIFY_WITH_SOURCE"
+      ]
+    },
+    "recordsJsonl": {"type": "string"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": {"$ref": "#/$defs/id"},
+        "artifactType": {"type": "string", "minLength": 1, "maxLength": 128},
+        "relativePath": {
+          "type": "string", "minLength": 1,
+          "pattern": "^(?!/)(?!.*:)(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\).+$"
+        },
+        "mediaType": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sizeBytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "methodRef", "tracepointId", "valueName", "scalarValue", "valueStatus",
+        "sequenceFrom", "sequenceTo"
+      ],
+      "properties": {
+        "methodRef": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "tracepointId": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "valueName": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "scalarValue": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "valueStatus": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "sequenceFrom": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "sequenceTo": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}
+      }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valueName", "scalarValue", "valueStatus"],
+      "properties": {
+        "valueName": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "scalarValue": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "valueStatus": {"oneOf": [{"type": "string"}, {"type": "null"}]}
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode", "filter", "predicates", "anchorSequence", "beforeRecords", "afterRecords",
+        "groupBy", "groupValueName", "topN", "changeValueNames", "offset", "limit", "maxBytes"
+      ],
+      "properties": {
+        "mode": {"enum": ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"]},
+        "filter": {"$ref": "#/$defs/filter"},
+        "predicates": {"type": "array", "maxItems": 8, "items": {"$ref": "#/$defs/predicate"}},
+        "anchorSequence": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+        "beforeRecords": {"type": "integer", "minimum": 0, "maximum": 50},
+        "afterRecords": {"type": "integer", "minimum": 0, "maximum": 50},
+        "groupBy": {"oneOf": [{"enum": ["METHOD_REF", "TRACEPOINT_ID", "PROJECTION_VALUE", "VALUE_STATUS"]}, {"type": "null"}]},
+        "groupValueName": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+        "topN": {"type": "integer", "minimum": 1, "maximum": 50},
+        "changeValueNames": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"type": "string"}},
+        "offset": {"type": "integer", "minimum": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        "maxBytes": {"type": "integer", "minimum": 1, "maximum": 65536}
+      }
+    }
+  }
+}

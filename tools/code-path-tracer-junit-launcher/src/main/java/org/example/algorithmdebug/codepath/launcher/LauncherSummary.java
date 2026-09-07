@@ -15,7 +15,20 @@ public record LauncherSummary(
         long eventsWritten,
         long bytesWritten,
         TraceJsonlSink.Limit limit,
-        String detail) {
+        String detail,
+        String captureMode,
+        String depthSemantics,
+        int selectedTypeCount,
+        int selectedMethodCount,
+        boolean scopeFilterEnabled,
+        long scopeInvocationsObserved,
+        long scopeInvocationsMatched,
+        long scopeInvocationsCaptured,
+        long scopeInvocationsSkippedByWindow,
+        long scopeConditionUnavailableInvocations,
+        long conditionProjectionReads,
+        long detailProjectionReads,
+        java.util.List<String> reasonCodes) {
 
     /** 父进程定位 Summary 的稳定前缀。 */
     public static final String LINE_PREFIX = "ADA_CODEPATH_SUMMARY=";
@@ -27,13 +40,75 @@ public record LauncherSummary(
         Objects.requireNonNull(limit, "limit");
         if (testsFound < 0 || testsSucceeded < 0 || testsAborted < 0 || testsFailed < 0
                 || testsSucceeded + testsAborted + testsFailed > testsFound
-                || eventsWritten < 0 || bytesWritten < 0) {
+                || eventsWritten < 0 || bytesWritten < 0
+                || selectedTypeCount < 0 || selectedMethodCount < 0
+                || scopeInvocationsObserved < 0 || scopeInvocationsMatched < 0
+                || scopeInvocationsCaptured < 0 || scopeInvocationsSkippedByWindow < 0
+                || scopeConditionUnavailableInvocations < 0
+                || scopeInvocationsCaptured + scopeInvocationsSkippedByWindow > scopeInvocationsMatched
+                || scopeInvocationsMatched + scopeConditionUnavailableInvocations > scopeInvocationsObserved
+                || conditionProjectionReads < 0 || detailProjectionReads < 0) {
             throw new IllegalArgumentException("Launcher Summary counts must not be negative");
         }
+        if (!("TRACE".equals(captureMode) || "AGGREGATE".equals(captureMode))
+                || !"SELECTED_METHOD_DEPTH".equals(depthSemantics)) {
+            throw new IllegalArgumentException("Launcher Summary capture semantics are invalid");
+        }
+        if (!scopeFilterEnabled && (scopeInvocationsObserved != 0
+                || scopeInvocationsMatched != 0
+                || scopeInvocationsCaptured != 0 || scopeInvocationsSkippedByWindow != 0
+                || scopeConditionUnavailableInvocations != 0)) {
+            throw new IllegalArgumentException("Disabled scope filter must have zero counts");
+        }
         detail = Objects.requireNonNull(detail, "detail");
+        reasonCodes = java.util.List.copyOf(Objects.requireNonNull(reasonCodes, "reasonCodes"));
+        if (reasonCodes.size() > 16 || reasonCodes.stream().anyMatch(
+                value -> value == null || value.isBlank() || value.length() > 128)) {
+            throw new IllegalArgumentException("Launcher Summary reasonCodes are invalid");
+        }
         if (detail.length() > 2_048) {
             throw new IllegalArgumentException("Launcher Summary detail is too long");
         }
+    }
+
+    /** 构造未启用运行时范围过滤的兼容 Summary。 */
+    public LauncherSummary(
+            LauncherOutcome outcome,
+            long testsFound,
+            long testsSucceeded,
+            long testsAborted,
+            long testsFailed,
+            long eventsWritten,
+            long bytesWritten,
+            TraceJsonlSink.Limit limit,
+            String detail) {
+        this(outcome, testsFound, testsSucceeded, testsAborted, testsFailed,
+                eventsWritten, bytesWritten, limit, detail,
+                "TRACE", "SELECTED_METHOD_DEPTH", 0, 0,
+                false, 0, 0, 0, 0, 0, 0, 0, java.util.List.of());
+    }
+
+    /** 兼容旧 Scope Summary 测试与读取方。 */
+    public LauncherSummary(
+            LauncherOutcome outcome,
+            long testsFound,
+            long testsSucceeded,
+            long testsAborted,
+            long testsFailed,
+            long eventsWritten,
+            long bytesWritten,
+            TraceJsonlSink.Limit limit,
+            String detail,
+            boolean scopeFilterEnabled,
+            long scopeInvocationsObserved,
+            long scopeInvocationsMatched,
+            long scopeConditionUnavailableInvocations) {
+        this(outcome, testsFound, testsSucceeded, testsAborted, testsFailed,
+                eventsWritten, bytesWritten, limit, detail,
+                "TRACE", "SELECTED_METHOD_DEPTH", 0, 0,
+                scopeFilterEnabled, scopeInvocationsObserved, scopeInvocationsMatched,
+                scopeInvocationsMatched, 0, scopeConditionUnavailableInvocations,
+                0, 0, java.util.List.of());
     }
 
     /** @return 目标测试是否失败；不依赖进程退出码猜测。 */

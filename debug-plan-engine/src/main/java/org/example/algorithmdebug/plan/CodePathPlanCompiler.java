@@ -44,11 +44,47 @@ public final class CodePathPlanCompiler {
                 .map(method -> compileMethod(entries, method))
                 .sorted(Comparator.comparing(selection -> selection.selector().methodKey()))
                 .toList();
+        validateScopeConditions(request, selections, scopeMethodKey);
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN,
                 request.planId(), catalog.caseId(), catalog.analysisId(), catalog.targetTest(),
-                selections, scopeMethodKey, request.budget(), request.rationale(),
-                request.intent(), request.requestedAt());
+                selections, scopeMethodKey, request.scopeConditions(), request.captureMode(),
+                request.scopeStartOrdinal(), request.maxMatchedScopes(), request.budget(),
+                request.rationale(), request.intent(), request.requestedAt());
+    }
+
+    private void validateScopeConditions(
+            CodePathPlanRequest request,
+            List<CodePathMethodSelection> selections,
+            Optional<String> scopeMethodKey) {
+        if (request.scopeConditions().isEmpty()) return;
+        if (scopeMethodKey.isEmpty()) {
+            throw new PlanCompilationException(
+                    "scopeMethodKey is required when scopeConditions are present");
+        }
+        CodePathMethodSelection scopeSelection = selections.stream()
+                .filter(selection -> selection.selector().methodKey().equals(scopeMethodKey.orElseThrow()))
+                .findFirst()
+                .orElseThrow();
+        Map<String, CodePathProjection> projections = scopeSelection.projections().stream()
+                .collect(Collectors.toMap(CodePathProjection::name, Function.identity()));
+        HashSet<String> names = new HashSet<>();
+        request.scopeConditions().forEach(condition -> {
+            if (!names.add(condition.projectionName())) {
+                throw new PlanCompilationException(
+                        "scopeConditions must not repeat a projectionName");
+            }
+            CodePathProjection projection = projections.get(condition.projectionName());
+            if (projection == null) {
+                throw new PlanCompilationException(
+                        "Scope condition references an unknown scope projection: "
+                                + condition.projectionName());
+            }
+            if (projection.source() != CodePathProjectionSource.ARGUMENT) {
+                throw new PlanCompilationException(
+                        "Scope conditions may reference only argument projections");
+            }
+        });
     }
 
     private Optional<String> validateScope(

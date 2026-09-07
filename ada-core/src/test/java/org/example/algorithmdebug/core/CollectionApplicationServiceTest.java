@@ -204,7 +204,7 @@ class CollectionApplicationServiceTest {
                 .map(org.example.algorithmdebug.contracts.ArtifactReference::artifactType)
                 .collect(java.util.stream.Collectors.toSet());
         assertTrue(types.containsAll(Set.of(
-                "METHOD_PATH_SUMMARY", "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
+                "CODEPATH_INVOCATIONS", "METHOD_PATH_SUMMARY", "NORMALIZATION_MANIFEST", "COLLECTION_VALIDATION",
                 "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE", "SUFFICIENCY_EVALUATION")));
         SufficiencyEvaluation sufficiency = mapper.readJson(
                 caseRoot.resolve("evidence/evidence-fixed/sufficiency-evaluation.json"),
@@ -214,6 +214,55 @@ class CollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer)).read(CASE_ID);
         assertEquals(List.of(result.summary()), digest.recentCollections());
         assertEquals(List.of(sufficiency), digest.recentEvidence());
+    }
+
+    @Test
+    void aggregateCollectionPublishesQueryableSummaryWithoutInvocationArtifact() throws Exception {
+        PlanId aggregatePlanId = new PlanId("aggregate-plan");
+        establishBaseline("{\"schedule\":1}");
+        createAggregatePlan(aggregatePlanId);
+        CollectionApplicationService service = service(aggregateCollector("{\"schedule\":1}"));
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, aggregatePlanId);
+
+        Set<String> types = result.artifacts().stream()
+                .map(org.example.algorithmdebug.contracts.ArtifactReference::artifactType)
+                .collect(java.util.stream.Collectors.toSet());
+        String artifactDiagnostic = result.artifacts().stream()
+                .filter(value -> "POST_PROCESSING_FAILURE".equals(value.artifactType()))
+                .findFirst()
+                .map(value -> {
+                    try {
+                        return Files.readString(WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                                .resolve(CASE_ID.value()).resolve(value.relativePath()));
+                    } catch (java.io.IOException failure) {
+                        return failure.toString();
+                    }
+                }).orElse(types.toString());
+        assertTrue(types.contains("METHOD_PATH_SUMMARY"), artifactDiagnostic);
+        assertFalse(types.contains("CODEPATH_INVOCATIONS"));
+        assertTrue(Files.isRegularFile(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(CASE_ID.value())
+                        .resolve("collections/collection-fixed/raw/codepath-aggregate.json")));
+        assertEquals(org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE,
+                mapper.readJson(
+                        WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(CASE_ID.value())
+                                .resolve(result.artifacts().stream()
+                                        .filter(value -> "METHOD_PATH_SUMMARY".equals(value.artifactType()))
+                                        .findFirst().orElseThrow().relativePath()),
+                        org.example.algorithmdebug.contracts.MethodPathSummary.class).captureMode());
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceQueryMode.SUMMARY,
+                result.summary().supportedModes().getFirst());
+        assertEquals("evidence_query", result.summary().recommendedTool());
+        var summaryArtifact = result.artifacts().stream()
+                .filter(value -> "METHOD_PATH_SUMMARY".equals(value.artifactType()))
+                .findFirst().orElseThrow();
+        var query = new org.example.algorithmdebug.casecore.RegisteredEvidenceQuery(archive()).query(
+                CASE_ID, summaryArtifact.artifactId(),
+                org.example.algorithmdebug.contracts.EvidenceQueryRequest.summary(65_536));
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceQueryOutcome.MATCHED, query.outcome());
+        assertTrue(query.recordsJsonl().contains("fixture.TargetTest#caseUnderTest()V"));
     }
 
     @Test
@@ -361,6 +410,64 @@ class CollectionApplicationServiceTest {
                 Path.of("java"), collector, (maven, root, output) -> List.of("classes"));
     }
 
+    private void createAggregatePlan(PlanId planId) {
+        StaticAnalysisApplicationService staticAnalysis = new StaticAnalysisApplicationService(
+                new ProjectRegistrationRepository(mapper, writer), mapper, writer,
+                new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());
+        staticAnalysis.createCodePathPlan(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
+                new CodePathPlanRequest(
+                        planId,
+                        List.of(new org.example.algorithmdebug.plan.CodePathMethodRequest(
+                                "fixture.TargetTest#caseUnderTest()V", List.of())),
+                        java.util.Optional.empty(), List.of(),
+                        org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE,
+                        1, 10_000, "Summarize the runtime path",
+                        new org.example.algorithmdebug.contracts.InvestigationIntent(
+                                "Which path executed?", "The target test executed", List.of(),
+                                List.of("Observed method counts")),
+                        org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
+    }
+
+    private MethodPathCollector aggregateCollector(String ganttJson) {
+        return request -> {
+            try {
+                Path raw = request.collectionDirectory().resolve("raw/codepath-aggregate.json");
+                Path stdout = request.collectionDirectory().resolve("logs/stdout.log");
+                Path stderr = request.collectionDirectory().resolve("logs/stderr.log");
+                Files.createDirectories(raw.getParent());
+                Files.createDirectories(stdout.getParent());
+                Files.writeString(raw, """
+                        {"schemaVersion":"1.0","captureMode":"AGGREGATE","depthSemantics":"SELECTED_METHOD_DEPTH",
+                         "acceptedEvents":2,
+                         "methods":[{"methodKey":"fixture.TargetTest#caseUnderTest()V","enterCount":1,
+                           "normalExitCount":1,"exceptionalExitCount":0,"minSelectedDepth":0,"maxSelectedDepth":0,
+                           "firstEventId":1,"lastEventId":2}],
+                         "observedPaths":[],"projectionDistributions":[],
+                         "scope":{"enabled":false,"methodKey":null,"observedInvocations":0,
+                           "matchedInvocations":0,"capturedInvocations":0,"skippedByWindowInvocations":0,
+                           "unavailableConditionInvocations":0,"incompleteCapturedInvocations":0},
+                         "limitations":[]}
+                        """);
+                Files.writeString(stdout, "collector summary\n");
+                Files.writeString(stderr, "");
+                Files.writeString(scheduleOutput.resolve("result.json"), ganttJson);
+                MethodPathManifest manifest = new MethodPathManifest(
+                        "5.0", request.caseId(), request.analysisId(), request.runId(),
+                        request.plan().planId(), request.collectionId(), "code-path-tracer", "0.1.0",
+                        CollectionCompletion.SUCCESS, "COMPLETE", true, 0, false, "PASSED",
+                        1, 1, 0, 0, 2, Files.size(raw),
+                        org.example.algorithmdebug.methodpath.CodePathScopeFilterSummary.disabled(),
+                        List.of(), Optional.empty(), "raw/codepath-aggregate.json",
+                        "logs/stdout.log", "logs/stderr.log", NOW, NOW);
+                return new MethodPathCollectionResult(request, manifest, raw, stdout, stderr);
+            } catch (java.io.IOException failure) {
+                throw new MethodPathCollectionException(
+                        "TEST_COLLECTOR_IO", "Test collector could not write artifacts", failure);
+            }
+        };
+    }
+
     private MethodPathCollector collector(
             CollectionCompletion completion, Optional<String> ganttJson) {
         return collector(completion, ganttJson, """
@@ -391,7 +498,7 @@ class CollectionApplicationServiceTest {
                     Files.writeString(scheduleOutput.resolve("result.json"), ganttJson.orElseThrow());
                 }
                 MethodPathManifest manifest = new MethodPathManifest(
-                        "3.0", request.caseId(), request.analysisId(),
+                        "4.0", request.caseId(), request.analysisId(),
                         request.runId(), request.plan().planId(), request.collectionId(),
                         "code-path-tracer", "0.1.0", completion, "COMPLETE", true,
                         completion == CollectionCompletion.TARGET_FAILED ? 2 : 0, false,
@@ -399,6 +506,7 @@ class CollectionApplicationServiceTest {
                         1, completion == CollectionCompletion.TARGET_FAILED ? 0 : 1, 0,
                         completion == CollectionCompletion.TARGET_FAILED ? 1 : 0,
                         eventCount, Files.size(raw),
+                        org.example.algorithmdebug.methodpath.CodePathScopeFilterSummary.disabled(),
                         truncationReasons, Optional.empty(), "raw/codepath.jsonl",
                         "logs/stdout.log", "logs/stderr.log", NOW, NOW);
                 return new MethodPathCollectionResult(

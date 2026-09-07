@@ -1,7 +1,12 @@
 package org.example.algorithmdebug.jdwp;
 
+import java.net.BindException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 
 final class CoordinatorFixtureMain {
     private CoordinatorFixtureMain() { }
@@ -43,8 +48,24 @@ final class CoordinatorFixtureMain {
     private static Process readyChild(String argument) throws Exception {
         String executable = System.getProperty("os.name").toLowerCase().contains("win")
                 ? "java.exe" : "java";
-        return new ProcessBuilder(
+        Process child = new ProcessBuilder(
                 Path.of(System.getProperty("java.home"), "bin", executable).toString(),
                 argument, "-version").start();
+        awaitListening(child, Integer.parseInt(argument.substring(argument.lastIndexOf(':') + 1)));
+        return child;
+    }
+
+    private static void awaitListening(Process child, int port) throws Exception {
+        long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
+        while (child.isAlive() && System.nanoTime() < deadline) {
+            try (ServerSocket probe = new ServerSocket()) {
+                probe.setReuseAddress(false);
+                probe.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), port));
+            } catch (BindException occupied) {
+                return;
+            }
+            Thread.sleep(10);
+        }
+        throw new IllegalStateException("JDWP fixture did not start listening within its test budget");
     }
 }

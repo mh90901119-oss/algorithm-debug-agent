@@ -210,6 +210,51 @@ test("grades causal Plan lineage and conditional JDWP", () => {
   assert.equal(grade.passed, true)
 })
 
+test("requires declared evidence query modes and a scoped CodePath refinement", () => {
+  const lines = assertionTrace().split("\n")
+  lines.splice(3, 0,
+    toolEvent("codepath_plan_create", {
+      questionToAnswer: "Which candidate path ran?", hypothesis: "W2 followed W1",
+      basedOnEvidenceIds: ["evidence-codepath-broad"], expectedObservations: ["Scoped W2 path"],
+      scopeConditions: [{ projectionName: "candidateId", scalarType: "STRING", expectedValue: "W2" }],
+    }, toolResponse({ planId: "codepath-plan-scoped" })),
+    toolEvent("evidence_query", { mode: "SUMMARY", artifactId: "codepath-invocations" },
+      toolResponse({ outcome: "MATCHED", sourceCoverage: "COMPLETE" })),
+    toolEvent("evidence_query", { mode: "FILTER", artifactId: "codepath-invocations" },
+      toolResponse({ outcome: "MATCHED", sourceCoverage: "COMPLETE" })),
+  )
+  const evalCase = {
+    ...assertionCase,
+    requiredTools: [...assertionCase.requiredTools, "codepath_plan_create", "evidence_query"],
+    allowCodePath: true,
+    requiredEvidenceQueryModes: ["SUMMARY", "FILTER"],
+    requireCodePathScopeCondition: true,
+    maxTargetTestExecutions: 1,
+  }
+
+  const accepted = gradeCase(evalCase, parseOpenCodeJsonl(lines.join("\n")), {
+    openCodeExitCode: 0, sourceModified: false,
+  })
+  assert.equal(accepted.passed, true)
+
+  const summaryIndex = lines.findIndex((line) => line.includes('"mode":"SUMMARY"'))
+  assert.notEqual(summaryIndex, -1)
+  lines.splice(summaryIndex, 1)
+  const missingSummaryTrace = parseOpenCodeJsonl(lines.join("\n"))
+  assert.deepEqual(
+    missingSummaryTrace.toolCalls
+      .filter((call) => call.name === "evidence_query")
+      .map((call) => call.input.mode),
+    ["FILTER"],
+  )
+  const missingSummary = gradeCase(evalCase, missingSummaryTrace, {
+    openCodeExitCode: 0, sourceModified: false,
+  })
+  assert.deepEqual(evalCase.requiredEvidenceQueryModes, ["SUMMARY", "FILTER"])
+  assert.match(missingSummary.correctnessFailures.join("\n"), /SUMMARY/iu)
+  assert.equal(missingSummary.passed, false)
+})
+
 test("rejects a JDWP plan created before CodePath evidence in sequential refinement", () => {
   const lines = assertionTrace().split("\n")
   lines.splice(3, 0,

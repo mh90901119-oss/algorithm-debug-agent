@@ -17,7 +17,7 @@ public final class SchemaVersions {
     public static final String TOOL_RESPONSE = "2.0";
 
     /** 有界动态证据查询结果 Schema 版本。 */
-    public static final String EVIDENCE_QUERY_RESULT = "1.0";
+    public static final String EVIDENCE_QUERY_RESULT = "2.0";
 
     /** 面向模型的目标 UT 运行摘要 Schema 版本。 */
     public static final String RUN_OUTCOME_SUMMARY = "2.0";
@@ -56,7 +56,7 @@ public final class SchemaVersions {
 
     /** 目标 UT 静态方法目录 Schema 版本。 */
     public static final String METHOD_CATALOG = "3.0";
-    public static final String CODEPATH_COLLECTION_PLAN = "4.0";
+    public static final String CODEPATH_COLLECTION_PLAN = "6.0";
 
     /** JDWP 采集计划 Schema 版本。 */
     public static final String JDWP_COLLECTION_PLAN = "5.0";
@@ -73,7 +73,7 @@ public final class SchemaVersions {
     /** 通用 Trace 归一化清单 Schema 版本。 */
     public static final String NORMALIZATION_MANIFEST = "2.0";
     /** 通用方法路径摘要 Schema 版本。 */
-    public static final String METHOD_PATH_SUMMARY = "4.0";
+    public static final String METHOD_PATH_SUMMARY = "5.0";
     /** 通用 JDWP 快照摘要 Schema 版本。 */
     public static final String JDWP_SNAPSHOT_SUMMARY = "4.0";
     /** Collection 证据校验 Schema 版本。 */

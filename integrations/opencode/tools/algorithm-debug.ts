@@ -93,7 +93,7 @@ export const static_analyze = tool({
 })
 
 export const codepath_plan_create = tool({
-  description: "Validate and archive a method-level CodePath collection plan from structured method intent; the Adapter supplies plan identity, time, and default budgets.",
+  description: "Validate and archive an exact-method CodePath plan. Use AGGREGATE to discover bounded method/path/value counts in high-volume code, then TRACE only when invocation order or value correlation is required.",
   args: {
     caseId: tool.schema.string(),
     analysisId: tool.schema.string(),
@@ -109,6 +109,23 @@ export const codepath_plan_create = tool({
       .describe("Exact methods and bounded scalar projections needed to answer this plan question"),
     scopeMethodKey: tool.schema.string().optional()
       .describe("Optional selected method whose repeated invocations should be grouped into path variants"),
+    scopeConditions: tool.schema.array(tool.schema.object({
+      projectionName: tool.schema.string()
+        .describe("Name of an ARGUMENT projection declared on scopeMethodKey"),
+      expectedType: tool.schema.enum(["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "NULL"]),
+      expectedValue: tool.schema.union([
+        tool.schema.string(), tool.schema.number(), tool.schema.boolean(),
+      ]).optional().describe("Typed exact value; omit only for NULL"),
+    })).max(4).default([])
+      .describe("Optional AND conditions that retain one repeated scope invocation and its selected descendants"),
+    captureMode: tool.schema.enum(["TRACE", "AGGREGATE"]).default("TRACE")
+      .describe("AGGREGATE keeps bounded counts without invocation rows; TRACE keeps ordered invocations and correlations"),
+    scopeStartOrdinal: tool.schema.number().int().min(1).max(1000000).optional()
+      .describe("First condition-matched scope ordinal to retain; ordinals count matches, not all observed calls"),
+    maxMatchedScopes: tool.schema.number().int().min(1).max(10000).optional()
+      .describe("Maximum condition-matched scopes retained from scopeStartOrdinal"),
+    timeoutMillis: tool.schema.number().int().min(1).max(1200000).optional()
+      .describe("Optional target-process timeout override; event and byte budgets remain Agent controlled"),
     rationale: tool.schema.string().describe("The concrete unresolved runtime-path question"),
     questionToAnswer: tool.schema.string().describe("The single question this collection must answer"),
     hypothesis: tool.schema.string().describe("The hypothesis this collection must verify or reject"),
@@ -121,7 +138,7 @@ export const codepath_plan_create = tool({
 })
 
 export const codepath_collect = tool({
-  description: "Execute one archived CodePath plan and return its bounded collection summary and artifacts.",
+  description: "Execute one archived CodePath plan and return coverage, limitations, registered primary Artifact, supported evidence_query modes, and a deterministic next action.",
   args: {
     caseId: tool.schema.string(),
     planId: tool.schema.string(),
@@ -142,7 +159,7 @@ export const jdwp_plan_create = tool({
       maxObservedHits: tool.schema.number().int().min(1).max(100000).default(1000)
         .describe("Maximum breakpoint observations before this tracepoint is disabled"),
       maxCapturedHits: tool.schema.number().int().min(1).max(200).default(20)
-        .describe("Maximum full snapshots written after condition matching"),
+        .describe("Maximum full snapshots written after condition matching; use at least 2 when comparing CHANGES"),
       captureFirstMatchedHits: tool.schema.number().int().min(0).max(200).optional()
         .describe("Capture the first N condition-matched hits consecutively"),
       captureEveryMatchedHits: tool.schema.number().int().min(0).max(100000).optional()
@@ -187,7 +204,7 @@ export const jdwp_collect = tool({
 })
 
 export const artifact_read = tool({
-  description: "Read a verified UTF-8 excerpt using an artifactIds entry from a Run or Collection summary; relative paths are not artifact ids.",
+  description: "Read a verified UTF-8 excerpt using an artifactIds entry from a Run or Collection summary. CODEPATH_INVOCATIONS and JDWP_SNAPSHOT_SUMMARY require evidence_query; relative paths are not artifact ids.",
   args: {
     caseId: tool.schema.string(),
     artifactId: tool.schema.string(),
@@ -198,26 +215,46 @@ export const artifact_read = tool({
 })
 
 export const evidence_query = tool({
-  description: "Query a verified CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY artifact without loading the full dataset. Filters are exact structural matches and do not infer business meaning.",
+  description: "Discover and query a verified CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY artifact without loading it all. Start with SUMMARY, then use COUNT/FILTER, WINDOW around a CodePath sequence, or JDWP-only CHANGES. Exact matches do not infer business meaning.",
   args: {
     caseId: tool.schema.string(),
     artifactId: tool.schema.string()
       .describe("Only use an Artifact whose artifactType is exactly CODEPATH_INVOCATIONS or JDWP_SNAPSHOT_SUMMARY. Never pass Method Catalog, Evidence Bundle, Raw Trace, Run, or Manifest Artifact IDs"),
-    methodRef: tool.schema.string().optional()
-      .describe("Exact CodePath methodRef; not valid for JDWP summaries"),
-    tracepointId: tool.schema.string().optional()
-      .describe("Exact JDWP tracepointId; not valid for CodePath invocations"),
-    valueName: tool.schema.string().optional()
-      .describe("CodePath projection name or JDWP normalized valuePath"),
-    scalarValue: tool.schema.string().optional()
-      .describe("Exact scalar text matched in the same value entry as valueName"),
-    valueStatus: tool.schema.enum([
-      "VALUE", "NULL", "UNAVAILABLE", "TRUNCATED",
-      "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY",
-      "CAPTURED", "REFERENCE_ONLY",
-    ]).optional(),
-    sequenceFrom: tool.schema.number().int().positive().optional(),
-    sequenceTo: tool.schema.number().int().positive().optional(),
+    mode: tool.schema.enum(["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"])
+      .default("SUMMARY"),
+    filter: tool.schema.object({
+      methodRef: tool.schema.string().optional()
+        .describe("Exact CodePath methodRef; omit for JDWP"),
+      tracepointId: tool.schema.string().optional()
+        .describe("Exact JDWP tracepointId; omit for CodePath"),
+      valueName: tool.schema.string().optional(),
+      scalarValue: tool.schema.string().optional(),
+      valueStatus: tool.schema.enum([
+        "VALUE", "NULL", "UNAVAILABLE", "TRUNCATED",
+        "STRING", "INTEGER", "DECIMAL", "BOOLEAN", "OBJECT", "ARRAY",
+        "CAPTURED", "REFERENCE_ONLY",
+      ]).optional(),
+      sequenceFrom: tool.schema.number().int().positive().optional(),
+      sequenceTo: tool.schema.number().int().positive().optional(),
+    }).optional().describe("Exact structural pre-filter shared by all modes"),
+    predicates: tool.schema.array(tool.schema.object({
+      valueName: tool.schema.string(),
+      scalarValue: tool.schema.string().optional(),
+      valueStatus: tool.schema.string().optional(),
+    })).max(8).default([])
+      .describe("FILTER-only named value predicates; different names use AND semantics"),
+    anchorSequence: tool.schema.number().int().positive().optional()
+      .describe("WINDOW-only exact record sequence"),
+    beforeRecords: tool.schema.number().int().min(0).max(50).default(0),
+    afterRecords: tool.schema.number().int().min(0).max(50).default(0),
+    groupBy: tool.schema.enum([
+      "METHOD_REF", "TRACEPOINT_ID", "PROJECTION_VALUE", "VALUE_STATUS",
+    ]).optional().describe("COUNT-only grouping dimension"),
+    groupValueName: tool.schema.string().optional()
+      .describe("Required by COUNT for PROJECTION_VALUE or VALUE_STATUS"),
+    topN: tool.schema.number().int().min(1).max(50).default(10),
+    changeValueNames: tool.schema.array(tool.schema.string()).max(16).default([])
+      .describe("CHANGES-only JDWP value paths; filter.tracepointId is also required"),
     offset: tool.schema.number().int().min(0).default(0),
     limit: tool.schema.number().int().positive().max(50).default(20),
     maxBytes: tool.schema.number().int().positive().max(65536).default(16384)

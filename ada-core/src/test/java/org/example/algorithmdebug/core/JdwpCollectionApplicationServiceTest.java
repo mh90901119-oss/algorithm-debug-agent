@@ -209,6 +209,52 @@ class JdwpCollectionApplicationServiceTest {
     }
 
     @Test
+    void zeroHitCollectionProducesCiteableMissingEvidence() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        JdwpCollectionApplicationService service = service(request -> {
+            try {
+                writeExternalArtifacts(request, "{\"schedule\":1}");
+                Files.writeString(request.rawTracePath(), "");
+                Path external = request.collectorOutputDirectory()
+                        .resolve("collection-manifest.json");
+                String manifest = Files.readString(external)
+                        .replace("\"eventCount\":1", "\"eventCount\":0")
+                        .replace("\"observedHitCounts\":{\"target-entry\":1}",
+                                "\"observedHitCounts\":{}")
+                        .replace("\"matchedHitCounts\":{\"target-entry\":1}",
+                                "\"matchedHitCounts\":{}")
+                        .replace("\"capturedHitCounts\":{\"target-entry\":1}",
+                                "\"capturedHitCounts\":{}");
+                Files.writeString(external, manifest);
+                return new JdwpExecutionResult(
+                        request.port(), JdwpCollectionCompletion.SUCCESS, true, true,
+                        Optional.of(successfulRun(request.targetOptions().stdoutLog(),
+                                request.targetOptions().stderrLog(), 123)),
+                        Optional.of(successfulRun(request.collectorStdoutLog(),
+                                request.collectorStderrLog(), 124)));
+            } catch (java.io.IOException failure) {
+                throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
+                        "TEST_IO", "Failed to write the zero-hit fixture", failure);
+            }
+        });
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+        var bundle = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                        "case-1/evidence/evidence-fixed/evidence-bundle.json"),
+                org.example.algorithmdebug.contracts.EvidenceBundle.class);
+
+        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "JDWP_SNAPSHOT_SUMMARY".equals(reference.artifactType())));
+        assertTrue(bundle.facts().stream().anyMatch(fact ->
+                "NO_USEFUL_FACTS".equals(fact.code())
+                        && fact.classification()
+                        == org.example.algorithmdebug.contracts.ClaimClassification.MISSING_EVIDENCE));
+    }
+
+    @Test
     void changedGanttDoesNotBlockCurrentRunEvidence() throws Exception {
         establishBaseline("{\"schedule\":1}");
         JdwpCollectionApplicationService service = service(

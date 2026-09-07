@@ -20,6 +20,11 @@ public record MethodPathSummary(
         List<ObservedPath> observedPaths,
         List<PathAnomaly> anomalies,
         Optional<ScopeSummary> scope,
+        CodePathCaptureMode captureMode,
+        String depthSemantics,
+        EvidenceSourceCoverage sourceCoverage,
+        List<String> limitations,
+        List<ProjectionDistribution> projectionDistributions,
         boolean truncated,
         Instant createdAt) {
 
@@ -39,10 +44,26 @@ public record MethodPathSummary(
         observedPaths = ContractChecks.immutableList(observedPaths, "observedPaths");
         anomalies = ContractChecks.immutableList(anomalies, "anomalies");
         scope = scope == null ? Optional.empty() : scope;
+        captureMode = ContractChecks.requireNonNull(captureMode, "captureMode");
+        depthSemantics = ContractChecks.requireBoundedText(
+                depthSemantics, "depthSemantics", 64, false);
+        if (!"SELECTED_METHOD_DEPTH".equals(depthSemantics)) {
+            throw new IllegalArgumentException("Unsupported CodePath depth semantics");
+        }
+        sourceCoverage = ContractChecks.requireNonNull(sourceCoverage, "sourceCoverage");
+        limitations = ContractChecks.immutableBoundedStrings(limitations, "limitations", 256);
+        projectionDistributions = ContractChecks.immutableList(
+                projectionDistributions, "projectionDistributions");
         if (methods.size() > NormalizationBudget.MAX_METHODS
                 || observedPaths.size() > NormalizationBudget.MAX_RELATIONSHIPS
-                || anomalies.size() > 10_000) {
+                || anomalies.size() > 10_000 || limitations.size() > 32
+                || projectionDistributions.size() > 1_600) {
             throw new IllegalArgumentException("The method-path summary exceeds the hard limit");
+        }
+        if ((sourceCoverage == EvidenceSourceCoverage.COMPLETE && !limitations.isEmpty())
+                || (sourceCoverage == EvidenceSourceCoverage.PARTIAL && limitations.isEmpty())
+                || (truncated && sourceCoverage == EvidenceSourceCoverage.COMPLETE)) {
+            throw new IllegalArgumentException("Method-path coverage and limitations are inconsistent");
         }
         createdAt = ContractChecks.requireNonNull(createdAt, "createdAt");
     }
@@ -64,7 +85,34 @@ public record MethodPathSummary(
             Instant createdAt) {
         this(schemaVersion, evidenceId, caseId, analysisId, runId, planId,
                 collectionId, rawTrace, methods, observedPaths, anomalies,
-                Optional.empty(), truncated, createdAt);
+                Optional.empty(), CodePathCaptureMode.TRACE, "SELECTED_METHOD_DEPTH",
+                truncated ? EvidenceSourceCoverage.PARTIAL : EvidenceSourceCoverage.COMPLETE,
+                truncated ? List.of("LEGACY_TRUNCATED") : List.of(), List.of(),
+                truncated, createdAt);
+    }
+
+    /** 兼容原有带 Scope 的 TRACE 摘要构造。 */
+    public MethodPathSummary(
+            String schemaVersion,
+            EvidenceId evidenceId,
+            CaseId caseId,
+            AnalysisId analysisId,
+            RunId runId,
+            PlanId planId,
+            CollectionId collectionId,
+            ArtifactReference rawTrace,
+            List<MethodStatistic> methods,
+            List<ObservedPath> observedPaths,
+            List<PathAnomaly> anomalies,
+            Optional<ScopeSummary> scope,
+            boolean truncated,
+            Instant createdAt) {
+        this(schemaVersion, evidenceId, caseId, analysisId, runId, planId,
+                collectionId, rawTrace, methods, observedPaths, anomalies, scope,
+                CodePathCaptureMode.TRACE, "SELECTED_METHOD_DEPTH",
+                truncated ? EvidenceSourceCoverage.PARTIAL : EvidenceSourceCoverage.COMPLETE,
+                truncated ? List.of("LEGACY_TRUNCATED") : List.of(), List.of(),
+                truncated, createdAt);
     }
 
     /** 一个计划方法的进入、退出和深度统计。 */
@@ -183,6 +231,52 @@ public record MethodPathSummary(
             code = ContractChecks.requireBoundedText(code, "code", 128, false);
             detail = ContractChecks.requireBoundedText(detail, "detail", 2_048, false);
             provenance = ContractChecks.requireNonNull(provenance, "provenance");
+        }
+    }
+
+    /** AGGREGATE 模式中一个显式 Plan 投影的有界值计数。 */
+    public record ProjectionDistribution(
+            String methodKey,
+            String projectionName,
+            String path,
+            long observedCount,
+            long otherCount,
+            boolean distinctLimitReached,
+            List<TrackedValueCount> trackedValueCounts) {
+        public ProjectionDistribution {
+            methodKey = ContractChecks.requireBoundedText(methodKey, "methodKey", 2_048, false);
+            projectionName = ContractChecks.requireBoundedText(
+                    projectionName, "projectionName", 128, false);
+            path = ContractChecks.requireBoundedText(path, "path", 512, false);
+            trackedValueCounts = ContractChecks.immutableList(
+                    trackedValueCounts, "trackedValueCounts");
+            long tracked = trackedValueCounts.stream().mapToLong(TrackedValueCount::count).sum();
+            if (observedCount < 0 || otherCount < 0 || trackedValueCounts.size() > 256
+                    || tracked + otherCount != observedCount
+                    || (otherCount > 0 && !distinctLimitReached)) {
+                throw new IllegalArgumentException("Projection distribution counts are invalid");
+            }
+        }
+    }
+
+    /** 一个被跟踪的投影状态/标量值及其次数。 */
+    public record TrackedValueCount(
+            String status,
+            String scalarType,
+            Optional<String> value,
+            Optional<String> failureCode,
+            long count) {
+        public TrackedValueCount {
+            status = ContractChecks.requireBoundedText(status, "status", 32, false);
+            scalarType = ContractChecks.requireBoundedText(scalarType, "scalarType", 32, false);
+            value = value == null ? Optional.empty() : value.map(text ->
+                    ContractChecks.requireBoundedText(text, "value", 512, true));
+            failureCode = failureCode == null ? Optional.empty() : failureCode.map(text ->
+                    ContractChecks.requireBoundedText(text, "failureCode", 128, false));
+            if (!List.of("VALUE", "NULL", "UNAVAILABLE", "TRUNCATED").contains(status)
+                    || count < 1) {
+                throw new IllegalArgumentException("Tracked value count is invalid");
+            }
         }
     }
 }

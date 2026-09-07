@@ -109,10 +109,37 @@ exit, attach, and archive facts; do not read Collector logs as algorithm evidenc
 specific recovery action in the message, and never modify the target project POM to repair an Agent
 installation or Collector failure.
 
+Classify CLI start, bootstrap, installation, and invalid-response failures as
+`AGENT_OR_ENVIRONMENT_FAILURE`, then stop target execution and collection. The algorithm-debug Agent
+must not modify, build, install, or repair the Agent itself. After the required Case audit, return the
+failed Tool name, exact ToolResponse code and message, Case/Analysis directories only when they exist,
+and a DFX location only when an installed setting or ToolResponse exposed it. Direct the user to the
+OpenCode Build Agent or PowerShell for diagnostic inspection, rebuild, reinstall, and installer Check.
+A target UT exception, assertion failure, or target timeout contained in a successful `run_test`
+response must not be classified as an Agent failure; analyze that target result normally.
+
 Use CodePath when the unresolved question is which implementation or path executed. Select exact
 `class#method(descriptor)` keys from the current Method Catalog. Use `scopeMethodKey` for a repeated
 operation whose invocation groups/path variants matter. Expand only across a specific unresolved
 boundary exposed by the previous validated summary.
+
+For a high-volume or still-broad path question, start with `captureMode=AGGREGATE`. It records bounded
+method counts, nearest-selected-ancestor edges, selected-method depth, Scope coverage, and counts for
+only the scalar projections explicitly justified by source. It does not preserve invocation order or
+prove that two projected values belonged to the same call. Query its registered `METHOD_PATH_SUMMARY`
+with `SUMMARY` first and `COUNT` second, then create a narrower `TRACE` Plan only if order, correlation,
+or a concrete invocation remains unresolved. Do not raise byte/event budgets to compensate for a
+broad Plan.
+
+Use `captureMode=TRACE` directly when prior input/source/runtime Evidence already identifies a narrow
+scope and the unresolved question requires invocation order or value correlation. A scoped
+follow-up may add at most four AND-combined `scopeConditions`. Every condition must reference a named
+`ARGUMENT` projection on `scopeMethodKey` and compare an exact string, boolean, integer, long, double,
+or null value. Use the scope filter to isolate one observed runtime entity or iteration, never to
+encode target-algorithm semantics. Read the Collection scope statistics: `observedInvocations` is the
+number of scope entries considered, `matchedInvocations` passed every condition, and
+`unavailableConditionInvocations` could not be evaluated. Zero matches prove scoped absence only when
+the source is complete and unavailable/truncation counts are zero.
 
 For each selected method, request only scalar values that can distinguish the current hypothesis.
 Use literal brackets in `arg[0]`, `arg[1].field.subfield`, `return`, or `return.field.subfield`;
@@ -123,10 +150,26 @@ that the source does not establish. Do not request getters, collection indexes, 
 expressions, or complete objects. An unavailable optional projection is a recorded fact; an
 unavailable required projection is an evidence gap, not permission to discard the method event.
 
-After collection, use Method Path Summary for execution counts and path variants. When individual
-argument/return values are needed, call `evidence_query` on the registered `CODEPATH_INVOCATIONS`
-Artifact with an exact `methodRef` and, when useful, one projection `valueName`/`scalarValue` pair.
-Do not page through the complete JSONL with `artifact_read`. For an
+When matching calls are still numerous, set `scopeStartOrdinal` and `maxMatchedScopes`. Ordinals count
+only calls that passed every Scope condition. Read `observedInvocations`, `matchedInvocations`,
+`capturedInvocations`, `skippedByWindowInvocations`, and unavailable-condition counts before treating
+an empty window as absence. A partial Aggregate distribution contains `trackedValueCounts` and
+`otherCount`; when `distinctLimitReached=true`, tracked values are not global top values and cannot
+prove an unlisted value was absent.
+
+After collection, use Method Path Summary for execution counts and path variants. `depth` is
+`SELECTED_METHOD_DEPTH`, and path edges are nearest selected ancestors rather than complete direct JVM
+callers. For an AGGREGATE Summary, only `SUMMARY` and `COUNT` are supported. For a large
+registered `CODEPATH_INVOCATIONS` Artifact, use `evidence_query` instead of paging through JSONL:
+
+- `SUMMARY` first exposes record count, available dimensions, sequence range, and source coverage.
+- `COUNT` compares exact `METHOD_REF`, `PROJECTION_VALUE`, or `VALUE_STATUS` distributions and keeps
+  an explicit `otherCount` outside top results.
+- `FILTER` applies AND-combined exact structural/value predicates to isolate relevant invocations.
+- `WINDOW` returns bounded records around a known sequence. Use `parentSelectedEnterEventId` to follow
+  the nearest selected caller; it is a trace relation, not a business identity.
+
+For an
 incremental CodePath Plan, cite the prior Evidence ID in `basedOnEvidenceIds`; the rationale must name
 the concrete observation that was insufficient, and expected observations must state what result
 would change the next decision. This is the complete multi-collection linkage; do not invent a
@@ -174,8 +217,13 @@ After a Collection, read normalized Summary/Evidence first. Each requested path 
 status: `CAPTURED` contains a scalar value, `TRUNCATED` contains a bounded prefix,
 `REFERENCE_ONLY` identifies a complex runtime object that needs a deeper path, and `UNAVAILABLE`
 contains the deterministic read-failure reason. Use `evidence_query` on the registered
-`JDWP_SNAPSHOT_SUMMARY` Artifact to select an exact `tracepointId`, `valueName`, `scalarValue`,
-`valueStatus`, or sequence window. Interpret the value with the Method Catalog declaration, current
+`JDWP_SNAPSHOT_SUMMARY` Artifact: start with `SUMMARY`, use `FILTER` for exact tracepoint/value
+predicates, `WINDOW` for nearby observed snapshots, `COUNT` for bounded distributions, and `CHANGES`
+to compare named values across captured hits. `CHANGES` never reconstructs skipped hits; when hit
+sampling leaves a gap its source coverage is `PARTIAL`, including when the captured endpoint values
+are equal. A Plan intended for `CHANGES` must allow at least two matched snapshots by setting
+`maxCapturedHits` and `captureFirstMatchedHits` to at least 2; one snapshot can prove one state but
+cannot prove a transition. Interpret each value with the Method Catalog declaration, current
 source, Algorithm Input, stack location, runtime type, and Plan intent; do not infer meaning from a
 field name alone. Read Raw Trace only for a specific detail missing from normalized evidence.
 Do not repeat an effective Plan unchanged. A later Plan must answer
@@ -187,6 +235,19 @@ After every step ask whether the concrete user question is answerable. If yes, s
 not, state the missing causal link and choose one next action: bounded Artifact read, Static analysis,
 CodePath, or JDWP. New evidence may reject the current hypothesis or reveal another entity; create a
 new incremental Plan that cites the prior Evidence instead of restarting the Case.
+
+For every `evidence_query`, obey its deterministic closure fields. `MATCHED` means the query selected
+records, not that a hypothesis is true. `NO_MATCH` plus `COMPLETE` may support only the exact scoped
+absence that was queried. `PARTIAL` or `UNKNOWN` cannot prove absence. `queryMoreAvailable=true`
+requires narrowing or paging before claiming complete coverage. Follow `nextAction`: refine an invalid
+or broad query, inspect matched records, narrow/page, recollect with a better scope, treat only a
+complete scoped absence, or verify the observation against source. Query output is ephemeral and must
+not be cited as a new Artifact; cite the source Artifact/Evidence ID.
+
+Do not lock onto only the entity or method named by the user. Before accepting a causal explanation,
+check the relevant earlier state, competing runtime entities, shared decisions/resources, and rejected
+alternatives that are visible in Algorithm Input, current source, Gantt, or dynamic Evidence. This is
+a search order, not embedded scheduling knowledge.
 
 For a failing target UT, dynamic evidence confirms the same failure only when its structured failure
 fingerprint is `MATCHED`. `CHANGED` or `INCOMPARABLE` is a clue or missing evidence, not confirmation.

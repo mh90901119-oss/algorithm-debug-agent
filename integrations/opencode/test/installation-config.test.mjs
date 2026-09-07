@@ -89,6 +89,8 @@ test("keeps Eval user paths in installed settings and isolates only its internal
   assert.doesNotMatch(wrapper, /\$TargetModule\b/u)
   assert.doesNotMatch(wrapper, /\$OutputRoot\b/u)
   assert.doesNotMatch(wrapper, /--target-module|--output-root/u)
+  assert.match(wrapper, /\[Alias\("CaseId"\)\]/u)
+  assert.match(wrapper, /--case/u)
   assert.doesNotMatch(runner, /ADA_WORKSPACE/u)
   assert.match(runner, /ADA_EVAL_WORKSPACE/u)
   assert.doesNotMatch(runner, /"\.algorithm-debug-agent\.json"/u)
@@ -104,11 +106,13 @@ test("keeps bundled collector paths independent from user overrides", async () =
   assert.doesNotMatch(verifier, /\$env:ADA_JDWP_COLLECTOR_JAR/u)
 })
 
-test("keeps source-build and JDWP verification scripts in the repository", async () => {
+test("keeps source-build scripts without the retired local tracer repository", async () => {
   const build = await readFile(new URL("../../../scripts/build-agent.ps1", import.meta.url), "utf8")
   const verify = await readFile(
     new URL("../../../scripts/verify-jdwp-loopback.ps1", import.meta.url), "utf8")
   const pom = await readFile(new URL("../../../pom.xml", import.meta.url), "utf8")
+  const launcherPom = await readFile(
+    new URL("../../../tools/code-path-tracer-junit-launcher/pom.xml", import.meta.url), "utf8")
 
   assert.match(build, /agentJavaHome/u)
   assert.match(build, /-Pcodepath-launcher/u)
@@ -116,7 +120,10 @@ test("keeps source-build and JDWP verification scripts in the repository", async
   assert.match(build, /if\s*\(\$mavenExitCode\s*-ne\s*0\)/u)
   assert.match(verify, /JdwpLoopbackProbe/u)
   assert.match(verify, /marker/u)
-  assert.match(pom, /third-party\/maven-repository/u)
+  assert.doesNotMatch(pom, /third-party\/maven-repository/u)
+  assert.match(launcherPom, /<artifactId>byte-buddy<\/artifactId>/u)
+  assert.match(launcherPom, /<artifactId>byte-buddy-agent<\/artifactId>/u)
+  assert.doesNotMatch(launcherPom, /kotlin-stdlib|io\.github\.takahirom/u)
 })
 
 test("does not expose DFX or workspace paths as Custom Tool arguments", async () => {
