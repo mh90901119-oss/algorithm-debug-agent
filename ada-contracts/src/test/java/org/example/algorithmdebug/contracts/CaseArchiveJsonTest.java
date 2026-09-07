@@ -44,7 +44,7 @@ class CaseArchiveJsonTest {
         assertRoundTrip(analysis, AnalysisRequest.class);
         assertRoundTrip(query, EvidenceQueryResult.class);
         assertFalse(MAPPER.valueToTree(analysis).has("contextId"));
-        JsonSchemaTestSupport.assertValid(schemaPath("tool", "evidence-query-result-v1.schema.json"),
+        JsonSchemaTestSupport.assertValid(schemaPath("tool", "evidence-query-result-v2.schema.json"),
                 MAPPER.writeValueAsString(query));
     }
 

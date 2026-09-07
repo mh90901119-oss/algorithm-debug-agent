@@ -29,6 +29,8 @@ class MethodPathCollectionContractsTest {
         assertEquals("raw/codepath.jsonl", manifest.rawTrace());
         assertEquals(10, manifest.capturedEventCount());
         assertEquals(100, manifest.capturedBytes());
+        assertEquals(5, manifest.scopeFilter().observedInvocations());
+        assertEquals(2, manifest.scopeFilter().matchedInvocations());
     }
 
     @Test
@@ -97,22 +99,23 @@ class MethodPathCollectionContractsTest {
 
     private static MethodPathManifest failureManifest(Optional<AgentFailureDiagnostic> diagnostic) {
         return new MethodPathManifest(
-                "3.0", new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"), new PlanId("plan-1"),
+                "4.0", new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"), new PlanId("plan-1"),
                 new CollectionId("collection-1"), "algorithm-debug-agent", "0.1.0",
                 CollectionCompletion.AGENT_FAILED,
                 "REQUEST_ARCHIVED", false, -1, false, "NOT_EXECUTED", 0, 0, 0, 0,
-                0, 0,
+                0, 0, CodePathScopeFilterSummary.disabled(),
                 List.of(), diagnostic, "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log",
                 Instant.EPOCH, Instant.EPOCH);
     }
 
     private static MethodPathManifest successManifest(CaseId caseId) {
         return new MethodPathManifest(
-                "3.0", caseId, new AnalysisId("analysis-1"),
+                "4.0", caseId, new AnalysisId("analysis-1"),
                 new RunId("run-1"), new PlanId("plan-1"), new CollectionId("collection-1"),
                 "code-path-tracer", "0.1.0",
                 CollectionCompletion.SUCCESS, "COMPLETE", true, 0, false,
                 "PASSED", 1, 1, 0, 0, 10, 100,
+                new CodePathScopeFilterSummary(true, 5, 2, 1),
                 List.of(), Optional.empty(),
                 "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log",
                 Instant.EPOCH, Instant.EPOCH);

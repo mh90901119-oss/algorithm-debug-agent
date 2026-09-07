@@ -38,6 +38,13 @@ public final class RegisteredArtifactReader {
         }
         ArtifactReference registered = repository.requireArtifactRegistration(
                 caseId, artifactId).artifact();
+        if ("CODEPATH_INVOCATIONS".equals(registered.artifactType())
+                || "METHOD_PATH_SUMMARY".equals(registered.artifactType())
+                || "JDWP_SNAPSHOT_SUMMARY".equals(registered.artifactType())) {
+            throw new WorkspaceException(
+                    "CASE_ARTIFACT_REQUIRES_EVIDENCE_QUERY",
+                    "Use evidence_query for normalized CodePath invocation and JDWP snapshot Artifacts");
+        }
         if (offsetBytes > registered.sizeBytes()) {
             throw new WorkspaceException("CASE_ARTIFACT_OFFSET_INVALID", "Artifact offset exceeds file size");
         }

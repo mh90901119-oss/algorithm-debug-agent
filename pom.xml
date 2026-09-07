@@ -61,20 +61,6 @@
         </dependencies>
     </dependencyManagement>
 
-    <repositories>
-        <repository>
-            <id>ada-third-party</id>
-            <name>Algorithm Debug Agent pinned third-party artifacts</name>
-            <url>file://${maven.multiModuleProjectDirectory}/third-party/maven-repository</url>
-            <releases><enabled>false</enabled></releases>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>never</updatePolicy>
-                <checksumPolicy>fail</checksumPolicy>
-            </snapshots>
-        </repository>
-    </repositories>
-
     <build>
         <pluginManagement>
             <plugins>

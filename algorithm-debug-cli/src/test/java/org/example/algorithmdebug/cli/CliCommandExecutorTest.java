@@ -98,4 +98,21 @@ class CliCommandExecutorTest {
                 CliInputException.class,
                 () -> CliCommandExecutor.readJdwpPlanRequest(unsupported));
     }
+
+    @Test
+    void evidenceQueryRequestUsesTheVersionedDomainContract() throws Exception {
+        var expected = org.example.algorithmdebug.contracts.EvidenceQueryRequest.summary(32_768);
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .registerModule(new com.fasterxml.jackson.datatype.jdk8.Jdk8Module());
+        Path valid = Files.writeString(
+                temporaryDirectory.resolve("evidence-query.json"),
+                mapper.writeValueAsString(expected));
+        Path unsupported = Files.writeString(
+                temporaryDirectory.resolve("unsupported-evidence-query.json"),
+                mapper.writeValueAsString(expected).replaceFirst("}$", ",\"unknown\":true}"));
+
+        assertEquals(expected, CliCommandExecutor.readEvidenceQueryRequest(valid));
+        assertThrows(CliInputException.class,
+                () -> CliCommandExecutor.readEvidenceQueryRequest(unsupported));
+    }
 }

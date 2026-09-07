@@ -11,7 +11,8 @@
 - 成功 Run 从配置的日期化结果目录捕获新增或变化的 JSON Gantt，并保留原文件名。
 - 生成有界方法目录和源码调用关系，帮助 LLM 找到动态采集边界。
 - 按 LLM 提交的结构化意图执行 CodePath 与 JDWP；CodePath 支持参数/返回值标量投影，JDWP 支持栈帧值路径条件和有界周期采样。
-- 通过 `evidence_query` 从已校验的 CodePath/JDWP 派生数据中分页筛选目标方法、断点和变量值。
+- 通过 `evidence_query` 对已校验的 CodePath/JDWP 派生数据执行概览、精确过滤、上下文窗口、
+  分组计数和 JDWP 状态变化查询；查询同时报告源覆盖和确定性下一步，不把临时视图落盘。
 - 同一 OpenCode 会话的普通 Run、CodePath 和 JDWP 严格顺序执行，不使用文件锁；最终回答直接返回用户，不归档模型文本。
 - 将原始 Trace、派生摘要、校验和证据追加归档到 Workspace；模型最终回答直接返回用户，不写入 Workspace。
 - 以 10 个真实 OpenCode Smoke Case 回归成功、失败、静态、动态、完整性和跨实体因果场景。
@@ -48,12 +49,19 @@
 .\scripts\install-opencode.ps1 -Mode Check
 ```
 
-安装器复制 Agent、Skill、Command、Custom Tool、Java CLI 和 Collector 到配置的 OpenCode 目录。仓库源码修改后，已安装副本不会自动变化；先卸载再重新安装：
+安装器复制 Agent、Skill、Command、Custom Tool、JS Runtime 和指向仓库 `bin/ada.cmd` 的路径
+配置。Java CLI、CodePath Launcher 和 JDWP Collector JAR 保留在 Agent 仓库。纯 Java 修改后执行
+`build-agent.ps1` 即可；Agent、Skill、Custom Tool、JS Runtime 或路径配置修改后重新安装并重启
+OpenCode：
 
 ```powershell
 .\scripts\uninstall-opencode.ps1
 .\scripts\install-opencode.ps1 -Mode Install
 ```
+
+`algorithm-debug` 使用 `bash: deny`，正常算法分析不需要终端权限。只有开发、构建、重新安装或
+修复 Agent 自身时才切换 OpenCode Build Agent，或使用外部 PowerShell；目标 UT 仍始终通过
+`run_test` 执行。
 
 安装器不会修改目标算法仓库或 POM。完整步骤见 [目标环境安装与验证](docs/testing/target-algorithm-environment-installation.md)。
 

@@ -18,6 +18,7 @@ import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ArtifactTextExcerpt;
 import org.example.algorithmdebug.contracts.EvidenceQueryFilter;
+import org.example.algorithmdebug.contracts.EvidenceQueryRequest;
 import org.example.algorithmdebug.contracts.EvidenceQueryResult;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
@@ -165,6 +166,15 @@ public final class CaseApplicationService {
             Path workspaceRoot, ProjectId projectId, CaseId caseId,
             String artifactId, EvidenceQueryFilter filter,
             int offset, int limit, int maxBytes) {
+        return queryEvidence(
+                workspaceRoot, projectId, caseId, artifactId,
+                EvidenceQueryRequest.filter(filter, java.util.List.of(), offset, limit, maxBytes));
+    }
+
+    /** 按版本化请求查询已注册 CodePath/JDWP 派生证据。 */
+    public EvidenceQueryResult queryEvidence(
+            Path workspaceRoot, ProjectId projectId, CaseId caseId,
+            String artifactId, EvidenceQueryRequest request) {
         AgentLogContext logContext = AgentLogContext.forCase(
                 workspaceRoot, projectId, caseId).withArtifact(artifactId);
         try {
@@ -172,13 +182,18 @@ public final class CaseApplicationService {
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             EvidenceQueryResult result = new RegisteredEvidenceQuery(archive).query(
-                    caseId, artifactId, filter, offset, limit, maxBytes);
+                    caseId, artifactId, request);
             executionLog.info(logContext, "CaseApplicationService",
-                    result.truncated() ? "EVIDENCE_QUERY_TRUNCATED" : "EVIDENCE_QUERY_COMPLETED",
-                    result.truncated() ? "PARTIAL" : "COMPLETED",
-                    "Evidence query completed; scanned=" + result.scannedRecords()
+                    result.queryMoreAvailable() ? "EVIDENCE_QUERY_PARTIAL" : "EVIDENCE_QUERY_COMPLETED",
+                    result.queryMoreAvailable() ? "PARTIAL" : "COMPLETED",
+                    "Evidence query completed; mode=" + result.mode()
+                            + "; outcome=" + result.outcome()
+                            + "; sourceCoverage=" + result.sourceCoverage()
                             + "; matched=" + result.matchedRecords()
-                            + "; returned=" + result.returnedRecords());
+                            + "; returned=" + result.returnedRecords()
+                            + "; scanned=" + result.scannedRecords()
+                            + "; queryMoreAvailable=" + result.queryMoreAvailable()
+                            + "; nextAction=" + result.nextAction());
             return result;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "Evidence Query failed", failure);

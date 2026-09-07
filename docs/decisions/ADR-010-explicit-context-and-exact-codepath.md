@@ -1,5 +1,7 @@
 # ADR-010：Context 显式分组与 CodePath 精确方法采集
 
+> CodePath 历史说明：其中“不修改上游 matcher”的阶段性选择已被 ADR-016 取代；当前 Launcher 由本仓库维护并采用 Plan 感知精确插桩。
+
 - 状态：Superseded by ADR-015（精确 CodePath 条款继续有效）
 - 日期：2026-08-18
 

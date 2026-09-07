@@ -358,6 +358,33 @@ class MethodPathNormalizerTest {
                 invocation.path("projections").get(1).path("failureCode").asText());
     }
 
+    @Test
+    void derivedInvocationsReferenceTheirNearestSelectedParent() throws Exception {
+        Path trace = write("""
+                {"eventId":1,"eventType":"METHOD_ENTER","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                {"eventId":2,"eventType":"METHOD_ENTER","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":3,"eventType":"METHOD_EXIT","depth":2,"threadName":"main","className":"fixture.Decision","methodName":"choose","descriptor":"()V"}
+                {"eventId":4,"eventType":"METHOD_EXIT","depth":1,"threadName":"main","className":"fixture.Algorithm","methodName":"solve","descriptor":"()V"}
+                """);
+        Path invocations = temporaryDirectory.resolve("nested-invocations.jsonl");
+
+        normalizer().normalize(input(
+                trace, plan(selectors("solve", "choose")), NormalizationBudget.defaults(),
+                "EXACT_DESCRIPTOR", false, invocations));
+
+        List<com.fasterxml.jackson.databind.JsonNode> rows = Files.readAllLines(invocations).stream()
+                .map(line -> {
+                    try {
+                        return new com.fasterxml.jackson.databind.ObjectMapper().readTree(line);
+                    } catch (java.io.IOException failure) {
+                        throw new java.io.UncheckedIOException(failure);
+                    }
+                }).toList();
+        assertEquals("2.0", rows.getFirst().path("schemaVersion").asText());
+        assertEquals(1, rows.getFirst().path("parentSelectedEnterEventId").asLong());
+        assertTrue(rows.get(1).path("parentSelectedEnterEventId").isNull());
+    }
+
     private MethodPathNormalizer normalizer() {
         return new MethodPathNormalizer();
     }

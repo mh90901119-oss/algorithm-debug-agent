@@ -91,6 +91,15 @@ class CodePathProcessCollectorTest {
     }
 
     @Test
+    void preservesSpecificReasonsAlongsideTheReachedHardLimit() throws Exception {
+        var result = collector().collect(request(2_000, "truncated-with-reason"));
+
+        assertEquals(CollectionCompletion.TRUNCATED, result.manifest().completion());
+        assertEquals(List.of("VALUE_CARDINALITY_LIMIT_REACHED", "launcher EVENTS"),
+                result.manifest().truncationReasons());
+    }
+
+    @Test
     void preservesTargetFailureWhenCollectorAlsoReportsToolFailure() throws Exception {
         var result = collector().collect(request(2_000, "tool-and-target-failed"));
 

@@ -33,6 +33,13 @@ function requireStringArray(value, label) {
   }
 }
 
+function requireEnumArray(value, label, allowed) {
+  requireStringArray(value, label)
+  if (value !== undefined && value.some((item) => !allowed.has(item))) {
+    throw new TypeError(`${label} contains an unsupported value`)
+  }
+}
+
 export function validateSuite(suite) {
   if (!suite || typeof suite !== "object" || Array.isArray(suite)) {
     throw new TypeError("Eval Suite must be an object")
@@ -73,6 +80,11 @@ export function validateSuite(suite) {
       item.requiredJdwpConditionValuePatterns,
       `cases[${index}].requiredJdwpConditionValuePatterns`,
     )
+    requireEnumArray(
+      item.requiredEvidenceQueryModes,
+      `cases[${index}].requiredEvidenceQueryModes`,
+      new Set(["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"]),
+    )
     if (item.expectedGanttOutcome !== undefined
         && !["PRESENT", "ABSENT"].includes(item.expectedGanttOutcome)) {
       throw new TypeError(`cases[${index}].expectedGanttOutcome must be PRESENT or ABSENT`)
@@ -100,7 +112,7 @@ export function validateSuite(suite) {
     }
     for (const flag of [
       "requirePlanIntent", "requireJdwpCondition", "requireAllCollectionsSuccessful",
-      "requireSequentialDynamicRefinement",
+      "requireSequentialDynamicRefinement", "requireCodePathScopeCondition",
     ]) {
       if (item[flag] !== undefined && typeof item[flag] !== "boolean") {
         throw new TypeError(`cases[${index}].${flag} must be boolean`)

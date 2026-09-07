@@ -1,5 +1,7 @@
 # ADR-014：Agent 仓库统一维护最小 JDWP Collector
 
+> CodePath 历史说明：其中“CodePathTracer 继续作为独立第三方依赖”的描述已被 ADR-016 取代；当前 CodePath Launcher 由本仓库维护。
+
 - 状态：Accepted
 - 日期：2026-08-23
 

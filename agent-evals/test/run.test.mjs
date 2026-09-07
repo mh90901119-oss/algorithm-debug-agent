@@ -41,13 +41,19 @@ test("loads the versioned smoke suite and keeps the target module outside checke
   const causal = suite.cases.find((item) => item.id === "cross-wafer-causal")
   assert.equal(causal.requirePlanIntent, true)
   assert.equal(causal.requireJdwpCondition, true)
+  assert.equal(causal.requireCodePathScopeCondition, true)
+  assert.equal(causal.requireAllCollectionsSuccessful, false)
+  assert.deepEqual(causal.requiredEvidenceQueryModes, ["SUMMARY", "FILTER", "CHANGES"])
   assert.equal(Object.hasOwn(causal, "minimumPlanEvidenceReferences"), false)
   assert.equal(causal.requiredTools.includes("codepath_collect"), true)
   assert.equal(causal.requiredTools.includes("jdwp_collect"), true)
-  assert.match(causal.question, /CodePath.*runtime method path.*JDWP.*state/iu)
+  assert.match(causal.question, /CodePath.*scope.*SUMMARY and FILTER.*JDWP.*CHANGES/iu)
   const forbiddenCausalPatterns = causal.forbiddenAnswerPatterns.map((pattern) => new RegExp(pattern, "iu"))
   assert.equal(forbiddenCausalPatterns.some((pattern) => pattern.test("A-W2 alone does not cause the delay")), false)
   assert.equal(forbiddenCausalPatterns.some((pattern) => pattern.test("A-W2 alone caused the delay")), true)
+  const explicitNo = "Did A-W2 alone cause the delay? No. B-W1, C-W1 and whole-wafer ordering contributed."
+  assert.equal(causal.requiredAnswerPatterns.every(
+    pattern => new RegExp(pattern, "iu").test(explicitNo)), true)
   assert.doesNotMatch(codePath.requiredAnswerPatterns.join("|"), /鏂规硶|杩愯/u)
 })
 
@@ -70,6 +76,27 @@ test("loads fifty unique real-session quality cases across all evidence categori
   assert.equal(suite.cases
     .filter(item => item.requireSequentialDynamicRefinement === true)
     .every(item => /CodePath.*JDWP|JDWP.*CodePath/iu.test(item.question)), true)
+})
+
+test("accepts a causal rejection without allowing an affirmative single-wafer verdict", async () => {
+  const suiteUrl = new URL("../suites/quality-50.json", import.meta.url)
+  const suite = JSON.parse(await readFile(suiteUrl, "utf8"))
+  const causal = suite.cases.find(item => item.id === "causal-03")
+  const supportedRejection = [
+    "## Verdict: \"A-W2 alone caused its late PICK\" is REJECTED",
+    "- **A-W2 alone caused nothing:** B-W1, C-W1 and whole-wafer ordering created the delay.",
+  ].join("\n")
+  const naturalRejection = "A-W2 did not delay itself; B-W1, C-W1 and whole-wafer ordering caused the delay."
+  const incorrectVerdict = "## Verdict: A-W2 alone caused the late PICK."
+
+  assert.equal(causal.requiredAnswerPatterns.every(
+    pattern => new RegExp(pattern, "iu").test(supportedRejection)), true)
+  assert.equal(causal.requiredAnswerPatterns.every(
+    pattern => new RegExp(pattern, "iu").test(naturalRejection)), true)
+  assert.equal(causal.forbiddenAnswerPatterns.some(
+    pattern => new RegExp(pattern, "iu").test(supportedRejection)), false)
+  assert.equal(causal.forbiddenAnswerPatterns.some(
+    pattern => new RegExp(pattern, "iu").test(incorrectVerdict)), true)
 })
 
 test("builds a real OpenCode run command from TargetModule and one user-style case question", () => {
@@ -102,6 +129,27 @@ test("rejects duplicate case ids and absolute module paths inside a suite", () =
   }
 
   assert.throws(() => validateSuite(invalid), /targetModule is not allowed|duplicate case id/u)
+})
+
+test("validates evidence discovery expectations", () => {
+  const evalCase = {
+    id: "evidence-discovery", question: "Find the decisive runtime facts.",
+    targetTest: { className: "a.B", methodName: "m" },
+    requiredTools: ["evidence_query"], forbiddenTools: [],
+    requiredAnswerPatterns: [], forbiddenAnswerPatterns: [],
+    requireAnswerContext: true, requireEvidenceReferences: true,
+    allowCodePath: true, allowJdwp: true, maxTargetTestExecutions: 3,
+    requiredEvidenceQueryModes: ["SUMMARY", "FILTER", "CHANGES"],
+    requireCodePathScopeCondition: true,
+  }
+  const suite = {
+    schemaVersion: "1.0", suiteId: "discovery", description: "discovery", cases: [evalCase],
+  }
+  assert.doesNotThrow(() => validateSuite(suite))
+  assert.throws(
+    () => validateSuite({ ...suite, cases: [{ ...evalCase, requiredEvidenceQueryModes: ["RAW"] }] }),
+    /requiredEvidenceQueryModes/iu,
+  )
 })
 
 test("executes Windows PowerShell and cmd shims without enabling shell interpolation", () => {

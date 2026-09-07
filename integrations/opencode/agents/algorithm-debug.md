@@ -38,6 +38,12 @@ tools (`algorithm_input_capture`, `artifact_read`, `evidence_query`, `gantt_insp
 `static_analyze`, `case_inspect`, and `case_audit`) so every diagnostic fact comes from a registered,
 verified Artifact. Use `evidence_query` instead of full-file reads for CodePath invocation and JDWP
 snapshot datasets; query output is ephemeral while the referenced source Artifact remains archived.
+For a broad/high-volume CodePath question, use AGGREGATE discovery before a narrow TRACE; do not raise
+budgets as a substitute for selecting exact methods and Scope. For a new large dynamic Artifact,
+query `SUMMARY` first, then use `COUNT` or exact `FILTER` to narrow
+the candidate set, `WINDOW` for surrounding invocation order, and JDWP `CHANGES` for named state
+transitions. Treat `NO_MATCH` as scoped absence only with `sourceCoverage=COMPLETE`; otherwise follow
+the returned `nextAction` and report missing evidence rather than guessing.
 If the available evidence is already sufficient, stop collecting and complete the
 analysis instead of attempting an unapproved direct filesystem command.
 
@@ -55,6 +61,14 @@ Collector failure, and do not retry it automatically.
 For any ToolResponse with `success=false`, do not diagnose the target UT from that call. Follow the
 specific bounded recovery message. If failure Manifest Artifacts are returned, read the Manifest for
 process and Collector facts; DFX logs remain human diagnostics and are not algorithm Evidence.
+Classify CLI start, bootstrap, installation, or invalid-response failures as
+`AGENT_OR_ENVIRONMENT_FAILURE` and stop further target execution or collection. The algorithm-debug
+Agent must not modify, build, install, or repair the Agent itself. After the required `case_audit`,
+report the failed Tool, exact response code and message, current Case and Analysis directories only
+when `analysis_begin` created them, and a DFX location only when a ToolResponse or installed setting
+exposed it. Tell the user to use the OpenCode Build Agent or PowerShell to inspect diagnostics and
+rebuild or reinstall. A target UT exception, assertion failure, or target timeout returned by a
+successful `run_test` must not be classified as an Agent failure.
 
 When the user explicitly requests a runtime method path, use CodePath; JDWP state and line-hit
 observations do not replace Method Path Evidence. Use JDWP for named runtime values rather than as a
@@ -66,11 +80,15 @@ where the named value is in scope, and request only exact scalar or enum `valueP
 `CAPTURED`, `TRUNCATED`, `REFERENCE_ONLY`, and `UNAVAILABLE` explicitly; use a deeper path in a later
 Plan for `REFERENCE_ONLY`, and treat `UNAVAILABLE` as an evidence gap. Combine each value with its
 method declaration, source line, stack, runtime type, Plan intent, and Algorithm Input. The Collector
-does not infer business meaning from field names.
+does not infer business meaning from field names. When the question requires a transition, retain at
+least two matched snapshots before using JDWP `CHANGES`; one captured hit cannot establish change.
 
 For CodePath, submit exact Method Catalog keys plus only the scalar `arg[n](.field)*` and
 `return(.field)*` projections needed to distinguish the current hypothesis. Read the normalized
 Method Path Summary first and bounded invocation rows only when value-level comparison is needed.
+Start with a broad Collection unless prior runtime Evidence already identifies an exact scope. A later
+scoped Plan may use up to four exact AND-combined `scopeConditions`, each bound to an `ARGUMENT`
+projection on `scopeMethodKey`; it must cite the prior Evidence that exposed the unresolved subset.
 Every follow-up Plan must cite the prior same-Case Evidence and state the unresolved observation in
 its rationale; never repeat a collection without a decision-changing evidence gap.
 

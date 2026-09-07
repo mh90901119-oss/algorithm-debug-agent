@@ -157,3 +157,4 @@ Workspace expected/actual files, Artifact integrity, and interaction JSONL.
 |---|---:|---|
 | 2026-09-03 | 2.0 | Replaced speculative observation/query design with the implemented CodePath v4, JDWP Collector 4.0 / Plan v5, one evidence query, direct answer, and non-locking single-session sequencing contracts. |
 | 2026-09-04 | 2.1 | Fixed OpenCode Evidence Query schema drift by exposing the normalized JDWP `CAPTURED` and `REFERENCE_ONLY` projection statuses; Java query behavior and stored evidence are unchanged. |
+| 2026-09-05 | 2.2 | Corrected the causal Eval contract: require an explicit rejection of the single-wafer hypothesis and only forbid an affirmative standalone verdict, so quoted hypotheses and negated conclusions are not misgraded. Agent runtime behavior is unchanged. |

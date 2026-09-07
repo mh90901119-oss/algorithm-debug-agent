@@ -13,20 +13,19 @@
     <name>ADA controlled Code Path Tracer JUnit Launcher</name>
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
-        <code-path-tracer.version>0.1.0-SNAPSHOT</code-path-tracer.version>
-        <kotlin.version>1.9.22</kotlin.version>
+        <byte-buddy.version>1.15.11</byte-buddy.version>
         <junit.platform.version>1.10.3</junit.platform.version>
     </properties>
     <dependencies>
         <dependency>
-            <groupId>io.github.takahirom.codepathtracer</groupId>
-            <artifactId>code-path-tracer</artifactId>
-            <version>${code-path-tracer.version}</version>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <version>${byte-buddy.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.jetbrains.kotlin</groupId>
-            <artifactId>kotlin-stdlib</artifactId>
-            <version>${kotlin.version}</version>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <version>${byte-buddy.version}</version>
         </dependency>
         <dependency>
             <groupId>org.junit.platform</groupId>

@@ -282,6 +282,27 @@ export function gradeCase(evalCase, trace, runtime) {
     }
   }
 
+  const successfulQueryModes = new Set(trace.toolCalls
+    .filter((call) => call.name === "evidence_query" && call.response?.success === true)
+    .map((call) => call.input?.mode)
+    .filter((mode) => typeof mode === "string"))
+  for (const mode of evalCase.requiredEvidenceQueryModes ?? []) {
+    if (!successfulQueryModes.has(mode)) {
+      correctnessFailures.push(`Required successful evidence_query mode was not used: ${mode}`)
+    }
+  }
+
+  if (evalCase.requireCodePathScopeCondition) {
+    const scopedPlan = trace.toolCalls.some((call) =>
+      call.name === "codepath_plan_create"
+      && call.response?.success === true
+      && Array.isArray(call.input?.scopeConditions)
+      && call.input.scopeConditions.length > 0)
+    if (!scopedPlan) {
+      correctnessFailures.push("A successful CodePath Plan with scopeConditions was required")
+    }
+  }
+
   if (toolNames.includes("analysis_complete")) {
     correctnessFailures.push("analysis_complete must not be called; return the answer directly")
   }

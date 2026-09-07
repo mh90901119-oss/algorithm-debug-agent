@@ -93,7 +93,11 @@ final class CodePathInvocationDeriver {
             ArrayNode projections = projections(event, records);
             markRequiredProjectionGaps(projections, reasons);
             if ("METHOD_ENTER".equals(type)) {
-                stack.push(new OpenInvocation(eventId, depth, methodRef, projections.deepCopy()));
+                Long parentSelectedEnterEventId = stack.isEmpty()
+                        ? null : stack.peek().enterEventId();
+                stack.push(new OpenInvocation(
+                        eventId, parentSelectedEnterEventId, depth, methodRef,
+                        projections.deepCopy()));
             } else if ("METHOD_EXIT".equals(type)) {
                 if (stack.isEmpty() || !stack.peek().methodRef().equals(methodRef)) {
                     reasons.add("TRACE_STRUCTURE_INCOMPLETE");
@@ -128,10 +132,15 @@ final class CodePathInvocationDeriver {
             long exitEventId,
             ArrayNode exitProjections) {
         ObjectNode value = MAPPER.createObjectNode();
-        value.put("schemaVersion", "1.0");
+        value.put("schemaVersion", "2.0");
         value.put("sequence", sequence);
         value.put("methodRef", open.methodRef());
         value.put("enterEventId", open.enterEventId());
+        if (open.parentSelectedEnterEventId() == null) {
+            value.putNull("parentSelectedEnterEventId");
+        } else {
+            value.put("parentSelectedEnterEventId", open.parentSelectedEnterEventId());
+        }
         value.put("exitEventId", exitEventId);
         value.put("depth", open.depth());
         ArrayNode merged = value.putArray("projections");
@@ -218,6 +227,7 @@ final class CodePathInvocationDeriver {
 
     private record OpenInvocation(
             long enterEventId,
+            Long parentSelectedEnterEventId,
             int depth,
             String methodRef,
             ArrayNode projections) {

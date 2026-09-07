@@ -125,45 +125,63 @@ final class CollectionPostProcessingService {
                 evidenceRunId, collection.collectionId(), EvidenceDimension.METHOD_PATH, budget);
         archive.createEvidenceRequest(request);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
-        Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/codepath.jsonl");
+        Path rawPath = layout.collectionRoot(collection.collectionId())
+                .resolve(collectorManifest.rawTrace()).normalize();
+        if (!rawPath.startsWith(layout.collectionRoot(collection.collectionId()))) {
+            throw new CaseRunException(
+                    "CODEPATH_RAW_PATH_INVALID", "CodePath manifest Raw path escapes the Collection");
+        }
         Path invocationPath = layout.collectionRoot(collection.collectionId())
                 .resolve("derived/codepath-invocations.jsonl");
         ArtifactReference raw = describe(
                 collection.caseId(), rawPath, collection.collectionId().value() + "-raw",
-                "CODEPATH_RAW_TRACE", "application/x-ndjson");
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                        ? "CODEPATH_RAW_AGGREGATE" : "CODEPATH_RAW_TRACE",
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                        ? "application/json" : "application/x-ndjson");
         Instant now = clock.instant();
-        NormalizationResult<MethodPathSummary> normalized = new MethodPathNormalizer().normalize(
-                new CodePathNormalizationInput(
-                        collection, plan, raw, rawPath, invocationPath, evidenceId, budget,
-                        collectorManifest.completion() == CollectionCompletion.TRUNCATED, now));
+        CodePathNormalizationInput normalizationInput = new CodePathNormalizationInput(
+                collection, plan, raw, rawPath, invocationPath, evidenceId, budget,
+                collectorManifest.completion() == CollectionCompletion.TRUNCATED, now);
+        NormalizationResult<MethodPathSummary> normalized =
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                ? new org.example.algorithmdebug.normalizer.AggregateMethodPathNormalizer()
+                        .normalize(normalizationInput)
+                : new MethodPathNormalizer().normalize(normalizationInput);
         if (normalized.summary().isEmpty()) {
             archive.createNormalizationManifest(normalizationManifest(
-                    evidenceId, collection, "CODEPATH", "method-path-normalizer", raw,
+                    evidenceId, collection, "CODEPATH",
+                    plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                            ? "aggregate-method-path-normalizer" : "method-path-normalizer", raw,
                     Optional.empty(), budget, normalized, now));
             throw new CaseRunException(
                     normalized.failureCode().orElse("CODEPATH_NORMALIZATION_FAILED"),
                     "CodePath Raw Trace normalization failed");
         }
         MethodPathSummary summary = normalized.summary().orElseThrow();
-        if (Files.exists(invocationPath)) {
+        ArrayList<ArtifactReference> queryArtifacts = new ArrayList<>();
+        if (plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE
+                && Files.exists(invocationPath)) {
             ArtifactReference invocations = describe(
                     collection.caseId(), invocationPath,
                     collection.collectionId().value() + "-codepath-invocations",
                     "CODEPATH_INVOCATIONS", "application/x-ndjson");
-            archive.registerArtifact(collection.caseId(), invocations, now);
+            queryArtifacts.add(invocations);
         }
         Path summaryPath = archive.createMethodPathSummary(summary);
         ArtifactReference summaryReference = describe(
                 collection.caseId(), summaryPath, evidenceId.value() + "-method-path-summary",
                 "METHOD_PATH_SUMMARY", "application/json");
         NormalizationManifest normalization = normalizationManifest(
-                evidenceId, collection, "CODEPATH", "method-path-normalizer", raw,
+                evidenceId, collection, "CODEPATH",
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                        ? "aggregate-method-path-normalizer" : "method-path-normalizer", raw,
                 Optional.of(summaryReference), budget, normalized, now);
         Path normalizationPath = archive.createNormalizationManifest(normalization);
         CollectionValidation validation = validator.validateMethodPath(new MethodPathValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath);
+        return complete(request, validation, summaryReference, normalizationPath, queryArtifacts);
     }
 
     private CollectionPostProcessingResult doProcessJdwp(
@@ -212,14 +230,15 @@ final class CollectionPostProcessingService {
         CollectionValidation validation = validator.validateJdwp(new JdwpValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath);
+        return complete(request, validation, summaryReference, normalizationPath, List.of());
     }
 
     private CollectionPostProcessingResult complete(
             EvidenceBuildRequest request,
             CollectionValidation validation,
             ArtifactReference summaryReference,
-            Path normalizationPath) {
+            Path normalizationPath,
+            List<ArtifactReference> queryArtifacts) {
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, request.caseId());
         Path validationPath = archive.createCollectionValidation(validation);
         ArtifactReference validationReference = describe(
@@ -248,6 +267,7 @@ final class CollectionPostProcessingService {
         Path sufficiencyPath = archive.createSufficiencyEvaluation(sufficiency);
 
         ArrayList<ArtifactReference> result = new ArrayList<>();
+        result.addAll(queryArtifacts);
         result.add(describe(request.caseId(), layout.evidenceBuildRequest(request.evidenceId()),
                 request.evidenceId().value() + "-request", "EVIDENCE_BUILD_REQUEST",
                 "application/json"));

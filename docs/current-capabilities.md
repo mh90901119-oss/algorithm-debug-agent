@@ -1,88 +1,70 @@
 # 当前能力与边界
 
-更新日期：2026-09-03。
+更新日期：2026-09-06。
 
 ## 已实现
 
-### OpenCode 集成
+### OpenCode 与执行入口
 
-- 安装 `algorithm-debug` Agent、Skill、Command 和 13 个 Custom Tool。
-- 不绑定 OpenCode 版本号，以安装后的实际发现和加载检查判断兼容性。
-- JS Adapter 调用 `bin/ada.cmd`，Java CLI 输出单一结构化 ToolResponse。
-- Tool 输入错误也返回 `success=false` 的 ToolResponse，不再以未结构化 JS 异常中断模型决策。
-- `analysis_begin` 返回 Case、Analysis ID、配置的算法结果目录和可逐字复制的相对目录。
-- 模型结论直接返回用户，不写入 Workspace。
+- 安装 `algorithm-debug` Agent、Skill、Command 和 13 个 Custom Tool，不绑定固定 OpenCode 版本号。
+- Custom Tool 经 JS Adapter 调用 `bin/ada.cmd`，Java CLI 只向 stdout 输出结构化 `ToolResponse`，运行日志写入 Workspace。
+- 同一 OpenCode Runtime 内的普通 UT、CodePath 和 JDWP 目标执行严格串行；不提供跨会话锁。
+- Tool 成功和失败均返回结构化状态、原因及下一步建议，模型结论直接返回用户，不默认归档。
 
-### Case、输入、UT 与 Gantt
+### Case、算法输入、UT 与 Gantt
 
-- 按目标 Maven 模块规范化路径计算稳定 `projectId`。
-- 一个目标 UT 对应一个 Case；需要新确定性工作时追加新的 `analysisId`。
-- 只接受目标测试方法第一层源码中恰好一个可确定的 `String` 输入路径，文件名以
-  `input.json` 或 `input_.json` 结尾。
+- 一个目标算法 UT 对应一个 Case；需要新确定性工作时在原 Case 中追加 Analysis。
+- 从目标测试方法第一层源码定位唯一的 `String` 输入路径，文件名支持 `input.json` 或 `input_.json` 结尾。
 - 输入首次按原名复制到 `case/input/`，后续 Analysis 复用并校验同一 Artifact。
-- Maven Surefire 精确执行一个 JUnit 5 类或方法，归档退出码、stdout、stderr、Surefire XML。
-- 成功普通 Run 从配置的 `${runDate}` Gantt 目录捕获一次新 JSON，保留原文件名。
-- 目标异常、断言失败和 Agent/环境失败使用不同的结构化事实，不强制套入封闭业务分类。
+- Maven Surefire 精确执行一个 JUnit 类或方法，归档退出码、stdout、stderr、Surefire XML 和结构化失败指纹。
+- 成功普通 Run 从配置的 `${runDate}` Gantt 目录捕获一次新增 JSON，保留原文件名。动态 Collection 不复制 Gantt，也不比较 Gantt SHA。
 
 ### 静态分析
 
 - 生成当前源码的有界 Method Catalog、源码锚点、直接调用边和多态候选边。
-- Catalog 是采集规划索引，不声称是完整全程序调用图。
-- Maven test classpath 无法解析时明确标记不完整，由 CodePath/JDWP 验证运行时事实。
+- Catalog 用于帮助模型选择动态采集点，不宣称是完整 JVM 调用图。
+- Maven test classpath 无法解析时明确标记覆盖不完整，由 CodePath 或 JDWP 验证运行时事实。
 
-### CodePath v4
+### CodePath Plan v6
 
-- 按精确 `class#method(descriptor)` 选择方法。
-- 支持 `arg[0]`、嵌套普通字段、`return` 和返回对象字段的有界标量投影。
-- `arg0`、Getter、任意表达式、容器扫描和完整对象展开不支持。
-- 原始 enter/exit 事件归档后，Normalizer 生成 `codepath-invocations.jsonl` 和 Method Path Summary。
-- 单个投影不可读不会丢弃调用事件；必填投影缺失会形成 Evidence gap。
-- Trace 写入失败后立即停止继续格式化事件，保留首次写入错误作为工具失败原因。
-- Plan 错误返回具体、单行、有界的英文原因。
+- Launcher 由本仓库维护，使用 Byte Buddy 仅对 Plan 中精确 `class#method(descriptor)` 安装 Advice；不再依赖第三方 CodePathTracer Snapshot 或 Kotlin 运行库。
+- `TRACE` 保存按顺序的 enter/exit 事件并派生 `codepath-invocations.jsonl`，用于调用顺序和同次调用值关联。
+- `AGGREGATE` 不保存逐调用明细，只保存方法计数、最近已选择祖先边、已选择方法深度、Scope 计数和显式投影值分布，适合高频、大型算法的第一轮发现。
+- 参数和返回值投影只读取 Plan 明确声明的参数位置与有限字段路径；不猜测 wafer、job、step 等业务含义，不扫描容器或完整对象图。
+- Scope 最多四个精确 `EQUALS` 条件；`scopeStartOrdinal` 与 `maxMatchedScopes` 可选择条件匹配后的连续调用窗口。
+- 默认预算仍为 100000 个事件、16 MiB、5 分钟，硬上限为 1000000 个事件、50 MiB、20 分钟。优化依赖精确 Plan、Scope 和聚合模式，而不是盲目提高预算。
+- AGGREGATE 每个投影最多保留 256 个不同值，全 Collection 最多 10000 个不同值；其余只计入 `otherCount` 并显式标记局限。
+- 方法路径表示“最近已选择祖先”，深度表示“已选择方法深度”，不冒充完整 JVM 调用栈。
 
-### JDWP Collector 4.0 / Plan v5
+### JDWP
 
-- 支持精确方法/行断点、显式局部变量、`this` 和普通实例字段的精确值路径。
-- `maxEvents` 只限制 `tracepoint_hit` 快照数；Collector 的启动和结束记录固定另计，Normalizer 按同一口径读取。
-- Collector 只接受 `127.0.0.1`、1 MiB 内计划和完整且单调的观察/匹配/采集计数。
-- 单个 Tracepoint 支持最多四个 `EQUALS` 条件，全部满足才采集；条件与投影共用同一值路径读取规则。
-- 分离 `maxObservedHits`、`maxCapturedHits`、首批匹配采样和周期匹配采样。
-- 暂停期间只复制选定值，`finally` 恢复事件集，恢复后由同一 Collector 线程顺序写 JSONL。
-- Manifest 分别记录 observed、matched、captured、unavailable；每个计划值保留 `CAPTURED/TRUNCATED/REFERENCE_ONLY/UNAVAILABLE` 状态。
-- Collector 不递归展开完整对象图，也不自动猜测字段的业务含义。
-- 大型重复循环可依据前一轮 Manifest 的具体缺口创建新 Plan；没有固定采集轮数。
+- 支持精确方法/行断点、显式局部变量、`this` 和有限普通实例字段路径。
+- 条件与投影共用栈帧值路径规则，支持观察、匹配、采集三类计数和有界连续采样。
+- 事件线程只在断点命中时短暂停止；值复制完成后恢复，再由同一 Collector 线程顺序写 JSONL。
+- 不递归展开完整对象图、不执行方法、不猜测字段业务含义。
 
-### 证据访问与顺序
+### Evidence 与模型读取
 
-- `evidence_query` 只查询已注册且 SHA 校验通过的 CodePath invocation 或 JDWP snapshot summary。
-- 查询使用精确过滤、分页和字节预算，不进行业务语义判断。
-- `run_test`、CodePath 和 JDWP 在单个 OpenCode Runtime 内不得重叠；第二个请求立即被拒绝。
-- 当 JDWP 用于细化 CodePath 时，必须等待 CodePath Collection 完成并引用其完整 Evidence ID。
-- 最终回答必须包含完整 Case/Analysis 相对目录、实际使用能力、事实分类和完整证据 ID。
-
-### Eval
-
-- Smoke Suite 包含 10 个真实 OpenCode 场景。
-- Quality Suite 包含 50 个唯一场景，覆盖成功、目标缺失、输入边界、算法异常、断言失败、
-  静态分析、CodePath、JDWP、Artifact 篡改和跨 wafer 因果 refinement。
-- Harness 检查 Tool 顺序、执行次数、动态执行重叠、Plan 意图、Evidence lineage、JDWP 条件、
-  最终回答、受保护源码未修改、Workspace 应有/实有文件、Artifact 完整性和交互 JSONL。
+- Raw Trace 只读保存；Normalizer 确定性生成 Method Path Summary 或 JDWP Snapshot Summary。
+- `evidence_query` 只读取已注册且 SHA 校验通过的动态 Artifact，并返回覆盖状态、局限、剩余结果和下一步动作。
+- TRACE 支持 `SUMMARY/FILTER/WINDOW/COUNT`；JDWP 额外支持 `CHANGES`；AGGREGATE Summary 支持 `SUMMARY/COUNT`。
+- AGGREGATE Summary 的 `COUNT` 可按方法、投影值或值状态查询。`otherCount` 表示未逐值保留的观测，不可据此证明某值不存在。
+- 小字节预算下 Summary 会保留总数并显式返回省略数量，不会因明细过多丢失整个查询结果。
+- Artifact SHA 只校验归档文件读取时未被替换或损坏，不证明业务结果相同。
 
 ## 保留边界
 
-- 一个目标 UT 只支持一个算法输入文件。
-- Java 工具不解释 Gantt 业务语义，`gantt_inspect` 只提供有界 JSON 结构和值。
-- 复杂反射、运行时生成代码和外部依赖分派可能在静态 Catalog 中保持未解析。
-- JDWP 只能读取命中栈顶帧可见值及有界实例字段，不执行方法或任意表达式。
-- 动态证据受观察命中、匹配命中、采集命中、栈帧、字符串、字节和超时预算约束；超限必须报告为部分证据。
-- 当前只保证一个 OpenCode 会话内的目标执行顺序，不提供多会话锁或跨进程协调。
+- 当前只支持一个目标 UT 对应一个算法输入文件。
+- Java 工具不解释 Gantt 或参数的业务语义；LLM 结合算法输入、源码和动态事实进行解释。
+- 反射、运行时生成代码和外部依赖分派可能在静态 Catalog 中保持未解析。
+- AGGREGATE 不能证明调用顺序，也不能证明两个投影值属于同一次调用；这类问题必须缩小范围后使用 TRACE。
+- 动态证据受事件、字节、时间、Scope、投影和值基数预算约束；超限只能作为部分证据。
+- 当前只保证单个 OpenCode Runtime 内的目标执行顺序，不处理多个 OpenCode 会话同时运行同一目标 UT。
 - Agent 不修改目标算法生产源码，不接管生产调度决策。
 
 ## 可靠性原则
 
-- Artifact SHA 只证明已注册文件在读取时未被替换或损坏，不证明两次业务结果相同。
-- 失败 UT 的动态复现只比较结构化失败指纹；成功 Gantt 不作为动态采集通用门禁。
-- Raw Trace 只读；Normalizer、Validator 和 Evidence Engine 确定性地产生派生证据。
-- 零个当前 Collection 不产生 Validation 覆盖；Evidence Bundle 截断时不能宣称 Validation 充分。
-- 截断、冲突、条件不可用和缺失值必须显式呈现，不能伪装成确认事实。
-- `case_audit` 校验版本化有界控制 JSON 的 Schema 与路径身份，并报告损坏文件和空目录；非版本化运行摘要仍参与已知文件审计。
+- 失败 UT 的动态复现只比较结构化失败指纹；`MATCHED` 才能确认同类失败，`CHANGED/INCOMPARABLE` 只能作为线索。
+- 成功 Gantt 独立归档，不作为动态采集门禁。
+- 截断、零命中、投影不可读、值基数超限和结构不完整都必须显式返回，不伪装成完整证据。
+- `case_audit` 校验控制 JSON、Artifact 身份、SHA 和目录结构，并报告损坏文件及空目录。

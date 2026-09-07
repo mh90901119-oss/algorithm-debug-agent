@@ -75,6 +75,13 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       projections: [{ name: "waferId", path: "arg[0].waferId", required: true }],
     }],
     scopeMethodKey: "fixture.Algorithm#schedule()V",
+    scopeConditions: [{
+      projectionName: "waferId", expectedType: "STRING", expectedValue: "WAFER-1",
+    }],
+    captureMode: "AGGREGATE",
+    scopeStartOrdinal: 2,
+    maxMatchedScopes: 3,
+    timeoutMillis: 600_000,
     rationale: "Observe invocation path variants",
     questionToAnswer: "Which invocation path executed?",
     hypothesis: "One path variant was selected",
@@ -106,9 +113,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
   }, context)
   await runtime.evidenceQuery({
     caseId: "case-1", artifactId: "codepath-invocations",
-    methodRef: "fixture.Algorithm#schedule()V", valueName: "waferId",
-    scalarValue: "WAFER-1", valueStatus: "VALUE",
-    sequenceFrom: 2, sequenceTo: 8, offset: 1, limit: 10, maxBytes: 32768,
+    mode: "FILTER",
+    filter: {
+      methodRef: "fixture.Algorithm#schedule()V", sequenceFrom: 2, sequenceTo: 8,
+    },
+    predicates: [{ valueName: "waferId", scalarValue: "WAFER-1", valueStatus: "VALUE" }],
+    offset: 1, limit: 10, maxBytes: 32768,
   }, context)
 
   const businessCalls = calls.filter(call => !["workspace", "project"].includes(call.args[0]))
@@ -141,10 +151,7 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
       "--max-bytes", "1024"],
     ["evidence", "query", "--workspace", "D:/ada-workspace", "--project-id", "demo-project",
       "--case-id", "case-1", "--artifact-id", "codepath-invocations",
-      "--method-ref", "fixture.Algorithm#schedule()V", "--value-name", "waferId",
-      "--scalar-value", "WAFER-1", "--value-status", "VALUE",
-      "--sequence-from", "2", "--sequence-to", "8",
-      "--offset", "1", "--limit", "10", "--max-bytes", "32768"],
+      "--request-file", "<temp>"],
   ])
   assert.deepEqual(temporaryFiles.map(value => value.content), [
     "why did it fail?",
@@ -155,6 +162,12 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         projections: [{ name: "waferId", path: "arg[0].waferId", required: true }],
       }],
       scopeMethodKey: "fixture.Algorithm#schedule()V",
+      scopeConditions: [{
+        projectionName: "waferId", expectedType: "STRING", expectedValue: "WAFER-1",
+      }],
+      captureMode: "AGGREGATE",
+      scopeStartOrdinal: 2,
+      maxMatchedScopes: 3,
       rationale: "Observe invocation path variants",
       intent: {
         questionToAnswer: "Which invocation path executed?",
@@ -162,7 +175,7 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         basedOnEvidenceIds: [],
         expectedObservations: ["Observed method path"],
       },
-      budget: { maxEvents: 100000, maxBytes: 16777216, timeoutMillis: 300000 },
+      budget: { maxEvents: 100000, maxBytes: 16777216, timeoutMillis: 600000 },
       requestedAt: "2026-08-19T00:00:00.000Z",
     }),
     JSON.stringify({
@@ -193,6 +206,24 @@ test("maps every OpenCode action to the real CLI and removes temporary files", a
         expectedObservations: ["Runtime state value"],
       },
       requestedAt: "2026-08-19T00:00:00.000Z",
+    }),
+    JSON.stringify({
+      mode: "FILTER",
+      filter: {
+        methodRef: "fixture.Algorithm#schedule()V",
+        sequenceFrom: 2,
+        sequenceTo: 8,
+      },
+      predicates: [{
+        valueName: "waferId", scalarValue: "WAFER-1", valueStatus: "VALUE",
+      }],
+      beforeRecords: 0,
+      afterRecords: 0,
+      topN: 10,
+      changeValueNames: [],
+      offset: 1,
+      limit: 10,
+      maxBytes: 32768,
     }),
   ])
   for (const file of temporaryFiles) {

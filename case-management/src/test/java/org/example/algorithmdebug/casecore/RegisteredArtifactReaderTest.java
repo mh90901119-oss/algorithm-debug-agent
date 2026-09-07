@@ -75,6 +75,26 @@ class RegisteredArtifactReaderTest {
     }
 
     @Test
+    void directsLargeNormalizedDynamicArtifactsToEvidenceQuery() throws Exception {
+        Path caseRoot = repository.layout(CaseArchiveRepositoryTest.manifest().caseId()).caseRoot();
+        RegisteredArtifactReader reader = new RegisteredArtifactReader(repository);
+        for (String artifactType : new String[]{"CODEPATH_INVOCATIONS", "JDWP_SNAPSHOT_SUMMARY"}) {
+            String artifactId = artifactType.toLowerCase();
+            Path file = Files.writeString(caseRoot.resolve(artifactId + ".jsonl"), "{}\n");
+            var reference = new CaseArtifactAccess(casesRoot).describe(
+                    CaseArchiveRepositoryTest.manifest().caseId(), artifactId, artifactType,
+                    "application/x-ndjson", file);
+            repository.registerArtifact(CaseArchiveRepositoryTest.manifest().caseId(), reference,
+                    Instant.parse("2026-08-19T00:00:00Z"));
+
+            WorkspaceException failure = assertThrows(WorkspaceException.class, () -> reader.read(
+                    CaseArchiveRepositoryTest.manifest().caseId(), artifactId, 0, 64));
+            assertEquals("CASE_ARTIFACT_REQUIRES_EVIDENCE_QUERY", failure.code());
+            assertTrue(failure.getMessage().contains("evidence_query"));
+        }
+    }
+
+    @Test
     void identicalRegistrationIsIdempotentButConflictingIdentityIsRejected() throws Exception {
         Path caseRoot = repository.layout(CaseArchiveRepositoryTest.manifest().caseId()).caseRoot();
         Path first = Files.writeString(caseRoot.resolve("plan.json"), "{\"plan\":1}");

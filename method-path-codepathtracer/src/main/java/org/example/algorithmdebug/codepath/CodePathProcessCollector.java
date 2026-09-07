@@ -19,6 +19,7 @@ import org.example.algorithmdebug.harness.ProcessLimits;
 import org.example.algorithmdebug.harness.RunCompletion;
 import org.example.algorithmdebug.harness.RunResult;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
+import org.example.algorithmdebug.methodpath.CodePathScopeFilterSummary;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionRequest;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionResult;
@@ -53,7 +54,9 @@ public final class CodePathProcessCollector implements MethodPathCollector {
     public MethodPathCollectionResult collect(MethodPathCollectionRequest request)
             throws MethodPathCollectionException {
         Path root = request.collectionDirectory();
-        Path raw = root.resolve("raw/codepath.jsonl");
+        Path raw = root.resolve(request.plan().captureMode()
+                == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                ? "raw/codepath-aggregate.json" : "raw/codepath.jsonl");
         Path stdout = root.resolve("logs/stdout.log");
         Path stderr = root.resolve("logs/stderr.log");
         Path launcherPlan = root.resolve("request/plan.json");
@@ -76,8 +79,7 @@ public final class CodePathProcessCollector implements MethodPathCollector {
             CodePathLauncherSummary summary = finished ? new LauncherSummaryReader().read(stdout) : null;
             if (!Files.exists(raw)) Files.createFile(raw);
             CollectionCompletion completion = completion(!finished, observedExitCode, summary);
-            List<String> truncation = summary != null && summary.truncated()
-                    ? List.of("launcher " + summary.limit()) : List.of();
+            List<String> truncation = mergeReasonCodes(summary);
             Optional<AgentFailureDiagnostic> diagnostic = completion == CollectionCompletion.TOOL_FAILED
                     ? Optional.of(new AgentFailureDiagnostic(
                             "CODEPATH_LAUNCHER_FAILED",
@@ -85,17 +87,28 @@ public final class CodePathProcessCollector implements MethodPathCollector {
                     : Optional.empty();
             long events = summary == null ? 0 : summary.eventsWritten();
             long bytes = Files.size(raw);
+            CodePathScopeFilterSummary scopeFilter = summary == null
+                    ? CodePathScopeFilterSummary.disabled()
+                    : new CodePathScopeFilterSummary(
+                            summary.scopeFilterEnabled(), summary.scopeInvocationsObserved(),
+                            summary.scopeInvocationsMatched(),
+                            summary.scopeInvocationsCaptured(),
+                            summary.scopeInvocationsSkippedByWindow(),
+                            summary.scopeConditionUnavailableInvocations());
             MethodPathManifest manifest = new MethodPathManifest(
-                    "3.0", request.caseId(), request.analysisId(), request.runId(),
+                    "5.0", request.caseId(), request.analysisId(), request.runId(),
                     request.plan().planId(), request.collectionId(), "code-path-tracer",
                     configuration.toolVersion(),
                     completion, "COMPLETE", true, observedExitCode, !finished,
                     targetOutcome(summary), summary == null ? 0 : summary.testsFound(),
                     summary == null ? 0 : summary.testsSucceeded(),
                     summary == null ? 0 : summary.testsAborted(),
-                    summary == null ? 0 : summary.testsFailed(), events, bytes,
+                    summary == null ? 0 : summary.testsFailed(), events, bytes, scopeFilter,
                     truncation, diagnostic,
-                    "raw/codepath.jsonl", "logs/stdout.log", "logs/stderr.log", startedAt, clock.instant());
+                    request.plan().captureMode()
+                            == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
+                            ? "raw/codepath-aggregate.json" : "raw/codepath.jsonl",
+                    "logs/stdout.log", "logs/stderr.log", startedAt, clock.instant());
             return new MethodPathCollectionResult(request, manifest, raw, stdout, stderr);
         } catch (CodePathAdapterException failure) {
             throw new MethodPathCollectionException(
@@ -135,6 +148,16 @@ public final class CodePathProcessCollector implements MethodPathCollector {
         if ("TARGET_FAILED".equals(summary.outcome())) return CollectionCompletion.TARGET_FAILED;
         if (exitCode != 0) return CollectionCompletion.TOOL_FAILED;
         return summary.truncated() ? CollectionCompletion.TRUNCATED : CollectionCompletion.SUCCESS;
+    }
+
+    private static List<String> mergeReasonCodes(CodePathLauncherSummary summary) {
+        if (summary == null) return List.of();
+        List<String> reasons = new java.util.ArrayList<>(summary.reasonCodes());
+        if (summary.truncated()) {
+            String limitReason = "launcher " + summary.limit();
+            if (!reasons.contains(limitReason)) reasons.add(limitReason);
+        }
+        return List.copyOf(reasons);
     }
 
     private static String targetOutcome(CodePathLauncherSummary summary) {

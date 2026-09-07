@@ -188,6 +188,11 @@ opencode
 
 当前工作目录用于确定目标模块和稳定 `projectId`。不要在 Agent 仓库目录提问目标算法 UT，否则 Maven 会运行错误项目。
 
+`algorithm-debug` 的 OpenCode 配置使用 `bash: deny`。这是运行时证据边界，不是安装缺失：
+正常分析不需要切换 Agent；只有修改、构建、重新安装或修复 Algorithm Debug Agent 自身时，
+才切换 OpenCode Build Agent，或在外部 PowerShell 中执行仓库脚本。目标 UT 即使抛异常、断言
+失败或超时，仍是 `run_test` 返回的目标执行事实，不应切换 Build Agent。
+
 ## 11. 首次手动分析
 
 明确指定完整 UT：
@@ -236,6 +241,11 @@ Custom Tool、JS Runtime 或路径配置发生变化时才需要重新安装。�
 
 也可以不单独执行卸载，`Install` 会调用相同卸载逻辑后写入最新副本。安装或卸载后重新打开
 OpenCode，使当前会话不再使用缓存定义。
+
+上述命令由 OpenCode Build Agent 或外部 PowerShell 执行，不由 `algorithm-debug` 执行。
+纯 Java 修改只执行 `build-agent.ps1` 即可；只有 OpenCode 侧资产或路径配置变化时才需要 Install
+和重启 OpenCode。Agent/环境故障的回答必须保留失败 Tool 名、结构化错误码、已创建的
+Case/Analysis 目录和可用 DFX 位置，不得继续推断目标算法根因。
 
 卸载不会删除 Workspace 或目标算法文件。详细规则见 [卸载与重新安装](opencode-uninstallation.md)。安装后调试见 [OpenCode Agent 调试](opencode-agent-debugging.md)。
 

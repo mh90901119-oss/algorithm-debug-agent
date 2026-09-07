@@ -13,7 +13,8 @@
     "completion",
     "baselineOutcome",
     "evidenceUsable",
-    "artifactRelativePaths"
+    "artifactRelativePaths",
+    "artifactIds"
   ],
   "properties": {
     "caseId": {
@@ -61,6 +62,20 @@
         "type": "string",
         "maxLength": 160
       }
-    }
+    },
+    "sourceCoverage": {"enum": ["COMPLETE", "PARTIAL", "UNKNOWN"]},
+    "reasonCodes": {
+      "type": "array", "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    },
+    "primaryArtifactId": {
+      "oneOf": [{"type": "string", "minLength": 1, "maxLength": 160}, {"type": "null"}]
+    },
+    "recommendedTool": {"type": "string", "maxLength": 64},
+    "supportedModes": {
+      "type": "array", "maxItems": 5, "uniqueItems": true,
+      "items": {"enum": ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"]}
+    },
+    "nextAction": {"type": "string", "minLength": 1, "maxLength": 256}
   }
 }

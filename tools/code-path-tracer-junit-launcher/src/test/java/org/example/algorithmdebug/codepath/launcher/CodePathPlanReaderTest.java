@@ -14,7 +14,8 @@ class CodePathPlanReaderTest {
 
     @Test
     void readsTheVersionedAgentPlanWithoutAdaContractsOnTheTargetJvm() throws Exception {
-        Path planFile = Files.writeString(directory.resolve("plan.json"), validPlan(""));
+        Path planFile = Files.writeString(directory.resolve("plan.json"), validPlan("6.0",
+                ",\"captureMode\":\"AGGREGATE\",\"scopeStartOrdinal\":100,\"maxMatchedScopes\":20"));
 
         LauncherCodePathPlan plan = new CodePathPlanReader().read(planFile);
 
@@ -25,6 +26,20 @@ class CodePathPlanReaderTest {
         assertEquals(100, plan.budget().maxEvents());
         assertEquals(4096, plan.budget().maxBytes());
         assertEquals("Which path ran?", plan.intent().questionToAnswer());
+        assertEquals(LauncherCodePathPlan.CaptureMode.AGGREGATE, plan.captureMode());
+        assertEquals(100, plan.scopeStartOrdinal());
+        assertEquals(20, plan.maxMatchedScopes());
+    }
+
+    @Test
+    void readsLegacyV5PlanAsTraceWithDefaultScopeWindow() throws Exception {
+        Path planFile = Files.writeString(directory.resolve("legacy.json"), validPlan("5.0", ""));
+
+        LauncherCodePathPlan plan = new CodePathPlanReader().read(planFile);
+
+        assertEquals(LauncherCodePathPlan.CaptureMode.TRACE, plan.captureMode());
+        assertEquals(1, plan.scopeStartOrdinal());
+        assertEquals(10_000, plan.maxMatchedScopes());
     }
 
     @Test
@@ -36,9 +51,13 @@ class CodePathPlanReaderTest {
     }
 
     private static String validPlan(String suffix) {
+        return validPlan("6.0", suffix);
+    }
+
+    private static String validPlan(String version, String suffix) {
         return """
                 {
-                  "schemaVersion":"4.0",
+                  "schemaVersion":"%s",
                   "planId":"plan-1",
                   "caseId":"case-1",
                   "analysisId":"analysis-1",
@@ -59,6 +78,7 @@ class CodePathPlanReaderTest {
                     }]
                   }],
                   "scopeMethodKey":"fixture.Service#solve()V",
+                  "scopeConditions":[],
                   "budget":{"maxEvents":100,"maxBytes":4096,"timeoutMillis":30000},
                   "rationale":"fixture",
                   "intent":{
@@ -69,6 +89,6 @@ class CodePathPlanReaderTest {
                   },
                   "createdAt":"2026-08-25T00:00:00Z"
                 }
-                """.trim().replace("\n}", suffix + "\n}");
+                """.formatted(version).trim().replace("\n}", suffix + "\n}");
     }
 }

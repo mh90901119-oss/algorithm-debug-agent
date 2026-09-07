@@ -2,11 +2,15 @@ package org.example.algorithmdebug.codepath.launcher;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** 按 Plan 读取普通字段，并把结果立即收敛成有界标量。 */
 final class ScalarProjectionReader {
     private static final int MAX_STRING_LENGTH = 512;
+    private final Map<FieldKey, FieldAccess> fields = new HashMap<>();
 
     List<ProjectionValue> readArguments(
             List<LauncherCodePathPlan.Projection> projections,
@@ -25,6 +29,14 @@ final class ScalarProjectionReader {
         return List.copyOf(values);
     }
 
+    List<ProjectionValue> readArguments(
+            List<LauncherCodePathPlan.Projection> projections,
+            Object[] arguments,
+            Set<String> includedNames) {
+        return readArguments(projections.stream()
+                .filter(value -> includedNames.contains(value.name())).toList(), arguments);
+    }
+
     List<ProjectionValue> readReturn(
             List<LauncherCodePathPlan.Projection> projections,
             Object returnValue) {
@@ -34,15 +46,25 @@ final class ScalarProjectionReader {
                 .toList();
     }
 
+    List<ProjectionValue> readReturn(
+            List<LauncherCodePathPlan.Projection> projections,
+            Object returnValue,
+            Throwable thrown) {
+        if (thrown == null) return readReturn(projections, returnValue);
+        return projections.stream()
+                .filter(projection -> projection.source() == LauncherCodePathPlan.ProjectionSource.RETURN)
+                .map(projection -> unavailable(projection, "METHOD_THREW"))
+                .toList();
+    }
+
     private ProjectionValue read(LauncherCodePathPlan.Projection projection, Object root) {
         Object current = root;
         for (String fieldName : projection.fieldPath()) {
             if (current == null) return nullValue(projection);
-            Field field = findField(current.getClass(), fieldName);
-            if (field == null) return unavailable(projection, "FIELD_NOT_FOUND");
+            FieldAccess access = findField(current.getClass(), fieldName);
+            if (access.field() == null) return unavailable(projection, access.failureCode());
             try {
-                if (!field.trySetAccessible()) return unavailable(projection, "FIELD_INACCESSIBLE");
-                current = field.get(current);
+                current = access.field().get(current);
             } catch (RuntimeException | IllegalAccessException failure) {
                 return unavailable(projection, "FIELD_READ_FAILED");
             }
@@ -51,15 +73,34 @@ final class ScalarProjectionReader {
         return scalar(projection, current);
     }
 
-    private Field findField(Class<?> type, String name) {
+    private FieldAccess findField(Class<?> type, String name) {
+        FieldKey key = new FieldKey(type, name);
+        FieldAccess cached = fields.get(key);
+        if (cached != null) return cached;
         for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             try {
-                return current.getDeclaredField(name);
+                Field field = current.getDeclaredField(name);
+                try {
+                    if (!field.trySetAccessible()) {
+                        FieldAccess result = new FieldAccess(null, "FIELD_INACCESSIBLE");
+                        fields.put(key, result);
+                        return result;
+                    }
+                } catch (RuntimeException failure) {
+                    FieldAccess result = new FieldAccess(null, "FIELD_INACCESSIBLE");
+                    fields.put(key, result);
+                    return result;
+                }
+                FieldAccess result = new FieldAccess(field, null);
+                fields.put(key, result);
+                return result;
             } catch (NoSuchFieldException ignored) {
                 // 继承字段必须继续向父类查找；失败状态只在完整查找结束后生成。
             }
         }
-        return null;
+        FieldAccess result = new FieldAccess(null, "FIELD_NOT_FOUND");
+        fields.put(key, result);
+        return result;
     }
 
     private ProjectionValue scalar(LauncherCodePathPlan.Projection projection, Object value) {
@@ -107,4 +148,7 @@ final class ScalarProjectionReader {
                 ? root
                 : root + "." + String.join(".", projection.fieldPath());
     }
+
+    private record FieldKey(Class<?> type, String name) {}
+    private record FieldAccess(Field field, String failureCode) {}
 }

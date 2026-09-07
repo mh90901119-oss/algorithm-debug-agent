@@ -58,7 +58,18 @@
         "minimumPlanEvidenceReferences": { "type": "integer", "minimum": 0, "maximum": 20 },
         "requireJdwpCondition": { "type": "boolean" },
         "requiredJdwpConditionValuePatterns": { "$ref": "#/$defs/stringArray" },
-        "requireAllCollectionsSuccessful": { "type": "boolean" }
+        "requireAllCollectionsSuccessful": { "type": "boolean" },
+        "requireSequentialDynamicRefinement": { "type": "boolean" },
+        "requireCodePathScopeCondition": { "type": "boolean" },
+        "requiredEvidenceQueryModes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 5,
+          "items": { "enum": ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"] }
+        },
+        "expectedGanttOutcome": { "enum": ["PRESENT", "ABSENT"] },
+        "expectedCollectionCompletion": { "enum": ["SUCCESS", "TARGET_FAILED", "TRUNCATED"] },
+        "postAction": { "enum": ["CORRUPT_FIRST_ARTIFACT"] }
       }
     }
   }

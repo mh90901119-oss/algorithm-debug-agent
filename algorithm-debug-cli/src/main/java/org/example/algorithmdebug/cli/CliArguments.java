@@ -156,25 +156,15 @@ public final class CliArguments {
         if (matches(arguments, "evidence", "query")) {
             Map<String, String> options = options(arguments, 2, Set.of(
                     "--workspace", "--project-id", "--case-id", "--artifact-id",
-                    "--method-ref", "--tracepoint-id", "--value-name", "--scalar-value",
-                    "--value-status", "--sequence-from", "--sequence-to",
-                    "--offset", "--limit", "--max-bytes"));
-            requirePresent(options, "--workspace", "--project-id", "--case-id", "--artifact-id");
-            var filter = new org.example.algorithmdebug.contracts.EvidenceQueryFilter(
-                    Optional.ofNullable(options.get("--method-ref")),
-                    Optional.ofNullable(options.get("--tracepoint-id")),
-                    Optional.ofNullable(options.get("--value-name")),
-                    Optional.ofNullable(options.get("--scalar-value")),
-                    Optional.ofNullable(options.get("--value-status")),
-                    optionalPositiveLong(options, "--sequence-from"),
-                    optionalPositiveLong(options, "--sequence-to"));
+                    "--request-file"));
+            requireExactly(options, Set.of(
+                    "--workspace", "--project-id", "--case-id", "--artifact-id",
+                    "--request-file"));
             return new CliCommand.EvidenceQuery(
                     path(options.get("--workspace"), "--workspace"),
                     new ProjectId(options.get("--project-id")),
-                    new CaseId(options.get("--case-id")), options.get("--artifact-id"), filter,
-                    boundedInt(options.getOrDefault("--offset", "0"), "--offset", 0, Integer.MAX_VALUE),
-                    boundedInt(options.getOrDefault("--limit", "20"), "--limit", 1, 50),
-                    boundedInt(options.getOrDefault("--max-bytes", "16384"), "--max-bytes", 1, 65_536));
+                    new CaseId(options.get("--case-id")), options.get("--artifact-id"),
+                    path(options.get("--request-file"), "--request-file"));
         }
         if (arguments.length >= 3 && "plan".equals(arguments[0])
                 && "jdwp".equals(arguments[1]) && "create".equals(arguments[2])) {

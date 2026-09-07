@@ -202,12 +202,18 @@ public final class EvidenceBundleBuilder {
         };
         String summary = validation.collectorType() + " Collection validation status is " + validation.status();
         ArrayList<EvidenceFact> result = new ArrayList<>();
-        result.add(fact(ClaimClassification.VALIDATOR_CONCLUSION,
+        ClaimClassification collectionClassification =
+                validation.status() == EvidenceValidationStatus.INCONCLUSIVE
+                        ? ClaimClassification.MISSING_EVIDENCE
+                        : ClaimClassification.VALIDATOR_CONCLUSION;
+        result.add(fact(collectionClassification,
                 EvidenceDimension.VALIDATION, code, summary,
                 validation.summaryArtifact().stream().toList()));
         validation.findings().stream().limit(MAX_FINDINGS_PER_COLLECTION).forEach(finding ->
                 result.add(new EvidenceFact(
-                        ClaimClassification.VALIDATOR_CONCLUSION,
+                        finding.status() == EvidenceValidationStatus.INCONCLUSIVE
+                                ? ClaimClassification.MISSING_EVIDENCE
+                                : ClaimClassification.VALIDATOR_CONCLUSION,
                         EvidenceDimension.VALIDATION, finding.code(), finding.detail(),
                         finding.artifacts(), finding.provenance())));
         return List.copyOf(result);

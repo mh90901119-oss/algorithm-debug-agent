@@ -157,19 +157,11 @@ class CliArgumentsTest {
         assertEquals(
                 new CliCommand.EvidenceQuery(
                         Path.of("workspace"), new ProjectId("demo"), new CaseId("case-1"),
-                        "invocations", new org.example.algorithmdebug.contracts.EvidenceQueryFilter(
-                                java.util.Optional.of("fixture.Target#run()V"),
-                                java.util.Optional.empty(), java.util.Optional.of("waferId"),
-                                java.util.Optional.of("W2"), java.util.Optional.of("VALUE"),
-                                java.util.Optional.of(2L), java.util.Optional.of(8L)),
-                        1, 10, 32_768),
+                        "invocations", Path.of("query.json")),
                 CliArguments.parse(new String[]{
                         "evidence", "query", "--workspace", "workspace", "--project-id", "demo",
                         "--case-id", "case-1", "--artifact-id", "invocations",
-                        "--method-ref", "fixture.Target#run()V", "--value-name", "waferId",
-                        "--scalar-value", "W2", "--value-status", "VALUE",
-                        "--sequence-from", "2", "--sequence-to", "8",
-                        "--offset", "1", "--limit", "10", "--max-bytes", "32768"}));
+                        "--request-file", "query.json"}));
     }
 
     @Test

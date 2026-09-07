@@ -182,10 +182,10 @@ function failure(code) {
 
 function cliFailureMessage(code) {
   const messages = {
-    ADA_CLI_START_FAILED: "The Agent CLI could not start. Rebuild or reinstall the Agent and run installer Check. This tool result is not target-test evidence.",
+    ADA_CLI_START_FAILED: "The Agent CLI could not start. Stop target diagnosis. Use the OpenCode Build Agent or PowerShell to inspect available local DFX logs, rebuild or reinstall the Agent, and run installer Check. This tool result is not target-test evidence.",
     ADA_CLI_TIMEOUT: "The Agent CLI timed out. Report the Agent failure before deciding whether a new bounded execution is required. This tool result is not target-test evidence.",
     ADA_CLI_OUTPUT_LIMIT_EXCEEDED: "The Agent CLI response exceeded its byte limit. Narrow the requested read or query. This tool result is not target-test evidence.",
-    ADA_CLI_INVALID_RESPONSE: "The Agent CLI did not return a valid ToolResponse. Report the Agent failure and inspect local DFX logs. This tool result is not target-test evidence.",
+    ADA_CLI_INVALID_RESPONSE: "The Agent CLI did not return a valid ToolResponse. Stop target diagnosis. Use the OpenCode Build Agent or PowerShell to inspect available local DFX logs, rebuild or reinstall the Agent, and run installer Check. This tool result is not target-test evidence.",
   }
   return messages[code]
     ?? `${String(code).toLowerCase().replaceAll("_", " ")}. This tool result is not target-test evidence.`

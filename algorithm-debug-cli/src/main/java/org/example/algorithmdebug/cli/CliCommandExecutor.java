@@ -185,7 +185,7 @@ public final class CliCommandExecutor {
         if (command instanceof CliCommand.EvidenceQuery query) {
             return caseService.queryEvidence(
                     query.workspace(), query.projectId(), query.caseId(), query.artifactId(),
-                    query.filter(), query.offset(), query.limit(), query.maxBytes());
+                    readEvidenceQueryRequest(query.requestFile()));
         }
         throw new IllegalArgumentException("Unsupported CLI command type");
     }
@@ -247,6 +247,20 @@ public final class CliCommandExecutor {
                     .readValue(json, JdwpPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException("request-file is not valid JdwpPlanRequest JSON", failure);
+        }
+    }
+
+    /** 严格读取 64 KiB 内且不允许未知字段的动态证据查询请求 JSON。 */
+    static org.example.algorithmdebug.contracts.EvidenceQueryRequest readEvidenceQueryRequest(
+            Path path) {
+        byte[] bytes = readBoundedFile(path, "request-file");
+        String json = decodeUtf8(bytes, "request-file");
+        try {
+            return requestMapper().readValue(
+                    json, org.example.algorithmdebug.contracts.EvidenceQueryRequest.class);
+        } catch (IOException | RuntimeException failure) {
+            throw new CliInputException(
+                    "request-file is not valid EvidenceQueryRequest JSON", failure);
         }
     }
 

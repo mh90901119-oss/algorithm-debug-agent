@@ -38,6 +38,22 @@ class CollectionExecutionSummaryTest {
         assertEquals(List.of("summary-1"), summary.artifactIds());
     }
 
+    @Test
+    void defaultsNewModelGuidanceWhenReadingLegacyShape() {
+        CollectionExecutionSummary summary = new CollectionExecutionSummary(
+                new CaseId("case-1"), new AnalysisId("analysis-1"), new RunId("run-1"),
+                new PlanId("plan-1"), new CollectionId("collection-1"),
+                "SUCCESS", ComparisonOutcome.NOT_COMPARED, false,
+                List.of("manifest.json"), List.of(), null, null, null, null, null, null);
+
+        assertEquals(EvidenceSourceCoverage.UNKNOWN, summary.sourceCoverage());
+        assertEquals(List.of(), summary.reasonCodes());
+        assertEquals(Optional.empty(), summary.primaryArtifactId());
+        assertEquals(List.of(), summary.supportedModes());
+        assertEquals("Inspect the returned collection facts before choosing another action",
+                summary.nextAction());
+    }
+
     private static CollectionExecutionSummary summary(
             ComparisonOutcome outcome, boolean usable) {
         return new CollectionExecutionSummary(

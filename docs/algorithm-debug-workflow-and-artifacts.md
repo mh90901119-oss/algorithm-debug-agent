@@ -1,114 +1,89 @@
 # 工作流与 Workspace 产物
 
-## 1. 参与者与职责
+## 1. 参与者
 
 | 参与者 | 职责 |
 | --- | --- |
-| 用户 | 指定一个目标算法 UT，并提出需要解释的问题 |
-| OpenCode | 承载会话，加载 Agent、Skill 和 Custom Tool |
-| LLM | 理解问题、提出假设、选择最小下一步证据并解释结论 |
-| Skill | 约束输入优先、因果搜索、动态采集和证据分级 |
-| JS Adapter | 校验 Tool 参数，调用 Java CLI，记录交互并返回有界 ToolResponse |
-| Java Agent CLI | 确定性执行、采集、校验和归档 |
+| 用户 | 指定一个目标算法 UT 并提出问题 |
+| OpenCode + LLM | 理解问题、形成假设、选择最小证据步骤并解释结论 |
+| Skill | 告知模型输入优先、因果搜索、采集模式、查询方式和证据分级规则 |
+| Custom Tool + JS Adapter | 校验参数、调用 Java CLI、记录交互并返回有界 ToolResponse |
+| Java Agent CLI | 确定性执行、采集、规范化、校验、注册和归档 |
 | Maven/JUnit | 执行目标 UT |
-| CodePath/JDWP | 在受控重跑中采集调用路径或运行时状态 |
-| Workspace | 追加保存控制文件、原始证据、派生证据、日志和最终报告 |
+| CodePath/JDWP | 在受控重跑中采集路径或状态 |
+| Workspace | 按 Case/Analysis/Run/Collection 保存不可变事实 |
 
-LLM 不生成伪造 Trace 或校验结论；Java 代码不内置目标算法业务语义。
+LLM 不生成 Raw Trace、哈希或 Validator 结论；Java 代码不内置目标算法业务语义。
 
-## 2. 对话与执行时序
+## 2. 完整时序
 
 ```mermaid
 sequenceDiagram
     actor U as 用户
-    participant O as OpenCode
-    participant L as LLM
-    participant S as Skill
+    participant L as OpenCode / LLM
     participant T as Custom Tool / JS Adapter
-    participant A as Java Agent CLI
+    participant A as Java CLI / Core
     participant M as Maven / JUnit
     participant C as CodePath / JDWP
     participant W as Workspace
 
-    U->>O: 指定目标 UT 与问题或继续追问
-    O->>L: 加载 Agent 与 Skill
-    L->>S: 判断现有证据是否已足够
-    alt 只读澄清且已有证据足够
-        L-->>O: 直接回答，不创建 Analysis
+    U->>L: 目标 UT 与问题
+    alt 现有证据足够回答追问
+        L-->>U: 直接回答，不创建 Analysis
     else 需要新的确定性工作
-        L->>T: analysis_begin(question,targetTest,caseId?)
-        T->>A: workspace init + project register + case open
-        A->>W: 新 Case 时写 case.json；始终追加 analysis-request.json
-        A-->>T: projectId, caseId, analysisId
-
+        L->>T: analysis_begin
+        T->>A: 初始化 Workspace、Project、Case、Analysis
+        A->>W: 写身份和 analysis-request
+        A-->>L: projectId、caseId、analysisId
         L->>T: algorithm_input_capture
-        T->>A: input capture
-        A->>A: 解析目标 UT 第一层唯一输入路径
-        A->>W: 首次复制 case/input/<原名>；写本 Analysis 输入报告
-        A-->>L: 输入 Artifact 或结构化停止原因
-
+        T->>A: 定位唯一算法输入
+        A->>W: 首次复制原名输入并写 input-analysis
         L->>T: artifact_read
-        T->>A: 校验 Artifact 并有界读取
-        A-->>L: 输入 JSON 片段与截断信息
-
+        T->>A: 校验 Artifact SHA 后有界读取
+        A-->>L: 输入片段与截断信息
         L->>T: run_test
-        T->>A: run execute
-        A->>M: 精确执行目标 UT 一次
-        M-->>A: exit, stdout, stderr, Surefire
-        A->>W: 写 Run 请求、结果、失败指纹或本次原名 Gantt
-        A-->>L: 目标结果或 Agent/环境故障
-
-        opt 当前源码关系仍不足
+        A->>M: 精确执行普通 UT
+        M-->>A: 测试结果、stdout、stderr、Surefire
+        A->>W: 写 Run、失败指纹或成功 Gantt
+        opt 需要候选源码关系
             L->>T: static_analyze
-            T->>A: static analyze
-            A->>W: 写当前 Analysis 的 Method Catalog
-            A-->>L: 方法、调用边和未解析边界
+            A->>W: 写 Method Catalog
         end
-
-        loop 每轮只处理一个最小证据缺口
-            alt 需要确认实际路径
-                L->>T: codepath_plan_create
-                T->>A: 保存结构化 Plan
-                L->>T: codepath_collect
-                T->>A: 执行 CodePath Collection
-                A->>C: 受控重跑目标 UT
-                C-->>A: 方法事件 JSONL
-            else 需要确认命名变量状态
-                L->>T: jdwp_plan_create
-                T->>A: 保存断点、条件、投影和预算
-                L->>T: jdwp_collect
-                T->>A: 执行 JDWP Collection
-                A->>C: 启动测试 JVM 与 loopback Collector
-                C-->>A: 条件匹配后的有界快照 JSONL
+        loop 每轮解决一个明确证据缺口
+            alt 高频或范围仍宽
+                L->>T: codepath_plan_create(AGGREGATE)
+                T->>A: 校验并保存 Plan v6
+                A->>C: 仅插桩 Plan 精确方法并重跑 UT
+                C->>W: 写 raw/codepath-aggregate.json
+                A->>W: 规范化、校验并注册 Method Path Summary
+                L->>T: evidence_query(SUMMARY/COUNT)
+                A-->>L: 方法、路径、投影分布、覆盖和局限
+            else 已锁定窄区间，需要顺序或值关联
+                L->>T: codepath_plan_create(TRACE)
+                A->>C: 精确插桩并重跑 UT
+                C->>W: 写 raw/codepath.jsonl
+                A->>W: 派生 Invocation 与 Method Path Summary
+                L->>T: evidence_query(FILTER/WINDOW/COUNT)
+                A-->>L: 有界逐调用事实
+            else 需要命名变量状态
+                L->>T: jdwp_plan_create + jdwp_collect
+                A->>C: loopback Collector 重跑 UT
+                C->>W: 写有界快照 JSONL
+                L->>T: evidence_query(FILTER/WINDOW/COUNT/CHANGES)
+                A-->>L: 有界变量事实
             end
-            A->>W: 写 Collection、Raw、Manifest、Validation 和 Evidence
-            A-->>L: 充分、部分、冲突或缺失原因
-            L->>L: 接受或拒绝假设，决定是否继续
         end
-
         L->>T: case_audit
-        T->>A: 审计控制文件、Artifact、日志和目录
-        A-->>L: 审计结果
-        L-->>O: 基于证据回答
+        A-->>L: 文件、Artifact 和目录审计结果
+        L-->>U: Case/Analysis 目录、已用能力、证据分级和结论
     end
-    O-->>U: 显示答案
 ```
 
-每个实线箭头表示一次真实请求、子进程调用或落盘动作，不表示模块静态依赖。虚线返回表示有界结果。`analysis_begin` 不分析算法，它只准备 Project/Case 并为需要新工作的轮次创建 `analysisId`。
+每个实线箭头表示一次真实请求、子进程调用或落盘动作。CodePath 与 JDWP 都会重跑目标 UT，但在同一 OpenCode Runtime 中不允许目标执行重叠。
 
-## 3. 普通 Run 与动态 Collection
+## 3. Workspace 结构
 
-CodePath 和 JDWP 都会重新执行目标 UT，但它们的动态 Run 与普通 Run 使用不同 `runId`。二者通过同一 `analysisId` 关联。
-
-- 普通 UT 失败时保存结构化失败指纹。
-- 动态 UT 失败时与本 Analysis 最近的普通失败指纹比较。
-- `MATCHED` 表示动态证据可用于确认同类失败。
-- `CHANGED` 或 `INCOMPARABLE` 只作为线索，不能确认原失败。
-- 普通 UT 成功时 Gantt 独立归档；CodePath/JDWP 重跑不复制 Gantt，也不比较 Gantt SHA。
-
-## 4. Workspace 结构
-
-目录按需创建，不为尚未发生的阶段创建空目录。
+目录按需创建，不为未发生阶段创建空目录。
 
 ```text
 projects/<projectId>/
@@ -129,7 +104,7 @@ projects/<projectId>/
     collections/<collectionId>/
       collection-request.json
       manifest.json
-      raw/
+      raw/codepath.jsonl | raw/codepath-aggregate.json | raw/jdwp.jsonl
       logs/
       validation/
       derived/<evidenceId>/
@@ -142,32 +117,31 @@ projects/<projectId>/
     logs/agent-YYYY-MM-DD.log
 ```
 
-## 5. 文件用途
+## 4. 关键文件用途
 
-| 文件或目录 | 作用 | 是否可作为问题证据 |
-| --- | --- | --- |
-| `project.json` | 记录目标模块、构建工具和结果目录配置 | 配置事实，不是算法根因 |
-| `case.json` | 固定目标 UT 与初始问题身份 | 身份事实 |
-| `input/<原名>` | Case 首次捕获的算法输入原始字节 | 可通过 Artifact 引用读取 |
-| `analysis-request.json` | 记录一次确定性调查的用户问题和 `analysisId` | 控制文件 |
-| `input-analysis.json` | 记录输入定位、复制或复用结果 | 可支持输入身份结论 |
-| `method-catalog.json` | 当前源码的有界方法目录、调用边和 SourceAnchor | 静态推断，不是运行时证明 |
-| `plans/<planId>` | 记录采集问题、假设、选点、投影和预算 | 采集意图，不是采集结果 |
-| `run-request.json` | 一次目标 UT 的执行请求 | 控制文件 |
-| `run-outcome.json` | 进程、测试、异常、Gantt 和 Artifact 事实 | 可作为目标执行证据 |
-| `run-result-fingerprint.json` | 失败 Run 的结构化失败身份 | 只用于同 Analysis 动态比较 |
-| `collections/<id>/raw` | Collector 原始事件或快照 | 原始证据，只读 |
-| `manifest.json` | 启动、退出、预算、命中和截断事实 | 可作为采集完整性事实 |
-| `validation` | 确定性校验和基线比较 | 可作为 Validator 结论 |
-| `derived/<evidenceId>` | Normalizer 生成的有界摘要 | 可作为已校验动态证据 |
-| `evidence-bundle.json` | 汇总当前证据、历史对比和覆盖维度 | LLM 的主要证据入口 |
-| `sufficiency-evaluation.json` | 检查覆盖、矛盾、截断和缺失 | 决定能否输出确认性结论 |
-| `artifacts/<artifactId>.json` | Artifact 注册、相对路径、大小和 SHA | 证据寻址与完整性 |
-| `interaction.jsonl` | OpenCode Tool 与 CLI 调用顺序 | 仅 DFX，不作为业务证据 |
-| `logs/agent-*.log` | Java 执行日志和异常栈 | 仅 DFX，不作为业务证据 |
+| 文件 | 用途 |
+| --- | --- |
+| `project.json` | 目标模块、构建工具和结果目录配置 |
+| `case.json` | 固定目标 UT 与初始问题身份 |
+| `input/<原名>` | 首次捕获的算法输入原始字节 |
+| `analysis-request.json` | 一次确定性调查的问题和 Analysis ID |
+| `input-analysis.json` | 输入定位、复制、复用或停止原因 |
+| `method-catalog.json` | 当前源码的有界方法和候选调用关系，只支持静态推断 |
+| `plans/<planId>` | 假设、精确方法、Scope、投影、模式和预算 |
+| `run-outcome.json` | 普通 UT 的进程、测试、异常和 Gantt 事实 |
+| `run-result-fingerprint.json` | 失败 Run 的结构化身份，仅用于同 Analysis 动态复现比较 |
+| `raw/codepath.jsonl` | TRACE 逐事件原始证据 |
+| `raw/codepath-aggregate.json` | AGGREGATE 有界计数原始证据，不含逐调用顺序 |
+| `manifest.json` | 启动、退出、预算、Scope 计数、截断和失败原因 |
+| `derived/<evidenceId>` | Normalizer 生成的 Method Path 或 JDWP 摘要 |
+| `evidence-bundle.json` | 汇总当前证据维度、覆盖和 lineage |
+| `sufficiency-evaluation.json` | 检查覆盖、矛盾、截断和缺口 |
+| `artifacts/<artifactId>.json` | Artifact 类型、相对路径、大小和 SHA 登记 |
+| `interaction.jsonl` | Tool 与 CLI 调用顺序，仅用于 DFX |
+| `logs/agent-*.log` | Java 执行日志和异常栈，仅用于 DFX |
 
-## 6. 多轮追问
+`evidence_query` 返回是临时有界视图，不新增 Workspace 文件。AGGREGATE 只生成 Summary，不创建空的 `codepath-invocations.jsonl`。
 
-如果上一轮证据足以回答追问，LLM 直接回答，不创建 Analysis。需要重新执行当前代码或采集新证据时，复用原 `caseId` 调用 `analysis_begin`，得到新 `analysisId`。新 Analysis 可以引用同一 Case 的不可变历史证据，但当前源码的静态目录、普通 Run 和动态 Collection 必须重新按本轮需要生成。
+## 5. 多轮追问
 
-用户明确说明代码已修改时，不创建新 Case；如果需要验证修改后的行为，则在原 Case 中创建新 Analysis。Agent 不猜测用户未说明的源码变化。
+上一轮证据足够时直接回答，不创建 Analysis。需要执行当前代码或采集新证据时，复用原 `caseId` 创建新 `analysisId`。新 Analysis 可以引用同一 Case 的不可变历史证据，但当前源码 Catalog、普通 Run 和新 Collection 按本轮问题重新生成。用户说明代码已修改时仍复用 Case；只有需要验证修改后行为时才创建新 Analysis。

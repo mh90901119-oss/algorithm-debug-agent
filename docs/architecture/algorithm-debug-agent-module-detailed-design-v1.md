@@ -1,103 +1,94 @@
 # Algorithm Debug Agent 模块详细设计
 
-更新日期：2026-09-01。
+更新日期：2026-09-06。
 
 ## 1. 运行时边界
 
 ```mermaid
 flowchart LR
     U["用户"] --> O["OpenCode + LLM"]
-    O --> SK["algorithm-debug Skill"]
-    O --> TS["OpenCode Custom Tool"]
-    TS --> JS["JS Adapter"]
-    JS --> CLI["bin/ada.cmd / Java CLI"]
-    CLI --> CORE["ada-core 应用服务"]
+    O --> S["algorithm-debug Skill"]
+    O --> T["Custom Tool + JS Adapter"]
+    T --> CLI["bin/ada.cmd / Java CLI"]
+    CLI --> CORE["ada-core"]
     CORE --> CASE["Case Management"]
     CORE --> RUN["Debug Harness + Maven Adapter"]
     CORE --> STATIC["Static Analysis"]
-    CORE --> CP["CodePath Adapter + Launcher"]
+    CORE --> CP["CodePath Adapter + Agent-owned Launcher"]
     CORE --> JDWP["JDWP Adapter + Agent-owned Collector"]
-    CORE --> NV["Normalizer + Validator + Evidence Engine"]
+    CORE --> E["Normalizer + Validator + Evidence Engine"]
     CASE --> W["Workspace"]
     RUN --> W
     STATIC --> W
     CP --> W
     JDWP --> W
-    NV --> W
+    E --> W
 ```
 
-OpenCode 是唯一对话运行时。Java CLI 是被 Tool 调用的确定性后端，不是独立对话 Agent。CodePath Launcher 与 JDWP Collector 编译为 JAR，是因为它们需要在目标测试 JVM 或独立 Collector JVM 中运行，而不是在 OpenCode 的 Node 进程中直接执行源码。
+OpenCode 是唯一对话运行时。Java CLI 是确定性后端。CodePath Launcher 在目标测试 JVM 内执行，因此编译为独立 JAR；JDWP Collector 在独立 JVM 通过 loopback 调试目标测试 JVM，也编译为独立 JAR。
 
-## 2. Maven 模块职责
+## 2. 模块职责
 
-| 模块 | 职责 | 主要依赖方向 |
-| --- | --- | --- |
-| `ada-contracts` | ID、Case、Plan、Run、Collection、Evidence 等稳定契约 | 不依赖实现模块 |
-| `adapter-sdk` | 目标算法适配 SPI | 仅依赖契约 |
-| `case-management` | Workspace 布局、追加式 Repository、Artifact、审计、日志 | 依赖契约 |
-| `debug-harness` | 外部进程、Maven/JUnit 执行、超时和日志捕获 | 依赖契约/Adapter SPI |
-| `adapters/maven-junit-adapter` | 通用 Maven/JUnit 与 JSON 结果适配 | 依赖 Adapter SPI |
-| `static-analysis` | 有界 Java 源码方法目录和调用关系 | 依赖契约 |
-| `method-path-spi` | 方法路径采集 SPI | 依赖契约 |
-| `method-path-codepathtracer` | CodePath 第三方集成与进程协调 | 依赖 SPI/Harness |
-| `tools/code-path-tracer-junit-launcher` | 在目标测试 JVM 启动 JUnit 与 Tracer | 独立运行 JAR |
-| `debug-plan-engine` | 校验并编译 CodePath/JDWP Plan | 依赖契约 |
-| `jdwp-collector-core` | Agent 自维护的 JDWP 协议、断点、值采集和条件判断 | 不含调度语义 |
-| `jdwp-collector-adapter` | 启动测试 JVM 与 Collector，协调生命周期 | 依赖 Collector 契约/Harness |
-| `tools/jdwp-batch-collector` | 独立 Collector 可执行入口 | 依赖 Collector Core |
-| `trace-normalizer` | Raw Trace 到有界摘要 | 依赖契约 |
-| `trace-validator` | 完整性、预算、基线和冲突校验 | 依赖契约 |
-| `evidence-engine` | Evidence Bundle 与充分性判断 | 依赖契约 |
-| `ada-core` | 用例编排，不承载 UI 或业务语义 | 组合上述 SPI/服务 |
-| `algorithm-debug-cli` | 严格 CLI 参数、JSON 输入输出、运行时装配 | 依赖 `ada-core` 和实现 Adapter |
-| `integration-tests` | 跨模块契约和关键链路测试 | 测试范围依赖 |
+| 模块 | 职责 |
+| --- | --- |
+| `ada-contracts` | ID、Case、Plan、Run、Collection、Evidence 和查询契约 |
+| `adapter-sdk` | 目标算法项目适配 SPI |
+| `case-management` | Workspace、追加式 Repository、Artifact、查询、审计和日志 |
+| `debug-harness` | 外部进程、Maven/JUnit、超时和输出捕获 |
+| `adapters/maven-junit-adapter` | 通用 Maven/JUnit 执行适配 |
+| `static-analysis` | 有界 Java Method Catalog 与候选调用关系 |
+| `method-path-spi` | 方法路径采集 SPI 和 Manifest |
+| `method-path-codepathtracer` | Launcher 进程协调和 Collection 归档 |
+| `tools/code-path-tracer-junit-launcher` | Plan 感知 Byte Buddy 插桩、TRACE/AGGREGATE 采集和 JUnit 启动 |
+| `debug-plan-engine` | 确定性校验并编译 CodePath/JDWP Plan |
+| `jdwp-collector-core` | JDWP 协议、断点、条件和值采集，不含业务语义 |
+| `jdwp-collector-adapter` | 测试 JVM 与 Collector 生命周期协调 |
+| `tools/jdwp-batch-collector` | JDWP Collector 可执行入口 |
+| `trace-normalizer` | Raw Trace 到有界派生摘要 |
+| `trace-validator` | 完整性、预算、基线和冲突校验 |
+| `evidence-engine` | Evidence Bundle 与充分性判断 |
+| `ada-core` | 用例编排，不承载 UI 或目标算法语义 |
+| `algorithm-debug-cli` | CLI JSON 输入输出和运行时装配 |
+| `integration-tests` | 跨模块契约与关键链路测试 |
 
-根 Reactor 默认包含 18 个子模块；`codepath-launcher` Profile 额外构建 Launcher。
+根 Reactor 默认构建业务模块，`codepath-launcher` Profile 额外构建目标 JVM Launcher。
 
-## 3. OpenCode Adapter
+## 3. OpenCode 契约
 
-`integrations/opencode/tools/algorithm-debug.ts` 暴露 13 个 Tool：
+`integrations/opencode/tools/algorithm-debug.ts` 暴露 13 个 Tool：`analysis_begin`、`case_inspect`、`algorithm_input_capture`、`case_audit`、`gantt_inspect`、`run_test`、`static_analyze`、`codepath_plan_create`、`codepath_collect`、`jdwp_plan_create`、`jdwp_collect`、`artifact_read`、`evidence_query`。
 
-1. `analysis_begin`
-2. `case_inspect`
-3. `algorithm_input_capture`
-4. `case_audit`
-5. `gantt_inspect`
-6. `run_test`
-7. `static_analyze`
-8. `codepath_plan_create`
-9. `codepath_collect`
-10. `jdwp_plan_create`
-11. `jdwp_collect`
-12. `artifact_read`
-13. `evidence_query`
+Tool 不做业务推理。JS Adapter 负责参数边界、临时请求、目标执行串行和结构化错误；Java CLI 负责确定性处理。`evidence_query` 是已注册动态 Artifact 的临时查询视图，不创建新 Artifact。
 
-Tool 不包含业务推理。它负责参数 Schema、有界临时请求文件、调用 CLI、解析结构化响应、Case 交互日志和用户可理解错误。路径来自安装期配置及当前工作目录，不要求用户在问题中传路径。
+## 4. CodePath 设计
 
-## 4. 输入优先因果工作流
+Plan v6 由精确方法、显式投影、可选 Scope 条件、采集模式、Scope ordinal 窗口和预算组成。Launcher 按 Plan 将方法分成仅路径、需要参数和需要返回值三类 Advice，只对明确选择的方法插桩。
 
-1. `analysis_begin` 固定目标 UT 与问题。
-2. `algorithm_input_capture` 找到唯一输入；不满足单输入契约则停止。
-3. `artifact_read` 有界读取输入快照，LLM 识别实体、剩余步骤、资源候选和配置开关。
-4. `run_test` 获取真实成功 Gantt或失败事实。
-5. `static_analyze` 在需要时建立候选调用和策略分派边界。
-6. LLM 写出可证伪的因果假设。
-7. CodePath 验证执行路径，JDWP 在必要时按实体条件验证状态。
-8. Validator/Evidence Engine 判断覆盖、冲突、截断和基线。
-9. `case_audit` 后，LLM 在回答开头列出 Case/Analysis 相对目录和本轮实际使用的能力，然后直接向用户返回结论，不归档模型回答。
+```mermaid
+flowchart LR
+    P["Plan v6"] --> W["精确方法插桩"]
+    W --> R["目标 UT"]
+    R --> M{"captureMode"}
+    M -->|TRACE| J["逐事件 JSONL"]
+    M -->|AGGREGATE| A["有界计数 JSON"]
+    J --> N1["Invocation + Method Path Summary"]
+    A --> N2["Method Path Summary"]
+    N1 --> Q["evidence_query"]
+    N2 --> Q
+```
 
-这套顺序不编码晶圆、腔室或调度策略语义。算法输入和源码帮助 LLM 形成业务假设，动态工具只验证必要事实。
+AGGREGATE 用于高频宽范围发现，只支持 Summary/Count；TRACE 用于窄范围顺序和同次调用值关联。两者保留相同方法身份和投影路径语义，模型可用 AGGREGATE 结果创建更小的 TRACE Plan。所有计数和省略均显式记录，不把未跟踪值解释为不存在。
 
 ## 5. 可靠性与低影响
 
-- Maven、Launcher、测试 JVM、Collector 都是受监管外部进程，具备超时、退出码、stdout/stderr 和清理。
-- CodePath/JDWP 每次都重新运行目标 UT；两者互不依赖，不并行启动。
-- JDWP 断点命中会短暂停止事件线程以读取有界值，因此不是物理意义的零影响；对象深度、字段数、字节数、观察命中和快照数预算限制扰动。
-- 条件先在栈顶帧解析值路径，再决定是否展开投影与写快照；未匹配命中只计数，不生成大快照。
-- Raw Trace 只读，派生产物保留来源 Collection、Plan 和 Run。
-- Artifact SHA 只校验归档字节完整性；失败指纹才用于失败复现一致性。
-- Java 日志写文件，stdout 保留给 Tool JSON 协议。
+- 所有外部进程有超时、退出码、stdout/stderr、异常清理和有界输出。
+- CodePath/JDWP 每次都重新运行目标 UT，但在单一 OpenCode Runtime 内串行。
+- Raw 只读；Normalizer、Validator 和 Evidence 确定性派生，不修改 Raw。
+- Artifact SHA 只检查文件完整性；失败指纹检查失败复现；成功 Gantt 不作为采集门禁。
+- Collector 不猜业务字段，不展开完整对象图，不执行任意表达式。
+- 新工具或模块只在真实 Eval 证明现有契约无法表达时引入。
 
-## 6. 扩展边界
+## 6. 决策来源
 
-目标算法规模扩大时，优先扩展 Skill 中的证据策略、静态分析的通用 Java 解析能力和 Collector 的通用投影，不把特定调度业务硬编码进 Java。只有真实 Eval 证明现有契约无法表达时，才新增 Tool 或模块。
+- Plan 感知插桩与 AGGREGATE 模式见 [ADR-016](../decisions/ADR-016-plan-aware-codepath-weaving-and-aggregate-mode.md)。
+- JDWP 源码归仓见 [ADR-014](../decisions/ADR-014-agent-owned-jdwp-collector.md)。
+- 详细 CodePath 行为、预算与失败闭环见 [可扩展 CodePath 采集设计](../designs/2026-09-06-scalable-codepath-collection-design.md)。
