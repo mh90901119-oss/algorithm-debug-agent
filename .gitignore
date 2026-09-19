@@ -9,3 +9,4 @@ target/
 *.log
 .superpowers/
 .tmp-tests/
+.worktrees/
