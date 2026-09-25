@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与确定性 Coordinator 可实施详细设计
 
 - 文档状态：Review
-- 设计版本：0.2
+- 设计版本：0.3
 - 创建日期：2026-09-25
 - 负责人：Algorithm Debug Agent Team
 - 目标里程碑：MCP-native portable subagent
@@ -36,7 +36,8 @@ MCP Server 提供统一能力，Coordinator 在服务端不可绕过地执行流
 
 ### 2.1 目标
 
-- 在当前根仓库新增 Java 原生 `algorithm-debug-mcp-server`，第一版使用 stdio 传输。
+- 在当前根仓库新增宿主无关的 `algorithm-debug-runtime` 组合根和 Java 原生
+  `algorithm-debug-mcp-server`；第一版 MCP 使用 stdio 传输。
 - 模型可见的 Algorithm Debug 能力全部通过标准 MCP Tool 暴露。
 - MCP Server 直接调用 `ada-core`，正常 Tool Call 不再通过 `bin/ada.cmd` 启动 Java CLI 子进程。
 - 引入不可绕过的 `AnalysisCoordinator`，所有模型可调用动作先授权、后执行、再校验后置条件。
@@ -141,6 +142,7 @@ flowchart TB
     ADAPTER --> CHILD
     CHILD --> CLIENT["宿主 MCP Client"]
     CLIENT -->|"stdio MCP"| SERVER["algorithm-debug-mcp-server"]
+    RUNTIME["algorithm-debug-runtime composition root"] -.->|"启动时装配"| SERVER
     SERVER --> DISPATCH["McpToolDispatcher"]
     DISPATCH --> COORD["AnalysisCoordinator"]
     COORD --> STATE["AnalysisStateProjector"]
@@ -182,12 +184,29 @@ Coordinator 或现有确定性模块完成。
 
 ## 6. 模块与类设计
 
-### 6.1 新增 Maven 模块 `algorithm-debug-mcp-server`
+### 6.1 新增 Maven 模块 `algorithm-debug-runtime`
+
+该模块是唯一生产组合根，依赖 `ada-core` 和 CodePath/JDWP/Adapter 的具体实现；CLI 与 MCP Server 都依赖它，
+避免各自复制 ServiceLoader、Java/Maven 路径、Collector 和 Doctor Probe 装配。它不处理 CLI/MCP 协议，也不包含
+分析流程策略。
+
+| 类 | 职责 | 输入 | 输出 |
+|---|---|---|---|
+| `AlgorithmDebugRuntimeBootstrap` | 从受限环境和配置组装完整 Core/Coordinator | `RuntimeBootstrapRequest` | `AlgorithmDebugRuntime` |
+| `AlgorithmDebugRuntime` | 持有 `ControlPlaneServices`、Coordinator 和关闭资源 | 构造参数 | 服务访问器/`close()` |
+| `RuntimeToolchainResolver` | 分离 Agent Java、目标 Java 和 Maven | env/config | `RuntimeToolchain` |
+| `CodePathRuntimeFactory` | 组装 Collector、Classpath Resolver 与 Doctor Probe | toolchain/env | `ConfiguredCodePath` |
+| `JdwpRuntimeFactory` | 组装 Collector 配置、Coordinator、端口与 Doctor Probe | toolchain/env | `ConfiguredJdwp` |
+
+`algorithm-debug-runtime` 不得依赖 `algorithm-debug-cli`、`algorithm-debug-mcp-server` 或任何宿主适配器。
+现有 `AdaMain` 中的组合代码迁移到该模块后删除，CLI 只做参数/输出适配。
+
+### 6.2 新增 Maven 模块 `algorithm-debug-mcp-server`
 
 | 类 | 职责 | 输入 | 输出 | 依赖 |
 |---|---|---|---|---|
 | `AlgorithmDebugMcpMain` | 解析受限启动参数、构建服务、启动 stdio、注册关闭钩子 | argv/env | 进程退出码 | `McpServerBootstrap` |
-| `McpServerBootstrap` | 组装 MCP SDK、Core Runtime、Tool Catalog 和 Dispatcher | 配置、Clock、依赖工厂 | `McpServerHandle` | MCP SDK、`ada-core` |
+| `McpServerBootstrap` | 使用 `AlgorithmDebugRuntimeBootstrap` 组装 SDK、Catalog 和 Dispatcher | 配置、Clock | `McpServerHandle` | MCP SDK、`algorithm-debug-runtime` |
 | `AlgorithmDebugMcpServer` | 协议初始化、工具/资源/Prompt 注册和生命周期 | MCP transport | MCP result | MCP SDK |
 | `McpToolCatalog` | 提供唯一、不可变、版本化工具目录 | 无 | `List<McpToolDescriptor>` | `ada-contracts`、Schema resources |
 | `McpToolDescriptor` | 描述名称、动作、Schema、说明和副作用等级 | 构造参数 | 不可变元数据 | 无 |
@@ -202,7 +221,7 @@ Coordinator 或现有确定性模块完成。
 该模块依赖 `ada-contracts`、`ada-core`、官方 MCP SDK、Jackson 2 适配和测试依赖。它不得依赖
 `algorithm-debug-cli`，不得通过 `ProcessBuilder` 启动 `ada.cmd`。
 
-### 6.2 `ada-core` 新增 `coordination` 包
+### 6.3 `ada-core` 新增 `coordination` 包
 
 | 类 | 职责 | 输入 | 输出 | 依赖 |
 |---|---|---|---|---|
@@ -214,12 +233,12 @@ Coordinator 或现有确定性模块完成。
 | `EvidenceObligationEvaluator` | 计算系统、工具和调查义务的状态 | control facts | obligation results | evidence engine |
 | `ConclusionGate` | 校验 claim 分类、证据引用、矛盾、截断和确认资格 | candidate/state | decision | evidence engine |
 | `OperationIdempotencyService` | 管理 operationId 的开始、完成和不确定状态 | operation request | receipt | operation journal |
-| `TargetExecutionLockManager` | 对目标 Workspace/Project 获取跨进程文件锁 | target identity | lock handle | case-management port |
+| `WorkspaceExecutionLockManager` | 对目标 Workspace/Project 获取跨进程文件锁 | target identity | lock handle | case-management |
 
 `AnalysisCoordinator` 不包含 Maven、CodePath 或 JDWP 的具体实现。Action Handler 只适配已有服务；Policy 只检查
 通用动作契约和该工具的机械前后置条件。
 
-### 6.3 `case-management` 新增持久化和锁边界
+### 6.4 `case-management` 新增持久化和锁边界
 
 | 类 | 职责 |
 |---|---|
@@ -231,7 +250,7 @@ Coordinator 或现有确定性模块完成。
 
 锁文件只用于同步，不作为分析事实。进程崩溃后 OS 释放文件锁；未完成 operation 仍保留 `UNCERTAIN` 或可恢复记录。
 
-### 6.4 `ada-contracts` 新增契约
+### 6.5 `ada-contracts` 新增契约
 
 新建不可变公共模型：
 
@@ -257,7 +276,7 @@ OperationReceipt
 
 公共模型使用中文 Javadoc；枚举、Schema 字段和错误码使用清晰英文。
 
-### 6.5 Canonical Agent Definition
+### 6.6 Canonical Agent Definition
 
 新增目录：
 
@@ -285,7 +304,7 @@ Agent Definition 包含：
 现有 `skills/algorithm-debug/SKILL.md` 的领域工作流内容迁移到规范 Prompt；硬规则同时由 Coordinator 实现。
 各宿主产物必须从 Agent Definition 生成或引用，不维护可独立漂移的第二份正文。
 
-### 6.6 Host Adapter Kit
+### 6.7 Host Adapter Kit
 
 新增：
 
@@ -673,7 +692,7 @@ Manifest，不反复扫描 Raw Trace。
 
 | 文件 | 动作 | 修改内容 |
 |---|---|---|
-| `pom.xml` | 修改 | 增加 MCP SDK BOM 2.0.1、`algorithm-debug-mcp-server` 模块；不引入 Spring |
+| `pom.xml` | 修改 | 增加 MCP SDK 2.0.1 版本、`algorithm-debug-runtime` 和 `algorithm-debug-mcp-server` 模块；不引入 Spring |
 | `scripts/build-agent.ps1` | 修改 | 构建 MCP Server 可执行 JAR、校验 Collector/Launcher/Server 三类产物 |
 | `bin/ada-mcp.cmd` | 新增 | 使用 Agent JDK 21 启动 stdio MCP Server；不接受任意主类和任意 classpath |
 | `bin/README.md` | 修改 | 区分 `ada.cmd` 管理/诊断入口与 `ada-mcp.cmd` 模型入口 |
@@ -685,8 +704,8 @@ Manifest，不反复扫描 Raw Trace。
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
-| `ada-contracts/.../coordination/*.java` | 新增 | Action、ControlView、Obligation、Conclusion、Operation、Result 契约 |
-| `ada-contracts/.../SchemaVersions.java` | 修改 | 增加协调与 Agent 契约版本，不破坏现有 Artifact Schema |
+| `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/` | 新增 | Action、ControlView、Obligation、Conclusion、Operation、Result 契约；精确文件见实施计划 Task 3 |
+| `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/SchemaVersions.java` | 修改 | 增加协调与 Agent 契约版本，不破坏现有 Artifact Schema |
 | `schemas/coordination/*.schema.json` | 新增 | 上述公共模型的 JSON Schema |
 | `schemas/agent/*.schema.json` | 新增 | Agent Definition、Completion Contract、Capability Manifest |
 | `schemas/tool/coordinated-tool-result-v1.schema.json` | 新增 | MCP Tool 统一结构化返回 |
@@ -696,48 +715,63 @@ Manifest，不反复扫描 Raw Trace。
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
-| `ada-core/.../coordination/AnalysisCoordinator.java` | 新增 | 统一执行管线 |
-| `ada-core/.../coordination/AnalysisStateProjector.java` | 新增 | 从追加式产物派生状态 |
-| `ada-core/.../coordination/AnalysisActionRegistry.java` | 新增 | 不可变 Policy/Handler 注册 |
-| `ada-core/.../coordination/*Policy.java` | 新增 | 每类动作的前置/后置规则 |
-| `ada-core/.../coordination/*Handler.java` | 新增 | 适配现有 ApplicationService |
-| `ada-core/.../coordination/ConclusionGate.java` | 新增 | 结论候选门禁 |
-| `ada-core/.../ControlPlaneServices.java` | 修改 | 组装并暴露唯一 `AnalysisCoordinator`；CLI 和 MCP 复用 |
-| `evidence-engine/.../EvidenceObligationEvaluator.java` | 新增 | 义务状态计算 |
-| `evidence-engine/.../EvidenceSufficiencyEvaluator.java` | 修改 | 使用拆分事实，不再把基准可比性和 Artifact 可读性混为一体 |
-| `case-management/.../AnalysisArtifactIndex.java` | 新增 | 有界状态索引 |
-| `case-management/.../WorkspaceExecutionLock.java` | 新增 | OS 文件锁 |
-| `case-management/.../OperationJournal.java` | 新增 | 幂等操作事件 |
-| `case-management/.../CoordinationDecisionArchive.java` | 新增 | 追加审计决策 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinator.java` | 新增 | 统一执行管线 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisStateProjector.java` | 新增 | 从追加式产物派生状态 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionRegistry.java` | 新增 | 不可变 Policy/Handler 注册 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/LifecycleActionPolicies.java` | 新增 | 生命周期动作前置/后置规则 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ReadActionPolicies.java` | 新增 | 只读动作前置/后置规则 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionPolicies.java` | 新增 | 分析与 Plan 动作规则 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/TargetExecutionPolicies.java` | 新增 | 目标执行动作规则 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionHandlers.java` | 新增 | 适配现有 ApplicationService |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ConclusionGate.java` | 新增 | 结论候选门禁 |
+| `ada-core/src/main/java/org/example/algorithmdebug/core/ControlPlaneServices.java` | 修改 | 组装并暴露唯一 `AnalysisCoordinator`；CLI 和 MCP 复用 |
+| `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceObligationEvaluator.java` | 新增 | 义务状态计算 |
+| `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceSufficiencyEvaluator.java` | 修改 | 使用拆分事实，不再把基准可比性和 Artifact 可读性混为一体 |
+| `case-management/src/main/java/org/example/algorithmdebug/casecore/AnalysisArtifactIndex.java` | 新增 | 有界状态索引 |
+| `case-management/src/main/java/org/example/algorithmdebug/casecore/WorkspaceExecutionLock.java` | 新增 | OS 文件锁 |
+| `case-management/src/main/java/org/example/algorithmdebug/casecore/OperationJournal.java` | 新增 | 幂等操作事件 |
+| `case-management/src/main/java/org/example/algorithmdebug/casecore/CoordinationDecisionArchive.java` | 新增 | 追加审计决策 |
 
-### 13.4 MCP Server
+### 13.4 共享运行时组合根
+
+| 文件/目录 | 动作 | 修改内容 |
+|---|---|---|
+| `algorithm-debug-runtime/pom.xml` | 新增 | 依赖 Core、Adapter 和 CodePath/JDWP 具体实现，不依赖入口模块 |
+| `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/AlgorithmDebugRuntimeBootstrap.java` | 新增 | 唯一生产组合根 |
+| `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/AlgorithmDebugRuntime.java` | 新增 | 服务集合与有界关闭 |
+| `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeToolchainResolver.java` | 新增 | 从配置/环境解析 Agent Java、目标 Java 和 Maven |
+| `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/CodePathRuntimeFactory.java` | 新增 | CodePath 具体装配与 Doctor Probe |
+| `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/JdwpRuntimeFactory.java` | 新增 | JDWP 具体装配与 Doctor Probe |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/RuntimeToolchain.java` | 删除 | 实现迁移到共享 Runtime，CLI 不保留副本 |
+
+### 13.5 MCP Server
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
 | `algorithm-debug-mcp-server/pom.xml` | 新增 | Java MCP SDK、Jackson 2、Core 和测试依赖 |
-| `algorithm-debug-mcp-server/.../AlgorithmDebugMcpMain.java` | 新增 | stdio 入口和退出码 |
-| `algorithm-debug-mcp-server/.../McpServerBootstrap.java` | 新增 | 依赖组装 |
-| `algorithm-debug-mcp-server/.../AlgorithmDebugMcpServer.java` | 新增 | MCP 生命周期和注册 |
-| `algorithm-debug-mcp-server/.../McpToolCatalog.java` | 新增 | 单一 Tool Catalog |
-| `algorithm-debug-mcp-server/.../McpToolDispatcher.java` | 新增 | 所有 tools/call 的唯一入口 |
-| `algorithm-debug-mcp-server/.../McpResultMapper.java` | 新增 | 协调结果到 MCP 结果 |
-| `algorithm-debug-mcp-server/.../AgentResourceProvider.java` | 新增 | 有界 Resource |
-| `algorithm-debug-mcp-server/.../AgentPromptProvider.java` | 新增 | 版本化 Prompt |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpMain.java` | 新增 | stdio 入口和退出码 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerBootstrap.java` | 新增 | 依赖组装 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpServer.java` | 新增 | MCP 生命周期和注册 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolCatalog.java` | 新增 | 单一 Tool Catalog |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolDispatcher.java` | 新增 | 所有 tools/call 的唯一入口 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpResultMapper.java` | 新增 | 协调结果到 MCP 结果 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentResourceProvider.java` | 新增 | 有界 Resource |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentPromptProvider.java` | 新增 | 版本化 Prompt |
 | `algorithm-debug-mcp-server/src/main/resources/schemas/` | 新增 | 打包后的只读 Schema |
 
-### 13.5 CLI
+### 13.6 CLI
 
 | 文件 | 动作 | 修改内容 |
 |---|---|---|
-| `algorithm-debug-cli/.../CliCommandExecutor.java` | 修改 | 模型相关动作经同一 Coordinator；保留 workspace/project/doctor 管理命令 |
-| `algorithm-debug-cli/.../AdaMain.java` | 修改 | 从 `ControlPlaneServices` 获取 Coordinator；保持 ToolResponse 2.0 CLI 输出 |
-| `algorithm-debug-cli/.../CliCoordinatedResultAdapter.java` | 新增 | 把协调结果映射为旧 CLI `ToolResponse 2.0`；CLI 不复制 Policy，也不绕过 Coordinator |
-| `algorithm-debug-cli/.../CliArguments.java` | 按需修改 | 只增加管理/诊断所需命令，不复制 MCP 参数协议 |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCommandExecutor.java` | 修改 | 模型相关动作经同一 Coordinator；保留 workspace/project/doctor 管理命令 |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/AdaMain.java` | 修改 | 从共享 Runtime 获取 Coordinator；保持 ToolResponse 2.0 CLI 输出 |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCoordinatedResultAdapter.java` | 新增 | 把协调结果映射为旧 CLI `ToolResponse 2.0`；CLI 不复制 Policy，也不绕过 Coordinator |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliArguments.java` | 保留 | MCP 参数不进入 CLI 兼容协议 |
 
 CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error code/message，旧协议不承载
 `allowedActions` 等新增控制信息；完整控制视图仅由 MCP 返回。兼容输出能力不足不能成为 CLI 绕过 Coordinator 的理由。
 
-### 13.6 Agent Definition 与适配器
+### 13.7 Agent Definition 与适配器
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
@@ -747,7 +781,7 @@ CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error 
 | `integrations/qwen-cli/*` | 新增 | 第一宿主安装、检查、卸载和模板 |
 | `integrations/opencode/*` | 最终退役 | 新 MCP 路径完成并通过回滚门禁前不删除；不再作为正式架构基线 |
 
-### 13.7 文档、评测和审计
+### 13.8 文档、评测和审计
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
@@ -758,7 +792,7 @@ CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error 
 | `agent-evals/*` | 修改 | 记录 MCP/Agent Definition/Policy/Host Adapter 版本 |
 | `integration-tests/*` | 修改 | 增加 stdio MCP Client、并发、恢复和真实 Fixture 测试 |
 
-### 13.8 精确测试文件清单
+### 13.9 精确测试文件清单
 
 | 文件 | 首批覆盖 |
 |---|---|
@@ -772,6 +806,8 @@ CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error 
 | `case-management/src/test/java/org/example/algorithmdebug/casecore/OperationJournalTest.java` | STARTED、唯一终态、冲突和崩溃恢复 |
 | `evidence-engine/src/test/java/org/example/algorithmdebug/evidence/EvidenceEligibilityTest.java` | 拆分语义及成功/失败 UT 回归 |
 | `evidence-engine/src/test/java/org/example/algorithmdebug/evidence/EvidenceObligationEvaluatorTest.java` | 系统、工具、调查义务 |
+| `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/AlgorithmDebugRuntimeBootstrapTest.java` | CLI/MCP 共用组合根、工具缺失降级和关闭 |
+| `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/RuntimeToolchainResolverTest.java` | Java/Maven 配置、Windows 环境大小写与路径边界 |
 | `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpToolCatalogTest.java` | 15 个基线工具、唯一名称与注册完整性 |
 | `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpToolDispatcherTest.java` | Schema、上下文、Coordinator 唯一入口 |
 | `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpResultMapperTest.java` | 目标 UT 失败与协议错误分层 |
@@ -1020,3 +1056,4 @@ CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error 
 |---|---|---|---|
 | 2026-09-25 | 0.1 | 初稿：确定 Java 原生 MCP Server、Canonical Agent Definition、确定性 Coordinator 和薄宿主适配器 | Codex |
 | 2026-09-25 | 0.2 | 自审修订：明确控制产物路径、追加式 operation 终态、配置兼容、CLI 适配边界和精确测试文件 | Codex |
+| 2026-09-25 | 0.3 | 实施计划修订：新增共享 `algorithm-debug-runtime` 组合根，消除 CLI/MCP 具体工具装配重复 | Codex |

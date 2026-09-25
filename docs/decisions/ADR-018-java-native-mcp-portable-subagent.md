@@ -25,7 +25,9 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 1. 仓库交付一个宿主无关的 Algorithm Debug Agent Package，由 Canonical Agent Definition、Java 原生 MCP
    Server、Analysis Coordinator、现有 Java 分析内核、Case Workspace 和 Agent Eval 组成。
 2. 宿主创建和运行模型子 Agent；MCP Server 不持有模型凭据、不调用模型、不实现 Agent Loop。
-3. 新增 `algorithm-debug-mcp-server` Maven 模块，第一版只支持本地 stdio 传输。
+3. 新增 `algorithm-debug-runtime` 作为 CLI 与 MCP 共用的唯一生产组合根；新增
+   `algorithm-debug-mcp-server` Maven 模块，第一版只支持本地 stdio 传输。Runtime 依赖具体 Adapter/Collector，
+   入口模块不复制该装配逻辑。
 4. MCP Server 使用官方 MCP Java SDK，初始锁定 2.0.1，并使用 `mcp-core` 与
    `mcp-json-jackson2`，不引入 Spring，不迁移到 Jackson 3。依赖必须通过离线镜像、许可证、NOTICE 和 SBOM
    预检后才能进入生产实现。
@@ -46,7 +48,7 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 
 ## 影响
 
-- 根项目新增一个 Maven 模块和官方 MCP Java SDK 依赖。
+- 根项目新增共享 Runtime 与 MCP Server 两个 Maven 模块，并增加官方 MCP Java SDK 依赖。
 - 模型正式入口从宿主专用 Custom Tool/CLI Adapter 转为标准 MCP Server。
 - `ada-core` 新增协调层；Case Management 新增跨进程锁、操作日志和状态投影支持。
 - MCP 使用新的协调结果契约；历史 Artifact 和 CLI `ToolResponse 2.0` 保持可读。

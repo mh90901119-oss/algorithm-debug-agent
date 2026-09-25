@@ -2,7 +2,7 @@
 
 - 审计日期：2026-09-25
 - 审计对象：
-  - `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.2
+  - `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.3
   - `docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`
 - 审计阶段：生产代码实施前
 - 审计结论：`TECHNICALLY_IMPLEMENTABLE / REVIEW_REQUIRED`
@@ -49,7 +49,9 @@
 ```mermaid
 flowchart LR
     HOST["Host Adapter"] --> MCP["algorithm-debug-mcp-server"]
+    RUNTIME["algorithm-debug-runtime"] -.-> MCP
     MCP --> CORE["ada-core coordination"]
+    RUNTIME --> CORE
     CORE --> CONTRACTS["ada-contracts"]
     CORE --> SERVICES["现有 ApplicationServices"]
     SERVICES --> CASE["case-management"]
@@ -77,7 +79,7 @@ MCP Server 不调用模型、不持有凭据、不实现第二个 Agent Loop；�
 ## 5. 证据语义审计
 
 原问题是一个 `evidenceUsable` 布尔同时表达“数据是否完整可读”和“数据是否有资格支持确认性结论”，并把失败
-复现基准错误应用到成功 UT。0.2 设计拆为：
+复现基准错误应用到成功 UT。0.2 起设计拆为：
 
 - Artifact 事实：`artifactReadable`、`collectionComplete`；
 - 场景事实：`baselineRequired`、`baselineComparable`、`failureFingerprintMatched`；
@@ -117,6 +119,10 @@ Artifact 分离；它是同步设施而非事实源。
    `config/mcp-agent-settings.json`，旧配置在迁移窗口保留。
 2. 明确新增 `CliCoordinatedResultAdapter`；CLI 可保持 `ToolResponse 2.0`，但不能绕过 Coordinator。
 3. 明确锁、operation、coordination 和 conclusion 的具体目录与只追加终态规则。
+
+实施计划映射现有 `AdaMain` 后又发现：CodePath/JDWP 具体装配若分别放入 CLI 与 MCP 会形成重复组合根。
+0.3 新增 `algorithm-debug-runtime`，将 ServiceLoader、Java/Maven、Collector 和 Doctor Probe 装配集中到一个模块；
+CLI 与 MCP 只依赖该 Runtime，不互相依赖。该修订消除了入口重复，没有改变已批准的 MCP/Coordinator 边界。
 
 历史 Case、Run、Collection、Evidence 和 ToolResponse 不升级原文件 Schema；新控制产物进入新增目录。OpenCode 资产
 只有在 MCP 发布、回滚和宿主验证全部通过后才退出正式安装。
@@ -166,7 +172,7 @@ Artifact 引用，不把 Raw Trace 直接发送给模型。stdio 不监听端口
 | Critical | 0 | 无数据破坏、不可逆迁移或架构不可实施问题 |
 | High | 0 | 无关键流程旁路或证据语义冲突 |
 | Medium | 3 | SDK 离线预检、公司 5 工具清单、宿主源码能力清单；均已有显式门禁 |
-| Low | 0 | 初稿三项歧义已在 0.2 修正 |
+| Low | 0 | 初稿三项歧义及组合根遗漏已在 0.2/0.3 修正 |
 
 最终判定：设计在技术上可以实施，允许进入“用户复核 → 逐任务实施计划”阶段；尚不允许跳过复核直接修改生产
 代码。实施过程中如发现需要改变 MCP/Agent/Coordinator 边界、公共 Schema 或持久化布局，必须先更新设计和 ADR，
