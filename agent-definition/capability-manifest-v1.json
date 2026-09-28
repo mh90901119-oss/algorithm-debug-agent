@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "serverId": "algorithm-debug",
+  "transport": "stdio",
+  "tools": [
+    "analysis_begin",
+    "case_inspect",
+    "algorithm_input_capture",
+    "case_audit",
+    "gantt_inspect",
+    "run_test",
+    "static_analyze",
+    "source_query",
+    "investigation_update",
+    "codepath_plan_create",
+    "codepath_collect",
+    "jdwp_plan_create",
+    "jdwp_collect",
+    "artifact_read",
+    "evidence_query",
+    "analysis_status",
+    "analysis_finalize"
+  ],
+  "resources": [
+    "ada://agent/manifest",
+    "ada://agent/capabilities",
+    "ada://cases/{caseId}/digest",
+    "ada://cases/{caseId}/analyses/{analysisId}/status"
+  ],
+  "prompts": [
+    "algorithm-debug/start",
+    "algorithm-debug/continue",
+    "algorithm-debug/explain-evidence"
+  ]
+}

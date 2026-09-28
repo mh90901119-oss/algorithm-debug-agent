@@ -1,0 +1,8 @@
+{
+  "command": {{MCP_COMMAND_JSON}},
+  "args": ["--project", "${workspacePath}"],
+  "cwd": "${workspacePath}",
+  "includeTools": {{MCP_TOOLS_JSON}},
+  "alwaysLoadTools": true,
+  "trust": false
+}

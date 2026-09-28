@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/mcp-agent-settings-v1.schema.json",
+  "title": "Algorithm Debug MCP Settings v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "workspaceDirectory",
+    "agentJavaHome",
+    "targetJavaHome",
+    "mavenExecutable",
+    "knowledgeDirectory"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "workspaceDirectory": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "agentJavaHome": { "type": "string", "maxLength": 4096 },
+    "targetJavaHome": { "type": "string", "maxLength": 4096 },
+    "mavenExecutable": { "type": "string", "maxLength": 4096 },
+    "knowledgeDirectory": { "type": "string", "maxLength": 4096 }
+  }
+}

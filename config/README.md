@@ -1,6 +1,8 @@
 # Agent path configuration
 
-`agent-settings.json` is the only user-edited path configuration file.
+`agent-settings.json` remains the legacy CLI/OpenCode path file. `mcp-agent-settings.json` is the
+only path configuration consumed by the Java-native MCP launcher; host adapters do not add path
+settings to target repositories.
 
 Every path is explicit so users can see and change the defaults. The installer expands only
 `%USERPROFILE%` and `%LOCALAPPDATA%`; every resolved value must be an absolute path.
@@ -25,3 +27,17 @@ On a target-environment computer, extract JDK 21 without changing system environ
 `agentJavaHome` to that directory, keep `targetJavaHome` on the target algorithm JDK 17, and set
 `mavenExecutable` only when the target-environment Maven command is not already discoverable. The installer
 prints the effective values. Invalid configured paths fail with an explicit English error.
+
+## MCP settings
+
+`mcp-agent-settings.json` contains only shared runtime settings:
+
+- `workspaceDirectory`: append-only Case/Run/Collection/Evidence/Report root.
+- `agentJavaHome`: optional JDK 21+ home; empty uses `JAVA_HOME` or `PATH`.
+- `targetJavaHome`: optional target-test JDK home; empty uses Agent Java.
+- `mavenExecutable`: optional explicit Maven executable.
+- `knowledgeDirectory`: optional hint directory. Missing or empty knowledge never blocks analysis and
+  never becomes Evidence.
+
+The launcher derives every repository-owned JAR from its installation root. The file therefore has
+no server JAR, Main class, Collector JAR, credentials, host profile or target-project field.

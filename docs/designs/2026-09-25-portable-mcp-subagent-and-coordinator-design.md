@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：1.9
+- 设计版本：2.1
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -1748,7 +1748,7 @@ MCP stdout 只有协议帧。
 - [ ] `docs/algorithm-debug-workflow-and-artifacts.md` 增加 Operation/Control/Investigation/Source Query/Conclusion
 - [ ] `README.md` 更新构建、安装和使用入口
 - [ ] MCP Tool、Resource、Prompt 和返回 Schema 示例
-- [ ] Agent Definition 与 Completion Contract
+- [x] Agent Definition 与 Completion Contract
 - [ ] Problem Frame、Hypothesis、Gap、Predicate、Evaluation、CausalChain 和 Source Query Schema 示例
 - [ ] Qwen 和第二宿主安装、检查、卸载说明
 - [ ] 许可证、NOTICE 和 SBOM
@@ -1818,3 +1818,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 1.8 | Task 16 最终审查冻结一次性取消令牌、终止回调槽位转移与关闭排空语义；补齐空工具参数分类和关联 metadata 扩帧后的二次硬上限，防止 SDK 静默断开会话 | Codex |
 | 2026-09-28 | 1.9 | Task 16 最终并发审查把请求预算从工具调用扩展到所有 JSON-RPC request；非工具请求也必须先占槽，终态响应 flush 后释放，禁止绕过 SDK 内部无界队列积压 | Codex |
 | 2026-09-28 | 2.0 | Task 17 实施审计冻结 17 Tool typed Catalog、4 Resource、3 Prompt、统一结果与协议错误分层；Action payload 预算提升为公共唯一常量，Server 启动不要求目录已存在，真实路径/注册交集在项目访问时惰性校验；状态 Resource 使用无决策归档的只读控制投影 | Codex |
+| 2026-09-28 | 2.1 | Task 18 建立带 SHA-256 绑定的 Canonical Agent Definition、唯一 Completion Contract、能力清单和规范 Prompt；Qwen Adapter 从规范资产生成单 Server/显式工具权限的子 Agent，知识目录可选；安装采用 staging 原子切换和 ownership hash 卸载，MCP shaded JAR 自包含 Prompt/Schema/Main class，构建统一校验 CLI、CodePath、JDWP、MCP 四类产物 | Codex |

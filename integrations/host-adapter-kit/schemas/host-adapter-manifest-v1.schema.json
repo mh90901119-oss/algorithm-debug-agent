@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/host-adapter-manifest-v1.schema.json",
+  "title": "Algorithm Debug Host Adapter Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "adapterId",
+    "host",
+    "agentDefinition",
+    "templates",
+    "outputFiles",
+    "mcpServerName"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "adapterId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "minimumVersion"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "minimumVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "agentDefinition": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "templates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mcpServer", "extension", "agent"],
+      "properties": {
+        "mcpServer": { "$ref": "#/$defs/relativePath" },
+        "extension": { "$ref": "#/$defs/relativePath" },
+        "agent": { "$ref": "#/$defs/relativePath" }
+      }
+    },
+    "outputFiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["extension", "agent"],
+      "properties": {
+        "extension": { "$ref": "#/$defs/relativePath" },
+        "agent": { "$ref": "#/$defs/relativePath" }
+      }
+    },
+    "mcpServerName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$" }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?![A-Za-z]:)(?![/\\\\])(?!.*(?:^|[/\\\\])\\.\\.(?:[/\\\\]|$)).+$"
+    }
+  }
+}
