@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.4，commit `98c50cc`；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.5；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -503,6 +503,8 @@ git commit -m "feat: project durable analysis control state"
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionHandler.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionBinding.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionRegistry.java`
+- Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisPolicyExecutor.java`
+- Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoordinatedResultFactory.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ActionCancellation.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/OperationIdempotencyService.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/WorkspaceExecutionLockManager.java`
@@ -510,6 +512,14 @@ git commit -m "feat: project durable analysis control state"
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/AnalysisActionRegistryTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/OperationIdempotencyServiceTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinatorTest.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/ActionCancellationTest.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/WorkspaceExecutionLockManagerTest.java`
+- Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/OperationJournal.java`
+- Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/OperationJournalTest.java`
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/CoordinationErrorCode.java`
+- Modify: `ada-contracts/src/test/java/org/example/algorithmdebug/contracts/coordination/CoordinationSchemaTest.java`
+- Modify: `schemas/coordination/*.schema.json`
+- Modify: `schemas/tool/coordinated-tool-result-v1.schema.json`
 
 **Interfaces:**
 - Produces: `CoordinatedToolResult<?> execute(AnalysisActionRequest<?> request)`；不可变 Action registry。
@@ -536,7 +546,7 @@ mvn -pl ada-core -am test "-Dtest=AnalysisActionRegistryTest,OperationIdempotenc
 
 - [ ] **Step 3: 实现模板方法**
 
-执行顺序固定为：解析 binding → 投影 before → policy authorize → 幂等检查 → 必要时获取锁 → 再投影 → 写 STARTED → handler → 写唯一终态 → 投影 after → policy postcondition → 追加 decision → 返回结果。Policy 不启动进程；Handler 不检查通用身份规则。
+执行顺序固定为：解析 binding → 投影 before → policy authorize → 归档授权 decision → 幂等检查 → 必要时获取锁 → 再投影 → 写 STARTED → handler → 投影 after → policy postcondition → 写唯一终态 → 归档后置 decision → 返回结果。成功终态必须晚于后置校验；否则追加式日志无法把校验失败的成功回执改成失败。Policy 不启动进程；Handler 不检查通用身份规则。
 
 ```java
 public interface AnalysisActionPolicy<I, O> {

@@ -159,17 +159,66 @@ public final class OperationJournal {
         return appendTerminal(TerminalKind.UNCERTAIN, receipt, recordedAt);
     }
 
+    /**
+     * 在不把“尚未开始”误报为归档损坏的前提下读取操作状态。
+     *
+     * @param identity Analysis 身份
+     * @param operationId 幂等操作 ID
+     * @return 启动文档不存在时为空；存在时返回经过身份、哈希和唯一终态校验的状态
+     * @throws WorkspaceException 存在孤立终态、路径异常、哈希或身份冲突
+     */
+    public Optional<State> findState(AnalysisIdentity identity, OperationId operationId) {
+        AnalysisIdentity checkedIdentity = ControlArchiveSupport.notNull(identity, "identity");
+        OperationId checkedOperationId = ControlArchiveSupport.notNull(operationId, "operationId");
+        CaseArchiveLayout layout = layout(checkedIdentity);
+        Path startedPath = layout.operationStarted(
+                checkedIdentity.analysisId(), checkedOperationId);
+        if (!Files.exists(startedPath, LinkOption.NOFOLLOW_LINKS)) {
+            if (hasAnyTerminal(layout, checkedIdentity, checkedOperationId)) {
+                throw ControlArchiveSupport.operationConflict(
+                        "Operation contains a terminal without a start: "
+                                + checkedOperationId.value());
+            }
+            return Optional.empty();
+        }
+        if (!Files.isRegularFile(startedPath, LinkOption.NOFOLLOW_LINKS)
+                || Files.isSymbolicLink(startedPath)) {
+            throw ControlArchiveSupport.operationConflict(
+                    "Operation start is not a regular file: " + checkedOperationId.value());
+        }
+        return Optional.of(readExistingState(
+                checkedIdentity, checkedOperationId, startedPath));
+    }
+
+    private boolean hasAnyTerminal(
+            CaseArchiveLayout layout,
+            AnalysisIdentity identity,
+            OperationId operationId) {
+        return Files.exists(
+                layout.operationCompleted(identity.analysisId(), operationId),
+                LinkOption.NOFOLLOW_LINKS)
+                || Files.exists(
+                        layout.operationFailed(identity.analysisId(), operationId),
+                        LinkOption.NOFOLLOW_LINKS)
+                || Files.exists(
+                        layout.operationUncertain(identity.analysisId(), operationId),
+                        LinkOption.NOFOLLOW_LINKS);
+    }
+
     /** 读取并完整校验一个操作生命周期。 */
     public State requireState(AnalysisIdentity identity, OperationId operationId) {
         AnalysisIdentity checkedIdentity = ControlArchiveSupport.notNull(identity, "identity");
         OperationId checkedOperationId = ControlArchiveSupport.notNull(operationId, "operationId");
+        return findState(checkedIdentity, checkedOperationId).orElseThrow(() ->
+                ControlArchiveSupport.operationConflict(
+                        "Operation start is missing: " + checkedOperationId.value()));
+    }
+
+    private State readExistingState(
+            AnalysisIdentity checkedIdentity,
+            OperationId checkedOperationId,
+            Path startedPath) {
         CaseArchiveLayout layout = layout(checkedIdentity);
-        Path startedPath = layout.operationStarted(checkedIdentity.analysisId(), checkedOperationId);
-        if (!Files.isRegularFile(startedPath, LinkOption.NOFOLLOW_LINKS)
-                || Files.isSymbolicLink(startedPath)) {
-            throw ControlArchiveSupport.operationConflict(
-                    "Operation start is missing: " + checkedOperationId.value());
-        }
         StartedDocument started = readStarted(startedPath);
         requireIdentity(checkedIdentity, checkedOperationId, started);
 

@@ -30,11 +30,12 @@ class OperationJournalTest {
     private static final Instant NOW = Instant.parse("2026-09-28T00:00:00Z");
 
     @TempDir Path temporaryDirectory;
+    private Path casesRoot;
     private OperationJournal journal;
 
     @BeforeEach
     void setUp() throws Exception {
-        Path casesRoot = temporaryDirectory.resolve("cases");
+        casesRoot = temporaryDirectory.resolve("cases");
         Files.createDirectories(casesRoot);
         journal = new OperationJournal(
                 casesRoot, new BoundedDocumentMapper(), new AtomicDocumentWriter());
@@ -42,6 +43,7 @@ class OperationJournalTest {
 
     @Test
     void operationAllowsStartedAndExactlyOneTerminalDocument() {
+        assertTrue(journal.findState(IDENTITY, OPERATION_ID).isEmpty());
         Path started = journal.start(
                 IDENTITY, OPERATION_ID, AnalysisActionType.RUN_TEST, INPUT_HASH, NOW);
         Path completed = journal.complete(receipt(ActionOutcome.SUCCEEDED, Optional.empty()), NOW.plusSeconds(1));
@@ -50,6 +52,7 @@ class OperationJournalTest {
 
         assertTrue(Files.isRegularFile(started));
         assertTrue(Files.isRegularFile(completed));
+        assertTrue(journal.findState(IDENTITY, OPERATION_ID).isPresent());
         assertEquals(OperationJournal.TerminalKind.COMPLETED, state.terminal().orElseThrow().kind());
         assertEquals(INPUT_HASH, state.started().inputSha256());
     }
@@ -100,6 +103,20 @@ class OperationJournalTest {
         assertEquals(
                 OperationJournal.TerminalKind.UNCERTAIN,
                 journal.requireState(IDENTITY, OPERATION_ID).terminal().orElseThrow().kind());
+    }
+
+    @Test
+    void orphanTerminalWithoutStartedDocumentIsRejectedAsConflict() throws Exception {
+        Path orphan = CaseArchiveLayout.of(casesRoot, IDENTITY.caseId())
+                .operationCompleted(IDENTITY.analysisId(), OPERATION_ID);
+        Files.createDirectories(orphan.getParent());
+        Files.writeString(orphan, "{}");
+
+        WorkspaceException failure = assertThrows(
+                WorkspaceException.class,
+                () -> journal.findState(IDENTITY, OPERATION_ID));
+
+        assertEquals("OPERATION_JOURNAL_CONFLICT", failure.code());
     }
 
     private static OperationReceipt receipt(

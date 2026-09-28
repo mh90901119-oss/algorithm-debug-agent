@@ -159,6 +159,24 @@ class CoordinationSchemaTest {
                 "coordination", "analysis-action-request-v1.schema.json").toFile());
         assertEquals(actionTypes(), enumValues(
                 request.path("$defs").path("actionType").path("enum")));
+        Map<Path, String> errorCodeEnums = Map.of(
+                schemaPath("coordination", "analysis-control-view-v1.schema.json"),
+                "/$defs/errorCodes/items/enum",
+                schemaPath("coordination", "action-decision-v1.schema.json"),
+                "/$defs/errorCodes/items/enum",
+                schemaPath("coordination", "evidence-obligation-v1.schema.json"),
+                "/$defs/errorCodes/items/enum",
+                schemaPath("coordination", "conclusion-decision-v1.schema.json"),
+                "/$defs/errorCodes/items/enum",
+                schemaPath("coordination", "operation-receipt-v1.schema.json"),
+                "/$defs/errorCode/enum",
+                schemaPath("tool", "coordinated-tool-result-v1.schema.json"),
+                "/$defs/errorCodes/items/enum");
+        for (Map.Entry<Path, String> entry : errorCodeEnums.entrySet()) {
+            JsonNode schema = MAPPER.readTree(entry.getKey().toFile());
+            assertEquals(coordinationErrorCodes(), enumValues(schema.at(entry.getValue())),
+                    entry.getKey().toString());
+        }
         assertEquals(CoordinationLimits.MAX_ID_LENGTH,
                 request.path("$defs").path("opaqueId").path("maxLength").asInt());
         assertEquals(CoordinationLimits.MAX_WORKSPACE_ID_LENGTH,
@@ -279,6 +297,12 @@ class CoordinationSchemaTest {
 
     private static Set<String> actionTypes() {
         return java.util.Arrays.stream(AnalysisActionType.values())
+                .map(Enum::name)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private static Set<String> coordinationErrorCodes() {
+        return java.util.Arrays.stream(CoordinationErrorCode.values())
                 .map(Enum::name)
                 .collect(Collectors.toUnmodifiableSet());
     }
