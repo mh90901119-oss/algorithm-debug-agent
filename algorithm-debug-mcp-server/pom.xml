@@ -13,6 +13,33 @@
     <artifactId>algorithm-debug-mcp-server</artifactId>
     <name>ADA MCP Server</name>
 
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>../schemas/mcp/tools</directory>
+                <targetPath>schemas/mcp/tools</targetPath>
+            </resource>
+            <resource>
+                <directory>../schemas/tool</directory>
+                <targetPath>schemas/tool</targetPath>
+                <includes>
+                    <include>coordinated-tool-result-v1.schema.json</include>
+                    <include>evidence-query-result-v2.schema.json</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>../schemas/coordination</directory>
+                <targetPath>schemas/coordination</targetPath>
+                <includes>
+                    <include>conclusion-candidate-v2.schema.json</include>
+                </includes>
+            </resource>
+        </resources>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
@@ -46,6 +73,14 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

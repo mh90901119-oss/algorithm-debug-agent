@@ -1256,7 +1256,10 @@ git commit -m "feat: add java stdio mcp server"
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolDescriptor.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolCatalog.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolDispatcher.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpActionRequestFactory.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestContextResolver.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestContext.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpJsonSupport.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpResultMapper.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentResourceProvider.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentPromptProvider.java`
@@ -1298,6 +1301,11 @@ git commit -m "feat: add java stdio mcp server"
 - Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpToolDispatcherTest.java`
 - Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpRequestContextResolverTest.java`
 - Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpResultMapperTest.java`
+- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/AgentResourceProviderTest.java`
+- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/AgentPromptProviderTest.java`
+- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpFeatureRegistrationTest.java`
+- Create: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/ActionInputLimits.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinator.java`
 
 **Interfaces:**
 - Produces: 17 Tools、4 Resources、3 Prompts；所有 `tools/call` 只走 Dispatcher → Coordinator。

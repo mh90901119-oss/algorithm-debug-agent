@@ -1,0 +1,17 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"Analysis begin input","type":"object","additionalProperties":false,
+  "required":["symptom","expectedBehavior","actualBehavior","targetTest","scopeAnchors","knownFactRefs","initialUnknowns"],
+  "properties":{
+    "symptom":{"type":"string","minLength":1,"maxLength":4096},
+    "expectedBehavior":{"type":"string","minLength":1,"maxLength":4096},
+    "actualBehavior":{"type":"string","minLength":1,"maxLength":4096},
+    "targetTest":{"type":"object","additionalProperties":false,"required":["className","methodName"],"properties":{"className":{"type":"string","minLength":1,"maxLength":1024},"methodName":{"type":"string","minLength":1,"maxLength":1024}}},
+    "scopeAnchors":{"type":"array","maxItems":64,"items":{"$ref":"#/$defs/sourceAnchor"}},
+    "knownFactRefs":{"type":"array","maxItems":128,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":128}},
+    "initialUnknowns":{"type":"array","minItems":1,"maxItems":128,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":4096}},
+    "existingCaseId":{"type":"string","minLength":1,"maxLength":128},
+    "adapterId":{"type":"string","minLength":1,"maxLength":512}
+  },
+  "$defs":{"sourceAnchor":{"type":"object","additionalProperties":false,"required":["className","methodName","descriptor","sourceRelativePath","startLine","endLine"],"properties":{"className":{"type":"string","minLength":1,"maxLength":1024},"methodName":{"type":"string","minLength":1,"maxLength":1024},"descriptor":{"type":"string","minLength":3,"maxLength":4096},"sourceRelativePath":{"type":"string","minLength":1,"maxLength":4096,"pattern":"^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"},"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1}}}}
+}

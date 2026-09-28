@@ -3,14 +3,21 @@ package org.example.algorithmdebug.mcp;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
+import io.modelcontextprotocol.server.McpServerFeatures.SyncPromptSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.SyncResourceSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.SyncResourceTemplateSpecification;
+import io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema.ServerCapabilities;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
+import java.time.Clock;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.example.algorithmdebug.runtime.AlgorithmDebugRuntime;
 
 /** 一个绑定冻结 Workspace/Project 根的本地 stdio MCP Server。 */
 public final class AlgorithmDebugMcpServer implements AutoCloseable {
@@ -18,6 +25,10 @@ public final class AlgorithmDebugMcpServer implements AutoCloseable {
     public static final String SERVER_NAME = "algorithm-debug-agent";
     /** 协议协商中稳定的 Server 实现版本。 */
     public static final String SERVER_VERSION = "0.1.0";
+    private static final String SERVER_INSTRUCTIONS =
+            "Use analysis_status and its allowedActions to continue an analysis. "
+                    + "All tool calls pass through the deterministic coordinator; "
+                    + "insufficient evidence must remain MISSING_EVIDENCE.";
 
     private final Path workspaceRoot;
     private final Path projectRoot;
@@ -41,8 +52,39 @@ public final class AlgorithmDebugMcpServer implements AutoCloseable {
             AutoCloseable runtime,
             Path workspaceRoot,
             Path projectRoot) {
+        return open(
+                input, protocolOutput, runtime, workspaceRoot, projectRoot,
+                ignored -> FeatureSet.empty());
+    }
+
+    /** 使用共享 Runtime 注册完整 Catalog、Resource 和 Prompt。 */
+    static AlgorithmDebugMcpServer open(
+            InputStream input,
+            OutputStream protocolOutput,
+            AlgorithmDebugRuntime runtime,
+            Path workspaceRoot,
+            Path projectRoot) {
+        if (runtime == null) {
+            throw new IllegalArgumentException("runtime must not be null");
+        }
+        return open(
+                input, protocolOutput, runtime, workspaceRoot, projectRoot,
+                lifecycle -> productionFeatures(
+                        runtime, workspaceRoot, projectRoot, lifecycle, Clock.systemUTC()));
+    }
+
+    static AlgorithmDebugMcpServer open(
+            InputStream input,
+            OutputStream protocolOutput,
+            AutoCloseable runtime,
+            Path workspaceRoot,
+            Path projectRoot,
+            FeatureFactory featureFactory) {
         if (input == null || protocolOutput == null || runtime == null) {
             throw new IllegalArgumentException("MCP server dependencies must not be null");
+        }
+        if (featureFactory == null) {
+            throw new IllegalArgumentException("featureFactory must not be null");
         }
         Path checkedWorkspace = checkedRoot(workspaceRoot, "workspaceRoot");
         Path checkedProject = checkedRoot(projectRoot, "projectRoot");
@@ -63,11 +105,26 @@ public final class AlgorithmDebugMcpServer implements AutoCloseable {
                 jsonMapper, guardedInput, guardedOutput, McpServerLimits.MAX_REQUEST_BYTES);
         final McpSyncServer sdkServer;
         try {
-            sdkServer = McpServer.sync(transport)
+            FeatureSet features = featureFactory.create(lifecycle);
+            var specification = McpServer.sync(transport)
                     .serverInfo(SERVER_NAME, SERVER_VERSION)
-                    .capabilities(ServerCapabilities.builder().build())
-                    .requestTimeout(McpServerLimits.DEFAULT_REQUEST_TIMEOUT)
-                    .build();
+                    .instructions(SERVER_INSTRUCTIONS)
+                    .capabilities(features.capabilities())
+                    .validateToolInputs(false)
+                    .requestTimeout(McpServerLimits.DEFAULT_REQUEST_TIMEOUT);
+            if (!features.tools().isEmpty()) {
+                specification.tools(features.tools());
+            }
+            if (!features.resources().isEmpty()) {
+                specification.resources(features.resources());
+            }
+            if (!features.resourceTemplates().isEmpty()) {
+                specification.resourceTemplates(features.resourceTemplates());
+            }
+            if (!features.prompts().isEmpty()) {
+                specification.prompts(features.prompts());
+            }
+            sdkServer = specification.build();
             deferredServerCloser.bind(sdkServer::close);
         } catch (RuntimeException failure) {
             closeAfterFailedStart(lifecycle, failure);
@@ -75,6 +132,34 @@ public final class AlgorithmDebugMcpServer implements AutoCloseable {
         }
         return new AlgorithmDebugMcpServer(
                 checkedWorkspace, checkedProject, sdkServer, lifecycle);
+    }
+
+    private static FeatureSet productionFeatures(
+            AlgorithmDebugRuntime runtime,
+            Path workspaceRoot,
+            Path projectRoot,
+            McpServerLifecycle lifecycle,
+            Clock clock) {
+        McpToolCatalog catalog = McpToolCatalog.load();
+        catalog.requireCompatible(runtime.coordinator().registeredActionTypes());
+        String workspaceId = org.example.algorithmdebug.runtime.RuntimeWorkspaceIdentity
+                .derive(workspaceRoot);
+        McpRequestContextResolver contexts = new McpRequestContextResolver(
+                workspaceRoot, projectRoot, workspaceId);
+        McpToolDispatcher dispatcher = new McpToolDispatcher(
+                catalog, contexts, lifecycle, runtime.coordinator()::execute,
+                new McpResultMapper(), clock);
+        AgentResourceProvider resources = new AgentResourceProvider(
+                catalog,
+                contexts::projectId,
+                runtime.capabilities(),
+                caseId -> runtime.services().cases().inspect(
+                        workspaceRoot, contexts.projectId(), caseId),
+                runtime.coordinator()::currentControlView);
+        AgentPromptProvider prompts = new AgentPromptProvider();
+        return new FeatureSet(
+                dispatcher.specifications(), resources.resources(),
+                resources.resourceTemplates(), prompts.prompts());
     }
 
     /** @return Server 启动时冻结的归档 Workspace 根 */
@@ -152,6 +237,50 @@ public final class AlgorithmDebugMcpServer implements AutoCloseable {
                     && delegateClosed.compareAndSet(false, true)) {
                 serverCloser.run();
             }
+        }
+    }
+
+    @FunctionalInterface
+    interface FeatureFactory {
+        FeatureSet create(McpServerLifecycle lifecycle);
+    }
+
+    /** 启动前一次性冻结的完整 SDK feature 集合。 */
+    record FeatureSet(
+            List<SyncToolSpecification> tools,
+            List<SyncResourceSpecification> resources,
+            List<SyncResourceTemplateSpecification> resourceTemplates,
+            List<SyncPromptSpecification> prompts) {
+        FeatureSet {
+            tools = immutable(tools, "tools");
+            resources = immutable(resources, "resources");
+            resourceTemplates = immutable(resourceTemplates, "resourceTemplates");
+            prompts = immutable(prompts, "prompts");
+        }
+
+        private static FeatureSet empty() {
+            return new FeatureSet(List.of(), List.of(), List.of(), List.of());
+        }
+
+        private ServerCapabilities capabilities() {
+            ServerCapabilities.Builder builder = ServerCapabilities.builder();
+            if (!tools.isEmpty()) {
+                builder.tools(false);
+            }
+            if (!resources.isEmpty() || !resourceTemplates.isEmpty()) {
+                builder.resources(false, false);
+            }
+            if (!prompts.isEmpty()) {
+                builder.prompts(false);
+            }
+            return builder.build();
+        }
+
+        private static <T> List<T> immutable(List<T> values, String label) {
+            if (values == null || values.stream().anyMatch(java.util.Objects::isNull)) {
+                throw new IllegalArgumentException(label + " must not contain null values");
+            }
+            return List.copyOf(values);
         }
     }
 }

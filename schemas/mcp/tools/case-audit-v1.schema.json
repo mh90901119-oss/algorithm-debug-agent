@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Case audit input","type":"object","additionalProperties":false,"required":["caseId","analysisId"],"properties":{"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128}}}

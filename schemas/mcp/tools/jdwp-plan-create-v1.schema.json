@@ -1,0 +1,28 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"JDWP plan create input","type":"object","additionalProperties":false,
+  "required":["caseId","analysisId","request"],
+  "properties":{
+    "caseId":{"$ref":"#/$defs/id"},"analysisId":{"$ref":"#/$defs/id"},
+    "request":{"type":"object","additionalProperties":false,
+      "required":["planId","tracepoints","budget","rationale","investigation","requestedAt"],
+      "properties":{
+        "planId":{"$ref":"#/$defs/id"},
+        "tracepoints":{"type":"array","minItems":1,"maxItems":20,"items":{"$ref":"#/$defs/tracepoint"}},
+        "budget":{"$ref":"#/$defs/budget"},
+        "rationale":{"type":"string","minLength":1,"maxLength":4096},
+        "investigation":{"$ref":"#/$defs/investigation"},
+        "requestedAt":{"type":"string","format":"date-time"}
+      }
+    }
+  },
+  "$defs":{
+    "id":{"type":"string","minLength":1,"maxLength":128},
+    "valuePath":{"type":"string","minLength":1,"maxLength":2048,"pattern":"^[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*){0,7}$"},
+    "condition":{"type":"object","additionalProperties":false,"required":["valuePath","operator","expectedType","expectedValue"],"properties":{"valuePath":{"$ref":"#/$defs/valuePath"},"operator":{"const":"EQUALS"},"expectedType":{"enum":["STRING","LONG","DOUBLE","BOOLEAN","CHAR","ENUM","NULL"]},"expectedValue":{"type":["string","null"],"maxLength":1024}}},
+    "capture":{"type":"object","additionalProperties":false,"required":["stack","maxFrames","maxStringLength","valuePaths"],"properties":{"stack":{"type":"boolean"},"maxFrames":{"type":"integer","minimum":1,"maximum":64},"maxStringLength":{"type":"integer","minimum":16,"maximum":1024},"valuePaths":{"type":"array","maxItems":128,"uniqueItems":true,"items":{"$ref":"#/$defs/valuePath"}}}},
+    "tracepoint":{"type":"object","additionalProperties":false,"required":["tracepointId","methodKey","line","maxObservedHits","maxCapturedHits","captureFirstMatchedHits","captureEveryMatchedHits","conditions","capture"],"properties":{"tracepointId":{"$ref":"#/$defs/id"},"methodKey":{"type":"string","minLength":1,"maxLength":2048},"line":{"type":"integer","minimum":1},"maxObservedHits":{"type":"integer","minimum":1,"maximum":100000},"maxCapturedHits":{"type":"integer","minimum":1,"maximum":200},"captureFirstMatchedHits":{"type":"integer","minimum":0,"maximum":200},"captureEveryMatchedHits":{"type":"integer","minimum":0,"maximum":100000},"conditions":{"type":"array","maxItems":4,"items":{"$ref":"#/$defs/condition"}},"capture":{"$ref":"#/$defs/capture"}}},
+    "budget":{"type":"object","additionalProperties":false,"required":["maxEvents","maxBytes","timeoutMillis","idleTimeoutMillis"],"properties":{"maxEvents":{"type":"integer","minimum":1,"maximum":5000},"maxBytes":{"type":"integer","minimum":1,"maximum":52428800},"timeoutMillis":{"type":"integer","minimum":1000,"maximum":1200000},"idleTimeoutMillis":{"type":"integer","minimum":1000,"maximum":1200000}}},
+    "investigation":{"type":"object","additionalProperties":false,"required":["questionToAnswer","gapId","hypothesisIds","predicateIds","basedOnEvidenceIds"],"properties":{"questionToAnswer":{"type":"string","minLength":1,"maxLength":2048},"gapId":{"$ref":"#/$defs/id"},"hypothesisIds":{"type":"array","minItems":1,"maxItems":32,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"predicateIds":{"type":"array","minItems":1,"maxItems":8,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}},"basedOnEvidenceIds":{"type":"array","maxItems":128,"uniqueItems":true,"items":{"$ref":"#/$defs/id"}}}}
+  }
+}

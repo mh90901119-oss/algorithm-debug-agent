@@ -5,6 +5,7 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.EvidenceQueryRequest;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SourceAnchor;
+import org.example.algorithmdebug.contracts.coordination.ActionInputLimits;
 import org.example.algorithmdebug.contracts.coordination.ConclusionCandidate;
 import org.example.algorithmdebug.contracts.investigation.InvestigationUpdateCommand;
 import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
@@ -15,13 +16,6 @@ import org.example.algorithmdebug.plan.JdwpPlanRequest;
 
 /** 17 个 Core Action 的有界 typed payload；Workspace/Project/Case/Analysis 身份位于 ActionTarget。 */
 public final class CoreActionInputs {
-    private static final int MAX_ADAPTER_ID_LENGTH = 512;
-    private static final int MAX_ARTIFACT_ID_LENGTH = 256;
-    private static final int MAX_GANTT_OPERATION_LENGTH = 32;
-    private static final int MAX_JSON_POINTER_LENGTH = 4_096;
-    private static final int MAX_GANTT_ROWS = 100;
-    private static final int MAX_ARTIFACT_READ_BYTES = 1_048_576;
-
     private CoreActionInputs() {
     }
 
@@ -38,7 +32,7 @@ public final class CoreActionInputs {
             existingCaseId = requireOptional(existingCaseId, "existingCaseId");
             adapterId = requireOptional(adapterId, "adapterId")
                     .map(value -> requireText(
-                            value, "adapterId", MAX_ADAPTER_ID_LENGTH, false));
+                            value, "adapterId", ActionInputLimits.MAX_ADAPTER_ID_LENGTH, false));
             if (existingCaseId.isPresent()
                     && !existingCaseId.orElseThrow().equals(problemFrame.caseId())) {
                 throw new IllegalArgumentException(
@@ -56,13 +50,13 @@ public final class CoreActionInputs {
             int limit) {
         public GanttInspect {
             artifactId = requireText(
-                    artifactId, "artifactId", MAX_ARTIFACT_ID_LENGTH, false);
+                    artifactId, "artifactId", ActionInputLimits.MAX_ARTIFACT_ID_LENGTH, false);
             operation = requireText(
-                    operation, "operation", MAX_GANTT_OPERATION_LENGTH, false);
+                    operation, "operation", ActionInputLimits.MAX_GANTT_OPERATION_LENGTH, false);
             jsonPointer = requireText(
                     jsonPointer == null ? "" : jsonPointer,
-                    "jsonPointer", MAX_JSON_POINTER_LENGTH, true);
-            if (offset < 0 || limit < 1 || limit > MAX_GANTT_ROWS) {
+                    "jsonPointer", ActionInputLimits.MAX_JSON_POINTER_LENGTH, true);
+            if (offset < 0 || limit < 1 || limit > ActionInputLimits.MAX_GANTT_ROWS) {
                 throw new IllegalArgumentException("Gantt slice budget is invalid");
             }
         }
@@ -125,8 +119,9 @@ public final class CoreActionInputs {
     public record ArtifactRead(String artifactId, long offsetBytes, int maxBytes) {
         public ArtifactRead {
             artifactId = requireText(
-                    artifactId, "artifactId", MAX_ARTIFACT_ID_LENGTH, false);
-            if (offsetBytes < 0 || maxBytes < 1 || maxBytes > MAX_ARTIFACT_READ_BYTES) {
+                    artifactId, "artifactId", ActionInputLimits.MAX_ARTIFACT_ID_LENGTH, false);
+            if (offsetBytes < 0 || maxBytes < 1
+                    || maxBytes > ActionInputLimits.MAX_ARTIFACT_READ_BYTES) {
                 throw new IllegalArgumentException("Artifact read budget is invalid");
             }
         }
@@ -136,7 +131,7 @@ public final class CoreActionInputs {
     public record EvidenceQuery(String artifactId, EvidenceQueryRequest request) {
         public EvidenceQuery {
             artifactId = requireText(
-                    artifactId, "artifactId", MAX_ARTIFACT_ID_LENGTH, false);
+                    artifactId, "artifactId", ActionInputLimits.MAX_ARTIFACT_ID_LENGTH, false);
             request = requireNonNull(request, "request");
         }
     }

@@ -311,6 +311,14 @@ Handler 绑定也不会丢失；Dispatcher 绑定独立 `ActionCancellation` 并
 提交失败 Manifest 的唯一回调。该兼容层不注册业务方法、不解释工具参数，也不生成业务结果；SDK 仍是
 会话、协商、方法分派和响应序列化的唯一实现。
 
+Task 17 冻结 Tool/Resource 注册边界：Server 启动仍允许 Workspace 或 Project 尚未初始化，并且不得因此创建目录；
+冻结路径的真实路径、符号链接和唯一 `ProjectRegistration` 交集校验延迟到第一次项目相关 Tool/Resource 读取。
+Catalog 在启动时与 Coordinator 的 17 个 Action 做全集一致性检查，但不读取 Case 状态。`analysis_status` Resource
+通过 Coordinator 的只读 `currentControlView` 投影入口读取状态，不执行 Action、Policy、Handler 或决策归档；
+模型发起的 `tools/call` 仍只能走 Dispatcher → Coordinator。Tool 参数先由自包含 JSON Schema 校验，再反序列化为
+唯一 record；未知字段、越界预算和非法路径统一作为 `-32602`，基础设施异常脱敏为 `-32603`。UT 失败、证据不足和
+Coordinator 拒绝均保留 `CoordinatedToolResult` 领域语义，`isError=false`，不能伪装为协议错误。
+
 终止回调由生命周期持有的受管理虚拟线程 Executor 执行并保存 Future；关闭时在同一截止时间内等待，超时后中断未完成
 任务，再关闭 Runtime 和 SDK。Executor 拒绝投递时 `ActionCancellation` 恢复可重试状态，单个回调失败不能跳过后续资源
 关闭。所有 stdout 写入由 SDK transport 或上述两个传输适配器完成，业务日志和启动诊断只能进入 stderr/DFX。
@@ -1266,6 +1274,7 @@ Manifest，不反复扫描 Raw Trace。表中默认值和硬上限必须在职�
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
 | `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinator.java` | 新增 | 统一执行管线 |
+| `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/ActionInputLimits.java` | 新增 | CLI/MCP/Core Action payload 共用预算唯一来源 |
 | `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisStateProjector.java` | 新增 | 从追加式产物派生状态 |
 | `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionRegistry.java` | 新增 | 不可变 Policy/Handler 注册 |
 | `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/LifecycleActionPolicies.java` | 新增 | 生命周期动作前置/后置规则 |
@@ -1332,12 +1341,16 @@ Manifest，不反复扫描 Raw Trace。表中默认值和硬上限必须在职�
 | `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpSdkJacksonCompatibilityTest.java` | 新增 | SDK Schema Validator 与 Jackson 2 基线兼容门禁 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolCatalog.java` | 新增 | 单一 Tool Catalog |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolDispatcher.java` | 新增 | 所有 tools/call 的唯一入口 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpActionRequestFactory.java` | 新增 | 17 种 typed MCP 输入到 ActionRequest 的确定性映射 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestContext.java` | 新增 | 冻结根、注册 Project 和 requestId 的可信调用上下文 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestContextResolver.java` | 新增 | 惰性真实路径与注册交集校验 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpJsonSupport.java` | 新增 | 严格 Jackson 配置唯一来源 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpResultMapper.java` | 新增 | 协调结果到 MCP 结果 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentResourceProvider.java` | 新增 | 有界 Resource |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AgentPromptProvider.java` | 新增 | 版本化 Prompt |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/input/SourceQueryInput.java` | 新增 | 有界源码查询输入 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/input/InvestigationUpdateInput.java` | 新增 | typed 调查事件输入 |
-| `algorithm-debug-mcp-server/src/main/resources/schemas/` | 新增 | 打包后的只读 Schema |
+| `schemas/mcp/tools/` | 新增 | 17 份根目录 canonical Tool 输入 Schema；构建时作为只读资源复制进 JAR |
 
 ### 13.7 CLI
 
@@ -1804,3 +1817,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 1.7 | Task 16 依赖审查确认 SDK 2.0.1 的 Jackson 2 编译基线为 2.21.1；统一升级根 Jackson 2 BOM，拒绝在同一 Server JVM 混用 2.17.2/2.21.1，并增加严格单 JSON 值、协议版本和 Schema Validator 兼容门禁 | Codex |
 | 2026-09-28 | 1.8 | Task 16 最终审查冻结一次性取消令牌、终止回调槽位转移与关闭排空语义；补齐空工具参数分类和关联 metadata 扩帧后的二次硬上限，防止 SDK 静默断开会话 | Codex |
 | 2026-09-28 | 1.9 | Task 16 最终并发审查把请求预算从工具调用扩展到所有 JSON-RPC request；非工具请求也必须先占槽，终态响应 flush 后释放，禁止绕过 SDK 内部无界队列积压 | Codex |
+| 2026-09-28 | 2.0 | Task 17 实施审计冻结 17 Tool typed Catalog、4 Resource、3 Prompt、统一结果与协议错误分层；Action payload 预算提升为公共唯一常量，Server 启动不要求目录已存在，真实路径/注册交集在项目访问时惰性校验；状态 Resource 使用无决策归档的只读控制投影 | Codex |

@@ -89,6 +89,18 @@ public final class AnalysisCoordinator {
     }
 
     /**
+     * 只读投影当前控制状态，不执行 Action、Policy、Handler 或决策归档。
+     *
+     * <p>该入口仅供 Resource/状态展示使用；所有模型请求的动作仍必须调用 {@link #execute}。</p>
+     *
+     * @param identity 要读取的 Analysis 身份
+     * @return 经过身份一致性校验的当前控制视图
+     */
+    public AnalysisControlView currentControlView(AnalysisIdentity identity) {
+        return project(requireNonNull(identity, "identity"));
+    }
+
+    /**
      * 执行一次动作；所有写操作和目标执行都不可绕过 Policy、幂等日志和后置校验。
      *
      * @param request typed 动作请求

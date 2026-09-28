@@ -413,6 +413,33 @@ class AnalysisCoordinatorTest {
                         .terminal().orElseThrow().kind());
     }
 
+    @Test
+    void currentControlViewReadsProjectionWithoutExecutingOrArchivingDecision() {
+        AtomicInteger projections = new AtomicInteger();
+        AtomicInteger executions = new AtomicInteger();
+        AnalysisActionBinding<String, String> binding = binding(
+                AnalysisActionType.CASE_AUDIT,
+                ActionSideEffect.READ_ONLY,
+                policy(true, true),
+                (target, input, cancellation) -> {
+                    executions.incrementAndGet();
+                    return input;
+                });
+        AnalysisControlView expected = control(7);
+        AnalysisCoordinator coordinator = coordinator(binding, identity -> {
+            projections.incrementAndGet();
+            assertEquals(IDENTITY, identity);
+            return expected;
+        }, noLockManager());
+
+        AnalysisControlView actual = coordinator.currentControlView(IDENTITY);
+
+        assertSame(expected, actual);
+        assertEquals(1, projections.get());
+        assertEquals(0, executions.get());
+        assertTrue(archivedDecisions.isEmpty());
+    }
+
     private AnalysisCoordinator coordinator(
             AnalysisActionBinding<String, String> binding,
             AnalysisCoordinator.StateSource stateSource,
