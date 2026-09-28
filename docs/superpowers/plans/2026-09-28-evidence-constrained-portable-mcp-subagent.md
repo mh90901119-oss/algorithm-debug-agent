@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.5；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.7；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -652,6 +652,8 @@ git commit -m "feat: add bounded source queries"
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/PathContainsEvaluator.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/FailureFingerprintEvaluator.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceView.java`
+- Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/ObservationInputHasher.java`
+- Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/ObservationEvaluationSemantics.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/ObservationEvaluator.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/HypothesisEvidenceReducer.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceObligationEvaluator.java`
@@ -660,7 +662,7 @@ git commit -m "feat: add bounded source queries"
 - Create: `evidence-engine/src/test/java/org/example/algorithmdebug/evidence/EvidenceObligationEvaluatorTest.java`
 
 **Interfaces:**
-- Produces: `ObservationEvaluation evaluate(ObservationPredicate, EvidenceView)`；`HypothesisEvaluation reduce(HypothesisRecord, List<ObservationEvaluation>)`。
+- Produces: `ObservationEvaluation evaluate(ObservationPredicate, EvidenceView)`；`HypothesisEvaluation reduce(HypothesisRecord, List<ObservationPredicate>, List<EvidenceGap>, List<ObservationEvaluation>)`。
 - Produces: `List<EvidenceObligation> evaluate(AnalysisControlView, InvestigationState)`。
 - Consumes: normalized CodePath/JDWP summaries、Evidence Query semantics、Task 2 eligibility、Task 3/4 contracts。
 
@@ -717,6 +719,9 @@ private static final Map<ObservationOperator, ObservationOperatorEvaluator> EVAL
 ```
 
 Registry 构造时断言 key set 等于 `EnumSet.allOf(ObservationOperator.class)`。Evaluator 不访问文件/时间/LLM，不复制 Raw 值；UNKNOWN 保留 limitation；只有 confirmation eligible 才 `effectApplied=true`。
+
+Reducer 必须显式使用冻结 Predicate 的角色和 Gap 状态，禁止从 `effectApplied`、limitation 字符串或 ID 命名反推。只有
+CRITICAL 且 confirmation eligible 的结果可改变状态；CORROBORATING 仅保留支持/反证引用。
 
 - [ ] **Step 5: 运行 GREEN、属性重复测试和 Commit**
 

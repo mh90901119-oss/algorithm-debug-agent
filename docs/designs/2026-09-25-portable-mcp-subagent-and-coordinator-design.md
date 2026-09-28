@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：0.6
+- 设计版本：0.7
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -602,6 +602,11 @@ Reducer 规则固定为：任一 CRITICAL Predicate 产生 `REFUTE` 即为 `REFU
 Predicate 时为 `INCONCLUSIVE`；尚未产生有效 Evaluation 时保持 `OPEN`。新增 Gap/Predicate 可以使 SUPPORTED 回到
 INCONCLUSIVE，但不能让 REFUTED 恢复。
 
+Reducer 必须显式接收目标 Hypothesis、同一 Analysis 中冻结的 Predicate 集合、Gap 集合和 Evaluation 集合，不能只接收
+`HypothesisRecord + Evaluation`。原因是 Evaluation 有意不复制 Predicate 的 `CRITICAL/CORROBORATING` 角色和 Gap 状态；
+如果 Reducer 从字符串、ID 命名或 `effectApplied` 反推这些信息，将无法区分 UNKNOWN 的关键观测与旁证，也无法证明关联
+Gap 已关闭。Reducer 按 typed ID 关联四类输入并拒绝跨 Case/Analysis、悬空引用和重复冲突。
+
 ### 7.5 结构化 Observation Predicate
 
 第一版操作符冻结为：
@@ -631,6 +636,14 @@ Predicate 的结果与声明 effect 组合才能直接把假设转为 SUPPORTED/
 失败指纹 CHANGED/INCOMPARABLE、历史非结构化或其他仅线索证据可以计算有界 truth，但 `effectApplied=false`。INVALID
 Evidence 不得参与计算。相同 Predicate 和相同 Evidence 输入哈希必须得到相同结果；重复计算返回同一语义，不追加
 冲突状态。Evaluation 不复制 Raw 值，只保存判定所需的有界摘要和 provenance。
+
+`EvidenceView` 是 Evaluator 的内部 typed 边界，只包含身份、Evidence ID、正交 eligibility、覆盖状态、失败比较结果以及
+方法跟踪/命中、记录范围、命名标量序列、精确计数和有序路径事实。它不接受 Raw JSON、任意 Map、文件路径或模型表达式；
+记录、投影和计数必须带显式查询范围，方法必须区分“已跟踪未命中”和“根本未跟踪”。输入在计算 SHA-256 前按语义稳定
+排序并使用长度前缀编码，Evaluation ID 从完整输入哈希确定性派生，Evaluator 不读取系统时间或外部状态。
+`VALUE_EQUALS` 只有在完整范围内归一为唯一 typed 标量时才返回 TRUE/FALSE；`VALUE_CHANGED` 匹配有序序列中相邻的
+`before -> after`；`PATH_CONTAINS` 匹配连续有序子路径。缺少相应记录、投影或路径范围时返回 UNKNOWN，不能用全局
+“采集完成”替代操作符自己的范围证明。
 
 ### 7.6 证据义务
 
@@ -1575,3 +1588,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.5 | Task 7 实施审计修正唯一终态顺序：后置校验先于成功终态，避免校验失败后无法撤销成功回执和错误幂等回放 | Codex |
 | 2026-09-28 | 0.5 | Task 7 将 Policy 校验和 Tool Result 映射拆出为包内高内聚组件，并增加独立的执行失败/取消错误码，避免 Coordinator 膨胀和错误语义复用 | Codex |
 | 2026-09-28 | 0.6 | Task 8 实施审计明确 Source Query 的流式源码窗口、源码文本控制字符规则、重复调用点路径去重、Core 生成 queryId 及请求/结果追加归档与 Catalog 完整性校验 | Codex |
+| 2026-09-28 | 0.7 | Task 9 实施前审计修正 Reducer 输入：显式接收冻结 Predicate 与 Gap，禁止从 Evaluation 字符串或 effectApplied 反推角色和 Gap 关闭状态 | Codex |
