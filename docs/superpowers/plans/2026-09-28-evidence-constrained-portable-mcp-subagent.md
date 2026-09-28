@@ -6,15 +6,15 @@
 
 **Architecture:** `algorithm-debug-runtime` 是 CLI 与 MCP 共用的唯一生产组合根；所有模型动作经 `AnalysisCoordinator`，从追加式 Case/Investigation 产物重建状态。模型负责提出 Problem Frame、竞争假设和采集选择；Java 代码负责 Source Query、Predicate 三值评估、反证保留、证据资格、因果链等级、并发、幂等、归档和恢复。
 
-**Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
+**Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.21.1、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.4；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.9；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
 ## Global Constraints
 
-- Java 固定为 21；MCP SDK 固定为 `io.modelcontextprotocol.sdk:mcp-core:2.0.1` 与 `mcp-json-jackson2:2.0.1`；不引入 Spring、Jackson 3 或新的 Agent 编排框架。
+- Java 固定为 21；MCP SDK 固定为 `io.modelcontextprotocol.sdk:mcp-core:2.0.1` 与 `mcp-json-jackson2:2.0.1`；根 Jackson 2 BOM 与 SDK 编译基线统一为 2.21.1；不引入 Spring、Jackson 3 或新的 Agent 编排框架。
 - `ada-contracts` 不依赖实现模块；`algorithm-debug-runtime` 不依赖 CLI、MCP Server 或宿主 Adapter；Adapter 不反向依赖 `ada-core`。
 - MCP Server 不调用模型、不保存模型凭据、不实现第二套 Agent Loop。知识 MD 是可选模型上下文，不是 Java Core 依赖、Evidence 或结论门禁输入。
 - 当前基线 Catalog 由 17 个 `AnalysisActionType` 枚举值计算：现有 13 个，加 `source_query`、`investigation_update`、`analysis_status`、`analysis_finalize`。生产代码不得硬编码工具数量。
@@ -1178,14 +1178,24 @@ git commit -m "refactor: route cli analysis through coordinator"
 
 **Files:**
 - Modify: `pom.xml`
+- Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeWorkspaceIdentity.java`
+- Create: `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/RuntimeWorkspaceIdentityTest.java`
+- Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/AdaMain.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ActionCancellation.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/ActionCancellationTest.java`
 - Create: `algorithm-debug-mcp-server/pom.xml`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpMain.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerBootstrap.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpServer.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerLimits.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolInputStream.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolOutputStream.java`
+- Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestId.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerLifecycle.java`
 - Create: `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolErrorMapper.java`
-- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/StdioMcpContractTest.java`
 - Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpServerLifecycleTest.java`
+- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/StdioMcpContractTest.java`
+- Create: `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpSdkJacksonCompatibilityTest.java`
 
 **Interfaces:**
 - Produces: stdio MCP initialize/shutdown、Server identity/capabilities、bounded cancellation/close。
@@ -1199,24 +1209,34 @@ git commit -m "refactor: route cli analysis through coordinator"
 @Test void logsAndStackTracesGoToStderr() { }
 @Test void shutdownRejectsNewCallsAndWaitsBoundedlyForActiveCalls() { }
 @Test void cancellationPropagatesToCoordinator() { }
+@Test void cancellationBeforeHandlerBindingIsNotLost() { }
+@Test void stringAndNumericRequestIdsRemainDistinct() { }
+@Test void cancellationTokenCannotBeReusedWhileTerminationRunsOrAfterCancellation() { }
+@Test void runningTerminationCallbackMakesShutdownReportUndrained() { }
+@Test void concurrentShutdownWaitsForOwnerAndReusesOneResult() { }
+@Test void shutdownHookRegistrationFailureClosesStartedServer() { }
 @Test void malformedJsonRpcAndUnknownCapabilityAreProtocolErrors() { }
+@Test void wrongProtocolVersionAndTrailingJsonCannotExecute() { }
+@Test void everyJsonRpcRequestUsesTheGlobalActiveCallBudget() { }
+@Test void sdkJacksonBaselineValidatesToolSchemas() { }
 @Test void oneServerInstanceIsBoundToOneFrozenProjectRoot() { }
+@Test void cliAndMcpShareOneNonLeakingWorkspaceIdentityRule() { }
 ```
 
 - [ ] **Step 2: 运行 RED**
 
 ```powershell
-mvn -pl algorithm-debug-mcp-server -am test "-Dtest=StdioMcpContractTest,McpServerLifecycleTest" "-Dsurefire.failIfNoSpecifiedTests=false"
+mvn -pl algorithm-debug-mcp-server,algorithm-debug-cli -am test "-Dtest=ActionCancellationTest,RuntimeWorkspaceIdentityTest,StdioMcpContractTest,McpServerLifecycleTest" "-Dsurefire.failIfNoSpecifiedTests=false"
 ```
 
 - [ ] **Step 3: 实现 stdio Server 和关闭顺序**
 
-使用 `mcp-core` 与 `mcp-json-jackson2`；不引入 Spring。关闭顺序：拒绝新请求 → 传播取消 → 有界等待 → Runtime close → Server close。所有日志使用 stderr/DFX，stdout writer 仅交给 SDK transport。
+使用 `mcp-core` 与 `mcp-json-jackson2`；不引入 Spring。关闭顺序：拒绝新请求 → 传播取消 → 在同一截止时间内等待并中断未完成终止任务 → Runtime close → Server close。所有日志使用 stderr/DFX；stdout writer 只交给 SDK transport，或交给复用 SDK parser 的有界传输适配器。SDK 2.0.1 不暴露工具调用的外层 requestId 且不处理 `notifications/cancelled`，因此适配器必须保留字符串/整数 id 类型，在标准 `_meta` 注入 Agent 保留关联字段、消费取消通知并路由同一生命周期令牌；SDK 响应后回收未被 Handler 领取的占位。不得自行分派业务方法或解释工具参数。CLI/MCP 共用 Runtime 的 Workspace ID 派生，不能复制哈希规则。
 
 - [ ] **Step 4: 运行 GREEN 和依赖检查**
 
 ```powershell
-mvn -pl algorithm-debug-mcp-server -am test
+mvn -pl algorithm-debug-mcp-server,algorithm-debug-cli -am package
 mvn -pl algorithm-debug-mcp-server dependency:tree
 ```
 
@@ -1224,6 +1244,9 @@ mvn -pl algorithm-debug-mcp-server dependency:tree
 
 ```powershell
 git add pom.xml algorithm-debug-mcp-server
+git add ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ActionCancellation.java ada-core/src/test/java/org/example/algorithmdebug/core/coordination/ActionCancellationTest.java
+git add algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeWorkspaceIdentity.java algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/RuntimeWorkspaceIdentityTest.java algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/AdaMain.java
+git add docs/decisions/ADR-018-java-native-mcp-portable-subagent.md docs/development/evidence-constrained-mcp-implementation-baseline.md docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md docs/superpowers/plans/2026-09-28-evidence-constrained-portable-mcp-subagent.md
 git commit -m "feat: add java stdio mcp server"
 ```
 

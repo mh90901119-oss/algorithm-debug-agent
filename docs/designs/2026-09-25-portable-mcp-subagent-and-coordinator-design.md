@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：1.4
+- 设计版本：1.9
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -119,7 +119,10 @@ Coordinator。现有 `JdwpCollectionCoordinator` 只协调一次 JDWP 采集中�
 - `io.modelcontextprotocol.sdk:mcp-core`
 - `io.modelcontextprotocol.sdk:mcp-json-jackson2`
 
-使用 Jackson 2 适配模块，避免把当前仓库从 Jackson 2.17.2 迁移到 Jackson 3。第一版不引入 Spring。
+使用 Jackson 2 适配模块，不迁移到 Jackson 3，第一版不引入 Spring。SDK 2.0.1 的 Jackson 2 适配器按
+Jackson 2.21.1 编译，Core 注解与 JSON Schema Validator 也要求更新的 Jackson 2 基线，因此根 BOM 统一升级到
+2.21.1；禁止把 MCP 模块单独覆盖为新版本而让同一 Server JVM 混用两套 Jackson 小版本。升级必须通过全仓测试和
+SDK Tool Schema Validator smoke，不能只用 initialize 握手证明兼容。
 SDK 使用 MIT 许可证；实施前必须确认公司离线 Maven 镜像可解析锁定版本，并更新 NOTICE、SBOM 和依赖审计。
 若镜像无法提供该锁定版本，实施停止在依赖预检，不得临时切换未评审 SDK 或自制 MCP 协议实现。
 
@@ -276,6 +279,45 @@ CodePath/JDWP Factory 返回非空的 typed capability status。能力缺失时�
 
 该模块依赖 `ada-contracts`、`ada-core`、官方 MCP SDK、Jackson 2 适配和测试依赖。它不得依赖
 `algorithm-debug-cli`，不得通过 `ProcessBuilder` 启动 `ada.cmd`。
+
+Task 16 的生命周期边界进一步冻结如下：Server 实例在构造时绑定一个规范化 Workspace 根和一个规范化目标
+Project 根，二者在进程生命周期内不可替换；Project 根不要求位于归档 Workspace 内，但后续请求上下文只能与该
+冻结根和已注册 Project 的交集匹配。`McpServerLifecycle` 以唯一 MCP requestId 登记有界活动调用，每个活动调用持有
+独立 `ActionCancellation`；单请求取消只传播到对应令牌，Server 关闭则先拒绝新调用、取消全部活动调用、有界等待
+lease 释放，再依次关闭共享 Runtime 和 SDK Server。超时不伪装成优雅关闭，必须返回结构化 termination 状态，
+但仍执行后续资源关闭。
+`ActionCancellation` 在调用方选择 Executor 时必须先同步冻结取消标志，再异步投递最多一次终止回调；首次取消先于
+Handler 注册时，后注册回调仍经首次取消时已冻结的受管理 Executor 投递，不能退回目标动作线程同步执行。终止回调
+开始执行后的异常不得被误判成提交失败并再次投递；只有 Executor 在任务开始前拒绝时才允许恢复一次可重试状态。
+
+stdio 仍由官方 SDK 负责 JSON-RPC 会话、协商和分派。由于 SDK 2.0.1 的 stdio transport 对无法反序列化的单行输入
+只记录错误并断开，Server 在它前面增加一个有界的 `McpProtocolInputStream`：它先使用同一 Jackson 2 基线执行严格
+UTF-8、重复字段和单 JSON 值完整消费校验，再使用 SDK 的 `McpSchema.deserializeJsonRpcMessage` 校验 MCP 信封；对
+错误协议版本、畸形 UTF-8/JSON、尾随内容或超限帧只通过
+`McpProtocolErrorMapper` 写一个标准 JSON-RPC error。每个合法 JSON-RPC request 在交给 SDK 前占用全局有界请求槽，
+SDK 刷新对应终态响应后由输出适配器释放；普通非工具帧内容仍原样交给 SDK。
+
+SDK 2.0.1 尚未注册标准 `notifications/cancelled`，工具处理器的 Exchange 也不暴露外层 JSON-RPC requestId。为保证
+真实客户端取消能够到达同一个 Coordinator 令牌，该有界适配仅对两类合法帧做协议兼容处理：消费取消通知并按保留
+字符串/整数类型的 `McpRequestId` 路由；对 `tools/call` 在 SDK 标准 `_meta` 中覆盖 Agent 保留的
+`org.example.algorithmdebug/request-id` 关联字段，再交给 SDK 分派。`McpServerLifecycle` 在分派前登记占位，因此取消先于
+Handler 绑定也不会丢失；Dispatcher 绑定独立 `ActionCancellation` 并在 finally 中释放 lease。若请求未进入 Handler，
+`McpProtocolOutputStream` 在 SDK 写出同 requestId 的终态响应后清理占位。数值 `1` 与字符串 `"1"` 永不合并，活动
+占位和取消任务均受 `McpServerLimits` 限制。每个调用从传输登记起占用一个请求槽；lease 已结束但终止回调尚未完成时，
+槽位和活动令牌身份占用均转移给该回调，完成后才释放；`ActionCancellation` 本身还以一次性 claim 保证令牌无论是否
+实际收到取消都不能跨动作复用，避免旧终止处理器被后续请求错误触发。
+`ShutdownResult.callsDrained` 以请求槽（含运行中的终止回调）是否在截止时间内全部释放为准，不能只观察 Handler lease。
+因此连续取消只能拒绝新调用，不能无限创建线程，也不能丢弃负责杀进程和
+提交失败 Manifest 的唯一回调。该兼容层不注册业务方法、不解释工具参数，也不生成业务结果；SDK 仍是
+会话、协商、方法分派和响应序列化的唯一实现。
+
+终止回调由生命周期持有的受管理虚拟线程 Executor 执行并保存 Future；关闭时在同一截止时间内等待，超时后中断未完成
+任务，再关闭 Runtime 和 SDK。Executor 拒绝投递时 `ActionCancellation` 恢复可重试状态，单个回调失败不能跳过后续资源
+关闭。所有 stdout 写入由 SDK transport 或上述两个传输适配器完成，业务日志和启动诊断只能进入 stderr/DFX。
+
+CLI 与 MCP 必须通过 `algorithm-debug-runtime` 的 `RuntimeWorkspaceIdentity` 生成相同的非路径泄漏 Workspace ID；
+不得各自复制 SHA-256 规则，否则同一归档会因宿主入口不同形成身份分裂。该工具只为 ID 对真实规范路径求哈希，
+不会把规范路径替换成 Runtime 的权限检查路径，因此不放宽 Task 14 的符号链接 fail-closed 边界。
 
 ### 6.3 `ada-core` 新增 `coordination` 包
 
@@ -1281,6 +1323,13 @@ Manifest，不反复扫描 Raw Trace。表中默认值和硬上限必须在职�
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpMain.java` | 新增 | stdio 入口和退出码 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerBootstrap.java` | 新增 | 依赖组装 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/AlgorithmDebugMcpServer.java` | 新增 | MCP 生命周期和注册 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerLimits.java` | 新增 | 请求、并发和关闭预算的单一来源 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolInputStream.java` | 新增 | 严格校验单帧、登记全局请求槽并为工具调用注入保留关联字段 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolOutputStream.java` | 新增 | 原样转发 SDK 响应并在 flush 后释放全局请求槽 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpRequestId.java` | 新增 | 保留字符串/整数 wire 类型的有界请求标识 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpServerLifecycle.java` | 新增 | requestId/取消令牌登记、有界等待和资源关闭顺序 |
+| `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpProtocolErrorMapper.java` | 新增 | JSON-RPC 协议、取消与基础设施错误映射 |
+| `algorithm-debug-mcp-server/src/test/java/org/example/algorithmdebug/mcp/McpSdkJacksonCompatibilityTest.java` | 新增 | SDK Schema Validator 与 Jackson 2 基线兼容门禁 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolCatalog.java` | 新增 | 单一 Tool Catalog |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpToolDispatcher.java` | 新增 | 所有 tools/call 的唯一入口 |
 | `algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/McpResultMapper.java` | 新增 | 协调结果到 MCP 结果 |
@@ -1750,3 +1799,8 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 1.2 | Task 14 实施前审计补齐多 Project Archive 路由、惰性引导态、注册 Artifact 控制快照、typed Collector capability、目标 Java 注入和 Runtime 幂等关闭，禁止把单个 Project 或 Agent Java 固化进共享组合根 | Codex |
 | 2026-09-28 | 1.3 | Task 14 组合审计修正 Analysis 引导写入顺序、Project 注册/符号链接边界、typed 控制文档读取、控制状态绕过和状态推进后的幂等回放：`ANALYSIS_BEGIN` 的决策/幂等日志进入独立 Project 级引导控制根；Coordinator 强制执行投影 `allowedActions`，同时允许已完成 Operation 只读回放 | Codex |
 | 2026-09-28 | 1.4 | Task 15 实施前审计冻结 CLI 迁移边界：命令解析后按 Workspace 启动/关闭共享 Runtime；仅三个管理命令直连管理服务；其余历史分析命令恰好经过一次 Coordinator；`case open` 的纯文本文件升级为结构化 Problem Frame 输入，禁止为兼容伪造 SourceAnchor | Codex |
+| 2026-09-28 | 1.5 | Task 16 实施前审计冻结 stdio 生命周期：Server 单 Workspace/Project 根绑定、requestId 到独立取消令牌、有界关闭顺序、协议 stdout 隔离；增加仅复用 SDK parser 的有界畸形帧适配，并把 CLI/MCP 共用 Workspace ID 派生下沉到共享 Runtime | Codex |
+| 2026-09-28 | 1.6 | Task 16 代码审查补齐 SDK 2.0.1 取消缺口：类型化 requestId、`tools/call` 保留 metadata 关联、取消通知路由、响应后占位回收和受管理终止 Executor；并冻结并发关闭与启动钩子失败清理语义 | Codex |
+| 2026-09-28 | 1.7 | Task 16 依赖审查确认 SDK 2.0.1 的 Jackson 2 编译基线为 2.21.1；统一升级根 Jackson 2 BOM，拒绝在同一 Server JVM 混用 2.17.2/2.21.1，并增加严格单 JSON 值、协议版本和 Schema Validator 兼容门禁 | Codex |
+| 2026-09-28 | 1.8 | Task 16 最终审查冻结一次性取消令牌、终止回调槽位转移与关闭排空语义；补齐空工具参数分类和关联 metadata 扩帧后的二次硬上限，防止 SDK 静默断开会话 | Codex |
+| 2026-09-28 | 1.9 | Task 16 最终并发审查把请求预算从工具调用扩展到所有 JSON-RPC request；非工具请求也必须先占槽，终态响应 flush 后释放，禁止绕过 SDK 内部无界队列积压 | Codex |

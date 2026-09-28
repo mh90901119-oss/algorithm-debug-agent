@@ -28,7 +28,7 @@
 | 实际 Agent Java | Temurin 21.0.11 | `java -version`、`mvn -v` |
 | Maven | 3.9.16 | `mvn -v` |
 | JUnit | 5.10.3 | 根 `pom.xml` |
-| Jackson | 2.17.2 | 根 `pom.xml`；MCP 必须使用 Jackson 2 适配器 |
+| Jackson | 2.21.1 | 根 `pom.xml`；与 MCP SDK 2.0.1 Jackson 2 编译基线一致 |
 | Node.js | 24.18.0 | `node --version`，仅用于 Adapter/Eval/安装测试 |
 | MCP Core | `io.modelcontextprotocol.sdk:mcp-core:2.0.1` | 在线和 `-o` 离线 `dependency:get` 均成功 |
 | MCP Jackson 2 | `io.modelcontextprotocol.sdk:mcp-json-jackson2:2.0.1` | 在线和 `-o` 离线 `dependency:get` 均成功 |
@@ -48,6 +48,12 @@ node --test integrations/opencode/test/*.test.mjs agent-evals/test/*.test.mjs
 2026-09-28 结果：两个依赖坐标均可解析；20 个 Reactor Project 全部 `SUCCESS`；Node 71/71 通过。Java 测试仍输出
 现有 SLF4J NOP provider 和 Byte Buddy 动态 Agent 加载预警，它们不是本次失败，但必须在最终打包/Java 升级门禁中
 重新验证，不得静默忽略。
+
+Task 16 依赖树审查发现，原冻结 Jackson 2.17.2 会把 `mcp-json-jackson2:2.0.1` 声明的 2.21.1、MCP Core
+声明的 annotations 2.21 以及 JSON Schema Validator 的较新 Jackson 编译基线整体降级，存在 Tool Schema
+注册阶段的二进制兼容风险。根 BOM 因而统一修订为 Jackson 2.21.1；仍使用 Jackson 2，不引入 Spring/Jackson 3，
+并要求全仓 Java 回归与 MCP Schema Validator smoke 同时通过。MCP 模块私有覆盖被否决，因为共享 Runtime 与 MCP
+仍运行在同一 JVM，混合小版本不能形成真实隔离。
 
 基线运行同时发现并修正了文档测试自身的两项边界错误：它不应扫描 Git 忽略的 `.superpowers` 执行临时目录，
 也不应把普通中文词“公司”作为全仓陈旧内容标记。具体陈旧路径、旧数量和乱码规则继续保留。

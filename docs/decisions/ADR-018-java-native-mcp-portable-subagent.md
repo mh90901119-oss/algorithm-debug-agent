@@ -30,7 +30,8 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
    `algorithm-debug-mcp-server` Maven 模块，第一版只支持本地 stdio 传输。Runtime 依赖具体 Adapter/Collector，
    入口模块不复制该装配逻辑。
 4. MCP Server 使用官方 MCP Java SDK，初始锁定 2.0.1，并使用 `mcp-core` 与
-   `mcp-json-jackson2`，不引入 Spring，不迁移到 Jackson 3。依赖必须通过离线镜像、许可证、NOTICE 和 SBOM
+   `mcp-json-jackson2`；根 Jackson 2 BOM 与该 SDK 的编译基线统一为 2.21.1，不引入 Spring，不迁移到 Jackson 3。
+   依赖必须通过离线镜像、许可证、NOTICE 和 SBOM
    预检后才能进入生产实现。
 5. MCP Tool Handler 直接调用 `ada-core`，正常模型调用不再启动 `bin/ada.cmd`。CLI 保留为人工、CI、诊断和
    迁移入口，并与 MCP Server 复用同一 Coordinator。
@@ -109,6 +110,10 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 2026-09-28，用户批准设计 0.4、详细实施计划，并明确选择在当前根仓库原生执行。MCP SDK 2.0.1 两个锁定坐标已
 完成在线与离线解析验证，许可证为 MIT；Qwen CLI 0.20.0 的 Extension、stdio MCP 与 `agents/*.md` 子 Agent
 契约已经本机验证。DeepSeek Harness 的真实契约尚不可得，因此只阻塞第二宿主门禁，不授权推测实现。
+
+2026-09-28 Task 16 依赖审查确认 SDK 2.0.1 的 Jackson 2 适配器按 2.21.1 编译；继续由根 BOM 降级到 2.17.2
+会把风险推迟到 Tool Schema 校验阶段。因此统一升级 Jackson 2 BOM，并以全仓测试和 MCP Schema Validator smoke
+作为兼容门禁；该修订不改变“不引入 Jackson 3/Spring”的架构选择。
 
 ## 回滚条件
 

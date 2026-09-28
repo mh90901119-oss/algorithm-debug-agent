@@ -2,6 +2,8 @@ package org.example.algorithmdebug.core.coordination;
 
 import java.time.Duration;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** 将 MCP 取消信号转换成一次协作式、有界目标终止请求。 */
 public final class ActionCancellation {
@@ -13,7 +15,9 @@ public final class ActionCancellation {
     private final Duration terminationTimeout;
     private boolean cancellationRequested;
     private TerminationHandler terminationHandler;
+    private Executor terminationExecutor;
     private boolean terminationDispatched;
+    private boolean actionClaimed;
 
     /** @param terminationTimeout Handler 清理目标进程和提交 Manifest 的最大预算 */
     public ActionCancellation(Duration terminationTimeout) {
@@ -42,6 +46,7 @@ public final class ActionCancellation {
             throw new IllegalArgumentException("handler must not be null");
         }
         TerminationHandler dispatch = null;
+        Executor executor = null;
         synchronized (this) {
             if (terminationHandler != null) {
                 throw new IllegalStateException("A termination handler is already registered");
@@ -50,22 +55,43 @@ public final class ActionCancellation {
             if (cancellationRequested && !terminationDispatched) {
                 terminationDispatched = true;
                 dispatch = terminationHandler;
+                executor = terminationExecutor;
             }
         }
-        dispatch(dispatch);
+        submit(dispatch, executor);
     }
 
     /** 请求取消；终止回调最多执行一次。 */
     public void requestCancellation() {
+        requestCancellation(Runnable::run);
+    }
+
+    /**
+     * 同步冻结取消状态，并通过调用方提供的执行器投递可能阻塞的终止回调。
+     *
+     * <p>该重载供 MCP Server 关闭使用，使终止回调的实际耗时不能占用 Server 的统一关闭预算。
+     * 重复取消不会再次提交回调。</p>
+     *
+     * @param executor 终止回调执行器
+     */
+    public void requestCancellation(Executor executor) {
+        if (executor == null) {
+            throw new IllegalArgumentException("executor must not be null");
+        }
         TerminationHandler dispatch = null;
+        Executor selectedExecutor = null;
         synchronized (this) {
             cancellationRequested = true;
+            if (terminationExecutor == null) {
+                terminationExecutor = executor;
+            }
             if (terminationHandler != null && !terminationDispatched) {
                 terminationDispatched = true;
                 dispatch = terminationHandler;
+                selectedExecutor = terminationExecutor;
             }
         }
-        dispatch(dispatch);
+        submit(dispatch, selectedExecutor);
     }
 
     /** @return 是否已经收到取消请求 */
@@ -78,6 +104,19 @@ public final class ActionCancellation {
         return terminationTimeout;
     }
 
+    /**
+     * 为一个分析动作独占该令牌。令牌保存终止处理器和一次性派发状态，因此不能跨动作复用。
+     *
+     * @return 首次占用返回 {@code true}；已经属于其他动作时返回 {@code false}
+     */
+    public synchronized boolean tryClaimForAction() {
+        if (actionClaimed) {
+            return false;
+        }
+        actionClaimed = true;
+        return true;
+    }
+
     /** 在协作检查点抛出标准取消异常。 */
     public void throwIfCancellationRequested() {
         if (isCancellationRequested()) {
@@ -85,9 +124,27 @@ public final class ActionCancellation {
         }
     }
 
-    private void dispatch(TerminationHandler handler) {
+    private void submit(TerminationHandler handler, Executor executor) {
         if (handler != null) {
-            handler.terminate(terminationTimeout);
+            AtomicBoolean started = new AtomicBoolean();
+            try {
+                executor.execute(() -> {
+                    started.set(true);
+                    handler.terminate(terminationTimeout);
+                });
+            } catch (RuntimeException submissionFailure) {
+                if (!started.get()) {
+                    synchronized (this) {
+                        if (terminationHandler == handler) {
+                            terminationDispatched = false;
+                            if (terminationExecutor == executor) {
+                                terminationExecutor = null;
+                            }
+                        }
+                    }
+                }
+                throw submissionFailure;
+            }
         }
     }
 

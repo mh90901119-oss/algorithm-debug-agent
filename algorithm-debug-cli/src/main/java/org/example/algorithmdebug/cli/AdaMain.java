@@ -1,13 +1,9 @@
 package org.example.algorithmdebug.cli;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -27,6 +23,7 @@ import org.example.algorithmdebug.runtime.AlgorithmDebugRuntime;
 import org.example.algorithmdebug.runtime.AlgorithmDebugRuntimeBootstrap;
 import org.example.algorithmdebug.runtime.RuntimeBootstrapException;
 import org.example.algorithmdebug.runtime.RuntimeBootstrapRequest;
+import org.example.algorithmdebug.runtime.RuntimeWorkspaceIdentity;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
@@ -35,8 +32,6 @@ public final class AdaMain {
     private static final int EXIT_INVALID_ARGUMENTS = 2;
     private static final int EXIT_DOMAIN_FAILURE = 3;
     private static final int EXIT_INTERNAL_ERROR = 10;
-    private static final String WORKSPACE_ID_PREFIX = "workspace-";
-    private static final String HASH_ALGORITHM = "SHA-256";
 
     private final CommandExecution execution;
     private final CliResponseWriter responseWriter;
@@ -285,24 +280,12 @@ public final class AdaMain {
     }
 
     static String stableWorkspaceId(Path workspace) {
-        if (workspace == null) {
-            throw new IllegalArgumentException("workspace must not be null");
-        }
-        final Path canonical;
         try {
-            canonical = workspace.toFile().getCanonicalFile().toPath();
-        } catch (IOException failure) {
+            return RuntimeWorkspaceIdentity.derive(workspace);
+        } catch (RuntimeBootstrapException failure) {
             throw new CliStartupException(
                     "CLI_WORKSPACE_CANONICALIZATION_FAILED",
                     "Workspace identity could not be derived", failure);
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
-            byte[] hash = digest.digest(
-                    canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return WORKSPACE_ID_PREFIX + HexFormat.of().formatHex(hash);
-        } catch (NoSuchAlgorithmException impossible) {
-            throw new IllegalStateException(HASH_ALGORITHM + " is unavailable", impossible);
         }
     }
 
