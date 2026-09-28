@@ -6,6 +6,8 @@ import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.CollectionId;
 import org.example.algorithmdebug.contracts.EvidenceId;
+import org.example.algorithmdebug.contracts.coordination.OperationId;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
 
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -88,6 +90,99 @@ public final class CaseArchiveLayout {
     /** @return 指定 Analysis 目录 */
     public Path analysisRoot(AnalysisId analysisId) {
         return child(analysesRoot(), safeSegment(analysisId.value(), "analysisId"));
+    }
+
+    /** @return 指定 Analysis 的幂等操作日志根目录。 */
+    public Path operationJournalRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "operations");
+    }
+
+    /** @return 指定操作的追加式生命周期目录。 */
+    public Path operationRoot(AnalysisId analysisId, OperationId operationId) {
+        return child(operationJournalRoot(analysisId),
+                safeSegment(operationId.value(), "operationId"));
+    }
+
+    /** @return 操作启动文档。 */
+    public Path operationStarted(AnalysisId analysisId, OperationId operationId) {
+        return child(operationRoot(analysisId, operationId), "started.json");
+    }
+
+    /** @return 操作成功终态文档。 */
+    public Path operationCompleted(AnalysisId analysisId, OperationId operationId) {
+        return child(operationRoot(analysisId, operationId), "completed.json");
+    }
+
+    /** @return 操作失败终态文档。 */
+    public Path operationFailed(AnalysisId analysisId, OperationId operationId) {
+        return child(operationRoot(analysisId, operationId), "failed.json");
+    }
+
+    /** @return 操作结果不确定终态文档。 */
+    public Path operationUncertain(AnalysisId analysisId, OperationId operationId) {
+        return child(operationRoot(analysisId, operationId), "uncertain.json");
+    }
+
+    /** @return 指定 Analysis 的协调决策目录。 */
+    public Path coordinationRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "coordination");
+    }
+
+    /** @return 指定协调决策的不可变文档。 */
+    public Path coordinationDecision(AnalysisId analysisId, String decisionId) {
+        return child(coordinationRoot(analysisId),
+                safeSegment(decisionId, "decisionId") + ".json");
+    }
+
+    /** @return 指定 Analysis 的调查事件目录。 */
+    public Path investigationEventsRoot(AnalysisId analysisId) {
+        return child(child(analysisRoot(analysisId), "investigation"), "events");
+    }
+
+    /** @return 由严格序号和事件 ID 共同命名的调查事件文档。 */
+    public Path investigationEvent(AnalysisId analysisId, long sequence, String eventId) {
+        if (sequence < 1) {
+            throw new IllegalArgumentException("sequence must be positive");
+        }
+        return child(investigationEventsRoot(analysisId),
+                sequence + "-" + safeSegment(eventId, "eventId") + ".json");
+    }
+
+    /** @return 指定 Source Query 的追加式目录。 */
+    public Path sourceQueryRoot(AnalysisId analysisId, SourceQueryId queryId) {
+        return child(child(analysisRoot(analysisId), "source-queries"),
+                safeSegment(queryId.value(), "queryId"));
+    }
+
+    /** @return Source Query 请求文档。 */
+    public Path sourceQueryRequest(AnalysisId analysisId, SourceQueryId queryId) {
+        return child(sourceQueryRoot(analysisId, queryId), "request.json");
+    }
+
+    /** @return Source Query 结果文档。 */
+    public Path sourceQueryResult(AnalysisId analysisId, SourceQueryId queryId) {
+        return child(sourceQueryRoot(analysisId, queryId), "result.json");
+    }
+
+    /** @return 指定结论候选的追加式目录。 */
+    public Path conclusionRoot(AnalysisId analysisId, String conclusionId) {
+        return child(child(analysisRoot(analysisId), "conclusions"),
+                safeSegment(conclusionId, "conclusionId"));
+    }
+
+    /** @return 结论候选文档。 */
+    public Path conclusionCandidate(AnalysisId analysisId, String conclusionId) {
+        return child(conclusionRoot(analysisId, conclusionId), "candidate.json");
+    }
+
+    /** @return 已接受结论决策文档。 */
+    public Path conclusionAccepted(AnalysisId analysisId, String conclusionId) {
+        return child(conclusionRoot(analysisId, conclusionId), "accepted.json");
+    }
+
+    /** @return 已拒绝结论决策文档。 */
+    public Path conclusionRejected(AnalysisId analysisId, String conclusionId) {
+        return child(conclusionRoot(analysisId, conclusionId), "rejected.json");
     }
 
     /** @return 当前 Case 唯一算法输入快照目录。 */
