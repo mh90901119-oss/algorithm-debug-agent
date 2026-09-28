@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.3；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.4；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -1116,11 +1116,18 @@ git commit -m "refactor: add shared algorithm debug runtime"
 ### Task 15: 让 CLI 复用 Runtime 和 Coordinator
 
 **Files:**
+- Modify: `README.md`
 - Modify: `algorithm-debug-cli/pom.xml`
 - Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/AdaMain.java`
+- Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCommand.java`
 - Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCommandExecutor.java`
 - Create: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCoordinatedResultAdapter.java`
+- Create: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliActionRequestMapper.java`
+- Create: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliAnalysisContextResolver.java`
+- Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliLogContextResolver.java`
+- Modify: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliFailureMessages.java`
 - Delete: `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/RuntimeToolchain.java`
+- Delete: `algorithm-debug-cli/src/test/java/org/example/algorithmdebug/cli/RuntimeToolchainTest.java`
 - Create: `algorithm-debug-cli/src/test/java/org/example/algorithmdebug/cli/CliCoordinatorCompatibilityTest.java`
 - Modify: `algorithm-debug-cli/src/test/java/org/example/algorithmdebug/cli/AdaMainTest.java`
 - Modify: `algorithm-debug-cli/src/test/java/org/example/algorithmdebug/cli/CliCommandExecutorTest.java`
@@ -1134,6 +1141,8 @@ git commit -m "refactor: add shared algorithm debug runtime"
 ```java
 @Test void modelCommandsInvokeCoordinatorExactlyOnce() { }
 @Test void managementCommandsRemainDirectAndDoNotPretendToBeAnalysisActions() { }
+@Test void caseOpenBuildsProblemFrameOnlyFromStructuredInputAndServerIds() { }
+@Test void plainTextCaseOpenIsRejectedRatherThanFabricatingSourceAnchors() { }
 @Test void rejectedDecisionMapsToStableCliErrorWithoutLosingCause() { }
 @Test void targetFailureRemainsSuccessfulCliInvocationWithTargetOutcome() { }
 @Test void toolResponseV2GoldenRemainsReadable() { }
@@ -1147,13 +1156,15 @@ mvn -pl algorithm-debug-cli -am test "-Dtest=CliCoordinatorCompatibilityTest,Ada
 
 - [ ] **Step 3: 删除重复装配并实现 adapter**
 
-`AdaMain` 只解析 CLI/config 并调用 Runtime bootstrap；`CliCommandExecutor` 将模型 command 映射为 ActionRequest；`CliCoordinatedResultAdapter` 只做协议形状转换，不复制 Policy 或错误判断。
+`AdaMain` 先解析 CLI，再按命令 Workspace 调用 Runtime bootstrap，并在单次命令后关闭 Runtime；`CliCommandExecutor` 只允许 workspace/project/doctor 三个管理命令直调管理服务，其余 command 由 `CliActionRequestMapper` 映射为 ActionRequest 并恰好调用一次 Coordinator。`CliAnalysisContextResolver` 只读 typed Case/Plan 控制文档补齐旧命令缺失的 Analysis 归属。`case open --question-file` 保留参数名但只接受结构化 Problem Frame JSON，禁止从纯文本伪造锚点。`CliCoordinatedResultAdapter` 只做协议形状转换，不复制 Policy 或错误判断。
 
 - [ ] **Step 4: 运行 GREEN 和 CLI smoke**
 
 ```powershell
-mvn -pl algorithm-debug-cli -am test
-.\bin\ada.cmd doctor --json
+mvn -pl algorithm-debug-cli -am package
+$workspace = Join-Path $env:TEMP "ada-cli-runtime-smoke"
+.\bin\ada.cmd workspace init --root $workspace
+.\bin\ada.cmd doctor --workspace $workspace
 ```
 
 - [ ] **Step 5: Commit**

@@ -77,6 +77,28 @@ com.example.scheduler.SchedulerTest#shouldScheduleAllWafers：
 
 工作流会先建立 Case/Analysis，捕获并读取算法输入，再按证据缺口选择 UT、静态分析、CodePath 或 JDWP。动态采集没有固定轮数，但每个 Plan 都必须说明问题、假设、预期观察和来源 Evidence；同一无效 Plan 不得重复。
 
+直接调用兼容 Java CLI 时，`case open --question-file` 的参数名保持不变，但文件内容必须是结构化
+Problem Frame JSON，不能再传自由文本。最小输入必须同时给出症状、预期/实际行为、至少一个真实源码锚点
+和至少一个待确认问题；Case、Analysis、Problem Frame 和 Operation 身份仍由 Agent 生成：
+
+```json
+{
+  "symptom": "低优先级任务先被选择",
+  "expectedBehavior": "高优先级任务先执行",
+  "actualBehavior": "低优先级任务先执行",
+  "scopeAnchors": [{
+    "className": "com.example.scheduler.Scheduler",
+    "methodName": "select",
+    "descriptor": "()V",
+    "sourceRelativePath": "src/main/java/com/example/scheduler/Scheduler.java",
+    "startLine": 10,
+    "endLine": 30
+  }],
+  "knownFactRefs": [],
+  "initialUnknowns": ["候选比较结果是否错误"]
+}
+```
+
 ## Workspace
 
 默认路径为 `%LOCALAPPDATA%\algorithm-debug-agent\workspace`，可配置。核心结构：

@@ -1,48 +1,42 @@
 package org.example.algorithmdebug.cli;
 
-import org.example.algorithmdebug.adapter.TargetProjectAdapter;
-import org.example.algorithmdebug.contracts.ToolResponse;
-import org.example.algorithmdebug.contracts.DoctorCheck;
-import org.example.algorithmdebug.contracts.DoctorStatus;
-import org.example.algorithmdebug.core.CaseRunException;
-import org.example.algorithmdebug.core.ControlPlaneException;
-import org.example.algorithmdebug.core.ControlPlaneServices;
-import org.example.algorithmdebug.core.ArtifactBackedResult;
-import org.example.algorithmdebug.core.MavenExecutableLocator;
-import org.example.algorithmdebug.core.MultiArtifactBackedResult;
-import org.example.algorithmdebug.core.ToolDoctorProbe;
-import org.example.algorithmdebug.core.JdwpToolConfiguration;
-import org.example.algorithmdebug.plan.PlanCompilationException;
-import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
-import org.example.algorithmdebug.codepath.CodePathProcessCollector;
-import org.example.algorithmdebug.codepath.CodePathToolConfiguration;
-import org.example.algorithmdebug.codepath.CodePathAdapterException;
-import org.example.algorithmdebug.codepath.MavenTestClasspathResolver;
-import org.example.algorithmdebug.methodpath.MethodPathCollector;
-import org.example.algorithmdebug.jdwp.JdwpCollectionCoordinator;
-import org.example.algorithmdebug.jdwp.LoopbackPortAllocator;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Clock;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 import org.example.algorithmdebug.casecore.logging.JavaExecutionLogRouter;
-
-import java.io.File;
-import java.io.PrintStream;
-import java.time.Clock;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.ServiceLoader;
-import java.util.stream.Collectors;
-import java.nio.file.Files;
-import java.util.Map;
+import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.core.ArtifactBackedResult;
+import org.example.algorithmdebug.core.CaseRunException;
+import org.example.algorithmdebug.core.ControlPlaneException;
+import org.example.algorithmdebug.core.MultiArtifactBackedResult;
+import org.example.algorithmdebug.core.coordination.AnalysisCoordinator;
+import org.example.algorithmdebug.plan.PlanCompilationException;
+import org.example.algorithmdebug.runtime.AlgorithmDebugRuntime;
+import org.example.algorithmdebug.runtime.AlgorithmDebugRuntimeBootstrap;
+import org.example.algorithmdebug.runtime.RuntimeBootstrapException;
+import org.example.algorithmdebug.runtime.RuntimeBootstrapRequest;
+import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 
 /** Algorithm Debug Agent 的稳定 JSON CLI 入口。 */
 public final class AdaMain {
-
     private static final int EXIT_SUCCESS = 0;
     private static final int EXIT_INVALID_ARGUMENTS = 2;
     private static final int EXIT_DOMAIN_FAILURE = 3;
     private static final int EXIT_INTERNAL_ERROR = 10;
+    private static final String WORKSPACE_ID_PREFIX = "workspace-";
+    private static final String HASH_ALGORITHM = "SHA-256";
 
     private final CommandExecution execution;
     private final CliResponseWriter responseWriter;
@@ -99,7 +93,7 @@ public final class AdaMain {
      * @param arguments CLI 参数
      * @param stdout 标准输出
      * @param stderr 标准错误
-     * @return 0 成功、2 参数错误、3 确定性领域错误、10 未预期错误
+     * @return 0 成功、2 输入错误、3 可处理领域失败、10 内部或启动失败
      */
     public int run(String[] arguments, PrintStream stdout, PrintStream stderr) {
         if (stdout == null || stderr == null) {
@@ -126,19 +120,20 @@ public final class AdaMain {
                 "CLI invocation started", Map.of("command", commandName));
         try {
             Object result = execution.execute(command);
-            logContext = CliLogContextResolver.after(command, result);
-            executionLog.info(logContext, "AdaMain", "CLI_INVOCATION_COMPLETED", "COMPLETED",
-                    "CLI invocation completed", Map.of("command", commandName));
-            if (result instanceof ArtifactBackedResult<?> artifactBacked) {
-                responseWriter.write(ToolResponse.success(
-                        artifactBacked.summary(), List.of(artifactBacked.artifact())), stdout);
-            } else if (result instanceof MultiArtifactBackedResult<?> artifactBacked) {
-                responseWriter.write(ToolResponse.success(
-                        artifactBacked.summary(), artifactBacked.artifacts()), stdout);
+            ToolResponse<?> response = normalizeResponse(result);
+            logContext = CliLogContextResolver.after(command, response);
+            if (response.success()) {
+                executionLog.info(
+                        logContext, "AdaMain", "CLI_INVOCATION_COMPLETED", "COMPLETED",
+                        "CLI invocation completed", Map.of("command", commandName));
             } else {
-                responseWriter.write(ToolResponse.success(result, List.of()), stdout);
+                executionLog.warn(
+                        logContext, "AdaMain", "CLI_INVOCATION_RETURNED_FAILURE", "FAILED",
+                        "CLI invocation returned a structured failure",
+                        Map.of("command", commandName, "code", response.code()));
             }
-            return EXIT_SUCCESS;
+            responseWriter.write(response, stdout);
+            return response.success() ? EXIT_SUCCESS : EXIT_DOMAIN_FAILURE;
         } catch (CliInputException failure) {
             logFailure(logContext, commandName, "CLI_INVALID_ARGUMENTS", failure);
             responseWriter.write(
@@ -147,6 +142,18 @@ public final class AdaMain {
                             "Invalid CLI input: " + failure.getMessage(), List.of()),
                     stdout);
             return EXIT_INVALID_ARGUMENTS;
+        } catch (AnalysisCoordinator.ExecutionFailure failure) {
+            ToolResponse<?> domainFailure = coordinatedDomainFailure(failure.getCause());
+            if (domainFailure != null) {
+                logFailure(logContext, commandName, domainFailure.code(), failure);
+                responseWriter.write(domainFailure, stdout);
+                return EXIT_DOMAIN_FAILURE;
+            }
+            String code = failure.code().name();
+            logFailure(logContext, commandName, code, failure);
+            responseWriter.write(
+                    ToolResponse.failure(code, CliFailureMessages.forCode(code), List.of()), stdout);
+            return EXIT_DOMAIN_FAILURE;
         } catch (CaseRunException failure) {
             logFailure(logContext, commandName, failure.code(), failure);
             responseWriter.write(
@@ -178,11 +185,19 @@ public final class AdaMain {
                                     "PLAN_COMPILATION_FAILED", failure), List.of()),
                     stdout);
             return EXIT_DOMAIN_FAILURE;
+        } catch (CliStartupException failure) {
+            logFailure(logContext, commandName, failure.code(), failure);
+            responseWriter.write(
+                    ToolResponse.failure(
+                            failure.code(), CliFailureMessages.forCode(failure.code()), List.of()),
+                    stdout);
+            return EXIT_INTERNAL_ERROR;
         } catch (RuntimeException failure) {
             logFailure(logContext, commandName, "INTERNAL_ERROR", failure);
             responseWriter.write(
                     ToolResponse.failure(
-                            "INTERNAL_ERROR", CliFailureMessages.forCode("INTERNAL_ERROR"), List.of()),
+                            "INTERNAL_ERROR", CliFailureMessages.forCode("INTERNAL_ERROR"),
+                            List.of()),
                     stdout);
             return EXIT_INTERNAL_ERROR;
         }
@@ -191,50 +206,104 @@ public final class AdaMain {
     static AdaMain defaultApplication() {
         AgentExecutionLog log = JavaExecutionLogRouter.fromEnvironment(
                 Clock.systemDefaultZone(), System.getenv());
-        CliCommandExecutor executor = defaultExecutor(log);
-        return new AdaMain(executor::execute, new CliResponseWriter(), log);
+        return new AdaMain(
+                command -> executeWithRuntime(command, log),
+                new CliResponseWriter(),
+                log);
     }
 
-    /** 装配默认 CLI 执行器；保留包级测试缝以验证组合根。 */
-    static CliCommandExecutor defaultExecutor() {
-        return defaultExecutor(AgentExecutionLog.disabled());
+    private static ToolResponse<?> normalizeResponse(Object result) {
+        if (result instanceof ToolResponse<?> response) {
+            return response;
+        }
+        if (result instanceof ArtifactBackedResult<?> value) {
+            return ToolResponse.success(value.summary(), List.of(value.artifact()));
+        }
+        if (result instanceof MultiArtifactBackedResult<?> value) {
+            return ToolResponse.success(value.summary(), value.artifacts());
+        }
+        return ToolResponse.success(result, List.of());
     }
 
-    private static CliCommandExecutor defaultExecutor(AgentExecutionLog executionLog) {
+    private static ToolResponse<?> coordinatedDomainFailure(Throwable cause) {
+        if (cause instanceof CaseRunException failure) {
+            return ToolResponse.failure(
+                    failure.code(), CliFailureMessages.forCaseRun(failure), failure.artifacts());
+        }
+        if (cause instanceof ControlPlaneException failure) {
+            return ToolResponse.failure(
+                    failure.code(), CliFailureMessages.forCode(failure.code()), List.of());
+        }
+        if (cause instanceof StaticAnalysisException failure) {
+            return ToolResponse.failure(
+                    failure.code(), CliFailureMessages.forCode(failure.code()), List.of());
+        }
+        if (cause instanceof PlanCompilationException failure) {
+            return ToolResponse.failure(
+                    "PLAN_COMPILATION_FAILED",
+                    CliFailureMessages.forPlanCompilation(
+                            "PLAN_COMPILATION_FAILED", failure), List.of());
+        }
+        if (cause instanceof WorkspaceException failure) {
+            return ToolResponse.failure(
+                    failure.code(), CliFailureMessages.forCode(failure.code()), List.of());
+        }
+        return null;
+    }
+
+    private static ToolResponse<?> executeWithRuntime(
+            CliCommand command, AgentExecutionLog executionLog) {
+        Path workspace = command.workspaceRoot();
         boolean windows = System.getProperty("os.name", "")
                 .toLowerCase(Locale.ROOT)
                 .contains("win");
-        List<TargetProjectAdapter> adapters = List.copyOf(ServiceLoader
-                .load(TargetProjectAdapter.class)
-                .stream()
-                .map(ServiceLoader.Provider::get)
-                .map(adapter -> (TargetProjectAdapter) adapter)
-                .collect(Collectors.toList()));
-        MavenExecutableLocator mavenLocator = new MavenExecutableLocator(
-                System.getenv(), File.pathSeparator, windows);
-        java.nio.file.Path agentJavaExecutable = java.nio.file.Path.of(
-                System.getProperty("java.home"), "bin", windows ? "java.exe" : "java")
-                .toAbsolutePath().normalize();
-        RuntimeToolchain toolchain = RuntimeToolchain.resolve(
-                System.getenv(), agentJavaExecutable, windows);
-        ConfiguredCodePath codePath = configuredCodePath(toolchain.targetJavaExecutable());
-        ConfiguredJdwp jdwp = configuredJdwp(toolchain.agentJavaExecutable());
-        ControlPlaneServices services = ControlPlaneServices.create(
+        Path agentJava = Path.of(
+                System.getProperty("java.home"), "bin", windows ? "java.exe" : "java");
+        RuntimeBootstrapRequest request = new RuntimeBootstrapRequest(
+                stableWorkspaceId(workspace),
+                workspace,
+                System.getenv(),
                 Clock.systemUTC(),
                 () -> Runtime.version().feature(),
-                System.getenv(),
+                agentJava,
                 File.pathSeparator,
                 windows,
-                adapters,
-                mavenLocator.locate(toolchain.mavenExecutable()),
-                codePath.collector(),
-                new MavenTestClasspathResolver(),
-                jdwp.tool(), jdwp.executor(), jdwp.ports(),
-                codePath.doctorProbe(), jdwp.doctorProbe(), executionLog);
-        return new CliCommandExecutor(
-                services.workspace(), services.project(), services.doctor(),
-                services.cases(), services.runs(), services.staticAnalysis(), services.collections(),
-                services.jdwpCollections(), services.algorithmInputs());
+                executionLog);
+        try (AlgorithmDebugRuntime runtime =
+                     new AlgorithmDebugRuntimeBootstrap().bootstrap(request)) {
+            CliActionRequestMapper mapper = new CliActionRequestMapper(
+                    request.workspaceId(),
+                    request.workspaceRoot(),
+                    new CliAnalysisContextResolver(request.workspaceRoot()),
+                    request.clock(),
+                    () -> UUID.randomUUID().toString());
+            return new CliCommandExecutor(runtime.services(), mapper).execute(command);
+        } catch (RuntimeBootstrapException failure) {
+            throw new CliStartupException(
+                    failure.code(), "Shared runtime could not be initialized", failure);
+        }
+    }
+
+    static String stableWorkspaceId(Path workspace) {
+        if (workspace == null) {
+            throw new IllegalArgumentException("workspace must not be null");
+        }
+        final Path canonical;
+        try {
+            canonical = workspace.toFile().getCanonicalFile().toPath();
+        } catch (IOException failure) {
+            throw new CliStartupException(
+                    "CLI_WORKSPACE_CANONICALIZATION_FAILED",
+                    "Workspace identity could not be derived", failure);
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
+            byte[] hash = digest.digest(
+                    canonical.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return WORKSPACE_ID_PREFIX + HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException(HASH_ALGORITHM + " is unavailable", impossible);
+        }
     }
 
     private void logFailure(
@@ -253,84 +322,6 @@ public final class AdaMain {
             // 日志失败不得破坏 stdout 的单 ToolResponse 协议。
         }
     }
-
-    private static ConfiguredCodePath configuredCodePath(java.nio.file.Path javaExecutable) {
-        String jar = System.getenv("ADA_CODEPATH_LAUNCHER_JAR");
-        if (jar == null || jar.isBlank()) {
-            MethodPathCollector unavailable = request -> {
-                throw new org.example.algorithmdebug.methodpath.MethodPathCollectionException(
-                        "CODEPATH_TOOL_NOT_CONFIGURED", "CodePath launcher is not configured", null);
-            };
-            return new ConfiguredCodePath(unavailable, () -> new DoctorCheck(
-                    "codepath", DoctorStatus.FAIL, "CODEPATH_TOOL_NOT_CONFIGURED",
-                    "CodePath launcher is not configured"));
-        }
-        CodePathToolConfiguration configuration = new CodePathToolConfiguration(
-                javaExecutable, java.nio.file.Path.of(jar), "0.1.0-SNAPSHOT",
-                "org.example.algorithmdebug.codepath.launcher.ExternalJUnitTraceLauncher");
-        ToolDoctorProbe probe = () -> {
-            if (!java.nio.file.Files.isRegularFile(javaExecutable)) {
-                return new DoctorCheck(
-                        "codepath", DoctorStatus.FAIL, "CODEPATH_JAVA_MISSING",
-                        "CodePath Java executable is unavailable");
-            }
-            try {
-                configuration.verifyTool();
-                return new DoctorCheck(
-                        "codepath", DoctorStatus.PASS, "CODEPATH_TOOL_OK",
-                        "CodePath launcher configuration and file checks passed");
-            } catch (CodePathAdapterException failure) {
-                return new DoctorCheck(
-                        "codepath", DoctorStatus.FAIL, failure.code(),
-                        "CodePath launcher configuration validation failed");
-            }
-        };
-        return new ConfiguredCodePath(new CodePathProcessCollector(configuration), probe);
-    }
-
-    private record ConfiguredCodePath(
-            MethodPathCollector collector,
-            ToolDoctorProbe doctorProbe) {
-    }
-
-    private static ConfiguredJdwp configuredJdwp(java.nio.file.Path javaExecutable) {
-        String jar = System.getenv("ADA_JDWP_COLLECTOR_JAR");
-        if (jar == null || jar.isBlank()) {
-            JdwpToolConfiguration unavailable = new JdwpToolConfiguration(
-                    javaExecutable, "unavailable");
-            return new ConfiguredJdwp(
-                    unavailable,
-                    request -> { throw new org.example.algorithmdebug.jdwp.JdwpAdapterException(
-                            "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector is not configured", null); },
-                    () -> 51234,
-                    () -> new DoctorCheck(
-                            "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_NOT_CONFIGURED",
-                            "JDWP Collector is not configured"));
-        }
-        JdwpToolConfiguration tool = new JdwpToolConfiguration(
-                java.nio.file.Path.of(jar), "2.0.0");
-        ToolDoctorProbe probe = () -> {
-            if (!Files.isRegularFile(tool.collectorJar())) {
-                return new DoctorCheck(
-                        "jdwp", DoctorStatus.FAIL, "JDWP_TOOL_MISSING",
-                        "JDWP Collector JAR is unavailable");
-            }
-            return new DoctorCheck(
-                    "jdwp", DoctorStatus.PASS, "JDWP_TOOL_OK",
-                    "JDWP Collector JAR path is available");
-        };
-        JdwpCollectionCoordinator coordinator = new JdwpCollectionCoordinator();
-        LoopbackPortAllocator ports = new LoopbackPortAllocator();
-        return new ConfiguredJdwp(tool, coordinator::execute, ports::allocate, probe);
-    }
-
-    private record ConfiguredJdwp(
-            JdwpToolConfiguration tool,
-            org.example.algorithmdebug.core.JdwpCollectionExecutor executor,
-            org.example.algorithmdebug.core.JdwpPortProvider ports,
-            ToolDoctorProbe doctorProbe) {
-    }
-
 }
 
 @FunctionalInterface

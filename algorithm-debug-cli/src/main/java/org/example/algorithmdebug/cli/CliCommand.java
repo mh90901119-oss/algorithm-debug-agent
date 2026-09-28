@@ -19,6 +19,32 @@ public sealed interface CliCommand
         CliCommand.CaseAudit, CliCommand.GanttInspect {
 
     /**
+     * 返回命令所属的 Workspace；Runtime 必须在命令解析完成后按该路径装配。
+     *
+     * @return 命令携带的 Workspace 根
+     */
+    default Path workspaceRoot() {
+        return switch (this) {
+            case WorkspaceInit value -> value.root();
+            case ProjectRegister value -> value.workspace();
+            case Doctor value -> value.workspace();
+            case CaseOpen value -> value.workspace();
+            case CaseInspect value -> value.workspace();
+            case AlgorithmInputCapture value -> value.workspace();
+            case CaseAudit value -> value.workspace();
+            case GanttInspect value -> value.workspace();
+            case RunExecute value -> value.workspace();
+            case StaticAnalyze value -> value.workspace();
+            case CodePathPlanCreate value -> value.workspace();
+            case CodePathCollectionExecute value -> value.workspace();
+            case JdwpPlanCreate value -> value.workspace();
+            case JdwpCollectionExecute value -> value.workspace();
+            case ArtifactRead value -> value.workspace();
+            case EvidenceQuery value -> value.workspace();
+        };
+    }
+
+    /**
      * 初始化外部 Workspace。
      *
      * @param root Workspace 根目录

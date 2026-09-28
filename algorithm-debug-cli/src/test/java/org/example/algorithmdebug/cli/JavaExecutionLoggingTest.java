@@ -12,9 +12,11 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.example.algorithmdebug.casecore.logging.JavaExecutionLogRouter;
+import org.example.algorithmdebug.contracts.ToolResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -77,5 +79,36 @@ class JavaExecutionLoggingTest {
         assertTrue(text.contains("java.lang.IllegalStateException"));
         assertTrue(text.contains("<redacted-path>"));
         assertFalse(text.contains("private"));
+    }
+
+    @Test
+    void structuredCoordinatorFailureIsNotLoggedAsCompleted() throws Exception {
+        Clock clock = Clock.fixed(Instant.parse("2026-08-28T00:00:00Z"), ZoneOffset.UTC);
+        AdaMain application = new AdaMain(
+                command -> ToolResponse.failure(
+                        "COORDINATION_ACTION_NOT_ALLOWED", "Rejected", List.of()),
+                new CliResponseWriter(),
+                new JavaExecutionLogRouter(
+                        clock, Optional.of(temporaryDirectory.resolve("dfx"))));
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+
+        int exit;
+        try (PrintStream out = new PrintStream(stdout, true, StandardCharsets.UTF_8);
+             PrintStream err = new PrintStream(stderr, true, StandardCharsets.UTF_8)) {
+            exit = application.run(new String[] {
+                    "case", "inspect",
+                    "--workspace", temporaryDirectory.resolve("workspace").toString(),
+                    "--project-id", "project-1", "--case-id", "case-1"
+            }, out, err);
+        }
+
+        assertEquals(3, exit);
+        Path file = temporaryDirectory.resolve(
+                "workspace/projects/project-1/cases/case-1/logs/agent-2026-08-28.log");
+        String text = Files.readString(file);
+        assertTrue(text.contains("CLI_INVOCATION_RETURNED_FAILURE"));
+        assertFalse(text.contains("CLI_INVOCATION_COMPLETED"));
+        assertEquals("", stderr.toString(StandardCharsets.UTF_8));
     }
 }

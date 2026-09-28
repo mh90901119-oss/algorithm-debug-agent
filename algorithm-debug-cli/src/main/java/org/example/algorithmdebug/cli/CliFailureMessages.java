@@ -70,6 +70,10 @@ final class CliFailureMessages {
                             + "or create a narrower collection projection";
             case "CLI_TOOLCHAIN_FILE_MISSING" ->
                     "A configured Java or Maven executable is missing; update agent-settings.json, reinstall the OpenCode integration, and run installer Check";
+            case "RUNTIME_TOOLCHAIN_FILE_MISSING" ->
+                    "A configured Java or Maven executable is missing; update the Agent runtime configuration and run doctor";
+            case "CLI_WORKSPACE_CANONICALIZATION_FAILED" ->
+                    "The Workspace path could not be resolved; verify the path and filesystem permissions";
             case "CLI_BOOTSTRAP_FAILED" ->
                     "The Agent CLI could not initialize; report the Agent failure and inspect the local bootstrap DFX log";
             case "INTERNAL_ERROR" ->

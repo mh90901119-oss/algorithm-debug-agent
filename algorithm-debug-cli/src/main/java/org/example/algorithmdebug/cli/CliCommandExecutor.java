@@ -1,22 +1,11 @@
 package org.example.algorithmdebug.cli;
 
-import org.example.algorithmdebug.core.CaseApplicationService;
-import org.example.algorithmdebug.core.AlgorithmInputApplicationService;
-import org.example.algorithmdebug.core.CaseRunException;
-import org.example.algorithmdebug.core.DoctorApplicationService;
-import org.example.algorithmdebug.core.ProjectApplicationService;
-import org.example.algorithmdebug.core.RunApplicationService;
-import org.example.algorithmdebug.core.WorkspaceApplicationService;
-import org.example.algorithmdebug.core.StaticAnalysisApplicationService;
-import org.example.algorithmdebug.core.CollectionApplicationService;
-import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
-import org.example.algorithmdebug.plan.CodePathPlanRequest;
-import org.example.algorithmdebug.plan.JdwpPlanRequest;
-import org.example.algorithmdebug.casecore.CaseWorkspaceAuditor;
-import org.example.algorithmdebug.casecore.GanttArtifactInspector;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -25,205 +14,115 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
+import org.example.algorithmdebug.contracts.ToolResponse;
+import org.example.algorithmdebug.contracts.coordination.AnalysisActionRequest;
+import org.example.algorithmdebug.contracts.coordination.CoordinatedToolResult;
+import org.example.algorithmdebug.core.ControlPlaneServices;
+import org.example.algorithmdebug.plan.CodePathPlanRequest;
+import org.example.algorithmdebug.plan.JdwpPlanRequest;
 
-/** 将 CLI 命令映射到 Core 用例，不处理序列化或文件布局。 */
+/**
+ * CLI 命令执行边界。
+ *
+ * <p>Workspace、Project 和 Doctor 是宿主管理命令，直接进入 Control Plane；其余分析命令
+ * 必须先映射成 typed ActionRequest，再且仅再调用一次共享 Coordinator。</p>
+ */
 public final class CliCommandExecutor {
+    private static final int MAX_REQUEST_BYTES = 65_536;
 
-    private final WorkspaceApplicationService workspaceService;
-    private final ProjectApplicationService projectService;
-    private final DoctorApplicationService doctorService;
-    private final CaseApplicationService caseService;
-    private final AlgorithmInputApplicationService algorithmInputService;
-    private final RunApplicationService runService;
-    private final StaticAnalysisApplicationService staticAnalysisService;
-    private final CollectionApplicationService collectionService;
-    private final JdwpCollectionApplicationService jdwpCollectionService;
+    private final ManagementExecution management;
+    private final ActionRequestMapping requests;
+    private final CoordinatedExecution coordinator;
+    private final CliCoordinatedResultAdapter resultAdapter;
 
-    private static final int MAX_QUESTION_BYTES = 65_536;
-    private static final int MAX_ANALYSIS_RESULT_BYTES = 256 * 1024;
-
-    /**
-     * 创建 CLI 命令执行器。
-     *
-     * @param workspaceService Workspace Core 服务
-     * @param projectService Project Core 服务
-     * @param doctorService Doctor Core 服务
-     * @param caseService Case Core 服务
-     * @param runService Run Core 服务
-     */
-    public CliCommandExecutor(
-            WorkspaceApplicationService workspaceService,
-            ProjectApplicationService projectService,
-            DoctorApplicationService doctorService,
-            CaseApplicationService caseService,
-            RunApplicationService runService,
-            StaticAnalysisApplicationService staticAnalysisService,
-            CollectionApplicationService collectionService) {
-        this(workspaceService, projectService, doctorService, caseService, runService,
-                staticAnalysisService, collectionService, null, null);
+    /** 使用共享 Runtime 暴露的服务和唯一 Coordinator 创建 CLI 执行器。 */
+    CliCommandExecutor(
+            ControlPlaneServices services,
+            CliActionRequestMapper requestMapper) {
+        this(
+                managementPort(services),
+                mappingPort(requestMapper),
+                coordinatorPort(services),
+                new CliCoordinatedResultAdapter());
     }
 
-    /** 创建同时支持 CodePath 和 JDWP 的 CLI 命令执行器。 */
-    public CliCommandExecutor(
-            WorkspaceApplicationService workspaceService,
-            ProjectApplicationService projectService,
-            DoctorApplicationService doctorService,
-            CaseApplicationService caseService,
-            RunApplicationService runService,
-            StaticAnalysisApplicationService staticAnalysisService,
-            CollectionApplicationService collectionService,
-            JdwpCollectionApplicationService jdwpCollectionService) {
-        this(workspaceService, projectService, doctorService, caseService, runService,
-                staticAnalysisService, collectionService, jdwpCollectionService, null);
-    }
-
-    /** 创建支持算法输入捕获、CodePath 和 JDWP 的完整 CLI 执行器。 */
-    public CliCommandExecutor(
-            WorkspaceApplicationService workspaceService,
-            ProjectApplicationService projectService,
-            DoctorApplicationService doctorService,
-            CaseApplicationService caseService,
-            RunApplicationService runService,
-            StaticAnalysisApplicationService staticAnalysisService,
-            CollectionApplicationService collectionService,
-            JdwpCollectionApplicationService jdwpCollectionService,
-            AlgorithmInputApplicationService algorithmInputService) {
-        if (workspaceService == null || projectService == null || doctorService == null
-                || caseService == null || runService == null || staticAnalysisService == null
-                || collectionService == null) {
-            throw new IllegalArgumentException("CLI core services must not be null");
+    /** 供契约测试注入窄端口，验证分析命令不存在旁路。 */
+    CliCommandExecutor(
+            ManagementExecution management,
+            ActionRequestMapping requests,
+            CoordinatedExecution coordinator,
+            CliCoordinatedResultAdapter resultAdapter) {
+        if (management == null || requests == null || coordinator == null
+                || resultAdapter == null) {
+            throw new IllegalArgumentException("CLI execution dependencies must not be null");
         }
-        this.workspaceService = workspaceService;
-        this.projectService = projectService;
-        this.doctorService = doctorService;
-        this.caseService = caseService;
-        this.algorithmInputService = algorithmInputService;
-        this.runService = runService;
-        this.staticAnalysisService = staticAnalysisService;
-        this.collectionService = collectionService;
-        this.jdwpCollectionService = jdwpCollectionService;
+        this.management = management;
+        this.requests = requests;
+        this.coordinator = coordinator;
+        this.resultAdapter = resultAdapter;
     }
 
     /**
-     * 执行命令并返回对应的版本化结果 DTO。
+     * 执行一个命令，并始终返回 ToolResponse 2.0。
      *
-     * @param command 已解析命令
-     * @return 对应命令的版本化结果 DTO
+     * @param command 已严格解析的命令
+     * @return 稳定 CLI 协议响应
      */
-    public Object execute(CliCommand command) {
-        if (command instanceof CliCommand.WorkspaceInit workspaceInit) {
-            return workspaceService.initialize(workspaceInit.root());
+    public ToolResponse<?> execute(CliCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("command must not be null");
         }
-        if (command instanceof CliCommand.ProjectRegister projectRegister) {
-            return projectService.register(
-                    projectRegister.workspace(), projectRegister.module(), projectRegister.projectId(),
-                    projectRegister.resultJsonDirectory());
+        if (isManagement(command)) {
+            return ToolResponse.success(management.execute(command), List.of());
         }
-        if (command instanceof CliCommand.Doctor doctor) {
-            return doctorService.diagnose(doctor.workspace(), doctor.module(), Optional.empty());
-        }
-        if (command instanceof CliCommand.CaseOpen open) {
-            return caseService.open(
-                    open.workspace(), open.projectId(), open.targetTest(),
-                    readQuestion(open.questionFile()), open.caseId(), open.adapterId());
-        }
-        if (command instanceof CliCommand.CaseInspect inspect) {
-            return caseService.inspect(
-                    inspect.workspace(), inspect.projectId(), inspect.caseId());
-        }
-        if (command instanceof CliCommand.CaseAudit audit) {
-            return new CaseWorkspaceAuditor().audit(audit.workspace(), audit.projectId(), audit.caseId());
-        }
-        if (command instanceof CliCommand.GanttInspect inspect) {
-            return new GanttArtifactInspector().inspect(inspect.workspace(), inspect.projectId(), inspect.caseId(),
-                    inspect.artifactId(), inspect.operation(), inspect.jsonPointer(), inspect.offset(), inspect.limit());
-        }
-        if (command instanceof CliCommand.RunExecute run) {
-            return runService.execute(
-                    run.workspace(), run.projectId(), run.caseId(), run.analysisId());
-        }
-        if (command instanceof CliCommand.AlgorithmInputCapture capture) {
-            if (algorithmInputService == null) {
-                throw new CaseRunException(
-                        "ALGORITHM_INPUT_CAPTURE_UNAVAILABLE", "Algorithm input service is unavailable");
-            }
-            return algorithmInputService.capture(
-                    capture.workspace(), capture.projectId(), capture.caseId(), capture.analysisId());
-        }
-        if (command instanceof CliCommand.StaticAnalyze analyze) {
-            return staticAnalysisService.analyze(
-                    analyze.workspace(), analyze.projectId(), analyze.caseId(), analyze.analysisId());
-        }
-        if (command instanceof CliCommand.CodePathPlanCreate create) {
-            return staticAnalysisService.createCodePathPlan(
-                    create.workspace(), create.projectId(), create.caseId(), create.analysisId(),
-                    readPlanRequest(create.requestFile()));
-        }
-        if (command instanceof CliCommand.CodePathCollectionExecute collect) {
-            return collectionService.executeCodePath(
-                    collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
-        }
-        if (command instanceof CliCommand.JdwpPlanCreate create) {
-            return staticAnalysisService.createJdwpPlan(
-                    create.workspace(), create.projectId(), create.caseId(), create.analysisId(),
-                    readJdwpPlanRequest(create.requestFile()));
-        }
-        if (command instanceof CliCommand.JdwpCollectionExecute collect) {
-            if (jdwpCollectionService == null) {
-                throw new org.example.algorithmdebug.core.CaseRunException(
-                        "JDWP_TOOL_NOT_CONFIGURED", "JDWP Collector is not configured");
-            }
-            return jdwpCollectionService.execute(
-                    collect.workspace(), collect.projectId(), collect.caseId(), collect.planId());
-        }
-        if (command instanceof CliCommand.ArtifactRead read) {
-            return caseService.readArtifact(
-                    read.workspace(), read.projectId(), read.caseId(), read.artifactId(),
-                    read.offsetBytes(), read.maxBytes());
-        }
-        if (command instanceof CliCommand.EvidenceQuery query) {
-            return caseService.queryEvidence(
-                    query.workspace(), query.projectId(), query.caseId(), query.artifactId(),
-                    readEvidenceQueryRequest(query.requestFile()));
-        }
-        throw new IllegalArgumentException("Unsupported CLI command type");
+        AnalysisActionRequest<?> request = requests.map(command);
+        return resultAdapter.adapt(coordinator.execute(request));
     }
 
-    /** 严格读取 64 KiB 内 UTF-8 普通问题文件；供命令测试复用。 */
-    static String readQuestion(Path path) {
-        if (path == null) {
-            throw new CliInputException("question-file must not be null");
+    private static boolean isManagement(CliCommand command) {
+        return command instanceof CliCommand.WorkspaceInit
+                || command instanceof CliCommand.ProjectRegister
+                || command instanceof CliCommand.Doctor;
+    }
+
+    private static ManagementExecution managementPort(ControlPlaneServices services) {
+        if (services == null) {
+            throw new IllegalArgumentException("services must not be null");
         }
-        Path normalized = path.toAbsolutePath().normalize();
-        if (!Files.isRegularFile(normalized, LinkOption.NOFOLLOW_LINKS)) {
-            throw new CliInputException("question-file does not exist or is not a regular file");
+        return command -> executeManagement(services, command);
+    }
+
+    private static ActionRequestMapping mappingPort(CliActionRequestMapper requestMapper) {
+        if (requestMapper == null) {
+            throw new IllegalArgumentException("requestMapper must not be null");
         }
-        byte[] bytes;
-        try (java.io.InputStream input = Files.newInputStream(normalized)) {
-            bytes = input.readNBytes(MAX_QUESTION_BYTES + 1);
-        } catch (IOException | SecurityException failure) {
-            throw new CliInputException("Unable to read question-file", failure);
+        return requestMapper::map;
+    }
+
+    private static CoordinatedExecution coordinatorPort(ControlPlaneServices services) {
+        if (services == null) {
+            throw new IllegalArgumentException("services must not be null");
         }
-        if (bytes.length > MAX_QUESTION_BYTES) {
-            throw new CliInputException("question-file exceeds 64 KiB");
+        return services.coordinator()::execute;
+    }
+
+    private static Object executeManagement(
+            ControlPlaneServices services, CliCommand command) {
+        if (command instanceof CliCommand.WorkspaceInit value) {
+            return services.workspace().initialize(value.root());
         }
-        String question;
-        try {
-            question = StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .onUnmappableCharacter(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(bytes)).toString();
-        } catch (CharacterCodingException failure) {
-            throw new CliInputException("question-file is not valid UTF-8", failure);
+        if (command instanceof CliCommand.ProjectRegister value) {
+            return services.project().register(
+                    value.workspace(), value.module(), value.projectId(),
+                    value.resultJsonDirectory());
         }
-        if (question.startsWith("\uFEFF")) {
-            question = question.substring(1);
+        if (command instanceof CliCommand.Doctor value) {
+            return services.doctor().diagnose(
+                    value.workspace(), value.module(), Optional.empty());
         }
-        if (question.isBlank()) {
-            throw new CliInputException("question-file content must not be blank");
-        }
-        return question;
+        throw new IllegalArgumentException("Command is not a management command");
     }
 
     /** 严格读取 64 KiB 内的 CodePath 计划请求 JSON。 */
@@ -231,10 +130,10 @@ public final class CliCommandExecutor {
         byte[] bytes = readBoundedFile(path, "request-file");
         String json = decodeUtf8(bytes, "request-file");
         try {
-            return requestMapper()
-                    .readValue(json, CodePathPlanRequest.class);
+            return strictRequestMapper().readValue(json, CodePathPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("request-file is not valid CodePathPlanRequest JSON", failure);
+            throw new CliInputException(
+                    "request-file is not valid CodePathPlanRequest JSON", failure);
         }
     }
 
@@ -243,10 +142,10 @@ public final class CliCommandExecutor {
         byte[] bytes = readBoundedFile(path, "request-file");
         String json = decodeUtf8(bytes, "request-file");
         try {
-            return requestMapper()
-                    .readValue(json, JdwpPlanRequest.class);
+            return strictRequestMapper().readValue(json, JdwpPlanRequest.class);
         } catch (IOException | RuntimeException failure) {
-            throw new CliInputException("request-file is not valid JdwpPlanRequest JSON", failure);
+            throw new CliInputException(
+                    "request-file is not valid JdwpPlanRequest JSON", failure);
         }
     }
 
@@ -256,7 +155,7 @@ public final class CliCommandExecutor {
         byte[] bytes = readBoundedFile(path, "request-file");
         String json = decodeUtf8(bytes, "request-file");
         try {
-            return requestMapper().readValue(
+            return strictRequestMapper().readValue(
                     json, org.example.algorithmdebug.contracts.EvidenceQueryRequest.class);
         } catch (IOException | RuntimeException failure) {
             throw new CliInputException(
@@ -264,13 +163,21 @@ public final class CliCommandExecutor {
         }
     }
 
-    private static ObjectMapper requestMapper() {
-        return new ObjectMapper()
+    static ObjectMapper strictRequestMapper() {
+        JsonFactory factory = JsonFactory.builder()
+                .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .build();
+        return new ObjectMapper(factory)
                 .registerModule(new JavaTimeModule())
-                .registerModule(new com.fasterxml.jackson.datatype.jdk8.Jdk8Module());
+                .registerModule(new Jdk8Module())
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     }
 
-    private static String decodeUtf8(byte[] bytes, String label) {
+    static String decodeUtf8(byte[] bytes, String label) {
+        if (bytes == null) {
+            throw new CliInputException(label + " content must not be null");
+        }
         try {
             String value = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -282,8 +189,8 @@ public final class CliCommandExecutor {
         }
     }
 
-    private static byte[] readBoundedFile(Path path, String label) {
-        return readBoundedFile(path, label, MAX_QUESTION_BYTES);
+    static byte[] readBoundedFile(Path path, String label) {
+        return readBoundedFile(path, label, MAX_REQUEST_BYTES);
     }
 
     private static byte[] readBoundedFile(Path path, String label, int maximumBytes) {
@@ -304,4 +211,19 @@ public final class CliCommandExecutor {
             throw new CliInputException("Unable to read " + label, failure);
         }
     }
+}
+
+@FunctionalInterface
+interface ManagementExecution {
+    Object execute(CliCommand command);
+}
+
+@FunctionalInterface
+interface ActionRequestMapping {
+    AnalysisActionRequest<?> map(CliCommand command);
+}
+
+@FunctionalInterface
+interface CoordinatedExecution {
+    CoordinatedToolResult<?> execute(AnalysisActionRequest<?> request);
 }

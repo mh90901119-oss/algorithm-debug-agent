@@ -4,8 +4,7 @@ import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
-import org.example.algorithmdebug.core.ArtifactBackedResult;
-import org.example.algorithmdebug.core.MultiArtifactBackedResult;
+import org.example.algorithmdebug.contracts.ToolResponse;
 
 /** 从已经解析的 CLI 命令和结果提取非敏感日志关联身份。 */
 final class CliLogContextResolver {
@@ -30,8 +29,7 @@ final class CliLogContextResolver {
     }
 
     static AgentLogContext after(CliCommand command, Object result) {
-        Object summary = result instanceof ArtifactBackedResult<?> value ? value.summary()
-                : result instanceof MultiArtifactBackedResult<?> value ? value.summary() : result;
+        Object summary = result instanceof ToolResponse<?> value ? value.data() : result;
         if (command instanceof CliCommand.CaseOpen open && summary instanceof CaseOpenResult value) {
             return caseContext(open.workspace(), open.projectId(), value.caseId())
                     .withAnalysis(value.analysisId());

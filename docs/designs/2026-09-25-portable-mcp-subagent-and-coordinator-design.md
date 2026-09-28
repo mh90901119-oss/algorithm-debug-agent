@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：1.3
+- 设计版本：1.4
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -1297,10 +1297,31 @@ Manifest，不反复扫描 Raw Trace。表中默认值和硬上限必须在职�
 | `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCommandExecutor.java` | 修改 | 模型相关动作经同一 Coordinator；保留 workspace/project/doctor 管理命令 |
 | `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/AdaMain.java` | 修改 | 从共享 Runtime 获取 Coordinator；保持 ToolResponse 2.0 CLI 输出 |
 | `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliCoordinatedResultAdapter.java` | 新增 | 把协调结果映射为旧 CLI `ToolResponse 2.0`；CLI 不复制 Policy，也不绕过 Coordinator |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliActionRequestMapper.java` | 新增 | 把旧命令参数映射为 typed ActionRequest，并由服务端生成身份与 operationId |
+| `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliAnalysisContextResolver.java` | 新增 | 只从注册 Project 与 typed Case 控制文档解析缺失的 Analysis/Plan 归属 |
 | `algorithm-debug-cli/src/main/java/org/example/algorithmdebug/cli/CliArguments.java` | 保留 | MCP 参数不进入 CLI 兼容协议 |
 
 CLI 兼容层只保留历史输出形状。`REJECTED` 映射为稳定 CLI error code/message，旧协议不承载
 `allowedActions` 等新增控制信息；完整控制视图仅由 MCP 返回。兼容输出能力不足不能成为 CLI 绕过 Coordinator 的理由。
+
+CLI 命令解析完成前无法知道本次 Workspace，因此 `defaultApplication()` 不得提前绑定某个 Workspace Runtime。
+默认执行器必须先解析命令，再按命令中的规范 Workspace 根创建共享 Runtime，在单次命令完成后幂等关闭；一个 CLI
+进程内顺序执行多个测试命令时，每次均使用各自的 Workspace，不能复用上一次的 Archive 路由。Workspace ID 由规范
+路径的 SHA-256 派生为不泄漏本地路径的稳定标识。
+
+`workspace init`、`project register` 和 `doctor` 是仅有的管理命令，可直接调用同一 Runtime 暴露的管理服务；其余
+13 个历史分析命令全部映射为 typed `AnalysisActionRequest` 并恰好调用一次 Coordinator。旧命令中没有 `analysisId`
+的只读动作按 Case 最新 Analysis 解析，Plan 执行动作按不可变 Plan 文档解析所属 Analysis；解析器不得执行业务动作、
+读取 Raw Trace 或产生副作用。
+
+旧 `case open --question-file` 的自由文本不足以构造强制的 Problem Frame，尤其不能证明源码锚点、预期/实际行为。
+CLI 不得为兼容而伪造 `SourceAnchor`。参数名在迁移期保持不变，但文件内容升级为严格 JSON：`symptom`、
+`expectedBehavior`、`actualBehavior`、`scopeAnchors`、`knownFactRefs`、`initialUnknowns`；Case/Analysis/ProblemFrame/
+Operation 身份仍由 CLI 服务端适配层生成。旧纯文本输入以 `CLI_INVALID_ARGUMENTS` 明确拒绝，并在迁移说明中要求改用
+结构化文件。此处兼容承诺仅指 `ToolResponse 2.0` 输出形状，不承诺继续接受无法满足新证据契约的自由文本输入。
+所有 CLI JSON 请求同时拒绝未知字段、重复字段和根对象后的尾随 token，避免同一输入出现最后值覆盖或多文档歧义。
+Coordinator 抛出执行包装异常时，CLI 只恢复其直接 cause 中已知的 typed 领域错误码与 Artifact；未知 cause
+仍返回协调错误码并保持脱敏，兼容转换不得沿任意 cause 链猜测错误语义。
 
 ### 13.8 Agent Definition 与适配器
 
@@ -1728,3 +1749,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 1.1 | Task 13 实施前审计冻结 17 Action 唯一绑定、只读 prerequisite port、Analysis 引导态、Problem Frame 原子初始化、Core 生成 Source Query ID，以及 Task 13 绑定能力与 Task 14 唯一生产组合根的边界 | Codex |
 | 2026-09-28 | 1.2 | Task 14 实施前审计补齐多 Project Archive 路由、惰性引导态、注册 Artifact 控制快照、typed Collector capability、目标 Java 注入和 Runtime 幂等关闭，禁止把单个 Project 或 Agent Java 固化进共享组合根 | Codex |
 | 2026-09-28 | 1.3 | Task 14 组合审计修正 Analysis 引导写入顺序、Project 注册/符号链接边界、typed 控制文档读取、控制状态绕过和状态推进后的幂等回放：`ANALYSIS_BEGIN` 的决策/幂等日志进入独立 Project 级引导控制根；Coordinator 强制执行投影 `allowedActions`，同时允许已完成 Operation 只读回放 | Codex |
+| 2026-09-28 | 1.4 | Task 15 实施前审计冻结 CLI 迁移边界：命令解析后按 Workspace 启动/关闭共享 Runtime；仅三个管理命令直连管理服务；其余历史分析命令恰好经过一次 Coordinator；`case open` 的纯文本文件升级为结构化 Problem Frame 输入，禁止为兼容伪造 SourceAnchor | Codex |
