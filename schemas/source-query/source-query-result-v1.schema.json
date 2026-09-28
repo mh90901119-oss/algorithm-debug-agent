@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/source-query/source-query-result-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "queryId", "caseId", "analysisId", "mode", "completeness", "methodCatalogArtifact", "methods", "edges", "paths", "sourceWindows", "limitations", "truncated", "completedAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "queryId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "mode": { "enum": ["METHOD", "CALLERS", "CALLEES", "REACHABLE_PATH", "SOURCE_WINDOW", "SEARCH_SYMBOL"] },
+    "completeness": { "enum": ["COMPLETE", "PARTIAL", "UNKNOWN"] },
+    "methodCatalogArtifact": { "$ref": "#/$defs/artifact" },
+    "methods": { "type": "array", "maxItems": 100, "items": { "type": "object" } },
+    "edges": { "type": "array", "maxItems": 500, "items": { "type": "object" } },
+    "paths": { "type": "array", "maxItems": 20, "items": { "type": "array", "maxItems": 9, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 4096 } } },
+    "sourceWindows": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/window" } },
+    "limitations": { "type": "array", "maxItems": 128, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 4096 } },
+    "truncated": { "type": "boolean" },
+    "completedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [{ "if": { "properties": { "truncated": { "const": true } } }, "then": { "properties": { "completeness": { "enum": ["PARTIAL", "UNKNOWN"] } } } }],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" }, "artifactType": { "const": "METHOD_CATALOG" },
+        "relativePath": { "type": "string", "minLength": 1 }, "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sourceAnchor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName", "descriptor", "sourceRelativePath", "startLine", "endLine"],
+      "properties": {
+        "className": { "type": "string", "minLength": 3 }, "methodName": { "type": "string", "minLength": 1 },
+        "descriptor": { "type": "string", "minLength": 3 }, "sourceRelativePath": { "type": "string", "minLength": 1 },
+        "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "window": {
+      "type": "object", "additionalProperties": false,
+      "required": ["anchor", "fromLine", "toLine", "sourceSha256", "text"],
+      "properties": {
+        "anchor": { "$ref": "#/$defs/sourceAnchor" }, "fromLine": { "type": "integer", "minimum": 1 },
+        "toLine": { "type": "integer", "minimum": 1 }, "sourceSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "text": { "type": "string", "minLength": 1, "maxLength": 262144 }
+      }
+    }
+  }
+}

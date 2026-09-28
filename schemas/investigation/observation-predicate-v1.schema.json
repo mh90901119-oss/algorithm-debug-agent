@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/investigation/observation-predicate-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "predicateId", "caseId", "analysisId", "hypothesisId", "gapId", "operator", "selector", "role", "onTrue", "onFalse", "onUnknown", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "predicateId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "hypothesisId": { "$ref": "#/$defs/id" }, "gapId": { "$ref": "#/$defs/id" },
+    "operator": { "$ref": "#/$defs/operator" },
+    "selector": { "$ref": "#/$defs/selector" },
+    "role": { "enum": ["CRITICAL", "CORROBORATING"] },
+    "onTrue": { "$ref": "#/$defs/effect" }, "onFalse": { "$ref": "#/$defs/effect" },
+    "onUnknown": { "const": "NO_CHANGE" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    { "if": { "properties": { "operator": { "const": "METHOD_OBSERVED" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "METHOD_OBSERVED" } } } } } },
+    { "if": { "properties": { "operator": { "const": "RECORD_EXISTS" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "RECORD_EXISTS" } } } } } },
+    { "if": { "properties": { "operator": { "const": "VALUE_EQUALS" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "VALUE_EQUALS" } } } } } },
+    { "if": { "properties": { "operator": { "const": "VALUE_CHANGED" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "VALUE_CHANGED" } } } } } },
+    { "if": { "properties": { "operator": { "const": "COUNT_COMPARE" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "COUNT_COMPARE" } } } } } },
+    { "if": { "properties": { "operator": { "const": "PATH_CONTAINS" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "PATH_CONTAINS" } } } } } },
+    { "if": { "properties": { "operator": { "const": "FAILURE_FINGERPRINT_MATCHES" } } }, "then": { "properties": { "selector": { "properties": { "selectorType": { "const": "FAILURE_FINGERPRINT_MATCHES" } } } } } }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "operator": { "enum": ["METHOD_OBSERVED", "RECORD_EXISTS", "VALUE_EQUALS", "VALUE_CHANGED", "COUNT_COMPARE", "PATH_CONTAINS", "FAILURE_FINGERPRINT_MATCHES"] },
+    "effect": { "enum": ["SUPPORT", "REFUTE", "NO_CHANGE"] },
+    "scalar": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["valueType", "value"], "properties": { "valueType": { "const": "TEXT" }, "value": { "type": "string", "minLength": 1, "maxLength": 1024 } } },
+        { "type": "object", "additionalProperties": false, "required": ["valueType", "value"], "properties": { "valueType": { "const": "LONG" }, "value": { "type": "integer" } } },
+        { "type": "object", "additionalProperties": false, "required": ["valueType", "value"], "properties": { "valueType": { "const": "DECIMAL" }, "value": { "type": "number" } } },
+        { "type": "object", "additionalProperties": false, "required": ["valueType", "value"], "properties": { "valueType": { "const": "BOOLEAN" }, "value": { "type": "boolean" } } },
+        { "type": "object", "additionalProperties": false, "required": ["valueType"], "properties": { "valueType": { "const": "NULL" } } }
+      ]
+    },
+    "selector": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "methodKey"], "properties": { "selectorType": { "const": "METHOD_OBSERVED" }, "methodKey": { "type": "string", "minLength": 1, "maxLength": 1024 } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "recordType", "fieldPath", "expectedValue"], "properties": { "selectorType": { "const": "RECORD_EXISTS" }, "recordType": { "type": "string", "minLength": 1, "maxLength": 1024 }, "fieldPath": { "type": "string", "minLength": 1, "maxLength": 1024 }, "expectedValue": { "$ref": "#/$defs/scalar" } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "projection", "expectedValue"], "properties": { "selectorType": { "const": "VALUE_EQUALS" }, "projection": { "type": "string", "minLength": 1, "maxLength": 1024 }, "expectedValue": { "$ref": "#/$defs/scalar" } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "projection", "before", "after"], "properties": { "selectorType": { "const": "VALUE_CHANGED" }, "projection": { "type": "string", "minLength": 1, "maxLength": 1024 }, "before": { "$ref": "#/$defs/scalar" }, "after": { "$ref": "#/$defs/scalar" } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "recordType", "comparator", "expectedCount"], "properties": { "selectorType": { "const": "COUNT_COMPARE" }, "recordType": { "type": "string", "minLength": 1, "maxLength": 1024 }, "comparator": { "enum": ["EQ", "NE", "LT", "LE", "GT", "GE"] }, "expectedCount": { "type": "integer", "minimum": 0 } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType", "methodKeys"], "properties": { "selectorType": { "const": "PATH_CONTAINS" }, "methodKeys": { "type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 1024 } } } },
+        { "type": "object", "additionalProperties": false, "required": ["selectorType"], "properties": { "selectorType": { "const": "FAILURE_FINGERPRINT_MATCHES" } } }
+      ]
+    }
+  }
+}

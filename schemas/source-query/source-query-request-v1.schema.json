@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/source-query/source-query-request-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "queryId", "caseId", "analysisId", "methodCatalogArtifact", "mode", "methodKey", "targetMethodKey", "sourceAnchor", "symbol", "budget", "requestedAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "queryId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "methodCatalogArtifact": { "$ref": "#/$defs/artifact" },
+    "mode": { "enum": ["METHOD", "CALLERS", "CALLEES", "REACHABLE_PATH", "SOURCE_WINDOW", "SEARCH_SYMBOL"] },
+    "methodKey": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+    "targetMethodKey": { "type": ["string", "null"], "minLength": 1, "maxLength": 1024 },
+    "sourceAnchor": { "anyOf": [{ "$ref": "#/$defs/sourceAnchor" }, { "type": "null" }] },
+    "symbol": { "type": ["string", "null"], "minLength": 1, "maxLength": 512, "pattern": "^[A-Za-z_$][A-Za-z0-9_$.#]*$" },
+    "budget": { "$ref": "#/$defs/budget" },
+    "requestedAt": { "type": "string", "format": "date-time" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "mode": { "enum": ["METHOD", "CALLERS", "CALLEES"] },
+        "methodKey": { "type": "string" }, "targetMethodKey": { "type": "null" },
+        "sourceAnchor": { "type": "null" }, "symbol": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "mode": { "const": "REACHABLE_PATH" },
+        "methodKey": { "type": "string" }, "targetMethodKey": { "type": "string" },
+        "sourceAnchor": { "type": "null" }, "symbol": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "mode": { "const": "SOURCE_WINDOW" },
+        "methodKey": { "type": "null" }, "targetMethodKey": { "type": "null" },
+        "sourceAnchor": { "$ref": "#/$defs/sourceAnchor" }, "symbol": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "mode": { "const": "SEARCH_SYMBOL" },
+        "methodKey": { "type": "null" }, "targetMethodKey": { "type": "null" },
+        "sourceAnchor": { "type": "null" }, "symbol": { "type": "string" }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/id" }, "artifactType": { "const": "METHOD_CATALOG" },
+        "relativePath": { "type": "string", "minLength": 1 }, "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sourceAnchor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName", "descriptor", "sourceRelativePath", "startLine", "endLine"],
+      "properties": {
+        "className": { "type": "string", "minLength": 3 }, "methodName": { "type": "string", "minLength": 1 },
+        "descriptor": { "type": "string", "minLength": 3 }, "sourceRelativePath": { "type": "string", "minLength": 1 },
+        "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "budget": {
+      "type": "object", "additionalProperties": false,
+      "required": ["maxMethods", "maxEdges", "maxDepth", "maxPaths", "maxSourceLines", "maxResponseBytes"],
+      "properties": {
+        "maxMethods": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "maxEdges": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "maxDepth": { "type": "integer", "minimum": 1, "maximum": 8 },
+        "maxPaths": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "maxSourceLines": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "maxResponseBytes": { "type": "integer", "minimum": 1, "maximum": 262144 }
+      }
+    }
+  }
+}

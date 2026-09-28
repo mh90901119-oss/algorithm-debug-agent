@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/investigation/causal-chain-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "causalChainId", "caseId", "analysisId", "nodes", "edges", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "causalChainId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "nodes": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/node" } },
+    "edges": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/edge" } },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "idList": { "type": "array", "maxItems": 128, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "node": {
+      "type": "object", "additionalProperties": false,
+      "required": ["nodeId", "type", "label", "evidenceIds", "sourceQueryIds"],
+      "properties": {
+        "nodeId": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["SYMPTOM", "INPUT", "RUNTIME_STATE", "DECISION", "SOURCE_MECHANISM", "UPSTREAM_CAUSE"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidenceIds": { "$ref": "#/$defs/idList" }, "sourceQueryIds": { "$ref": "#/$defs/idList" }
+      },
+      "anyOf": [{ "properties": { "evidenceIds": { "minItems": 1 } } }, { "properties": { "sourceQueryIds": { "minItems": 1 } } }]
+    },
+    "edge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edgeId", "fromNodeId", "toNodeId", "relation", "classification", "critical", "evidenceIds", "sourceQueryIds"],
+      "properties": {
+        "edgeId": { "$ref": "#/$defs/id" }, "fromNodeId": { "$ref": "#/$defs/id" }, "toNodeId": { "$ref": "#/$defs/id" },
+        "relation": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "classification": { "enum": ["CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE", "LLM_HYPOTHESIS", "MISSING_EVIDENCE"] },
+        "critical": { "type": "boolean" },
+        "evidenceIds": { "$ref": "#/$defs/idList" }, "sourceQueryIds": { "$ref": "#/$defs/idList" }
+      },
+      "anyOf": [{ "properties": { "evidenceIds": { "minItems": 1 } } }, { "properties": { "sourceQueryIds": { "minItems": 1 } } }]
+    }
+  }
+}

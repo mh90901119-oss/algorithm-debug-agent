@@ -118,6 +118,29 @@ public final class SchemaVersions {
     /** 结论门禁决策 Schema 版本。 */
     public static final String CONCLUSION_DECISION = "1.0";
 
+    /** Problem Frame Schema 版本。 */
+    public static final String PROBLEM_FRAME = "1.0";
+    /** Hypothesis 记录 Schema 版本。 */
+    public static final String HYPOTHESIS_RECORD = "1.0";
+    /** Evidence Gap Schema 版本。 */
+    public static final String EVIDENCE_GAP = "1.0";
+    /** Observation Predicate Schema 版本。 */
+    public static final String OBSERVATION_PREDICATE = "1.0";
+    /** Observation Evaluation Schema 版本。 */
+    public static final String OBSERVATION_EVALUATION = "1.0";
+    /** Investigation Binding Schema 版本。 */
+    public static final String INVESTIGATION_BINDING = "1.0";
+    /** Investigation Event Schema 版本。 */
+    public static final String INVESTIGATION_EVENT = "1.0";
+    /** Investigation State Schema 版本。 */
+    public static final String INVESTIGATION_STATE = "1.0";
+    /** Causal Chain Schema 版本。 */
+    public static final String CAUSAL_CHAIN = "1.0";
+    /** Source Query 请求 Schema 版本。 */
+    public static final String SOURCE_QUERY_REQUEST = "1.0";
+    /** Source Query 结果 Schema 版本。 */
+    public static final String SOURCE_QUERY_RESULT = "1.0";
+
     private SchemaVersions() {
     }
 }
