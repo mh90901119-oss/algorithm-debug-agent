@@ -259,12 +259,21 @@ public final class JdwpCollectionApplicationService {
                             "JDWP_ARCHIVE_FAILED", "JDWP artifact archival failed", failure));
         }
 
+        boolean completeCoverage = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
+                || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
+                && !manifest.truncated();
         CollectionPostProcessingResult postProcessing = Files.isRegularFile(
                 collectionRoot.resolve("raw/jdwp.jsonl"))
                 ? new CollectionPostProcessingService(
                         layout.projectCases(projectId), archive, mapper, writer, ids, clock)
                         .processJdwp(record, plan, manifest, baseline)
-                : new CollectionPostProcessingResult(false, List.of());
+                : new CollectionPostProcessingResult(false, List.of(),
+                        new EvidenceEligibilityEvaluator().evaluate(
+                                new EvidenceEligibilityEvaluator.Context(
+                                        false, completeCoverage,
+                                        manifest.completion()
+                                                == JdwpCollectionCompletion.TARGET_FAILED,
+                                        baseline.outcome(), false)));
         executionLog.info(logContext, "JdwpCollectionApplicationService",
                 "COLLECTION_POST_PROCESSING_COMPLETED",
                 postProcessing.artifactReadable() ? "READABLE" : "UNREADABLE",
@@ -273,16 +282,7 @@ public final class JdwpCollectionApplicationService {
                 caseRoot, collectionRoot, plan, collectionId));
         artifacts.addAll(postProcessing.artifacts());
         artifacts = List.copyOf(artifacts);
-        boolean completeCoverage = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
-                || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
-                && !manifest.truncated();
-        long capturedHits = manifest.capturedHitCounts().values().stream()
-                .mapToLong(Integer::longValue).sum();
-        var eligibility = new EvidenceEligibilityEvaluator().evaluate(
-                new EvidenceEligibilityEvaluator.Context(
-                        postProcessing.artifactReadable(), completeCoverage,
-                        manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED,
-                        baseline.outcome(), capturedHits > 0));
+        var eligibility = postProcessing.eligibility();
         Optional<String> primaryArtifactId = artifacts.stream()
                 .filter(artifact -> JDWP_SUMMARY_ARTIFACT_TYPE.equals(artifact.artifactType()))
                 .map(ArtifactReference::artifactId).findFirst();

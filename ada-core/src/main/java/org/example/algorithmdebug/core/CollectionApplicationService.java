@@ -186,11 +186,20 @@ public final class CollectionApplicationService {
                     archive, caseId, caseRoot, collectionRoot, collectionId, failure);
         }
         archive.createCollectionBaselineCheck(baseline);
+        boolean completeCoverage = (result.manifest().completion() == CollectionCompletion.SUCCESS
+                || result.manifest().completion() == CollectionCompletion.TARGET_FAILED)
+                && result.manifest().truncationReasons().isEmpty();
         CollectionPostProcessingResult postProcessing = Files.isRegularFile(result.rawTrace())
                 ? new CollectionPostProcessingService(
                         layout.projectCases(projectId), archive, mapper, writer, ids, clock)
                         .processCodePath(record, plan, result.manifest(), baseline)
-                : new CollectionPostProcessingResult(false, List.of());
+                : new CollectionPostProcessingResult(false, List.of(),
+                        new EvidenceEligibilityEvaluator().evaluate(
+                                new EvidenceEligibilityEvaluator.Context(
+                                        false, completeCoverage,
+                                        result.manifest().completion()
+                                                == CollectionCompletion.TARGET_FAILED,
+                                        baseline.outcome(), false)));
         executionLog.info(logContext, "CollectionApplicationService",
                 "COLLECTION_POST_PROCESSING_COMPLETED",
                 postProcessing.artifactReadable() ? "READABLE" : "UNREADABLE",
@@ -205,14 +214,7 @@ public final class CollectionApplicationService {
         Optional<String> primaryArtifactId = artifacts.stream()
                 .filter(artifact -> primaryType.equals(artifact.artifactType()))
                 .map(ArtifactReference::artifactId).findFirst();
-        boolean completeCoverage = (result.manifest().completion() == CollectionCompletion.SUCCESS
-                || result.manifest().completion() == CollectionCompletion.TARGET_FAILED)
-                && result.manifest().truncationReasons().isEmpty();
-        var eligibility = new EvidenceEligibilityEvaluator().evaluate(
-                new EvidenceEligibilityEvaluator.Context(
-                        postProcessing.artifactReadable(), completeCoverage,
-                        result.manifest().completion() == CollectionCompletion.TARGET_FAILED,
-                        baseline.outcome(), result.manifest().capturedEventCount() > 0));
+        var eligibility = postProcessing.eligibility();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
                 SchemaVersions.COLLECTION_EXECUTION_SUMMARY,
                 caseId, plan.analysisId(), runId, planId, collectionId,

@@ -23,6 +23,12 @@ final class InvestigationBindingValidator {
     private static final Set<String> CODEPATH_RECORD_TYPES = Set.of(
             "CODEPATH_INVOCATION", "METHOD_PATH_SUMMARY");
     private static final Set<String> JDWP_RECORD_TYPES = Set.of("JDWP_SNAPSHOT");
+    private static final String CODEPATH_INVOCATION = "CODEPATH_INVOCATION";
+    private static final String METHOD_PATH_SUMMARY = "METHOD_PATH_SUMMARY";
+    private static final String JDWP_SNAPSHOT = "JDWP_SNAPSHOT";
+    private static final String METHOD_REF_FIELD = "methodRef";
+    private static final String METHOD_KEY_FIELD = "methodKey";
+    private static final String TRACEPOINT_ID_FIELD = "tracepointId";
 
     InvestigationBinding validateCodePath(
             InvestigationState state,
@@ -32,9 +38,14 @@ final class InvestigationBindingValidator {
         Resolved resolved = resolve(state, request);
         Set<String> methodKeys = selections.stream()
                 .map(value -> value.selector().methodKey()).collect(Collectors.toUnmodifiableSet());
-        Set<String> projections = selections.stream()
+        Map<String, Long> projectionCounts = selections.stream()
                 .flatMap(value -> value.projections().stream())
-                .map(value -> value.name()).collect(Collectors.toUnmodifiableSet());
+                .collect(Collectors.groupingBy(
+                        value -> value.name(), Collectors.counting()));
+        Set<String> projections = projectionCounts.entrySet().stream()
+                .filter(value -> value.getValue() == 1L)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toUnmodifiableSet());
         for (ObservationPredicate predicate : resolved.predicates()) {
             ObservationSelector selector = predicate.selector();
             boolean supported = switch (selector) {
@@ -46,8 +57,8 @@ final class InvestigationBindingValidator {
                 case ObservationSelector.ValueChanged value ->
                         captureMode == CodePathCaptureMode.TRACE
                                 && projections.contains(value.projection());
-                case ObservationSelector.RecordExists value ->
-                        CODEPATH_RECORD_TYPES.contains(value.recordType());
+                case ObservationSelector.RecordExists value -> codePathRecordFieldSupported(
+                        value.recordType(), value.fieldPath(), projections);
                 case ObservationSelector.CountCompare value ->
                         CODEPATH_RECORD_TYPES.contains(value.recordType());
                 case ObservationSelector.FailureFingerprintMatches ignored -> true;
@@ -75,7 +86,9 @@ final class InvestigationBindingValidator {
                 case ObservationSelector.ValueChanged value ->
                         maximumCapturedHits >= 2 && valuePaths.contains(value.projection());
                 case ObservationSelector.RecordExists value ->
-                        JDWP_RECORD_TYPES.contains(value.recordType());
+                        JDWP_SNAPSHOT.equals(value.recordType())
+                                && (TRACEPOINT_ID_FIELD.equals(value.fieldPath())
+                                || valuePaths.contains(value.fieldPath()));
                 case ObservationSelector.CountCompare value ->
                         JDWP_RECORD_TYPES.contains(value.recordType());
                 case ObservationSelector.FailureFingerprintMatches ignored -> true;
@@ -134,6 +147,16 @@ final class InvestigationBindingValidator {
                     collector + " cannot evaluate Predicate "
                             + predicate.predicateId().value() + " from the selected capture");
         }
+    }
+
+    private static boolean codePathRecordFieldSupported(
+            String recordType, String fieldPath, Set<String> projections) {
+        return switch (recordType) {
+            case CODEPATH_INVOCATION -> METHOD_REF_FIELD.equals(fieldPath)
+                    || projections.contains(fieldPath);
+            case METHOD_PATH_SUMMARY -> METHOD_KEY_FIELD.equals(fieldPath);
+            default -> false;
+        };
     }
 
     private record Resolved(

@@ -160,6 +160,14 @@ class StaticAnalysisApplicationServiceTest {
         assertEquals(result.artifact().sizeBytes(), Files.size(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                         .resolve(CASE_ID.value()).resolve(result.artifact().relativePath())));
+        var state = new org.example.algorithmdebug.core.coordination.InvestigationStateProjector()
+                .project(new org.example.algorithmdebug.casecore.InvestigationJournalReader(
+                        WorkspaceLayout.of(workspace).projectCases(PROJECT_ID),
+                        new BoundedDocumentMapper())
+                        .readValidatedEvents(new org.example.algorithmdebug.contracts.coordination.AnalysisIdentity(
+                                PROJECT_ID, CASE_ID, ANALYSIS_ID)).events());
+        assertEquals(org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.PLANNED,
+                state.gaps().getFirst().status());
     }
 
     @Test
@@ -254,6 +262,14 @@ class StaticAnalysisApplicationServiceTest {
                 result.artifact().relativePath());
         assertEquals(result.summary().planId(), archive().requireJdwpPlan(
                 CASE_ID, ANALYSIS_ID, result.summary().planId()).planId());
+        var state = new org.example.algorithmdebug.core.coordination.InvestigationStateProjector()
+                .project(new org.example.algorithmdebug.casecore.InvestigationJournalReader(
+                        WorkspaceLayout.of(workspace).projectCases(PROJECT_ID),
+                        new BoundedDocumentMapper())
+                        .readValidatedEvents(new org.example.algorithmdebug.contracts.coordination.AnalysisIdentity(
+                                PROJECT_ID, CASE_ID, ANALYSIS_ID)).events());
+        assertEquals(org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.PLANNED,
+                state.gaps().getFirst().status());
     }
 
     @Test
@@ -266,7 +282,7 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
-    void mapsStaticAndPlanArchiveFailuresToStageCodes() {
+    void mapsStaticFailureAndRejectsASecondPlanForTheAlreadyPlannedGap() {
         StaticAnalysisApplicationService service = service();
         service.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
 
@@ -281,7 +297,7 @@ class StaticAnalysisApplicationServiceTest {
                 service.createCodePathPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
 
         assertEquals("STATIC_ARCHIVE_FAILED", staticFailure.code());
-        assertEquals("PLAN_ARCHIVE_FAILED", planFailure.code());
+        assertEquals("PLAN_COMPILATION_FAILED", planFailure.code());
     }
 
     private StaticAnalysisApplicationService service() {

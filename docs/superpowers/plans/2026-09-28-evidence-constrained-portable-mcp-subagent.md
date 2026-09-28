@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.8；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.9；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -806,12 +806,19 @@ git commit -m "feat: bind collection plans to investigation predicates"
 
 **Files:**
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CollectionPostProcessingService.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CollectionPostProcessingResult.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CollectionApplicationService.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/JdwpCollectionApplicationService.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/StaticAnalysisApplicationService.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/InvestigationApplicationService.java`
+- Create: `ada-core/src/main/java/org/example/algorithmdebug/core/CollectionEvidenceViewFactory.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/InvestigationApplicationServiceTest.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/CollectionEvidenceViewFactoryTest.java`
 - Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/CollectionApplicationServiceTest.java`
 - Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/JdwpCollectionApplicationServiceTest.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/StaticAnalysisApplicationServiceTest.java`
+- Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/InvestigationBindingValidator.java`
+- Modify: `debug-plan-engine/src/test/java/org/example/algorithmdebug/plan/InvestigationBoundPlanCompilerTest.java`
 
 **Interfaces:**
 - Produces: `InvestigationState update(InvestigationUpdateCommand)`；采集成功后自动追加 Evaluation/Gap/Hypothesis 系统事件。
@@ -828,6 +835,8 @@ git commit -m "feat: bind collection plans to investigation predicates"
 @Test void clueOnlyTruthIsArchivedWithoutStateTransition() { }
 @Test void evaluatorFailurePreservesCollectionAndReturnsPostProcessingFailure() { }
 @Test void unexpectedObservationRequiresNewHypothesisAndCannotRewritePredicate() { }
+@Test void evidenceViewUsesOnlyBoundedNormalizedFacts() { }
+@Test void planRejectsUnsupportedRecordFieldAndAmbiguousProjection() { }
 ```
 
 - [ ] **Step 2: 运行 RED**

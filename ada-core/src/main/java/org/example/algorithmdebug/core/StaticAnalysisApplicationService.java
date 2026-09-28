@@ -217,6 +217,10 @@ public final class StaticAnalysisApplicationService {
                     scopedArtifactId(analysisId.value() + "-codepath-plan-" + plan.planId().value()),
                     "CODEPATH_PLAN", "PLAN_");
             archive.registerArtifact(caseId, artifact, clock.instant());
+            new InvestigationApplicationService(
+                    layout.projectCases(projectId), mapper, writer, clock)
+                    .recordPlanBound(
+                            plan.planId(), plan.investigationBinding().orElseThrow());
             executionLog.info(logContext.withPlan(plan.planId().value()),
                     "StaticAnalysisApplicationService", "CODEPATH_PLAN_COMPLETED",
                     "COMPLETED", "CodePath plan was archived", Map.of(
@@ -264,6 +268,10 @@ public final class StaticAnalysisApplicationService {
                     scopedArtifactId(analysisId.value() + "-jdwp-plan-" + plan.planId().value()),
                     "JDWP_PLAN", "JDWP_PLAN_");
             archive.registerArtifact(caseId, artifact, clock.instant());
+            new InvestigationApplicationService(
+                    layout.projectCases(projectId), mapper, writer, clock)
+                    .recordPlanBound(
+                            plan.planId(), plan.investigationBinding().orElseThrow());
             executionLog.info(logContext.withPlan(plan.planId().value()),
                     "StaticAnalysisApplicationService", "JDWP_PLAN_COMPLETED",
                     "COMPLETED", "JDWP plan was archived", Map.of(

@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：0.8
+- 设计版本：0.9
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -650,6 +650,53 @@ Evidence 不得参与计算。相同 Predicate 和相同 Evidence 输入哈希�
 `VALUE_EQUALS` 只有在完整范围内归一为唯一 typed 标量时才返回 TRUE/FALSE；`VALUE_CHANGED` 匹配有序序列中相邻的
 `before -> after`；`PATH_CONTAINS` 匹配连续有序子路径。缺少相应记录、投影或路径范围时返回 UNKNOWN，不能用全局
 “采集完成”替代操作符自己的范围证明。
+
+#### 7.5.1 Plan 与采集后的自动状态闭环
+
+`InvestigationApplicationService` 是模型命令和系统事件的唯一 Core 入口。模型更新只映射为
+`HypothesisAdded/EvidenceGapAdded/PredicateRegistered/GapStatusChanged(UNRESOLVED)`；不存在设置 Hypothesis 状态、
+替换 Problem Frame、覆盖 Predicate 或提交 Evaluation 的 API。Plan 文档原子归档成功后，Plan handler 立即追加
+`PlanBound`，再把绑定 Gap 从 `OPEN` 转为 `PLANNED`。如果第二个事件写入失败，Plan 保持可审计但本次操作失败，由
+Operation Journal 标为失败或不确定；不得先写 `PLANNED` 再尝试归档 Plan。
+
+```mermaid
+sequenceDiagram
+    participant H as "Plan/Collection Handler"
+    participant A as "Case Archive"
+    participant I as "Investigation Service"
+    participant E as "Deterministic Evaluator"
+    H->>A: "append Plan or validated derived artifacts"
+    A-->>H: "immutable Artifact reference"
+    H->>I: "recordPlanBound or recordCollectedEvidence"
+    I->>I: "read + project complete Journal"
+    I->>E: "frozen Predicate + typed EvidenceView"
+    E-->>I: "three-valued Evaluation"
+    I->>I: "precompute all legal state transitions"
+    I->>A: "append system events in strict sequence"
+    I-->>H: "new InvestigationState"
+```
+
+采集闭环只从已经归一化并验证的派生产物构造 `EvidenceView`。CodePath 的方法命中、方法路径和 Aggregate 分布来自
+`MethodPathSummary`；TRACE 的命名投影与 invocation record 来自有界读取的
+`codepath-invocations.jsonl`。JDWP 的 tracepoint、值序列和计数来自 `JdwpSnapshotSummary`。适配器只读取绑定 Predicate
+需要的字段，继续应用记录数、单记录字节、总字节和每个序列值数量上限。允许的 record/field 组合固定为：
+
+- `CODEPATH_INVOCATION`: `methodRef` 或 Plan 中全局唯一的命名 projection；
+- `METHOD_PATH_SUMMARY`: `methodKey`；
+- `JDWP_SNAPSHOT`: `tracepointId` 或 Plan 中捕获的 value path。
+
+Plan Compiler 必须在采集前拒绝其他 fieldPath，也必须拒绝 Value Predicate 引用跨多个方法重复的 CodePath projection
+名称。typed scalar 只允许 TEXT/LONG/DECIMAL/BOOLEAN/NULL；无法无损转换、缺失、不可见或截断的值不伪造，局部覆盖
+降为 PARTIAL 并使对应结果为 UNKNOWN。
+
+每个 binding Predicate 针对同一 `EvidenceView` 只生成一个由输入哈希确定的 Evaluation；同 ID 同内容重放时跳过，
+同 ID 不同内容时失败。只有本轮所有 Evaluation 都为 `CONFIRMATION_ELIGIBLE` 时才自动改变状态：有 UNKNOWN 时 Gap
+按 `PLANNED -> OBSERVED -> UNRESOLVED`，否则按 `PLANNED -> OBSERVED -> CLOSED`，随后 reducer 对绑定 Hypothesis
+追加必要的 `HypothesisStatusChanged`。`CLUE_ONLY/INVALID` Evaluation 只归档事实，不改变 Gap 或 Hypothesis。
+
+系统在追加任何事件前先在内存中重放完整候选序列，避免 evaluator/reducer 逻辑异常造成半套状态；文件系统异常仍按
+逐事件原子追加保留已成功写入的历史。后处理失败不得删除 Raw、Manifest、Normalization、Summary 或 Validation，返回
+`POST_PROCESSING_FAILURE` Artifact，并把已经生成的派生 Artifact 引用一并交给上层注册。
 
 ### 7.6 证据义务
 
@@ -1596,3 +1643,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.6 | Task 8 实施审计明确 Source Query 的流式源码窗口、源码文本控制字符规则、重复调用点路径去重、Core 生成 queryId 及请求/结果追加归档与 Catalog 完整性校验 | Codex |
 | 2026-09-28 | 0.7 | Task 9 实施前审计修正 Reducer 输入：显式接收冻结 Predicate 与 Gap，禁止从 Evaluation 字符串或 effectApplied 反推角色和 Gap 关闭状态 | Codex |
 | 2026-09-28 | 0.8 | Task 10 实施前审计冻结 Plan v7/v6 的结构化 binding、旧 Plan 只读投影、CodePath Launcher 透传与锁定 JDWP Collector 协议边界 | Codex |
+| 2026-09-28 | 0.9 | Task 11 实施前审计冻结 PlanBound/PLANNED 时序、typed EvidenceView 字段映射、Evaluation 状态转换和失败产物保留语义 | Codex |

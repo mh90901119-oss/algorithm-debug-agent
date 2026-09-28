@@ -177,6 +177,13 @@ class JdwpCollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
                         "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
                 SufficiencyEvaluation.class).status());
+        var investigation = new InvestigationApplicationService(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer,
+                Clock.fixed(NOW, ZoneOffset.UTC)).currentState(CASE_ID, ANALYSIS_ID);
+        assertEquals(1, investigation.evaluations().size());
+        assertEquals(
+                org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.UNRESOLVED,
+                investigation.gaps().getFirst().status());
     }
 
     @Test

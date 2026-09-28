@@ -11,12 +11,16 @@ import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCaptureMode;
+import org.example.algorithmdebug.contracts.CodePathMethodSelection;
+import org.example.algorithmdebug.contracts.CodePathProjection;
+import org.example.algorithmdebug.contracts.CodePathProjectionSource;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
+import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
@@ -116,6 +120,30 @@ class InvestigationBoundPlanCompilerTest {
     }
 
     @Test
+    void recordSelectorsRequireARealNormalizedFieldAndProjectionNamesMustBeGloballyUnique() {
+        InvestigationBindingValidator validator = new InvestigationBindingValidator();
+        CodePathMethodSelection first = selection(METHOD_KEY, "decision");
+        CodePathMethodSelection second = selection("fixture.Other#solve(I)I", "decision");
+
+        InvestigationState unsupportedRecord = state(
+                EvidenceGapStatus.OPEN, CASE_ID, ANALYSIS_ID, PredicateRole.CRITICAL,
+                new ObservationSelector.RecordExists(
+                        "CODEPATH_INVOCATION", "unknownField",
+                        new ObservationSelector.TextValue("x")));
+        assertThrows(PlanCompilationException.class, () -> validator.validateCodePath(
+                unsupportedRecord, investigation(PREDICATE_ID), List.of(first),
+                CodePathCaptureMode.TRACE));
+
+        InvestigationState ambiguousProjection = state(
+                EvidenceGapStatus.OPEN, CASE_ID, ANALYSIS_ID, PredicateRole.CRITICAL,
+                new ObservationSelector.ValueEquals(
+                        "decision", new ObservationSelector.LongValue(1)));
+        assertThrows(PlanCompilationException.class, () -> validator.validateCodePath(
+                ambiguousProjection, investigation(PREDICATE_ID), List.of(first, second),
+                CodePathCaptureMode.TRACE));
+    }
+
+    @Test
     void duplicateBindingIdsAreRejectedAtTheRequestBoundary() {
         assertThrows(IllegalArgumentException.class, () -> new InvestigationBindingRequest(
                 "Did the algorithm method execute?", GAP_ID,
@@ -167,6 +195,14 @@ class InvestigationBoundPlanCompilerTest {
                         new ObservationSelector.TextValue("B")));
         assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
                 catalog(), changeState, changeRequest, moduleRoot));
+
+        InvestigationState unsupportedRecord = state(
+                EvidenceGapStatus.OPEN, CASE_ID, ANALYSIS_ID, PredicateRole.CRITICAL,
+                new ObservationSelector.RecordExists(
+                        "JDWP_SNAPSHOT", "missing.path",
+                        new ObservationSelector.TextValue("A")));
+        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
+                catalog(), unsupportedRecord, request, moduleRoot));
     }
 
     private static CodePathPlanRequest request(ObservationPredicateId predicateId) {
@@ -236,5 +272,14 @@ class InvestigationBoundPlanCompilerTest {
         return new SourceAnchor(
                 "fixture.Algorithm", "solve", "(I)I",
                 "src/main/java/fixture/Algorithm.java", 1, 10);
+    }
+
+    private static CodePathMethodSelection selection(String methodKey, String projectionName) {
+        String className = methodKey.substring(0, methodKey.indexOf('#'));
+        return new CodePathMethodSelection(
+                new MethodSelector(methodKey, className, "solve", "(I)I"),
+                List.of(new CodePathProjection(
+                        projectionName, CodePathProjectionSource.RETURN,
+                        Optional.empty(), List.of(), true)));
     }
 }
