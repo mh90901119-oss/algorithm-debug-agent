@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：0.9
+- 设计版本：1.0
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -784,6 +784,17 @@ capabilitiesUsed[]
 `SYMPTOM`、`RUNTIME_STATE` 或 `DECISION`、`SOURCE_MECHANISM`，且不能全部依赖 `SOURCE_INFERENCE`。自然语言 claim
 必须引用 CausalChain 中的节点或边，防止报告正文出现未经过 Gate 的新根因。
 
+`ConclusionCandidate v2` 必须直接携带有界 `causalChains[]`，而不是只携带无法解引用的 ID。每条 Chain 的
+`caseId/analysisId` 必须与候选一致，Chain ID 在候选内唯一；`ConclusionGate` 从该不可变候选读取待校验结构，
+并使用运行时注入的只读 Reference Catalog 校验 Evidence ID 和 Source Query ID 是否真实属于当前 Analysis。
+这样 `analysis_finalize` 的单一输入即可闭环，不依赖隐藏会话状态，也不需要新增一个仅用于暂存 Chain 的模型写工具。
+`ConclusionDecision v2` 必须显式返回当前控制视图允许的 `allowedActions[]`；拒绝时父模型可以据此继续补证据，接受时
+该列表可以为空或仅包含只读动作，但不得由自然语言提示代替。
+
+上述两项均为破坏性契约修正，因此 Schema 主版本升级到 `2.0`。v1 Schema 保留为历史只读校验入口，不改写既有
+文档；v1 Candidate 若没有另行保存完整 Chain，不能猜测迁移，必须依据原 Evidence/Source Query 重新提交 v2。
+迁移步骤见 `docs/development/conclusion-contract-v2-migration.md`。
+
 完成状态与单条 claim 分类相互独立：整体为 `BOUNDED_HYPOTHESIS` 或 `INSUFFICIENT_EVIDENCE` 时，仍可包含“UT 返回
 断言失败”等有直接 Evidence 的 `CONFIRMED_FACT`；但不得把这些局部事实包装为整体根因 `CONFIRMED`。
 
@@ -1017,6 +1028,10 @@ Coordinator 不替代模型理解算法业务语义，但可以确定性验证�
 `CausalChain` 至少包含症状节点、运行时状态/决策节点和源码机制节点。`CONFIRMED` 还要求关键边具有动态 Evidence；
 只有源码关系的链最多为 `BOUNDED_HYPOTHESIS`。若无法区分剩余假设，Gate 返回结构化 `missingEvidence` 和允许等级，
 不得自动选择一个假设。
+
+归档顺序固定为：先以 create-new 原子写入包含完整 `causalChains[]` 的 candidate 信封，再计算门禁，最后只允许写入
+`accepted.json` 或 `rejected.json` 之一。相同内容的精确重放幂等返回既有文档；同一 conclusionId 的内容冲突、双终态
+或候选缺失均视为归档冲突。candidate 和 decision 信封都包含 policyVersion、输入哈希、时间和 provenance。
 
 ## 10. 错误处理与可观测性
 
@@ -1644,3 +1659,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.7 | Task 9 实施前审计修正 Reducer 输入：显式接收冻结 Predicate 与 Gap，禁止从 Evaluation 字符串或 effectApplied 反推角色和 Gap 关闭状态 | Codex |
 | 2026-09-28 | 0.8 | Task 10 实施前审计冻结 Plan v7/v6 的结构化 binding、旧 Plan 只读投影、CodePath Launcher 透传与锁定 JDWP Collector 协议边界 | Codex |
 | 2026-09-28 | 0.9 | Task 11 实施前审计冻结 PlanBound/PLANNED 时序、typed EvidenceView 字段映射、Evaluation 状态转换和失败产物保留语义 | Codex |
+| 2026-09-28 | 1.0 | Task 12 实施前审计修正结论输入空悬：Candidate 内嵌有界 CausalChain，Decision 返回 allowedActions；冻结 Reference Catalog 校验与 candidate-first 单终态归档语义 | Codex |

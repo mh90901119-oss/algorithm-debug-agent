@@ -15,6 +15,7 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
  * @param allowedStatus 当前证据允许的最高等级
  * @param reasonCodes 拒绝原因码
  * @param missingEvidence 缺失 Evidence、Gap 或 Predicate ID
+ * @param allowedActions 当前状态允许的下一步动作
  */
 public record ConclusionDecision(
         String schemaVersion,
@@ -25,7 +26,8 @@ public record ConclusionDecision(
         ActionDecisionCode decision,
         ConclusionStatus allowedStatus,
         List<CoordinationErrorCode> reasonCodes,
-        List<String> missingEvidence) {
+        List<String> missingEvidence,
+        List<AnalysisActionType> allowedActions) {
 
     /** 校验版本、身份、修订号和接受/拒绝原因的一致性。 */
     public ConclusionDecision {
@@ -44,6 +46,8 @@ public record ConclusionDecision(
                 reasonCodes, "reasonCodes", CoordinationLimits.MAX_CONTROL_ITEMS);
         missingEvidence = CoordinationContractChecks.immutableUniqueIds(
                 missingEvidence, "missingEvidence");
+        allowedActions = CoordinationContractChecks.immutableUniqueList(
+                allowedActions, "allowedActions", CoordinationLimits.MAX_CONTROL_ITEMS);
         ActionDecision.requireDecisionReasons(decision, reasonCodes);
         if (decision == ActionDecisionCode.ALLOWED && !missingEvidence.isEmpty()) {
             throw new IllegalArgumentException(

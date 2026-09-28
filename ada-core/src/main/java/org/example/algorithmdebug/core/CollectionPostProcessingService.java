@@ -203,10 +203,11 @@ final class CollectionPostProcessingService {
         CollectionValidation validation = validator.validateMethodPath(new MethodPathValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        CollectionPostProcessingResult completed = complete(
-                collection.caseId(), evidenceId, request, validation, produced);
         EvidenceEligibility eligibility = codePathEligibility(
-                completed.artifactReadable(), collectorManifest, baseline);
+                validation.status() != EvidenceValidationStatus.INVALID,
+                collectorManifest, baseline);
+        CollectionPostProcessingResult completed = complete(
+                collection.caseId(), evidenceId, request, validation, eligibility, produced);
         evaluateCodePath(plan, summary,
                 plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE
                         && Files.isRegularFile(invocationPath)
@@ -274,10 +275,11 @@ final class CollectionPostProcessingService {
         CollectionValidation validation = validator.validateJdwp(new JdwpValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        CollectionPostProcessingResult completed = complete(
-                collection.caseId(), evidenceId, request, validation, produced);
         EvidenceEligibility eligibility = jdwpEligibility(
-                completed.artifactReadable(), collectorManifest, baseline);
+                validation.status() != EvidenceValidationStatus.INVALID,
+                collectorManifest, baseline);
+        CollectionPostProcessingResult completed = complete(
+                collection.caseId(), evidenceId, request, validation, eligibility, produced);
         evaluateJdwp(
                 plan, summary, eligibility,
                 observationComparison(eligibility, baseline.outcome()));
@@ -290,6 +292,7 @@ final class CollectionPostProcessingService {
             EvidenceId evidenceId,
             Optional<EvidenceBuildRequest> request,
             CollectionValidation validation,
+            EvidenceEligibility eligibility,
             List<ArtifactReference> result) {
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, caseId);
         Path validationPath = archive.createCollectionValidation(validation);
@@ -299,8 +302,7 @@ final class CollectionPostProcessingService {
         addUnique(result, validationReference);
         if (request.isEmpty()) {
             return new CollectionPostProcessingResult(
-                    validation.status() != EvidenceValidationStatus.INVALID, result,
-                    EvidenceEligibility.legacyUnknown());
+                    validation.status() != EvidenceValidationStatus.INVALID, result, eligibility);
         }
 
         EvidenceBuildRequest buildRequest = request.orElseThrow();
@@ -323,7 +325,8 @@ final class CollectionPostProcessingService {
                 List.of(new ValidatedCollectionSource(validation, validationReference)));
         var bundle = new EvidenceBundleBuilder().build(buildRequest, sources);
         Path bundlePath = archive.createEvidenceBundle(bundle);
-        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(buildRequest, bundle);
+        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(
+                buildRequest, bundle, eligibility, Set.of());
         Path sufficiencyPath = archive.createSufficiencyEvaluation(sufficiency);
 
         addUnique(result, describe(caseId, bundlePath,
@@ -332,8 +335,7 @@ final class CollectionPostProcessingService {
                 evidenceId.value() + "-sufficiency", "SUFFICIENCY_EVALUATION",
                 "application/json"));
         return new CollectionPostProcessingResult(
-                validation.status() != EvidenceValidationStatus.INVALID, result,
-                EvidenceEligibility.legacyUnknown());
+                validation.status() != EvidenceValidationStatus.INVALID, result, eligibility);
     }
 
     private EvidenceBuildRequest request(

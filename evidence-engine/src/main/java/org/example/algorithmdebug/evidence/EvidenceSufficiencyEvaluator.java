@@ -8,6 +8,9 @@ import java.util.Set;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
 import org.example.algorithmdebug.contracts.EvidenceBundle;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
+import org.example.algorithmdebug.contracts.EvidenceEligibility;
+import org.example.algorithmdebug.contracts.EvidenceEligibilityReason;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SufficiencyStatus;
@@ -18,13 +21,41 @@ public final class EvidenceSufficiencyEvaluator {
     /** 评估覆盖、缺口和阻断矛盾；不判断业务根因是否正确。 */
     public SufficiencyEvaluation evaluate(
             EvidenceBuildRequest request, EvidenceBundle bundle) {
+        EvidenceEligibility neutral = new EvidenceEligibilityEvaluator().evaluate(
+                new EvidenceEligibilityEvaluator.Context(
+                        true, true, false, ComparisonOutcome.NOT_COMPARED, true));
+        return evaluate(request, bundle, neutral, Set.of());
+    }
+
+    /**
+     * 同时评估维度覆盖、正交 Evidence 资格和仍未满足的调查义务。
+     * 任一资格维度不完整时不得仅因 Bundle 字段齐全而返回充分。
+     */
+    public SufficiencyEvaluation evaluate(
+            EvidenceBuildRequest request,
+            EvidenceBundle bundle,
+            EvidenceEligibility eligibility,
+            Set<String> remainingObligationIds) {
         if (request == null || bundle == null) {
             throw new IllegalArgumentException("request and bundle must not be null");
+        }
+        if (eligibility == null || remainingObligationIds == null
+                || remainingObligationIds.stream().anyMatch(value ->
+                value == null || value.isBlank())) {
+            throw new IllegalArgumentException(
+                    "eligibility and remainingObligationIds must not be null");
         }
         validateIdentity(request, bundle);
         HashSet<EvidenceDimension> effectiveCoverage = new HashSet<>(bundle.coveredDimensions());
         if (bundle.truncated()) {
             effectiveCoverage.remove(EvidenceDimension.VALIDATION);
+        }
+        boolean incompleteEligibility = !eligibility.artifactReadable()
+                || !eligibility.collectionComplete()
+                || !eligibility.obligationSatisfied()
+                || (eligibility.baselineRequired() && !eligibility.baselineComparable());
+        if (incompleteEligibility || !remainingObligationIds.isEmpty()) {
+            effectiveCoverage.clear();
         }
         Set<EvidenceDimension> covered = Set.copyOf(effectiveCoverage);
         HashSet<EvidenceDimension> missing = new HashSet<>(request.requiredDimensions());
@@ -35,6 +66,10 @@ public final class EvidenceSufficiencyEvaluator {
                 .collect(java.util.stream.Collectors.collectingAndThen(
                         java.util.stream.Collectors.toCollection(LinkedHashSet::new),
                         ArrayList::new));
+        if (eligibility.reasonCodes().contains(
+                EvidenceEligibilityReason.FAILURE_FINGERPRINT_CHANGED.name())) {
+            contradictions.add(EvidenceEligibilityReason.FAILURE_FINGERPRINT_CHANGED.name());
+        }
         SufficiencyStatus status;
         if (!contradictions.isEmpty()) {
             status = SufficiencyStatus.CONTRADICTED;

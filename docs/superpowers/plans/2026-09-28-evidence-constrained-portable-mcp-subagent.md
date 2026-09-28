@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.9；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.0；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -865,19 +865,31 @@ git commit -m "feat: update investigation state from collected evidence"
 ### Task 12: 实现 CausalChain 和 ConclusionGate
 
 **Files:**
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/ConclusionCandidate.java`
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination/ConclusionDecision.java`
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/SchemaVersions.java`
+- Create: `schemas/coordination/conclusion-candidate-v2.schema.json`
+- Create: `schemas/coordination/conclusion-decision-v2.schema.json`
+- Preserve: `schemas/coordination/conclusion-candidate-v1.schema.json`
+- Preserve: `schemas/coordination/conclusion-decision-v1.schema.json`
+- Modify: `ada-contracts/src/test/java/org/example/algorithmdebug/contracts/coordination/CoordinationSchemaTest.java`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/CausalChainEligibilityEvaluator.java`
 - Modify: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceSufficiencyEvaluator.java`
 - Create: `evidence-engine/src/test/java/org/example/algorithmdebug/evidence/CausalChainEligibilityEvaluatorTest.java`
 - Modify: `evidence-engine/src/test/java/org/example/algorithmdebug/evidence/EvidenceSufficiencyEvaluatorTest.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ConclusionGate.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/ConclusionGateTest.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CollectionPostProcessingService.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/CollectionApplicationServiceTest.java`
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveLayout.java`
 - Create: `case-management/src/main/java/org/example/algorithmdebug/casecore/ConclusionDecisionArchive.java`
 - Create: `case-management/src/test/java/org/example/algorithmdebug/casecore/ConclusionDecisionArchiveTest.java`
+- Create: `docs/development/conclusion-contract-v2-migration.md`
 
 **Interfaces:**
 - Produces: `ConclusionDecision evaluate(ConclusionCandidate, AnalysisControlView, InvestigationState)`。
-- Consumes: Evidence/Source Query refs、Observation results、eligibility、hypothesis/gap states。
+- Consumes: Candidate 内嵌的有界 `causalChains[]`、只读 Reference Catalog 中的 Evidence/Source Query refs、Observation results、eligibility、hypothesis/gap states。
+- Contract closure: `ConclusionDecision.allowedActions[]` 返回拒绝后的合法下一步；不得仅返回自然语言提示。
 
 - [ ] **Step 1: 写因果链和等级失败测试**
 

@@ -120,10 +120,10 @@ public final class SchemaVersions {
     public static final String OPERATION_RECEIPT = "1.0";
 
     /** 结论候选 Schema 版本。 */
-    public static final String CONCLUSION_CANDIDATE = "1.0";
+    public static final String CONCLUSION_CANDIDATE = "2.0";
 
     /** 结论门禁决策 Schema 版本。 */
-    public static final String CONCLUSION_DECISION = "1.0";
+    public static final String CONCLUSION_DECISION = "2.0";
 
     /** Problem Frame Schema 版本。 */
     public static final String PROBLEM_FRAME = "1.0";

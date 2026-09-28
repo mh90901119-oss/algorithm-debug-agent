@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.networknt.schema.InputFormat;
 import com.networknt.schema.SchemaRegistry;
 import com.networknt.schema.SpecificationVersion;
@@ -27,10 +29,20 @@ import org.example.algorithmdebug.contracts.ClaimClassification;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.CausalChain;
+import org.example.algorithmdebug.contracts.investigation.CausalChainId;
+import org.example.algorithmdebug.contracts.investigation.CausalEdge;
+import org.example.algorithmdebug.contracts.investigation.CausalNode;
+import org.example.algorithmdebug.contracts.investigation.CausalNodeType;
+import org.example.algorithmdebug.contracts.investigation.InvestigationLimits;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
 import org.junit.jupiter.api.Test;
 
 class CoordinationSchemaTest {
-    private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new Jdk8Module());
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .registerModule(new Jdk8Module())
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Test
     void everyContractRoundTripsThroughItsSchema() throws Exception {
@@ -42,8 +54,8 @@ class CoordinationSchemaTest {
         values.put(schemaPath("coordination", "evidence-obligation-v1.schema.json"), fixtures.obligation());
         values.put(schemaPath("tool", "coordinated-tool-result-v1.schema.json"), fixtures.result());
         values.put(schemaPath("coordination", "operation-receipt-v1.schema.json"), fixtures.receipt());
-        values.put(schemaPath("coordination", "conclusion-candidate-v1.schema.json"), fixtures.candidate());
-        values.put(schemaPath("coordination", "conclusion-decision-v1.schema.json"), fixtures.conclusionDecision());
+        values.put(schemaPath("coordination", "conclusion-candidate-v2.schema.json"), fixtures.candidate());
+        values.put(schemaPath("coordination", "conclusion-decision-v2.schema.json"), fixtures.conclusionDecision());
 
         for (Map.Entry<Path, Object> fixture : values.entrySet()) {
             assertValid(fixture.getKey(), MAPPER.writeValueAsString(fixture.getValue()));
@@ -73,8 +85,8 @@ class CoordinationSchemaTest {
                 schemaPath("coordination", "evidence-obligation-v1.schema.json"), fixtures.obligation(),
                 schemaPath("tool", "coordinated-tool-result-v1.schema.json"), fixtures.result(),
                 schemaPath("coordination", "operation-receipt-v1.schema.json"), fixtures.receipt(),
-                schemaPath("coordination", "conclusion-candidate-v1.schema.json"), fixtures.candidate(),
-                schemaPath("coordination", "conclusion-decision-v1.schema.json"), fixtures.conclusionDecision());
+                schemaPath("coordination", "conclusion-candidate-v2.schema.json"), fixtures.candidate(),
+                schemaPath("coordination", "conclusion-decision-v2.schema.json"), fixtures.conclusionDecision());
 
         for (Map.Entry<Path, Object> fixture : values.entrySet()) {
             ObjectNode json = (ObjectNode) MAPPER.valueToTree(fixture.getValue());
@@ -116,7 +128,7 @@ class CoordinationSchemaTest {
 
         ObjectNode conclusion = (ObjectNode) MAPPER.valueToTree(fixtures.conclusionDecision());
         conclusion.put("decision", ActionDecisionCode.ALLOWED.name());
-        assertInvalid(schemaPath("coordination", "conclusion-decision-v1.schema.json"),
+        assertInvalid(schemaPath("coordination", "conclusion-decision-v2.schema.json"),
                 MAPPER.writeValueAsString(conclusion));
 
         ObjectNode candidate = (ObjectNode) MAPPER.valueToTree(fixtures.candidate());
@@ -124,8 +136,30 @@ class CoordinationSchemaTest {
         claim.withArray("evidenceIds").removeAll();
         claim.withArray("artifactReferences").removeAll();
         claim.withArray("sourceReferenceIds").removeAll();
-        assertInvalid(schemaPath("coordination", "conclusion-candidate-v1.schema.json"),
+        assertInvalid(schemaPath("coordination", "conclusion-candidate-v2.schema.json"),
                 MAPPER.writeValueAsString(candidate));
+    }
+
+    @Test
+    void legacyConclusionSchemasRemainReadableWhileV2RequiresClosedInputs() throws Exception {
+        Fixtures fixtures = fixtures();
+        ObjectNode legacyCandidate = (ObjectNode) MAPPER.valueToTree(fixtures.candidate());
+        legacyCandidate.put("schemaVersion", "1.0");
+        legacyCandidate.remove("causalChains");
+        legacyCandidate.putArray("causalChainIds").add("chain-1");
+        assertValid(schemaPath("coordination", "conclusion-candidate-v1.schema.json"),
+                MAPPER.writeValueAsString(legacyCandidate));
+        assertInvalid(schemaPath("coordination", "conclusion-candidate-v2.schema.json"),
+                MAPPER.writeValueAsString(legacyCandidate));
+
+        ObjectNode legacyDecision = (ObjectNode) MAPPER.valueToTree(
+                fixtures.conclusionDecision());
+        legacyDecision.put("schemaVersion", "1.0");
+        legacyDecision.remove("allowedActions");
+        assertValid(schemaPath("coordination", "conclusion-decision-v1.schema.json"),
+                MAPPER.writeValueAsString(legacyDecision));
+        assertInvalid(schemaPath("coordination", "conclusion-decision-v2.schema.json"),
+                MAPPER.writeValueAsString(legacyDecision));
     }
 
     @Test
@@ -143,9 +177,9 @@ class CoordinationSchemaTest {
                 SchemaVersions.COORDINATED_TOOL_RESULT,
                 schemaPath("coordination", "operation-receipt-v1.schema.json"),
                 SchemaVersions.OPERATION_RECEIPT,
-                schemaPath("coordination", "conclusion-candidate-v1.schema.json"),
+                schemaPath("coordination", "conclusion-candidate-v2.schema.json"),
                 SchemaVersions.CONCLUSION_CANDIDATE,
-                schemaPath("coordination", "conclusion-decision-v1.schema.json"),
+                schemaPath("coordination", "conclusion-decision-v2.schema.json"),
                 SchemaVersions.CONCLUSION_DECISION);
         for (Map.Entry<Path, String> entry : versions.entrySet()) {
             JsonNode json = MAPPER.readTree(entry.getKey().toFile());
@@ -166,7 +200,7 @@ class CoordinationSchemaTest {
                 "/$defs/errorCodes/items/enum",
                 schemaPath("coordination", "evidence-obligation-v1.schema.json"),
                 "/$defs/errorCodes/items/enum",
-                schemaPath("coordination", "conclusion-decision-v1.schema.json"),
+                schemaPath("coordination", "conclusion-decision-v2.schema.json"),
                 "/$defs/errorCodes/items/enum",
                 schemaPath("coordination", "operation-receipt-v1.schema.json"),
                 "/$defs/errorCode/enum",
@@ -193,12 +227,24 @@ class CoordinationSchemaTest {
                 result.path("properties").path("artifacts").path("maxItems").asInt());
 
         JsonNode candidate = MAPPER.readTree(schemaPath(
-                "coordination", "conclusion-candidate-v1.schema.json").toFile());
+                "coordination", "conclusion-candidate-v2.schema.json").toFile());
         assertEquals(CoordinationLimits.MAX_CLAIMS,
                 candidate.path("properties").path("claims").path("maxItems").asInt());
         assertEquals(CoordinationLimits.MAX_CLAIM_TEXT_LENGTH,
                 candidate.path("$defs").path("claim").path("properties")
                         .path("statement").path("maxLength").asInt());
+        assertEquals(InvestigationLimits.MAX_CAUSAL_NODES,
+                candidate.path("$defs").path("causalChain").path("properties")
+                        .path("nodes").path("maxItems").asInt());
+        assertEquals(java.util.Arrays.stream(CausalNodeType.values())
+                        .map(Enum::name).collect(Collectors.toUnmodifiableSet()),
+                enumValues(candidate.path("$defs").path("causalNode")
+                        .path("properties").path("type").path("enum")));
+
+        JsonNode conclusionDecision = MAPPER.readTree(schemaPath(
+                "coordination", "conclusion-decision-v2.schema.json").toFile());
+        assertEquals(actionTypes(), enumValues(conclusionDecision.path("$defs")
+                .path("actionType").path("enum")));
     }
 
     private static Fixtures fixtures() {
@@ -238,17 +284,42 @@ class CoordinationSchemaTest {
         ConclusionClaim claim = new ConclusionClaim(
                 "claim-1", "The runtime evidence supports the selected branch.",
                 ClaimClassification.VALIDATOR_CONCLUSION,
-                List.of(new EvidenceId("evidence-1")), List.of(), List.of());
+                List.of(new EvidenceId("evidence-1")), List.of(), List.of("runtime-node"));
+        CausalChain chain = new CausalChain(
+                SchemaVersions.CAUSAL_CHAIN, new CausalChainId("chain-1"),
+                identity.caseId(), identity.analysisId(),
+                List.of(
+                        new CausalNode(
+                                "source-node", CausalNodeType.SOURCE_MECHANISM,
+                                "Source branch", List.of(), List.of(new SourceQueryId("query-1"))),
+                        new CausalNode(
+                                "runtime-node", CausalNodeType.RUNTIME_STATE,
+                                "Runtime branch", List.of(new EvidenceId("evidence-1")), List.of()),
+                        new CausalNode(
+                                "symptom-node", CausalNodeType.SYMPTOM,
+                                "Observed symptom", List.of(new EvidenceId("evidence-1")), List.of())),
+                List.of(
+                        new CausalEdge(
+                                "source-runtime", "source-node", "runtime-node", "selects",
+                                ClaimClassification.VALIDATOR_CONCLUSION, true,
+                                List.of(new EvidenceId("evidence-1")),
+                                List.of(new SourceQueryId("query-1"))),
+                        new CausalEdge(
+                                "runtime-symptom", "runtime-node", "symptom-node", "produces",
+                                ClaimClassification.CONFIRMED_FACT, true,
+                                List.of(new EvidenceId("evidence-1")), List.of())),
+                java.time.Instant.parse("2026-09-28T00:00:00Z"));
         ConclusionCandidate candidate = new ConclusionCandidate(
                 SchemaVersions.CONCLUSION_CANDIDATE, "conclusion-1", identity, 4,
                 ConclusionStatus.BOUNDED_HYPOTHESIS, List.of(claim),
-                List.of("chain-1"), List.of("gap-1"));
+                List.of(chain), List.of("gap-1"));
         ConclusionDecision conclusionDecision = new ConclusionDecision(
                 SchemaVersions.CONCLUSION_DECISION, CoordinationPolicyVersions.CURRENT,
                 "conclusion-1", identity, 4,
                 ActionDecisionCode.REJECTED, ConclusionStatus.BOUNDED_HYPOTHESIS,
                 List.of(CoordinationErrorCode.CONCLUSION_NOT_ELIGIBLE),
-                List.of("gap-1"));
+                List.of("gap-1"),
+                List.of(AnalysisActionType.CODEPATH_PLAN_CREATE));
         return new Fixtures(request, control, decision, obligation, result, receipt,
                 candidate, conclusionDecision);
     }

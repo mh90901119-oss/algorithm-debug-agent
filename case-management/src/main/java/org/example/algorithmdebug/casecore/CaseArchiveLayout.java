@@ -165,8 +165,13 @@ public final class CaseArchiveLayout {
     }
 
     /** @return 指定结论候选的追加式目录。 */
+    public Path conclusionsRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "conclusions");
+    }
+
+    /** @return 指定结论候选的追加式目录。 */
     public Path conclusionRoot(AnalysisId analysisId, String conclusionId) {
-        return child(child(analysisRoot(analysisId), "conclusions"),
+        return child(conclusionsRoot(analysisId),
                 safeSegment(conclusionId, "conclusionId"));
     }
 

@@ -355,6 +355,12 @@ class CollectionApplicationServiceTest {
         assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
         assertTrue(result.summary().eligibility().artifactReadable());
         assertFalse(result.summary().eligibility().confirmationEligible());
+        SufficiencyEvaluation sufficiency = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class);
+        assertEquals(SufficiencyStatus.CONTRADICTED, sufficiency.status());
+        assertTrue(sufficiency.contradictions().contains("FAILURE_FINGERPRINT_CHANGED"));
     }
 
     @Test
@@ -380,6 +386,11 @@ class CollectionApplicationServiceTest {
         assertTrue(zeroHit.summary().eligibility().artifactReadable());
         assertFalse(zeroHit.summary().eligibility().obligationSatisfied());
         assertFalse(zeroHit.summary().eligibility().confirmationEligible());
+        SufficiencyEvaluation sufficiency = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class);
+        assertEquals(SufficiencyStatus.INSUFFICIENT, sufficiency.status());
         assertTrue(zeroHit.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(zeroHit.artifacts().stream().noneMatch(reference ->

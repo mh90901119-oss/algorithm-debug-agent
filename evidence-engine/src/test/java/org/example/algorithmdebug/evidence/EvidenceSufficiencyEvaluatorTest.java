@@ -14,6 +14,7 @@ import org.example.algorithmdebug.contracts.EvidenceBundle;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
 import org.example.algorithmdebug.contracts.EvidenceFact;
 import org.example.algorithmdebug.contracts.EvidenceId;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SufficiencyStatus;
 
@@ -71,6 +72,44 @@ class EvidenceSufficiencyEvaluatorTest {
 
         assertEquals(SufficiencyStatus.CONTRADICTED, evaluation.status());
         assertEquals(List.of("Baseline changed"), evaluation.contradictions());
+    }
+
+    @org.junit.jupiter.api.Test
+    void sufficiencyUsesOrthogonalEligibilityAndObligationsWithoutLegacyBoolean() {
+        EvidenceBuildRequest request = request(Set.of(EvidenceDimension.METHOD_PATH));
+        EvidenceBundle bundle = bundle(Set.of(EvidenceDimension.METHOD_PATH), List.of());
+        var incomplete = new EvidenceSufficiencyEvaluator().evaluate(
+                request, bundle,
+                new EvidenceEligibilityEvaluator().evaluate(
+                        new EvidenceEligibilityEvaluator.Context(
+                                true, false, false, ComparisonOutcome.NOT_COMPARED, true)),
+                Set.of());
+        var obligationOpen = new EvidenceSufficiencyEvaluator().evaluate(
+                request, bundle,
+                new EvidenceEligibilityEvaluator().evaluate(
+                        new EvidenceEligibilityEvaluator.Context(
+                                true, true, false, ComparisonOutcome.NOT_COMPARED, true)),
+                Set.of("predicate-runtime-state"));
+
+        assertEquals(SufficiencyStatus.INSUFFICIENT, incomplete.status());
+        assertEquals(Set.of(EvidenceDimension.METHOD_PATH), incomplete.missingDimensions());
+        assertEquals(SufficiencyStatus.INSUFFICIENT, obligationOpen.status());
+        assertEquals(Set.of(EvidenceDimension.METHOD_PATH), obligationOpen.missingDimensions());
+    }
+
+    @org.junit.jupiter.api.Test
+    void changedFailureFingerprintIsAContradictionNotMissingCoverage() {
+        EvidenceBuildRequest request = request(Set.of(EvidenceDimension.METHOD_PATH));
+        var changed = new EvidenceEligibilityEvaluator().evaluate(
+                new EvidenceEligibilityEvaluator.Context(
+                        true, true, true, ComparisonOutcome.CHANGED, true));
+
+        var evaluation = new EvidenceSufficiencyEvaluator().evaluate(
+                request, bundle(Set.of(EvidenceDimension.METHOD_PATH), List.of()),
+                changed, Set.of());
+
+        assertEquals(SufficiencyStatus.CONTRADICTED, evaluation.status());
+        assertEquals(List.of("FAILURE_FINGERPRINT_CHANGED"), evaluation.contradictions());
     }
 
     private static EvidenceBuildRequest request(Set<EvidenceDimension> required) {

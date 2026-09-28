@@ -3,6 +3,7 @@ package org.example.algorithmdebug.contracts.coordination;
 import java.util.HashSet;
 import java.util.List;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.CausalChain;
 
 /**
  * 模型提交给确定性 ConclusionGate 的结论候选。
@@ -13,7 +14,7 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
  * @param basedOnRevision 候选依据的控制状态修订号
  * @param requestedStatus 请求达到的结论等级
  * @param claims 逐条分类且带引用的 Claim
- * @param causalChainIds 因果链 ID
+ * @param causalChains 待门禁校验的完整有界因果链
  * @param unresolvedGapIds 模型显式保留的未解决缺口
  */
 public record ConclusionCandidate(
@@ -23,7 +24,7 @@ public record ConclusionCandidate(
         long basedOnRevision,
         ConclusionStatus requestedStatus,
         List<ConclusionClaim> claims,
-        List<String> causalChainIds,
+        List<CausalChain> causalChains,
         List<String> unresolvedGapIds) {
 
     /** 校验身份、修订号、Claim 和引用集合。 */
@@ -46,8 +47,23 @@ public record ConclusionCandidate(
                 != claims.size()) {
             throw new IllegalArgumentException("claims must have unique claimId values");
         }
-        causalChainIds = CoordinationContractChecks.immutableUniqueIds(
-                causalChainIds, "causalChainIds");
+        causalChains = CoordinationContractChecks.immutableUniqueList(
+                causalChains, "causalChains", CoordinationLimits.MAX_CONTROL_ITEMS);
+        if (causalChains.isEmpty()) {
+            throw new IllegalArgumentException("causalChains must not be empty");
+        }
+        if (new HashSet<>(causalChains.stream()
+                .map(value -> value.causalChainId().value()).toList()).size()
+                != causalChains.size()) {
+            throw new IllegalArgumentException("causalChains must have unique IDs");
+        }
+        AnalysisIdentity checkedIdentity = identity;
+        if (causalChains.stream().anyMatch(value ->
+                !checkedIdentity.caseId().equals(value.caseId())
+                        || !checkedIdentity.analysisId().equals(value.analysisId()))) {
+            throw new IllegalArgumentException(
+                    "Every CausalChain must belong to the conclusion Analysis");
+        }
         unresolvedGapIds = CoordinationContractChecks.immutableUniqueIds(
                 unresolvedGapIds, "unresolvedGapIds");
     }
