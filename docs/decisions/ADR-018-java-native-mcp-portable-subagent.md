@@ -1,7 +1,8 @@
 # ADR-018：采用 Java 原生 MCP Server 交付可移植 Algorithm Debug 子 Agent
 
-- 状态：Proposed
+- 状态：Accepted
 - 日期：2026-09-25
+- 批准日期：2026-09-28
 - 决策范围：模型入口、Agent 边界、MCP Server、Coordinator、宿主适配器
 - 关联设计：[可移植 MCP 子 Agent 与确定性 Coordinator 可实施详细设计](../designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md)
 - 取代范围：实施完成并通过迁移门禁后，取代 ADR-007 的 OpenCode 专用集成边界，并取代 ADR-017 中 Qwen 专用 Gateway、双 Runtime 产品形态和 OpenCode 兼容基线；保留“Java 确定性后端、Adapter 薄、领域规则不进入宿主 Core”的原则
@@ -37,20 +38,27 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
    文件锁、幂等、后置条件、证据义务和结论门禁。大模型不需要、也不能通过一个可选 Tool 绕过 Coordinator。
 7. 保留粒度明确的多个 MCP Tool，不创建包含所有动作和联合参数的万能工具。所有 Tool 从唯一 Canonical
    Catalog 注册，宿主适配器不得复制名称、Schema 或业务规则。
-8. 当前根仓库的 13 个工具作为迁移基线，并新增 `analysis_status`、`analysis_finalize` 完成控制和结论闭环。
+8. 当前根仓库的 13 个工具作为迁移基线，并新增 `source_query`、`investigation_update`、`analysis_status`、
+   `analysis_finalize`，形成 17 个基线 Action。生产代码从 Action/Catalog 集合计算完整性，不把数量写成协议常量。
    公司环境额外 5 个工具必须在提供真实契约、实现来源和测试后导入，不得推测创建。
-9. 新增 Canonical Agent Definition，版本化记录角色、输入、所需 MCP 能力、Prompt、权限和完成契约。关键
+9. 新增追加式 Investigation Runtime，保存唯一 Problem Frame、竞争假设、证据缺口、冻结 Predicate、三值
+   Evaluation、支持与反证；新增有界 `source_query`，让源码理解不依赖宿主私有读文件工具。
+10. 新增 Canonical Agent Definition，版本化记录角色、输入、所需 MCP 能力、Prompt、权限和完成契约。关键
    安全、证据和流程规则由代码执行；Prompt 只指导模型的业务推理和工具选择。
-10. 每个宿主只提供薄 Adapter：注册同一个 MCP Server、创建子 Agent、加载 Canonical Agent Definition、映射
+    知识 Markdown 是可选提示，不进入 Evidence、Predicate Evaluation 或 ConclusionGate。
+11. 每个宿主只提供薄 Adapter：注册同一个 MCP Server、创建子 Agent、加载 Canonical Agent Definition、映射
     权限并完成兼容检查。先实现 Qwen CLI，再以第二个真实宿主证明可移植性。
-11. 第一版不提供远程 Streamable HTTP、共享服务、多租户或 OAuth。出现真实需求后单独设计。
-12. 所有实现只在当前根仓库进行；`.worktrees` 中的实验代码只能作为只读参考，不作为实施目录或直接覆盖来源。
+12. 第一版不提供远程 Streamable HTTP、共享服务、多租户或 OAuth。出现真实需求后单独设计。
+13. 所有实现只在当前根仓库进行；`.worktrees` 中的实验代码只能作为只读参考，不作为实施目录或直接覆盖来源。
+14. 0.3 实施计划因缺失 17 Tool、Source Query、Investigation、Observation 和 CausalChain 已失效；只能执行
+    2026-09-28 的替代计划，不允许在旧计划上叠加补丁。
 
 ## 影响
 
 - 根项目新增共享 Runtime 与 MCP Server 两个 Maven 模块，并增加官方 MCP Java SDK 依赖。
 - 模型正式入口从宿主专用 Custom Tool/CLI Adapter 转为标准 MCP Server。
 - `ada-core` 新增协调层；Case Management 新增跨进程锁、操作日志和状态投影支持。
+- `static-analysis` 新增有界 Source Query；`evidence-engine` 新增 Predicate、反证和因果链资格评估。
 - MCP 使用新的协调结果契约；历史 Artifact 和 CLI `ToolResponse 2.0` 保持可读。
 - `algorithm-debug-cli` 不再是模型正常调用链的一部分，但继续提供管理和诊断价值。
 - Agent 的角色与 Prompt 从 OpenCode 专用文件迁移为 Canonical Agent Definition；宿主资产由其生成或引用。
@@ -95,6 +103,12 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 6. 先写失败测试，再实现契约、Coordinator、MCP Server 和 Adapter。
 7. 每阶段执行受影响模块测试；跨模块契约完成后执行根项目 `mvn test`。
 8. Qwen 和第二宿主使用相同 MCP Tool Catalog、Agent Definition 和 Eval Suite。
+
+## 批准记录
+
+2026-09-28，用户批准设计 0.4、详细实施计划，并明确选择在当前根仓库原生执行。MCP SDK 2.0.1 两个锁定坐标已
+完成在线与离线解析验证，许可证为 MIT；Qwen CLI 0.20.0 的 Extension、stdio MCP 与 `agents/*.md` 子 Agent
+契约已经本机验证。DeepSeek Harness 的真实契约尚不可得，因此只阻塞第二宿主门禁，不授权推测实现。
 
 ## 回滚条件
 

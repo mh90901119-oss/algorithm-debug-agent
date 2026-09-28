@@ -1,9 +1,10 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
-- 文档状态：Review
+- 文档状态：Approved
 - 设计版本：0.4
 - 创建日期：2026-09-25
 - 最后修订：2026-09-27
+- 批准日期：2026-09-28
 - 负责人：Algorithm Debug Agent Team
 - 目标里程碑：MCP-native portable evidence-constrained subagent
 - 关联需求：将 Algorithm Debug Agent 从宿主专用工具集合重构为可被 Qwen CLI、DeepSeek Harness 等编程工具注册的统一子 Agent
@@ -1535,7 +1536,8 @@ MCP stdout 只有协议帧。
 
 ## 20. 实现完成记录
 
-本文状态为 `Review`，尚未进入生产代码实施。实现完成后记录：
+本文于 2026-09-28 经用户批准，并选择按
+`docs/superpowers/plans/2026-09-28-evidence-constrained-portable-mcp-subagent.md` 在当前根仓库原生执行。实现完成后记录：
 
 - 实际变更和提交；
 - 相对设计的偏差及批准记录；
@@ -1554,3 +1556,4 @@ MCP stdout 只有协议帧。
 | 2026-09-25 | 0.2 | 自审修订：明确控制产物路径、追加式 operation 终态、配置兼容、CLI 适配边界和精确测试文件 | Codex |
 | 2026-09-25 | 0.3 | 实施计划修订：新增共享 `algorithm-debug-runtime` 组合根，消除 CLI/MCP 具体工具装配重复 | Codex |
 | 2026-09-27 | 0.4 | 最终审计修订：知识可选；新增必需 Source Query、追加调查账本、结构化三值观测、反证和因果链门禁；冻结 17 个基线 Tool、测试先行、质量规范、收敛 Eval 与完整审计要求 | Codex |
+| 2026-09-28 | 0.4 | 用户批准设计与替代实施计划，并选择当前根仓库原生执行；设计状态转为 Approved | User / Codex |

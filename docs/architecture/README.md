@@ -8,6 +8,8 @@
 4. [工具验证基线](tool-validation-baseline.md)
 5. [当前实现设计](../designs/2026-09-01-input-first-causal-evidence-and-conditional-jdwp-design.md)
 6. [最终实施审计](../audits/2026-09-01-input-first-conditional-runtime-evidence-final-audit.md)
+7. [可移植 MCP 子 Agent 与证据约束调查运行时设计 0.4](../designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md)
+8. [证据约束 MCP 实施基线](../development/evidence-constrained-mcp-implementation-baseline.md)
 
 ## 核心决策
 
@@ -20,5 +22,7 @@
 - [ADR-013：Case 内 DFX 日志](../decisions/ADR-013-case-local-dfx-interaction-log.md)
 - [ADR-014：Agent 自维护 JDWP Collector](../decisions/ADR-014-agent-owned-jdwp-collector.md)
 - [ADR-015：删除 Context，运行时基线收敛到 Analysis](../decisions/ADR-015-remove-context-and-scope-runtime-baseline-to-analysis.md)
+- [ADR-018：Java 原生 MCP 可移植子 Agent](../decisions/ADR-018-java-native-mcp-portable-subagent.md)
 
-若历史 ADR 的背景描述与当前代码不同，以其后续 ADR、当前实现设计和代码为准；不得恢复已删除的阶段性设计文件。
+当前正在实施设计 0.4 与 ADR-018。若历史 ADR 的背景描述与当前代码不同，以其后续 ADR、已批准的当前设计和代码
+为准；不得恢复已删除的阶段性设计文件或 0.3 实施计划。

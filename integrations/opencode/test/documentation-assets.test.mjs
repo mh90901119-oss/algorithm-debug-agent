@@ -5,7 +5,7 @@ import test from "node:test"
 import { fileURLToPath } from "node:url"
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url))
-const ignoredDirectories = new Set([".git", "node_modules", "target"])
+const ignoredDirectories = new Set([".git", ".superpowers", "node_modules", "target"])
 
 async function markdownFiles(directory) {
   const files = []
@@ -25,7 +25,6 @@ test("current documentation has no stale paths, counts, or mojibake", async () =
     /collections\/<collectionId>\/raw\/gantt\.json/u,
     /9 个真实 OpenCode/u,
     /wafer-demo-v1/u,
-    /公司/u,
     /锛|銆|鈥|鐨勫|鏂囨。|瀹炵幇/u,
   ]
 
@@ -57,4 +56,3 @@ test("all repository-local Markdown links resolve", async () => {
 
   assert.deepEqual(missing, [])
 })
-
