@@ -81,6 +81,13 @@ public final class AnalysisCoordinator {
         return execute(request, ActionCancellation.active());
     }
 
+    /** @return Registry 当前按名称稳定排序的完整动作集合 */
+    public List<AnalysisActionType> registeredActionTypes() {
+        return registry.bindings().stream()
+                .map(AnalysisActionBinding::actionType)
+                .toList();
+    }
+
     /**
      * 执行一次动作；所有写操作和目标执行都不可绕过 Policy、幂等日志和后置校验。
      *
@@ -107,6 +114,11 @@ public final class AnalysisCoordinator {
         ActionDecision authorization = policies.authorize(binding, before, request);
         archiveDecision(inputHash, authorization);
         if (authorization.decision() == ActionDecisionCode.REJECTED) {
+            CoordinatedToolResult<?> replay = replayRejectedSideEffectIfPresent(
+                    binding, request, inputHash, before);
+            if (replay != null) {
+                return replay;
+            }
             return results.rejected(authorization, before);
         }
 
@@ -153,6 +165,25 @@ public final class AnalysisCoordinator {
             return executeClaimed(
                     binding, request, payload, cancellation, inputHash, context, lockedBefore);
         }
+    }
+
+    private <I, O> CoordinatedToolResult<?> replayRejectedSideEffectIfPresent(
+            AnalysisActionBinding<I, O> binding,
+            AnalysisActionRequest<I> request,
+            String inputHash,
+            AnalysisControlView before) {
+        if (binding.sideEffect() == ActionSideEffect.READ_ONLY
+                || request.operationId().isEmpty()) {
+            return null;
+        }
+        OperationIdempotencyService.Context context =
+                new OperationIdempotencyService.Context(
+                        request.operationId().orElseThrow(), request.identity(),
+                        request.actionType(), inputHash);
+        OperationIdempotencyService.Inspection inspection = inspectOperation(context);
+        return inspection.status() == OperationIdempotencyService.Status.AVAILABLE
+                ? null
+                : results.idempotency(inspection, before, request.actionType());
     }
 
     private <I, O> CoordinatedToolResult<?> executeReadOnly(

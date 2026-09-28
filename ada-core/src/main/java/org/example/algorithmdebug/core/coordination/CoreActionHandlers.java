@@ -27,7 +27,6 @@ import org.example.algorithmdebug.core.ArtifactBackedResult;
 import org.example.algorithmdebug.core.CaseApplicationService;
 import org.example.algorithmdebug.core.CodePathPlanSummary;
 import org.example.algorithmdebug.core.CollectionApplicationService;
-import org.example.algorithmdebug.core.InvestigationApplicationService;
 import org.example.algorithmdebug.core.JdwpCollectionApplicationService;
 import org.example.algorithmdebug.core.JdwpPlanSummary;
 import org.example.algorithmdebug.core.MultiArtifactBackedResult;
@@ -258,7 +257,7 @@ public final class CoreActionHandlers {
                         input.targetMethodKey(), input.sourceAnchor(), input.symbol(),
                         input.budget()),
                 (target, input, cancellation) -> services.investigations().update(
-                        input.command()),
+                        target, input.command()),
                 (target, input, cancellation) -> services.staticAnalysis().createCodePathPlan(
                         services.workspace(target), target.projectId(), target.caseId(),
                         target.analysisId(), input.request()),
@@ -294,7 +293,7 @@ public final class CoreActionHandlers {
             StaticAnalysisApplicationService staticAnalysis,
             CollectionApplicationService collections,
             JdwpCollectionApplicationService jdwpCollections,
-            InvestigationApplicationService investigations,
+            InvestigationAction investigations,
             AnalysisCoordinator.StateSource stateSource,
             ConclusionAction conclusionAction) {
         public ServiceBindings {
@@ -321,6 +320,14 @@ public final class CoreActionHandlers {
     @FunctionalInterface
     public interface ConclusionAction {
         ConclusionDecision evaluate(ConclusionCandidate candidate);
+    }
+
+    /** 由 Runtime 按 ActionTarget.projectId 路由 Investigation Ledger。 */
+    @FunctionalInterface
+    public interface InvestigationAction {
+        InvestigationState update(
+                org.example.algorithmdebug.contracts.coordination.ActionTarget target,
+                org.example.algorithmdebug.contracts.investigation.InvestigationUpdateCommand command);
     }
 
     private static <I, O> AnalysisActionBinding<I, O> binding(

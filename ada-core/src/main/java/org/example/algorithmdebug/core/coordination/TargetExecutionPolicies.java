@@ -95,6 +95,9 @@ public final class TargetExecutionPolicies {
         if (initialized != null) {
             return initialized;
         }
+        if (!prerequisites.actionAvailable(request.actionType())) {
+            return CoordinationErrorCode.COORDINATION_PREREQUISITE_MISSING;
+        }
         if (request.operationId().isEmpty()) {
             return CoordinationErrorCode.ACTION_OPERATION_ID_REQUIRED;
         }

@@ -94,6 +94,31 @@ class AnalysisCoordinatorTest {
     }
 
     @Test
+    void projectedAllowedActionsCannotBeBypassedByAnAllowingPolicy() {
+        AtomicInteger handlerCalls = new AtomicInteger();
+        AnalysisActionBinding<String, String> binding = binding(
+                AnalysisActionType.STATIC_ANALYZE,
+                ActionSideEffect.CASE_WRITE,
+                policy(true, true),
+                (target, input, cancellation) -> {
+                    handlerCalls.incrementAndGet();
+                    return input;
+                });
+
+        CoordinatedToolResult<?> result = coordinator(
+                binding, ignored -> control(1), noLockManager()).execute(
+                        request(AnalysisActionType.STATIC_ANALYZE,
+                                "operation-not-projected", "input"));
+
+        assertEquals(ActionOutcome.REJECTED, result.outcome());
+        assertEquals(
+                CoordinationErrorCode.COORDINATION_ACTION_NOT_ALLOWED.name(), result.code());
+        assertEquals(0, handlerCalls.get());
+        assertTrue(journal.findState(
+                IDENTITY, new OperationId("operation-not-projected")).isEmpty());
+    }
+
+    @Test
     void sideEffectActionWithoutOperationIdIsRejectedBeforeExecution() {
         AtomicInteger handlerCalls = new AtomicInteger();
         AnalysisActionBinding<String, String> binding = binding(
@@ -179,7 +204,7 @@ class AnalysisCoordinatorTest {
                 });
 
         CoordinatedToolResult<?> result = coordinator(
-                binding, ignored -> control(1), locks).execute(
+                binding, ignored -> controlWithout(1, AnalysisActionType.RUN_TEST), locks).execute(
                         request(AnalysisActionType.RUN_TEST, "operation-completed", "input"));
 
         assertEquals(ActionOutcome.SUCCEEDED, result.outcome());
@@ -517,6 +542,24 @@ class AnalysisCoordinatorTest {
                 List.of(CoordinationErrorCode.COORDINATION_STATE_INVALID),
                 List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
                 List.of(AnalysisActionType.CASE_INSPECT, AnalysisActionType.ANALYSIS_STATUS),
+                ConclusionStatus.MISSING_EVIDENCE);
+    }
+
+    private static AnalysisControlView controlWithout(
+            long revision, AnalysisActionType excludedAction) {
+        List<AnalysisActionType> allowed = control(revision).allowedActions().stream()
+                .filter(action -> action != excludedAction)
+                .toList();
+        return new AnalysisControlView(
+                SchemaVersions.ANALYSIS_CONTROL_VIEW,
+                CoordinationPolicyVersions.CURRENT,
+                IDENTITY,
+                revision,
+                AnalysisActionType.ANALYSIS_STATUS,
+                ActionDecisionCode.ALLOWED,
+                List.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
+                allowed,
                 ConclusionStatus.MISSING_EVIDENCE);
     }
 

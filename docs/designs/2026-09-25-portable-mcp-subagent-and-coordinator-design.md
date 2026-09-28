@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：1.1
+- 设计版本：1.3
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -235,6 +235,25 @@ Coordinator 或现有确定性模块完成。
 | `CodePathRuntimeFactory` | 组装 Collector、Classpath Resolver 与 Doctor Probe | toolchain/env | `ConfiguredCodePath` |
 | `JdwpRuntimeFactory` | 组装 Collector 配置、Coordinator、端口与 Doctor Probe | toolchain/env | `ConfiguredJdwp` |
 
+Runtime 以一个受信任的 `workspaceId -> workspaceRoot` 绑定服务整个 Workspace，而不是绑定某个 Project。
+`StateSource`、Operation Journal、Investigation Ledger、Decision Archive 和 Conclusion Archive 必须根据
+`AnalysisIdentity.projectId` 路由到 `projects/{projectId}/cases`；不得在 bootstrap 时把第一个 Project 的
+`casesRoot` 固化给全部 Action。Archive 路由为惰性读取：Runtime 创建本身不初始化 Workspace、不创建 Project，
+实际 Action 仍由既有 Workspace/Project 用例控制生命周期。
+
+`AnalysisArchiveReader` 只枚举有界的注册 Artifact 和控制文档，并通过 Analysis/Run/Plan/Collection/Evidence
+的 typed identity 关联 `AnalysisArtifactIndex`、Evidence eligibility、Source Query 和结论 Reference Catalog；
+不得扫描或解析 Raw Trace 来推导控制状态。Analysis manifest 与 Investigation Journal 同时不存在时生成 revision 0
+引导视图；只存在一侧、身份不一致或控制文档损坏时返回 fail-closed 视图。
+
+CodePath/JDWP Factory 返回非空的 typed capability status。能力缺失时，Registry 仍保持完整，但对应采集 Policy
+根据 status 确定性拒绝，Doctor/manifest 返回稳定原因码；不得以 `null` Service、漏注册 Action 或静默空 Collector
+表达降级。`RuntimeToolchain` 分别保存 Agent Java、目标 Java 和 Maven；所有目标 UT、CodePath 与 JDWP 进程均使用
+目标 Java，不能再次读取 Agent JVM 的 `java.home` 覆盖它。
+
+`AlgorithmDebugRuntime` 持有唯一 `AnalysisCoordinator` 实例、同一实例已绑定的 `ControlPlaneServices`、工具链、
+能力状态和受管资源。`close()` 逆序释放受管资源且幂等；CLI/MCP 只能复用该 Runtime，不能重新组装 Coordinator。
+
 `algorithm-debug-runtime` 不得依赖 `algorithm-debug-cli`、`algorithm-debug-mcp-server` 或任何宿主适配器。
 现有 `AdaMain` 中的组合代码迁移到该模块后删除，CLI 只做参数/输出适配。
 
@@ -301,6 +320,23 @@ Task 13 产出完整 Registry/Policy/Handler 组合能力，并为 `ControlPlane
 `coordinator()` 访问器；Task 14 的唯一 Runtime 组合根负责注入可信 Workspace 映射、按 Project 路由的 Archive
 端口、状态源、锁、幂等日志和结论 Reference Catalog。基础/旧式 Service 集合没有 coordinator 时，访问器必须明确
 失败，禁止退回直接模型入口。
+
+`ANALYSIS_BEGIN` 的 Coordinator 控制产物不得写入尚未原子发布的 Case/Analysis 目录。授权决策、Operation
+STARTED 和唯一终态统一写入 Project 级引导控制根：
+`projects/{projectId}/control/analysis-begins/cases/{caseId}/analyses/{analysisId}/...`。该根仍复用同一版本化
+`CoordinationDecisionArchive` 和 `OperationJournal` 契约，但与正式 Case Archive 物理隔离；因此既能在 Handler
+执行前完成幂等占位，又不会提前创建 `cases/{caseId}` 或 `analyses/{analysisId}`，破坏 Analysis staging 的原子目录
+发布。引导动作成功后控制记录保持追加只读，用于相同 operationId 的稳定回放，不迁移、不复制进正式 Analysis。
+除 `ANALYSIS_BEGIN` 外的所有动作仍按 `projectId` 写入正式 Project Case 根。路由必须使用完整 Operation Context
+或 ActionDecision 的 `requestedAction`，不得仅凭 Analysis identity 猜测归档位置。
+任何 Project 路由在读写前都必须验证不可变 `project.json` 注册记录与目录 `projectId` 一致；仅存在同名目录不构成
+有效 Project。引导控制根按路径段创建并使用 `NOFOLLOW_LINKS` 校验，不得穿过符号链接。Analysis 控制快照对
+Run、Collection、Evidence 和 Source Query 必须复用 `CaseArchiveRepository` 的 typed require/find 入口，不能把直接
+落盘但缺少不可变请求、Catalog 或身份校验的 JSON 当成可用证据。
+Coordinator 授权还必须检查投影视图的 `allowedActions`，具体 Action Policy 不能通过返回 `ALLOWED` 绕过状态机；
+结论 Handler 传给 `ConclusionGate` 的 finalize 视图也必须保留这一判断，不能无条件伪造为允许。
+若同一 operationId 与输入哈希已有终态，则即使动作因状态推进已不再允许，也只回放既有回执而绝不重新执行；
+状态拒绝只阻止新的 Operation，不能破坏已完成 Operation 的幂等读取。
 
 `SOURCE_QUERY` Action payload 只包含 mode、method/source/symbol 选择器和预算，不包含 `queryId` 或 Method Catalog
 Artifact。Core Handler 继续调用 Task 8 的 `querySource(...)`，由 Core 创建 queryId 并绑定当前 Method Catalog，
@@ -1690,3 +1726,5 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.9 | Task 11 实施前审计冻结 PlanBound/PLANNED 时序、typed EvidenceView 字段映射、Evaluation 状态转换和失败产物保留语义 | Codex |
 | 2026-09-28 | 1.0 | Task 12 实施前审计修正结论输入空悬：Candidate 内嵌有界 CausalChain，Decision 返回 allowedActions；冻结 Reference Catalog 校验与 candidate-first 单终态归档语义 | Codex |
 | 2026-09-28 | 1.1 | Task 13 实施前审计冻结 17 Action 唯一绑定、只读 prerequisite port、Analysis 引导态、Problem Frame 原子初始化、Core 生成 Source Query ID，以及 Task 13 绑定能力与 Task 14 唯一生产组合根的边界 | Codex |
+| 2026-09-28 | 1.2 | Task 14 实施前审计补齐多 Project Archive 路由、惰性引导态、注册 Artifact 控制快照、typed Collector capability、目标 Java 注入和 Runtime 幂等关闭，禁止把单个 Project 或 Agent Java 固化进共享组合根 | Codex |
+| 2026-09-28 | 1.3 | Task 14 组合审计修正 Analysis 引导写入顺序、Project 注册/符号链接边界、typed 控制文档读取、控制状态绕过和状态推进后的幂等回放：`ANALYSIS_BEGIN` 的决策/幂等日志进入独立 Project 级引导控制根；Coordinator 强制执行投影 `allowedActions`，同时允许已完成 Operation 只读回放 | Codex |

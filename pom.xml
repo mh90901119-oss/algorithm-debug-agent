@@ -37,6 +37,7 @@
         <module>trace-validator</module>
         <module>evidence-engine</module>
         <module>ada-core</module>
+        <module>algorithm-debug-runtime</module>
         <module>algorithm-debug-cli</module>
         <module>adapters/maven-junit-adapter</module>
         <module>integration-tests</module>

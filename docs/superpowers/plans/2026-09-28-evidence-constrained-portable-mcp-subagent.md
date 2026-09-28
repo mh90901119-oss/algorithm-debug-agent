@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.1；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.3；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -1040,8 +1040,30 @@ git commit -m "feat: register evidence-constrained analysis lifecycle"
 - Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeToolchainResolver.java`
 - Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/CodePathRuntimeFactory.java`
 - Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/JdwpRuntimeFactory.java`
+- Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeCapabilityStatus.java`
+- Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeBootstrapException.java`
+- Create: `algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime/RuntimeAnalysisArchiveRouter.java`
+- Create: `case-management/src/main/java/org/example/algorithmdebug/casecore/AnalysisArchiveSnapshot.java`
+- Create: `case-management/src/main/java/org/example/algorithmdebug/casecore/AnalysisArchiveReader.java`
+- Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveLayout.java`
+- Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/WorkspaceLayout.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/ControlPlaneServices.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionPrerequisites.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionHandlers.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/TargetExecutionPolicies.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/OperationIdempotencyService.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/WorkspaceExecutionLockManager.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinator.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisPolicyExecutor.java`
 - Create: `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/AlgorithmDebugRuntimeBootstrapTest.java`
 - Create: `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/RuntimeToolchainResolverTest.java`
+- Create: `algorithm-debug-runtime/src/test/java/org/example/algorithmdebug/runtime/RuntimeAnalysisArchiveRouterTest.java`
+- Create: `case-management/src/test/java/org/example/algorithmdebug/casecore/AnalysisArchiveReaderTest.java`
+- Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/WorkspaceLayoutTest.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/OperationIdempotencyServiceTest.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/AnalysisCoordinatorTest.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/PolicyTestFixtures.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/RunTestActionPolicyTest.java`
 
 **Interfaces:**
 - Produces: `AlgorithmDebugRuntime bootstrap(RuntimeBootstrapRequest)`；runtime 暴露唯一 `AnalysisCoordinator` 和 `close()`。
@@ -1055,6 +1077,12 @@ git commit -m "feat: register evidence-constrained analysis lifecycle"
 @Test void missingCollectorReturnsCapabilityFailureNotNullService() { }
 @Test void closeIsIdempotentAndReleasesManagedResources() { }
 @Test void runtimeModuleHasNoCliMcpOrHostAdapterDependency() { }
+@Test void routesStateAndJournalsByProjectIdentity() { }
+@Test void analysisBeginControlRecordsDoNotPrecreateTheCaseOrAnalysisDirectory() { }
+@Test void analysisBeginRequiresAnImmutableProjectRegistration() { }
+@Test void archiveSnapshotUsesTypedControlOwnershipAndNeverReadsRawTrace() { }
+@Test void archiveSnapshotRejectsSourceQueryWithoutItsImmutableRequest() { }
+@Test void targetExecutionsUseConfiguredTargetJava() { }
 ```
 
 - [ ] **Step 2: 运行 RED**
@@ -1067,7 +1095,7 @@ Expected: FAIL because module is absent.
 
 - [ ] **Step 3: 实现模块和 bootstrap**
 
-把 `AdaMain` 中 ServiceLoader、Maven/JDK、CodePath/JDWP、Doctor 和 Core 装配移动到 runtime。Factory 每个只负责一个 collector；缺失能力返回 typed capability status，不创建 null/空实现。
+把 `AdaMain` 中 ServiceLoader、Maven/JDK、CodePath/JDWP、Doctor 和 Core 装配移动到 runtime。Factory 每个只负责一个 collector；缺失能力返回 typed capability status，不创建 null/空实现。Runtime 固定 Workspace 映射但按 `projectId` 惰性路由 Archive；所有路由先验证不可变 Project 注册和非符号链接路径。`AnalysisArchiveReader` 只从有界注册 metadata 与经过 Repository 强校验的 typed 控制文档建立状态/结论目录。Operation Journal、Investigation、Decision、Conclusion 都使用相同 Project 路由。`ANALYSIS_BEGIN` 的 Decision 与 Operation Journal 写入 `projects/{projectId}/control/analysis-begins/cases`，不得在 Handler 原子发布前创建正式 Case/Analysis 目录；其他动作仍写正式 Project Case 根。`ControlPlaneServices` 显式接收 target Java，禁止目标进程退回 Agent Java。
 
 - [ ] **Step 4: 运行 GREEN 和依赖树检查**
 

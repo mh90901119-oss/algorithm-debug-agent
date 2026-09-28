@@ -32,6 +32,11 @@ final class AnalysisPolicyExecutor {
                     : before.reasonCodes().getFirst();
             return rejected(binding, request, before, reason);
         }
+        if (!before.allowedActions().contains(request.actionType())) {
+            return rejected(
+                    binding, request, before,
+                    CoordinationErrorCode.COORDINATION_ACTION_NOT_ALLOWED);
+        }
         if (binding.sideEffect() != ActionSideEffect.READ_ONLY
                 && request.operationId().isEmpty()) {
             return rejected(

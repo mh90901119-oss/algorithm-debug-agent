@@ -61,6 +61,7 @@ final class PolicyTestFixtures {
         AnalysisInitialization initialization = AnalysisInitialization.INITIALIZED;
         boolean inputCaptured = true;
         boolean methodCatalog = true;
+        boolean actionAvailable = true;
         final Set<String> codePathPlans = new HashSet<>();
         final Set<String> jdwpPlans = new HashSet<>();
 
@@ -84,6 +85,11 @@ final class PolicyTestFixtures {
                 AnalysisIdentity identity, PlanId planId, PlanKind planKind) {
             return (planKind == PlanKind.CODEPATH ? codePathPlans : jdwpPlans)
                     .contains(planId.value());
+        }
+
+        @Override
+        public boolean actionAvailable(AnalysisActionType actionType) {
+            return actionAvailable;
         }
     }
 }

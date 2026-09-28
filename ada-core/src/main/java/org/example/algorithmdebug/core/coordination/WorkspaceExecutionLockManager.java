@@ -1,6 +1,7 @@
 package org.example.algorithmdebug.core.coordination;
 
 import java.time.Duration;
+import java.nio.file.Path;
 import org.example.algorithmdebug.casecore.WorkspaceExecutionLock;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.coordination.ActionSideEffect;
@@ -29,6 +30,24 @@ public final class WorkspaceExecutionLockManager {
     public WorkspaceExecutionLockManager(
             WorkspaceExecutionLock lock, Duration acquireTimeout) {
         this(provider(lock), acquireTimeout);
+    }
+
+    /**
+     * 创建惰性的 Workspace Project 锁路由；bootstrap 不要求 projects 目录提前存在。
+     * 实际 TARGET_EXECUTION 时，Project 必须已由控制面注册。
+     */
+    public static WorkspaceExecutionLockManager lazyWorkspace(Path projectsRoot) {
+        if (projectsRoot == null) {
+            throw new IllegalArgumentException("projectsRoot must not be null");
+        }
+        Path normalized = projectsRoot.toAbsolutePath().normalize();
+        return new WorkspaceExecutionLockManager(
+                (projectId, timeout) -> {
+                    WorkspaceExecutionLock.Handle handle = new WorkspaceExecutionLock(normalized)
+                            .tryAcquire(projectId, timeout);
+                    return handle::close;
+                },
+                DEFAULT_ACQUIRE_TIMEOUT);
     }
 
     WorkspaceExecutionLockManager(LockProvider lockProvider, Duration acquireTimeout) {

@@ -17,11 +17,21 @@ import org.example.algorithmdebug.contracts.coordination.OperationReceipt;
 public final class OperationIdempotencyService {
     private static final Pattern SHA256_PATTERN = Pattern.compile("[0-9a-f]{64}");
 
-    private final OperationJournal journal;
+    private final JournalRouter journalRouter;
 
     /** @param journal 追加式操作日志 */
     public OperationIdempotencyService(OperationJournal journal) {
-        this.journal = requireNonNull(journal, "journal");
+        OperationJournal checked = requireNonNull(journal, "journal");
+        this.journalRouter = ignored -> checked;
+    }
+
+    /**
+     * 创建按 Analysis Project 路由的幂等服务。
+     *
+     * @param journalRouter 根据完整 Analysis identity 返回对应 Project 的 Journal
+     */
+    public OperationIdempotencyService(JournalRouter journalRouter) {
+        this.journalRouter = requireNonNull(journalRouter, "journalRouter");
     }
 
     /**
@@ -34,7 +44,8 @@ public final class OperationIdempotencyService {
         Context checked = requireNonNull(context, "context");
         final Optional<OperationJournal.State> optionalState;
         try {
-            optionalState = journal.findState(checked.identity(), checked.operationId());
+            optionalState = journal(checked).findState(
+                    checked.identity(), checked.operationId());
         } catch (WorkspaceException invalidJournal) {
             throw new IdempotencyFailure(
                     CoordinationErrorCode.OPERATION_JOURNAL_CONFLICT,
@@ -75,7 +86,7 @@ public final class OperationIdempotencyService {
             return current;
         }
         try {
-            journal.start(
+            journal(checked).start(
                     checked.identity(), checked.operationId(), checked.actionType(),
                     checked.inputSha256(), checkedStartedAt);
             return Inspection.started();
@@ -116,7 +127,7 @@ public final class OperationIdempotencyService {
                 checked.operationId(), checked.identity(), checked.actionType(),
                 ActionOutcome.SUCCEEDED, checked.inputSha256(), false,
                 requireNonNull(resultArtifactId, "resultArtifactId"), Optional.empty());
-        journal.complete(receipt, requireNonNull(completedAt, "completedAt"));
+        journal(checked).complete(receipt, requireNonNull(completedAt, "completedAt"));
         return receipt;
     }
 
@@ -136,7 +147,7 @@ public final class OperationIdempotencyService {
             throw new IllegalArgumentException("Use uncertain for OPERATION_UNCERTAIN");
         }
         OperationReceipt receipt = failedReceipt(checked, checkedCode);
-        journal.fail(receipt, requireNonNull(failedAt, "failedAt"));
+        journal(checked).fail(receipt, requireNonNull(failedAt, "failedAt"));
         return receipt;
     }
 
@@ -151,7 +162,7 @@ public final class OperationIdempotencyService {
         Context checked = requireNonNull(context, "context");
         OperationReceipt receipt = failedReceipt(
                 checked, CoordinationErrorCode.OPERATION_UNCERTAIN);
-        journal.markUncertain(receipt, requireNonNull(recordedAt, "recordedAt"));
+        journal(checked).markUncertain(receipt, requireNonNull(recordedAt, "recordedAt"));
         return receipt;
     }
 
@@ -169,6 +180,18 @@ public final class OperationIdempotencyService {
                 receipt.schemaVersion(), receipt.operationId(), receipt.identity(),
                 receipt.actionType(), receipt.outcome(), receipt.inputSha256(), true,
                 receipt.resultArtifactId(), receipt.errorCode());
+    }
+
+    private OperationJournal journal(Context context) {
+        return requireNonNull(
+                journalRouter.journal(context), "routed operation journal");
+    }
+
+    /** 根据完整操作上下文选择 Project 级 Operation Journal。 */
+    @FunctionalInterface
+    public interface JournalRouter {
+        /** @return 操作所属 Project 和动作阶段对应的非空 Journal */
+        OperationJournal journal(Context context);
     }
 
     /**

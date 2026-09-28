@@ -85,8 +85,43 @@ class OperationIdempotencyServiceTest {
                 conflict.errorCode().orElseThrow());
     }
 
+    @Test
+    void journalRouterUsesTheProjectFromEachAnalysisIdentity() throws Exception {
+        Path projectOne = temporaryDirectory.resolve("project-1-cases");
+        Path projectTwo = temporaryDirectory.resolve("project-2-cases");
+        Files.createDirectories(projectOne);
+        Files.createDirectories(projectTwo);
+        BoundedDocumentMapper mapper = new BoundedDocumentMapper();
+        AtomicDocumentWriter writer = new AtomicDocumentWriter();
+        OperationIdempotencyService routed = new OperationIdempotencyService(context ->
+                new OperationJournal(
+                        context.identity().projectId().value().equals("project-1")
+                                ? projectOne : projectTwo,
+                        mapper, writer));
+        OperationIdempotencyService.Context first = context(
+                IDENTITY, "operation-routed-1", INPUT_HASH);
+        AnalysisIdentity secondIdentity = new AnalysisIdentity(
+                new ProjectId("project-2"), new CaseId("case-2"),
+                new AnalysisId("analysis-2"));
+        OperationIdempotencyService.Context second = context(
+                secondIdentity, "operation-routed-2", INPUT_HASH);
+
+        routed.claim(first, NOW);
+        routed.claim(second, NOW);
+
+        assertTrue(Files.exists(projectOne.resolve(
+                "case-1/analyses/analysis-1/operations/operation-routed-1/started.json")));
+        assertTrue(Files.exists(projectTwo.resolve(
+                "case-2/analyses/analysis-2/operations/operation-routed-2/started.json")));
+    }
+
     private static OperationIdempotencyService.Context context(String operationId, String inputHash) {
+        return context(IDENTITY, operationId, inputHash);
+    }
+
+    private static OperationIdempotencyService.Context context(
+            AnalysisIdentity identity, String operationId, String inputHash) {
         return new OperationIdempotencyService.Context(
-                new OperationId(operationId), IDENTITY, AnalysisActionType.RUN_TEST, inputHash);
+                new OperationId(operationId), identity, AnalysisActionType.RUN_TEST, inputHash);
     }
 }

@@ -17,6 +17,9 @@ public interface CoreActionPrerequisites {
     /** 指定 Plan 是否存在、属于当前 Analysis 且类型匹配。 */
     boolean planAvailable(AnalysisIdentity identity, PlanId planId, PlanKind planKind);
 
+    /** 对应动作的本机工具能力是否可用；不得以 null Handler 表达能力缺失。 */
+    boolean actionAvailable(org.example.algorithmdebug.contracts.coordination.AnalysisActionType actionType);
+
     enum AnalysisInitialization { ABSENT, INITIALIZED, INVALID }
 
     enum PlanKind { CODEPATH, JDWP }

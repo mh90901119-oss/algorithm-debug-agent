@@ -32,5 +32,12 @@ class RunTestActionPolicyTest {
         assertEquals(ActionDecisionCode.REJECTED, missingInput.decision());
         assertEquals(ActionDecisionCode.REJECTED, missingOperation.decision());
         assertEquals(ActionDecisionCode.ALLOWED, allowed.decision());
+
+        prerequisites.actionAvailable = false;
+        assertEquals(ActionDecisionCode.REJECTED,
+                policy.authorize(
+                        PolicyTestFixtures.view(), PolicyTestFixtures.request(
+                                AnalysisActionType.RUN_TEST, CoreActionInputs.NoInput.INSTANCE,
+                                true, Optional.empty())).decision());
     }
 }

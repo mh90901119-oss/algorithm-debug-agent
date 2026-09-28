@@ -67,6 +67,20 @@ public final class WorkspaceLayout {
         return resolveWithinRoot(Path.of("projects", segment, "cases"));
     }
 
+    /**
+     * 返回 Analysis 引导动作的独立控制归档根。
+     *
+     * <p>该目录故意位于正式 Case 根之外，避免 Coordinator 在原子发布新 Case/Analysis 前占用目标目录。</p>
+     *
+     * @param projectId 不透明项目 ID
+     * @return Project 内的 Analysis Begin 控制 Case 根
+     */
+    public Path projectAnalysisBeginControlCases(ProjectId projectId) {
+        String segment = safeProjectSegment(projectId);
+        return resolveWithinRoot(Path.of(
+                "projects", segment, "control", "analysis-begins", "cases"));
+    }
+
     private Path resolveWithinRoot(Path relativePath) {
         if (relativePath.isAbsolute()) {
             throw new IllegalArgumentException("Workspace child path must be relative: " + relativePath);

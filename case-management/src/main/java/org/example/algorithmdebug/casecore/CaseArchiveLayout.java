@@ -148,10 +148,14 @@ public final class CaseArchiveLayout {
                 sequence + "-" + safeSegment(eventId, "eventId") + ".json");
     }
 
+    /** @return 指定 Analysis 的 Source Query 根目录。 */
+    public Path sourceQueriesRoot(AnalysisId analysisId) {
+        return child(analysisRoot(analysisId), "source-queries");
+    }
+
     /** @return 指定 Source Query 的追加式目录。 */
     public Path sourceQueryRoot(AnalysisId analysisId, SourceQueryId queryId) {
-        return child(child(analysisRoot(analysisId), "source-queries"),
-                safeSegment(queryId.value(), "queryId"));
+        return child(sourceQueriesRoot(analysisId), safeSegment(queryId.value(), "queryId"));
     }
 
     /** @return Source Query 请求文档。 */

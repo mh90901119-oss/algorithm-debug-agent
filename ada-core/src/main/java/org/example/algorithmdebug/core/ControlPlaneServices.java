@@ -95,7 +95,8 @@ public final class ControlPlaneServices {
             boolean windows) {
         return createInternal(
                 clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                null, null, null, null, null, null, null, List.of());
+                null, null, currentJavaExecutable(windows),
+                null, null, null, null, null, List.of());
     }
 
     /**
@@ -175,7 +176,8 @@ public final class ControlPlaneServices {
             throw new IllegalArgumentException("Full control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                List.copyOf(adapters), mavenExecutable, currentJavaExecutable(windows),
+                collector, classpathResolver,
                 null, null, null, List.of(toolProbe));
     }
 
@@ -217,12 +219,40 @@ public final class ControlPlaneServices {
             ToolDoctorProbe codePathProbe,
             ToolDoctorProbe jdwpProbe,
             AgentExecutionLog executionLog) {
+        return create(
+                clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, mavenExecutable, currentJavaExecutable(windows), collector,
+                classpathResolver, jdwpTool, jdwpExecutor, jdwpPorts,
+                codePathProbe, jdwpProbe, executionLog);
+    }
+
+    /** 共享 Runtime 显式注入目标 JVM，确保所有目标执行使用同一受信工具链。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter> adapters,
+            Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
+            ToolDoctorProbe codePathProbe,
+            ToolDoctorProbe jdwpProbe,
+            AgentExecutionLog executionLog) {
         if (jdwpTool == null || jdwpExecutor == null || jdwpPorts == null
-                || codePathProbe == null || jdwpProbe == null || executionLog == null) {
+                || codePathProbe == null || jdwpProbe == null || executionLog == null
+                || targetJavaExecutable == null) {
             throw new IllegalArgumentException("JDWP control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                List.copyOf(adapters), mavenExecutable,
+                targetJavaExecutable.toAbsolutePath().normalize(),
+                collector, classpathResolver,
                 jdwpTool, jdwpExecutor, jdwpPorts, List.of(codePathProbe, jdwpProbe), executionLog);
     }
 
@@ -234,6 +264,7 @@ public final class ControlPlaneServices {
             boolean windows,
             List<TargetProjectAdapter> adapters,
             Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
             MethodPathCollector methodPathCollector,
             TargetClasspathResolver classpathResolver,
             JdwpToolConfiguration jdwpTool,
@@ -241,7 +272,8 @@ public final class ControlPlaneServices {
             JdwpPortProvider jdwpPorts,
             List<ToolDoctorProbe> toolProbes) {
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                adapters, mavenExecutable, methodPathCollector, classpathResolver,
+                adapters, mavenExecutable, targetJavaExecutable,
+                methodPathCollector, classpathResolver,
                 jdwpTool, jdwpExecutor, jdwpPorts, toolProbes, AgentExecutionLog.disabled());
     }
 
@@ -253,6 +285,7 @@ public final class ControlPlaneServices {
             boolean windows,
             List<TargetProjectAdapter> adapters,
             Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
             MethodPathCollector methodPathCollector,
             TargetClasspathResolver classpathResolver,
             JdwpToolConfiguration jdwpTool,
@@ -261,7 +294,8 @@ public final class ControlPlaneServices {
             List<ToolDoctorProbe> toolProbes,
             AgentExecutionLog executionLog) {
         if (clock == null || javaFeatureSupplier == null || environment == null
-                || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null) {
+                || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null
+                || targetJavaExecutable == null) {
             throw new IllegalArgumentException("ControlPlaneServices dependencies must be valid");
         }
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
@@ -301,12 +335,12 @@ public final class ControlPlaneServices {
                     mavenExecutable, classpathResolver, executionLog);
             collections = new CollectionApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
-                    ids, clock, mavenExecutable, currentJavaExecutable(windows),
+                    ids, clock, mavenExecutable, targetJavaExecutable,
                     methodPathCollector, classpathResolver, executionLog);
             if (jdwpTool != null) {
                 jdwpCollections = new JdwpCollectionApplicationService(
                         new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
-                        ids, clock, mavenExecutable, currentJavaExecutable(windows), jdwpTool,
+                        ids, clock, mavenExecutable, targetJavaExecutable, jdwpTool,
                         jdwpExecutor, jdwpPorts, executionLog);
             }
         }
