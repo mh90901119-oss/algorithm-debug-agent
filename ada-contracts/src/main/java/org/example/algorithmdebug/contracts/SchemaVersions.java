@@ -94,6 +94,30 @@ public final class SchemaVersions {
     /** 证据充分性评估 Schema 版本。 */
     public static final String SUFFICIENCY_EVALUATION = "2.0";
 
+    /** 协调动作请求 Schema 版本。 */
+    public static final String ANALYSIS_ACTION_REQUEST = "1.0";
+
+    /** Analysis 确定性控制视图 Schema 版本。 */
+    public static final String ANALYSIS_CONTROL_VIEW = "1.0";
+
+    /** 动作授权决策 Schema 版本。 */
+    public static final String ACTION_DECISION = "1.0";
+
+    /** 证据义务 Schema 版本。 */
+    public static final String EVIDENCE_OBLIGATION = "1.0";
+
+    /** MCP 协调工具结果 Schema 版本。 */
+    public static final String COORDINATED_TOOL_RESULT = "1.0";
+
+    /** 幂等操作回执 Schema 版本。 */
+    public static final String OPERATION_RECEIPT = "1.0";
+
+    /** 结论候选 Schema 版本。 */
+    public static final String CONCLUSION_CANDIDATE = "1.0";
+
+    /** 结论门禁决策 Schema 版本。 */
+    public static final String CONCLUSION_DECISION = "1.0";
+
     private SchemaVersions() {
     }
 }

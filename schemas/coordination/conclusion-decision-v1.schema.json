@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/conclusion-decision-v1.schema.json",
+  "title": "ConclusionDecision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "policyVersion", "conclusionId", "identity", "evaluatedRevision",
+    "decision", "allowedStatus", "reasonCodes", "missingEvidence"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "policyVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "conclusionId": { "$ref": "#/$defs/opaqueId" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "evaluatedRevision": { "type": "integer", "minimum": 0 },
+    "decision": { "enum": ["ALLOWED", "REJECTED"] },
+    "allowedStatus": {
+      "enum": ["CONFIRMED", "BOUNDED_HYPOTHESIS", "MISSING_EVIDENCE"]
+    },
+    "reasonCodes": { "$ref": "#/$defs/errorCodes" },
+    "missingEvidence": { "$ref": "#/$defs/idList" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "ALLOWED" } } },
+      "then": {
+        "properties": {
+          "reasonCodes": { "maxItems": 0 },
+          "missingEvidence": { "maxItems": 0 }
+        }
+      },
+      "else": { "properties": { "reasonCodes": { "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "idList": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/opaqueId" }
+    },
+    "identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["projectId", "caseId", "analysisId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "errorCodes": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "COORDINATION_IDENTITY_MISMATCH", "COORDINATION_ACTION_NOT_ALLOWED",
+          "COORDINATION_STATE_INVALID", "COORDINATION_PREREQUISITE_MISSING",
+          "COORDINATION_POSTCONDITION_FAILED", "ACTION_OPERATION_ID_REQUIRED",
+          "TARGET_EXECUTION_BUSY", "OPERATION_IN_PROGRESS", "OPERATION_UNCERTAIN",
+          "OPERATION_JOURNAL_CONFLICT", "CONCLUSION_NOT_ELIGIBLE"
+        ]
+      }
+    }
+  }
+}

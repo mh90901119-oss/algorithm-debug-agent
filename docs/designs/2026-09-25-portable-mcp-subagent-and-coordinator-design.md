@@ -456,7 +456,7 @@ MCP 的结构化结果使用独立契约：
     "refutedHypothesisIds": ["H2"],
     "unevaluatedPredicateIds": [],
     "allowedActions": ["EVIDENCE_QUERY", "JDWP_PLAN_CREATE", "ANALYSIS_FINALIZE"],
-    "terminalEligibility": "HYPOTHESIS_ONLY"
+    "terminalEligibility": "BOUNDED_HYPOTHESIS"
   }
 }
 ```

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/evidence-obligation-v1.schema.json",
+  "title": "EvidenceObligation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "obligationId", "identity", "kind", "status", "description",
+    "referenceIds", "reasonCodes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "obligationId": { "$ref": "#/$defs/opaqueId" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "kind": {
+      "enum": [
+        "SYSTEM_PREREQUISITE", "ACTION_PRECONDITION", "ACTION_POSTCONDITION",
+        "INVESTIGATION_PREDICATE", "CONCLUSION_GATE"
+      ]
+    },
+    "status": { "enum": ["SATISFIED", "MISSING", "CONTRADICTED", "UNCHECKABLE"] },
+    "description": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "referenceIds": { "$ref": "#/$defs/idList" },
+    "reasonCodes": { "$ref": "#/$defs/errorCodes" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "SATISFIED" } } },
+      "then": { "properties": { "reasonCodes": { "maxItems": 0 } } },
+      "else": { "properties": { "reasonCodes": { "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "idList": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/opaqueId" }
+    },
+    "identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["projectId", "caseId", "analysisId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "errorCodes": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "COORDINATION_IDENTITY_MISMATCH", "COORDINATION_ACTION_NOT_ALLOWED",
+          "COORDINATION_STATE_INVALID", "COORDINATION_PREREQUISITE_MISSING",
+          "COORDINATION_POSTCONDITION_FAILED", "ACTION_OPERATION_ID_REQUIRED",
+          "TARGET_EXECUTION_BUSY", "OPERATION_IN_PROGRESS", "OPERATION_UNCERTAIN",
+          "OPERATION_JOURNAL_CONFLICT", "CONCLUSION_NOT_ELIGIBLE"
+        ]
+      }
+    }
+  }
+}
