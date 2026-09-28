@@ -28,11 +28,15 @@ import org.example.algorithmdebug.contracts.MethodPathSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,6 +46,10 @@ import java.util.stream.Stream;
 
 /** 原子创建并有界读取外部 Workspace 中的追加式 Case 归档。 */
 public final class CaseArchiveRepository {
+    private static final String SOURCE_QUERY_REQUEST_NOT_FOUND =
+            "SOURCE_QUERY_REQUEST_NOT_FOUND";
+    private static final String SOURCE_QUERY_RESULT_NOT_FOUND =
+            "SOURCE_QUERY_RESULT_NOT_FOUND";
 
     private final Path casesRoot;
     private final BoundedDocumentMapper mapper;
@@ -280,6 +288,134 @@ public final class CaseArchiveRepository {
             throw identityMismatch("MethodCatalog document identity does not match its path");
         }
         return value;
+    }
+
+    /** 为当前 Analysis 追加 Source Query 请求，并校验其 Method Catalog provenance。 */
+    public Path createSourceQueryRequest(SourceQueryRequest request) {
+        SourceQueryRequest checked = requireNonNull(request, "request");
+        validateSourceQueryRequest(checked);
+        CaseArchiveLayout archiveLayout = layout(checked.caseId());
+        return createP4Document(
+                archiveLayout.sourceQueryRequest(checked.analysisId(), checked.queryId()),
+                checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 读取并校验指定 Source Query 请求的路径身份。 */
+    public SourceQueryRequest requireSourceQueryRequest(
+            CaseId caseId, AnalysisId analysisId, SourceQueryId queryId) {
+        SourceQueryRequest value = requireDocument(
+                layout(caseId).sourceQueryRequest(analysisId, queryId),
+                SourceQueryRequest.class, SOURCE_QUERY_REQUEST_NOT_FOUND);
+        if (!caseId.equals(value.caseId())
+                || !analysisId.equals(value.analysisId())
+                || !queryId.equals(value.queryId())) {
+            throw identityMismatch("Source Query request identity does not match its path");
+        }
+        validateSourceQueryRequest(value);
+        return value;
+    }
+
+    private void validateSourceQueryRequest(SourceQueryRequest request) {
+        requireAnalysis(request.caseId(), request.analysisId());
+        requireMethodCatalog(request.caseId(), request.analysisId());
+        ArtifactReference registered = requireArtifactRegistration(
+                request.caseId(), request.methodCatalogArtifact().artifactId()).artifact();
+        if (!registered.equals(request.methodCatalogArtifact())) {
+            throw identityMismatch(
+                    "Source Query Method Catalog does not match its Artifact registration");
+        }
+        CaseArchiveLayout archiveLayout = layout(request.caseId());
+        String expectedCatalogPath = archiveLayout.caseRoot()
+                .relativize(archiveLayout.analysisMethodCatalog(request.analysisId()))
+                .toString().replace('\\', '/');
+        if (!expectedCatalogPath.equals(registered.relativePath())) {
+            throw identityMismatch(
+                    "Source Query does not reference the current Analysis Method Catalog");
+        }
+        new CaseArtifactAccess(casesRoot).requireVerifiedArtifact(request.caseId(), registered);
+    }
+
+    /** 为已有请求追加唯一 Source Query 结果；请求与结果语义不得漂移。 */
+    public Path createSourceQueryResult(SourceQueryResult result) {
+        SourceQueryResult checked = requireNonNull(result, "result");
+        SourceQueryRequest request = requireSourceQueryRequest(
+                checked.caseId(), checked.analysisId(), checked.queryId());
+        if (request.mode() != checked.mode()
+                || !request.methodCatalogArtifact().equals(checked.methodCatalogArtifact())) {
+            throw identityMismatch("Source Query result does not match its immutable request");
+        }
+        validateSourceQueryResultBudget(request, checked);
+        MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
+        validateSourceQueryResultCatalog(catalog, checked);
+        return createP4Document(
+                layout(checked.caseId()).sourceQueryResult(
+                        checked.analysisId(), checked.queryId()),
+                checked, BoundedDocumentMapper.MAX_JSON_ARTIFACT_BYTES);
+    }
+
+    /** 读取并校验指定 Source Query 结果的路径身份和请求身份。 */
+    public SourceQueryResult requireSourceQueryResult(
+            CaseId caseId, AnalysisId analysisId, SourceQueryId queryId) {
+        SourceQueryResult value = requireJsonArtifactDocument(
+                layout(caseId).sourceQueryResult(analysisId, queryId),
+                SourceQueryResult.class, SOURCE_QUERY_RESULT_NOT_FOUND);
+        if (!caseId.equals(value.caseId())
+                || !analysisId.equals(value.analysisId())
+                || !queryId.equals(value.queryId())) {
+            throw identityMismatch("Source Query result identity does not match its path");
+        }
+        SourceQueryRequest request = requireSourceQueryRequest(caseId, analysisId, queryId);
+        if (request.mode() != value.mode()
+                || !request.methodCatalogArtifact().equals(value.methodCatalogArtifact())) {
+            throw identityMismatch("Source Query result does not match its immutable request");
+        }
+        validateSourceQueryResultBudget(request, value);
+        validateSourceQueryResultCatalog(requireMethodCatalog(caseId, analysisId), value);
+        return value;
+    }
+
+    private static void validateSourceQueryResultBudget(
+            SourceQueryRequest request, SourceQueryResult result) {
+        boolean exceedsCounts = result.methods().size() > request.budget().maxMethods()
+                || result.edges().size() > request.budget().maxEdges()
+                || result.paths().size() > request.budget().maxPaths()
+                || result.paths().stream().anyMatch(
+                        path -> path.size() - 1 > request.budget().maxDepth());
+        long sourceLines = result.sourceWindows().stream()
+                .mapToLong(window -> (long) window.toLine() - window.fromLine() + 1L)
+                .sum();
+        long sourceBytes = result.sourceWindows().stream()
+                .mapToLong(window -> window.text().getBytes(StandardCharsets.UTF_8).length)
+                .sum();
+        if (exceedsCounts
+                || sourceLines > request.budget().maxSourceLines()
+                || sourceBytes > request.budget().maxResponseBytes()
+                || result.completedAt().isBefore(request.requestedAt())) {
+            throw identityMismatch("Source Query result exceeds or predates its immutable request");
+        }
+    }
+
+    private static void validateSourceQueryResultCatalog(
+            MethodCatalog catalog, SourceQueryResult result) {
+        var methodsByKey = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
+        catalog.entries().forEach(entry -> methodsByKey.put(entry.methodKey(), entry));
+        for (var method : result.methods()) {
+            if (!method.equals(methodsByKey.get(method.methodKey()))) {
+                throw identityMismatch(
+                        "Source Query result contains a method outside its Method Catalog");
+            }
+        }
+        var catalogEdges = new HashSet<>(catalog.edges());
+        if (!catalogEdges.containsAll(result.edges())) {
+            throw identityMismatch(
+                    "Source Query result contains an edge outside its Method Catalog");
+        }
+        for (List<String> path : result.paths()) {
+            if (path.stream().anyMatch(methodKey -> !methodsByKey.containsKey(methodKey))) {
+                throw identityMismatch(
+                        "Source Query result contains a path outside its Method Catalog");
+            }
+        }
     }
 
     /** 为已有 MethodCatalog 原子创建 CodePath 计划；计划 ID 不得覆盖。 */
@@ -927,6 +1063,19 @@ public final class CaseArchiveRepository {
         } catch (WorkspaceException failure) {
             throw new WorkspaceException(
                     "CASE_DOCUMENT_INVALID", "The archived Case document is invalid", failure);
+        }
+    }
+
+    private <T> T requireJsonArtifactDocument(
+            Path document, Class<T> type, String missingCode) {
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(missingCode, "The archived Case document does not exist");
+        }
+        try {
+            return mapper.readJsonArtifact(document, type);
+        } catch (WorkspaceException failure) {
+            throw new WorkspaceException(
+                    "CASE_DOCUMENT_INVALID", "The archived JSON Artifact is invalid", failure);
         }
     }
 

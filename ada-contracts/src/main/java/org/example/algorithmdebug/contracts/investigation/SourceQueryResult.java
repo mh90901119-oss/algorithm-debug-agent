@@ -94,7 +94,7 @@ public record SourceQueryResult(
                 throw new IllegalArgumentException("SourceWindow line range is invalid");
             }
             sourceSha256 = InvestigationContractChecks.sha256(sourceSha256, "sourceSha256");
-            text = InvestigationContractChecks.text(
+            text = InvestigationContractChecks.sourceText(
                     text, "text", SourceQueryLimits.MAX_RESPONSE_BYTES);
             if (text.getBytes(StandardCharsets.UTF_8).length > SourceQueryLimits.MAX_RESPONSE_BYTES) {
                 throw new IllegalArgumentException("text exceeds the UTF-8 byte budget");

@@ -144,6 +144,27 @@ class InvestigationSchemaTest {
     }
 
     @Test
+    void sourceWindowSchemaAcceptsCodeLayoutAndRejectsUnsafeControls() throws Exception {
+        Fixtures fixture = fixtures();
+        SourceQueryResult base = fixture.sourceResult();
+        SourceQueryResult withWindow = new SourceQueryResult(
+                base.schemaVersion(), base.queryId(), base.caseId(), base.analysisId(),
+                base.mode(), base.completeness(), base.methodCatalogArtifact(),
+                base.methods(), base.edges(), base.paths(),
+                List.of(new SourceQueryResult.SourceWindow(
+                        new SourceAnchor("a.b.C", "m", "()V",
+                                "src/main/java/a/b/C.java", 1, 2),
+                        1, 2, "a".repeat(64), "class C {\n\tvoid m() {}\n}")),
+                base.limitations(), base.truncated(), base.completedAt());
+        Path resultSchema = schema("source-query", "source-query-result-v1.schema.json");
+        ObjectNode valid = (ObjectNode) MAPPER.valueToTree(withWindow);
+
+        assertValid(resultSchema, MAPPER.writeValueAsString(valid));
+        ((ObjectNode) valid.path("sourceWindows").get(0)).put("text", "unsafe\u0000code");
+        assertInvalid(resultSchema, MAPPER.writeValueAsString(valid));
+    }
+
+    @Test
     void allInvestigationEventsRoundTripAndRejectUnknownFields() throws Exception {
         Fixtures fixture = fixtures();
         List<InvestigationEvent> events = List.of(

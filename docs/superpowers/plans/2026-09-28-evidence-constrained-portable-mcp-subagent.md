@@ -580,6 +580,7 @@ git commit -m "feat: coordinate all analysis actions"
 - Create: `static-analysis/src/main/java/org/example/algorithmdebug/staticanalysis/ReachablePathFinder.java`
 - Create: `static-analysis/src/main/java/org/example/algorithmdebug/staticanalysis/BoundedSourceWindowReader.java`
 - Create: `static-analysis/src/main/java/org/example/algorithmdebug/staticanalysis/SourceQueryService.java`
+- Create: `static-analysis/src/main/java/org/example/algorithmdebug/staticanalysis/SourceQueryException.java`
 - Create: `static-analysis/src/test/java/org/example/algorithmdebug/staticanalysis/ReachablePathFinderTest.java`
 - Create: `static-analysis/src/test/java/org/example/algorithmdebug/staticanalysis/BoundedSourceWindowReaderTest.java`
 - Create: `static-analysis/src/test/java/org/example/algorithmdebug/staticanalysis/SourceQueryServiceTest.java`
@@ -588,6 +589,14 @@ git commit -m "feat: coordinate all analysis actions"
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveLayout.java`
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveRepository.java`
 - Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/CaseArchiveRepositoryTest.java`
+- Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/OpaqueIdGenerator.java`
+- Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/OpaqueIdGeneratorTest.java`
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/investigation/InvestigationContractChecks.java`
+- Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/investigation/SourceQueryResult.java`
+- Modify: `ada-contracts/src/test/java/org/example/algorithmdebug/contracts/investigation/InvestigationContractsTest.java`
+- Modify: `ada-contracts/src/test/java/org/example/algorithmdebug/contracts/investigation/InvestigationSchemaTest.java`
+- Modify: `schemas/source-query/source-query-result-v1.schema.json`
+- Modify: `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md`
 
 **Interfaces:**
 - Produces: `SourceQueryResult query(MethodCatalog catalog, Path moduleRoot, SourceQueryRequest request)`。

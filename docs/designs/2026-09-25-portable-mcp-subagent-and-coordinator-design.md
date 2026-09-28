@@ -1,9 +1,9 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：0.5
+- 设计版本：0.6
 - 创建日期：2026-09-25
-- 最后修订：2026-09-27
+- 最后修订：2026-09-28
 - 批准日期：2026-09-28
 - 负责人：Algorithm Debug Agent Team
 - 目标里程碑：MCP-native portable evidence-constrained subagent
@@ -661,6 +661,16 @@ SEARCH_SYMBOL
 任意编码。默认预算和硬上限集中在 `SourceQueryLimits`，第一版值为：默认 20 个方法、50 条边、3 层深度、5 条路径、
 200 行源码和 64 KiB 响应；硬上限为 100 个方法、500 条边、8 层深度、20 条路径、500 行源码和 256 KiB 响应。
 这些值只在常量类和 Schema 单一来源中定义，设计实施时通过契约测试校验一致性。
+
+源码窗口按严格 UTF-8 字符流读取，只保存响应预算内的前缀并对完整源码文件计算 SHA-256；不得使用会先构造无界
+单行字符串的读取方式。`SourceWindow.text` 为源码专用文本契约，允许源码布局必需的 LF、CR 和 Tab，但继续拒绝
+NUL 等其他控制字符。相同调用方到相同被调用方的多个源码调用点在可达路径中只形成一条方法路径，调用边结果仍保留
+各自的 `sourceLine` 和 `CallResolutionKind`。
+
+Core 负责创建 `queryId`。请求在执行前以 `request.json` 追加归档并注册 Artifact；成功后再独立追加
+`result.json`。执行失败不得删除已归档请求。Repository 在写入和读取时都校验请求引用的是当前 Analysis 已注册且内容
+未变化的 Method Catalog，结果的方法、边和路径不得脱离该 Catalog；结果还必须逐项满足原请求的方法数、边数、深度、
+路径数、源码行数和 UTF-8 字节预算，不得只依赖 Result Schema 的全局硬上限。
 
 结果必须返回 `completeness`、`limitations` 和 `provenance`。静态关系只允许支持 `SOURCE_INFERENCE`；只有与
 CodePath/JDWP 的 `RUNTIME_OBSERVED` 证据关联后，才允许描述本次执行行为。
@@ -1564,3 +1574,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.4 | 用户批准设计与替代实施计划，并选择当前根仓库原生执行；设计状态转为 Approved | User / Codex |
 | 2026-09-28 | 0.5 | Task 7 实施审计修正唯一终态顺序：后置校验先于成功终态，避免校验失败后无法撤销成功回执和错误幂等回放 | Codex |
 | 2026-09-28 | 0.5 | Task 7 将 Policy 校验和 Tool Result 映射拆出为包内高内聚组件，并增加独立的执行失败/取消错误码，避免 Coordinator 膨胀和错误语义复用 | Codex |
+| 2026-09-28 | 0.6 | Task 8 实施审计明确 Source Query 的流式源码窗口、源码文本控制字符规则、重复调用点路径去重、Core 生成 queryId 及请求/结果追加归档与 Catalog 完整性校验 | Codex |

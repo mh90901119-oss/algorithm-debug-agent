@@ -17,6 +17,7 @@ import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
+import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.AnalysisId;
@@ -27,6 +28,12 @@ import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
+import org.example.algorithmdebug.contracts.SourceAnchor;
+import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanCompiler;
@@ -36,6 +43,10 @@ import org.example.algorithmdebug.staticanalysis.JavaSourceCallGraphAnalyzer;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisBudget;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisException;
 import org.example.algorithmdebug.staticanalysis.StaticAnalysisRequest;
+import org.example.algorithmdebug.staticanalysis.BoundedSourceWindowReader;
+import org.example.algorithmdebug.staticanalysis.ReachablePathFinder;
+import org.example.algorithmdebug.staticanalysis.SourceQueryException;
+import org.example.algorithmdebug.staticanalysis.SourceQueryService;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 import org.example.algorithmdebug.methodpath.MethodPathCollectionException;
@@ -43,6 +54,10 @@ import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 
 /** 编排静态方法目录、CodePath 计划和 JDWP 计划，并追加归档到同一 Case。 */
 public final class StaticAnalysisApplicationService {
+    private static final String SOURCE_QUERY_REQUEST_ARTIFACT_TYPE = "SOURCE_QUERY_REQUEST";
+    private static final String SOURCE_QUERY_RESULT_ARTIFACT_TYPE = "SOURCE_QUERY_RESULT";
+    private static final String SOURCE_QUERY_ERROR_PREFIX = "SOURCE_QUERY_";
+    private static final String SOURCE_QUERY_ARCHIVE_FAILED = "SOURCE_QUERY_ARCHIVE_FAILED";
     private final ProjectRegistrationRepository registrations;
     private final BoundedDocumentMapper mapper;
     private final AtomicDocumentWriter writer;
@@ -50,6 +65,8 @@ public final class StaticAnalysisApplicationService {
     private final CodePathPlanCompiler compiler;
     private final JdwpPlanCompiler jdwpCompiler;
     private final Clock clock;
+    private final OpaqueIdGenerator ids;
+    private final SourceQueryService sourceQueryService;
     private final AgentExecutionLog executionLog;
     private Optional<Path> mavenExecutable = Optional.empty();
     private Optional<TargetClasspathResolver> classpathResolver = Optional.empty();
@@ -62,7 +79,8 @@ public final class StaticAnalysisApplicationService {
             JavaSourceCallGraphAnalyzer analyzer,
             CodePathPlanCompiler compiler,
             Clock clock) {
-        this(registrations, mapper, writer, analyzer, compiler, clock, AgentExecutionLog.disabled());
+        this(registrations, mapper, writer, analyzer, compiler, clock,
+                new OpaqueIdGenerator(), AgentExecutionLog.disabled());
     }
 
     public StaticAnalysisApplicationService(
@@ -73,8 +91,22 @@ public final class StaticAnalysisApplicationService {
             CodePathPlanCompiler compiler,
             Clock clock,
             AgentExecutionLog executionLog) {
+        this(registrations, mapper, writer, analyzer, compiler, clock,
+                new OpaqueIdGenerator(), executionLog);
+    }
+
+    /** 注入可替换 ID 生成器，供可重复测试和共享运行时使用。 */
+    public StaticAnalysisApplicationService(
+            ProjectRegistrationRepository registrations,
+            BoundedDocumentMapper mapper,
+            AtomicDocumentWriter writer,
+            JavaSourceCallGraphAnalyzer analyzer,
+            CodePathPlanCompiler compiler,
+            Clock clock,
+            OpaqueIdGenerator ids,
+            AgentExecutionLog executionLog) {
         if (registrations == null || mapper == null || writer == null || analyzer == null
-                || compiler == null || clock == null || executionLog == null) {
+                || compiler == null || clock == null || ids == null || executionLog == null) {
             throw new IllegalArgumentException("StaticAnalysisApplicationService dependencies must not be null");
         }
         this.registrations = registrations;
@@ -84,6 +116,9 @@ public final class StaticAnalysisApplicationService {
         this.compiler = compiler;
         this.jdwpCompiler = new JdwpPlanCompiler();
         this.clock = clock;
+        this.ids = ids;
+        this.sourceQueryService = new SourceQueryService(
+                new BoundedSourceWindowReader(), new ReachablePathFinder(), clock);
         this.executionLog = executionLog;
     }
 
@@ -238,6 +273,105 @@ public final class StaticAnalysisApplicationService {
             throw new CaseRunException("JDWP_PLAN_COMPILATION_FAILED", "JDWP plan compilation failed", failure);
         } catch (WorkspaceException failure) {
             throw new CaseRunException("JDWP_PLAN_ARCHIVE_FAILED", "JDWP plan archival or catalog read failed", failure);
+        }
+    }
+
+    /**
+     * 使用当前 Analysis 的不可变 Method Catalog 执行并归档一次有界 Source Query。
+     *
+     * <p>queryId 由 Core 创建；请求先归档，失败时也保留审计轨迹，成功结果再独立追加。</p>
+     */
+    public SourceQueryExecution querySource(
+            Path workspaceRoot,
+            ProjectId projectId,
+            CaseId caseId,
+            AnalysisId analysisId,
+            SourceQueryMode mode,
+            Optional<String> methodKey,
+            Optional<String> targetMethodKey,
+            Optional<SourceAnchor> sourceAnchor,
+            Optional<String> symbol,
+            SourceQueryBudget budget) {
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, caseId).withAnalysis(analysisId);
+        executionLog.info(logContext, "StaticAnalysisApplicationService", "SOURCE_QUERY_STARTED",
+                "STARTED", "Source Query started");
+        try {
+            WorkspaceLayout workspace = WorkspaceLayout.of(workspaceRoot);
+            ProjectRegistration registration = requireRegistration(workspace, projectId);
+            CaseArchiveRepository archive = archive(workspace, projectId);
+            archive.requireAnalysis(caseId, analysisId);
+            if (!archive.requireCase(caseId).projectId().equals(projectId)) {
+                throw new CaseRunException(
+                        "CASE_PROJECT_MISMATCH", "Case does not belong to the specified Project");
+            }
+            MethodCatalog catalog = archive.requireMethodCatalog(caseId, analysisId);
+            ArtifactReference catalogArtifact = archive.requireArtifactRegistration(
+                    caseId, scopedArtifactId(analysisId.value() + "-method-catalog")).artifact();
+            SourceQueryRequest request = new SourceQueryRequest(
+                    SchemaVersions.SOURCE_QUERY_REQUEST,
+                    ids.newSourceQueryId(),
+                    caseId,
+                    analysisId,
+                    catalogArtifact,
+                    mode,
+                    methodKey,
+                    targetMethodKey,
+                    sourceAnchor,
+                    symbol,
+                    budget,
+                    clock.instant());
+            Path caseRoot = workspace.projectCases(projectId).resolve(caseId.value());
+            Path requestDocument = archive.createSourceQueryRequest(request);
+            ArtifactReference requestArtifact = describeArtifact(
+                    caseRoot,
+                    requestDocument,
+                    scopedArtifactId(analysisId.value() + "-source-query-"
+                            + request.queryId().value() + "-request"),
+                    SOURCE_QUERY_REQUEST_ARTIFACT_TYPE,
+                    SOURCE_QUERY_ERROR_PREFIX);
+            archive.registerArtifact(caseId, requestArtifact, clock.instant());
+
+            SourceQueryResult result = sourceQueryService.query(
+                    catalog, Path.of(registration.moduleRoot()), request);
+            Path resultDocument = archive.createSourceQueryResult(result);
+            ArtifactReference resultArtifact = describeArtifact(
+                    caseRoot,
+                    resultDocument,
+                    scopedArtifactId(analysisId.value() + "-source-query-"
+                            + request.queryId().value() + "-result"),
+                    SOURCE_QUERY_RESULT_ARTIFACT_TYPE,
+                    SOURCE_QUERY_ERROR_PREFIX);
+            archive.registerArtifact(caseId, resultArtifact, clock.instant());
+            executionLog.info(logContext, "StaticAnalysisApplicationService",
+                    "SOURCE_QUERY_COMPLETED", result.completeness().name(),
+                    "Source Query completed", Map.of(
+                            "queryId", result.queryId().value(),
+                            "mode", result.mode().name(),
+                            "methodCount", Integer.toString(result.methods().size()),
+                            "edgeCount", Integer.toString(result.edges().size()),
+                            "pathCount", Integer.toString(result.paths().size()),
+                            "truncated", Boolean.toString(result.truncated())));
+            return new SourceQueryExecution(result, requestArtifact, resultArtifact);
+        } catch (SourceQueryException failure) {
+            throw new CaseRunException(
+                    failure.code().name(), "Source Query execution failed", failure);
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(
+                    SOURCE_QUERY_ARCHIVE_FAILED, "Source Query archival or read failed", failure);
+        }
+    }
+
+    /** Source Query 结果以及请求/结果两个不可变 Artifact。 */
+    public record SourceQueryExecution(
+            SourceQueryResult result,
+            ArtifactReference requestArtifact,
+            ArtifactReference resultArtifact) {
+        /** 校验执行结果完整。 */
+        public SourceQueryExecution {
+            if (result == null || requestArtifact == null || resultArtifact == null) {
+                throw new IllegalArgumentException("Source Query execution must not contain null");
+            }
         }
     }
 

@@ -139,6 +139,18 @@ class InvestigationContractsTest {
                 SourceQueryBudget.defaults(), NOW));
     }
 
+    @Test
+    void sourceWindowAcceptsMultilineCodeButRejectsUnsafeControlCharacters() {
+        SourceQueryResult.SourceWindow window = new SourceQueryResult.SourceWindow(
+                anchor(), 10, 11, "a".repeat(InvestigationLimits.SHA256_HEX_LENGTH),
+                "if (ready) {\n\treturn;\n}");
+
+        assertEquals("if (ready) {\n\treturn;\n}", window.text());
+        assertThrows(IllegalArgumentException.class, () -> new SourceQueryResult.SourceWindow(
+                anchor(), 10, 10, "a".repeat(InvestigationLimits.SHA256_HEX_LENGTH),
+                "unsafe\u0000code"));
+    }
+
     private static HypothesisRecord hypothesis(HypothesisStatus status) {
         return new HypothesisRecord(
                 SchemaVersions.HYPOTHESIS_RECORD,

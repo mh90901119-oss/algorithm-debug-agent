@@ -15,6 +15,7 @@ import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
+import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
@@ -27,6 +28,9 @@ import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryCompleteness;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
@@ -99,6 +103,38 @@ class StaticAnalysisApplicationServiceTest {
                 result.artifact().relativePath());
         assertEquals("application/json", result.artifact().mediaType());
         assertEquals(Files.exists(module.resolve(result.artifact().relativePath())), false);
+    }
+
+    @Test
+    void sourceQueryCreatesIdentityArchivesBothDocumentsAndReturnsRegisteredArtifacts() {
+        ArtifactBackedResult<StaticAnalysisSummary> staticResult =
+                service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        String methodKey = archive().requireMethodCatalog(CASE_ID, ANALYSIS_ID)
+                .entries().getFirst().methodKey();
+        StaticAnalysisApplicationService deterministic = service(
+                new OpaqueIdGenerator(() -> "fixed"));
+
+        StaticAnalysisApplicationService.SourceQueryExecution execution =
+                deterministic.querySource(
+                        workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
+                        SourceQueryMode.METHOD, Optional.of(methodKey), Optional.empty(),
+                        Optional.empty(), Optional.empty(), SourceQueryBudget.defaults());
+
+        assertEquals("source-query-fixed", execution.result().queryId().value());
+        assertEquals(SourceQueryCompleteness.COMPLETE, execution.result().completeness());
+        assertEquals(staticResult.artifact(), execution.result().methodCatalogArtifact());
+        assertEquals("SOURCE_QUERY_REQUEST", execution.requestArtifact().artifactType());
+        assertEquals("SOURCE_QUERY_RESULT", execution.resultArtifact().artifactType());
+        assertEquals("analyses/analysis-1/source-queries/source-query-fixed/request.json",
+                execution.requestArtifact().relativePath());
+        assertEquals("analyses/analysis-1/source-queries/source-query-fixed/result.json",
+                execution.resultArtifact().relativePath());
+        assertEquals(execution.result(), archive().requireSourceQueryResult(
+                CASE_ID, ANALYSIS_ID, execution.result().queryId()));
+        assertEquals(execution.requestArtifact(), archive().requireArtifactRegistration(
+                CASE_ID, execution.requestArtifact().artifactId()).artifact());
+        assertEquals(execution.resultArtifact(), archive().requireArtifactRegistration(
+                CASE_ID, execution.resultArtifact().artifactId()).artifact());
     }
 
     @Test
@@ -238,12 +274,17 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     private StaticAnalysisApplicationService service() {
+        return service(new OpaqueIdGenerator());
+    }
+
+    private StaticAnalysisApplicationService service(OpaqueIdGenerator ids) {
         return new StaticAnalysisApplicationService(
                 new ProjectRegistrationRepository(
                         new BoundedDocumentMapper(), new AtomicDocumentWriter()),
                 new BoundedDocumentMapper(), new AtomicDocumentWriter(),
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), ids,
+                org.example.algorithmdebug.casecore.logging.AgentExecutionLog.disabled());
     }
 
     private CaseArchiveRepository archive() {

@@ -3,6 +3,7 @@ package org.example.algorithmdebug.casecore;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
+import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
@@ -28,13 +29,21 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryCompleteness;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.IntStream;
@@ -116,6 +125,72 @@ class CaseArchiveRepositoryTest {
                 WorkspaceException.class, () -> repository.createMethodCatalog(catalog)).code());
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
                 WorkspaceException.class, () -> repository.createCodePathPlan(plan)).code());
+    }
+
+    @Test
+    void shouldArchiveSourceQueryRequestAndResultOnceWithMatchingProvenance() throws Exception {
+        repository.createCase(manifest());
+        repository.createAnalysis(analysis());
+        Path catalogPath = repository.createMethodCatalog(methodCatalog());
+        ArtifactReference catalogArtifact = registerCatalog(catalogPath);
+        SourceQueryRequest request = sourceQueryRequest(catalogArtifact);
+        SourceQueryResult result = sourceQueryResult(request, SourceQueryMode.METHOD);
+
+        Path requestPath = repository.createSourceQueryRequest(request);
+        Path resultPath = repository.createSourceQueryResult(result);
+
+        assertEquals(request, repository.requireSourceQueryRequest(
+                CASE_ID, ANALYSIS_ID, request.queryId()));
+        assertEquals(result, repository.requireSourceQueryResult(
+                CASE_ID, ANALYSIS_ID, request.queryId()));
+        assertTrue(requestPath.endsWith(
+                "analyses/analysis-1/source-queries/query-1/request.json"));
+        assertTrue(resultPath.endsWith(
+                "analyses/analysis-1/source-queries/query-1/result.json"));
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class,
+                () -> repository.createSourceQueryRequest(request)).code());
+        assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
+                WorkspaceException.class,
+                () -> repository.createSourceQueryResult(result)).code());
+    }
+
+    @Test
+    void shouldRejectSourceQueryWithUnregisteredCatalogOrMismatchedResult() throws Exception {
+        repository.createCase(manifest());
+        repository.createAnalysis(analysis());
+        Path catalogPath = repository.createMethodCatalog(methodCatalog());
+        ArtifactReference catalogArtifact = registerCatalog(catalogPath);
+        ArtifactReference unregistered = new ArtifactReference(
+                "catalog-unregistered", "METHOD_CATALOG", catalogArtifact.relativePath(),
+                catalogArtifact.mediaType(), catalogArtifact.sha256(), catalogArtifact.sizeBytes());
+
+        WorkspaceException missingRegistration = assertThrows(
+                WorkspaceException.class,
+                () -> repository.createSourceQueryRequest(sourceQueryRequest(unregistered)));
+        assertEquals("CASE_ARTIFACT_NOT_REGISTERED", missingRegistration.code());
+
+        SourceQueryRequest request = sourceQueryRequest(catalogArtifact);
+        repository.createSourceQueryRequest(request);
+        WorkspaceException mismatch = assertThrows(
+                WorkspaceException.class,
+                () -> repository.createSourceQueryResult(
+                        sourceQueryResult(request, SourceQueryMode.CALLERS)));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", mismatch.code());
+
+        SourceQueryResult oversized = new SourceQueryResult(
+                SchemaVersions.SOURCE_QUERY_RESULT,
+                request.queryId(), request.caseId(), request.analysisId(), request.mode(),
+                SourceQueryCompleteness.COMPLETE, request.methodCatalogArtifact(),
+                List.of(methodCatalog().entries().getFirst()), List.of(), List.of(),
+                List.of(new SourceQueryResult.SourceWindow(
+                        methodCatalog().entries().getFirst().sourceAnchor(),
+                        1, 1, "a".repeat(64), "x".repeat(70_000))),
+                List.of(), false, TIME.plusSeconds(6));
+        WorkspaceException overBudget = assertThrows(
+                WorkspaceException.class,
+                () -> repository.createSourceQueryResult(oversized));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", overBudget.code());
     }
 
     @Test
@@ -359,6 +434,54 @@ class CaseArchiveRepositoryTest {
                 List.of(entry), List.of(), List.of(),
                 SnapshotCompleteness.COMPLETE,
                 1, 0, TIME.plusSeconds(3));
+    }
+
+    private ArtifactReference registerCatalog(Path catalogPath) throws Exception {
+        ArtifactReference artifact = new ArtifactReference(
+                "analysis-1-method-catalog", "METHOD_CATALOG",
+                repository.caseRoot(CASE_ID).relativize(catalogPath)
+                        .toString().replace('\\', '/'),
+                "application/json",
+                HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                        .digest(Files.readAllBytes(catalogPath))),
+                Files.size(catalogPath));
+        repository.registerArtifact(CASE_ID, artifact, TIME.plusSeconds(4));
+        return artifact;
+    }
+
+    private static SourceQueryRequest sourceQueryRequest(ArtifactReference catalogArtifact) {
+        return new SourceQueryRequest(
+                SchemaVersions.SOURCE_QUERY_REQUEST,
+                new SourceQueryId("query-1"),
+                CASE_ID,
+                ANALYSIS_ID,
+                catalogArtifact,
+                SourceQueryMode.METHOD,
+                Optional.of(methodCatalog().entries().getFirst().methodKey()),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                SourceQueryBudget.defaults(),
+                TIME.plusSeconds(5));
+    }
+
+    private static SourceQueryResult sourceQueryResult(
+            SourceQueryRequest request, SourceQueryMode mode) {
+        return new SourceQueryResult(
+                SchemaVersions.SOURCE_QUERY_RESULT,
+                request.queryId(),
+                request.caseId(),
+                request.analysisId(),
+                mode,
+                SourceQueryCompleteness.COMPLETE,
+                request.methodCatalogArtifact(),
+                List.of(methodCatalog().entries().getFirst()),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                false,
+                TIME.plusSeconds(6));
     }
 
     static CodePathCollectionPlan codePathPlan() {

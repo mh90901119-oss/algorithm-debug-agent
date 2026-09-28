@@ -45,6 +45,21 @@ final class InvestigationContractChecks {
         return value;
     }
 
+    static String sourceText(String value, String field, int maximumLength) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        if (value.length() > maximumLength) {
+            throw new IllegalArgumentException(field + " exceeds maximum length " + maximumLength);
+        }
+        if (value.codePoints().anyMatch(codePoint -> Character.isISOControl(codePoint)
+                && codePoint != '\n' && codePoint != '\r' && codePoint != '\t')) {
+            throw new IllegalArgumentException(
+                    field + " must not contain unsafe control characters");
+        }
+        return value;
+    }
+
     static String sha256(String value, String field) {
         String checked = text(value, field, InvestigationLimits.SHA256_HEX_LENGTH);
         if (!SHA256.matcher(checked).matches()) {
