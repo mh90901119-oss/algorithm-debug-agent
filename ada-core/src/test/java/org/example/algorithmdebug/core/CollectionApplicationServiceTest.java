@@ -192,7 +192,7 @@ class CollectionApplicationServiceTest {
 
         assertEquals("SUCCESS", result.summary().completion());
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
         assertEquals(
                 result.artifacts().stream().map(
                         org.example.algorithmdebug.contracts.ArtifactReference::relativePath).toList(),
@@ -214,6 +214,33 @@ class CollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer)).read(CASE_ID);
         assertEquals(List.of(result.summary()), digest.recentCollections());
         assertEquals(List.of(sufficiency), digest.recentEvidence());
+    }
+
+    @Test
+    void successfulCodePathWithoutRunTestRegistersPrimaryArtifact() throws Exception {
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}")));
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
+        assertFalse(result.summary().eligibility().baselineRequired());
+        assertTrue(result.summary().eligibility().confirmationEligible());
+        assertTrue(result.summary().primaryArtifactId().isPresent());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "METHOD_PATH_SUMMARY".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        var query = new org.example.algorithmdebug.casecore.RegisteredEvidenceQuery(archive()).query(
+                CASE_ID, result.summary().primaryArtifactId().orElseThrow(),
+                org.example.algorithmdebug.contracts.EvidenceQueryRequest.summary(65_536));
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceQueryOutcome.MATCHED,
+                query.outcome());
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE,
+                query.sourceCoverage());
     }
 
     @Test
@@ -278,7 +305,8 @@ class CollectionApplicationServiceTest {
 
         assertEquals("TARGET_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertFalse(result.artifacts().stream().anyMatch(reference ->
                 "GANTT_RAW".equals(reference.artifactType())));
     }
@@ -295,12 +323,12 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
         var baseline = mapper.readJson(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                         .resolve("case-1/collections/collection-fixed/validation/baseline-check.json"),
                 org.example.algorithmdebug.contracts.CollectionBaselineCheck.class);
-        assertTrue(baseline.evidenceUsable());
+        assertEquals(ComparisonOutcome.MATCHED, baseline.outcome());
     }
 
     @Test
@@ -314,7 +342,8 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
     }
 
     @Test
@@ -327,7 +356,7 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
     }
 
     @Test
@@ -337,7 +366,9 @@ class CollectionApplicationServiceTest {
                 CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}"), "", 0,
                 List.of())).executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(zeroHit.summary().evidenceUsable());
+        assertTrue(zeroHit.summary().eligibility().artifactReadable());
+        assertFalse(zeroHit.summary().eligibility().obligationSatisfied());
+        assertFalse(zeroHit.summary().eligibility().confirmationEligible());
         assertTrue(zeroHit.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(zeroHit.artifacts().stream().noneMatch(reference ->
@@ -356,7 +387,9 @@ class CollectionApplicationServiceTest {
                 CollectionCompletion.TRUNCATED, Optional.of("{\"schedule\":1}")))
                 .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().collectionComplete());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
@@ -385,7 +418,8 @@ class CollectionApplicationServiceTest {
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service(malformed)
                 .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertFalse(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "CODEPATH_RAW".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().anyMatch(reference ->

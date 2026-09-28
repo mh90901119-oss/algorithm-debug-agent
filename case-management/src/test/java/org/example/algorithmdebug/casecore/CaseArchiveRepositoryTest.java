@@ -18,6 +18,7 @@ import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
 import org.example.algorithmdebug.contracts.JdwpCollectionRecord;
 import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
 import org.example.algorithmdebug.contracts.CollectionId;
+import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.RunId;
@@ -251,6 +252,21 @@ class CaseArchiveRepositoryTest {
 
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", failure.code());
         assertEquals("为什么有空闲？", repository.requireCase(CASE_ID).initialQuestion());
+    }
+
+    @Test
+    void shouldNeverWriteLegacyCollectionExecutionSummary() {
+        CollectionExecutionSummary legacy = CollectionExecutionSummary.fromJson(
+                null, CASE_ID, ANALYSIS_ID, new RunId("run-legacy"),
+                new PlanId("plan-legacy"), new CollectionId("collection-legacy"),
+                "SUCCESS", org.example.algorithmdebug.contracts.ComparisonOutcome.NOT_COMPARED,
+                null, true, List.of("manifest.json"), List.of(), null, null, null,
+                null, null, null);
+
+        WorkspaceException failure = assertThrows(WorkspaceException.class,
+                () -> repository.createCollectionExecutionSummary(legacy));
+
+        assertEquals("COLLECTION_SUMMARY_VERSION_UNSUPPORTED", failure.code());
     }
 
 

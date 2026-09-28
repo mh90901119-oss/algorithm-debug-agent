@@ -636,11 +636,7 @@ public final class RegisteredEvidenceQuery {
             try {
                 CollectionExecutionSummary summary = repository.requireCollectionExecutionSummary(
                         caseId, new CollectionId(segments[index + 1]));
-                if (!summary.evidenceUsable()) return EvidenceSourceCoverage.PARTIAL;
-                return switch (summary.completion()) {
-                    case "SUCCESS", "TARGET_FAILED" -> EvidenceSourceCoverage.COMPLETE;
-                    default -> EvidenceSourceCoverage.PARTIAL;
-                };
+                return summary.sourceCoverage();
             } catch (RuntimeException ignored) {
                 return EvidenceSourceCoverage.UNKNOWN;
             }

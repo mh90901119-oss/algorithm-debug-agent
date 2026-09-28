@@ -502,6 +502,11 @@ public final class CaseArchiveRepository {
     /** 原子追加一次 Collection 的可恢复 Tool 摘要。 */
     public Path createCollectionExecutionSummary(CollectionExecutionSummary summary) {
         CollectionExecutionSummary checked = requireNonNull(summary, "summary");
+        if (!SchemaVersions.COLLECTION_EXECUTION_SUMMARY.equals(checked.schemaVersion())) {
+            throw new WorkspaceException(
+                    "COLLECTION_SUMMARY_VERSION_UNSUPPORTED",
+                    "Only CollectionExecutionSummary v3 may be archived by the current Writer");
+        }
         requireCollectionSummaryIdentity(checked);
         return createP4Document(
                 layout(checked.caseId()).collectionSummary(checked.collectionId()),
@@ -849,14 +854,23 @@ public final class CaseArchiveRepository {
             CollectionId collectionId,
             EvidenceId evidenceId,
             String collectorType) {
-        EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
-        boolean currentEvidence = request.collectionIds().contains(collectionId);
-        boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
-        if (!currentEvidence && !comparisonEvidence) {
-            throw identityMismatch("Derived artifact Collection is not selected by the Evidence request");
+        Path requestPath = layout(caseId).evidenceBuildRequest(evidenceId);
+        if (Files.exists(requestPath, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isRegularFile(requestPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw identityMismatch("Evidence request path is not a regular file");
         }
-        if (currentEvidence && !request.analysisId().equals(analysisId)) {
-            throw identityMismatch("Current Evidence Collection must belong to the request Analysis");
+        if (Files.isRegularFile(requestPath, LinkOption.NOFOLLOW_LINKS)) {
+            EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
+            boolean currentEvidence = request.collectionIds().contains(collectionId);
+            boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
+            if (!currentEvidence && !comparisonEvidence) {
+                throw identityMismatch(
+                        "Derived artifact Collection is not selected by the Evidence request");
+            }
+            if (currentEvidence && !request.analysisId().equals(analysisId)) {
+                throw identityMismatch(
+                        "Current Evidence Collection must belong to the request Analysis");
+            }
         }
         boolean matched;
         if ("CODEPATH".equals(collectorType)) {

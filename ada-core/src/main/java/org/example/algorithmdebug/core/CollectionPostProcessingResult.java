@@ -3,9 +3,13 @@ package org.example.algorithmdebug.core;
 import java.util.List;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 
-/** 一次 Collection 后处理的有界结果；失败与 Collector 完成状态相互独立。 */
+/**
+ * 一次 Collection 后处理的有界结果。
+ *
+ * <p>{@code artifactReadable} 只表达派生产物结构和完整性，不表达失败基线或最终确认资格。</p>
+ */
 record CollectionPostProcessingResult(
-        boolean confirmationUsable,
+        boolean artifactReadable,
         List<ArtifactReference> artifacts) {
 
     CollectionPostProcessingResult {

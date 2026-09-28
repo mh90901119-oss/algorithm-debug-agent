@@ -36,6 +36,7 @@ import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.evidence.EvidenceEligibilityEvaluator;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.HarnessException;
 import org.example.algorithmdebug.harness.JsonResultParser;
@@ -56,7 +57,7 @@ import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
-/** 缂栨帓涓€娆?CodePath 鍔ㄦ€侀噰闆嗐€丆ase 褰掓。鍜屾棤閲囬泦 Baseline 涓€鑷存€ф鏌ャ€?*/
+/** 编排单次 CodePath 动态采集、Case 归档、失败基线检查和证据资格计算。 */
 public final class CollectionApplicationService {
     private final ProjectRegistrationRepository registrations;
     private final BoundedDocumentMapper mapper;
@@ -70,7 +71,7 @@ public final class CollectionApplicationService {
     private final Path javaExecutable;
     private final AgentExecutionLog executionLog;
 
-    /** 娉ㄥ叆椤圭洰銆丄dapter銆両D銆佸伐鍏蜂笌澶栭儴杩涚▼閰嶇疆銆?*/
+    /** 注入项目、Adapter、ID、工具和外部进程配置。 */
     public CollectionApplicationService(
             ProjectRegistrationRepository registrations,
             BoundedDocumentMapper mapper,
@@ -112,7 +113,7 @@ public final class CollectionApplicationService {
         this.executionLog = executionLog;
     }
 
-    /** 姣忔璋冪敤鍒涘缓鏂扮殑 runId/collectionId锛屼笉鑷姩閲嶈瘯鎴栬鐩栥€?*/
+    /** 每次调用创建新的 runId/collectionId，不自动重试或覆盖历史采集。 */
     public MultiArtifactBackedResult<CollectionExecutionSummary> executeCodePath(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, PlanId planId) {
         AgentLogContext logContext = AgentLogContext.forCase(
@@ -192,7 +193,7 @@ public final class CollectionApplicationService {
                 : new CollectionPostProcessingResult(false, List.of());
         executionLog.info(logContext, "CollectionApplicationService",
                 "COLLECTION_POST_PROCESSING_COMPLETED",
-                postProcessing.confirmationUsable() ? "USABLE" : "PARTIAL",
+                postProcessing.artifactReadable() ? "READABLE" : "UNREADABLE",
                 "CodePath normalization, validation, and evidence processing completed");
         List<ArtifactReference> artifacts = new java.util.ArrayList<>(describeArtifacts(
                 caseRoot, collectionRoot, collectionId));
@@ -207,11 +208,15 @@ public final class CollectionApplicationService {
         boolean completeCoverage = (result.manifest().completion() == CollectionCompletion.SUCCESS
                 || result.manifest().completion() == CollectionCompletion.TARGET_FAILED)
                 && result.manifest().truncationReasons().isEmpty();
+        var eligibility = new EvidenceEligibilityEvaluator().evaluate(
+                new EvidenceEligibilityEvaluator.Context(
+                        postProcessing.artifactReadable(), completeCoverage,
+                        result.manifest().completion() == CollectionCompletion.TARGET_FAILED,
+                        baseline.outcome(), result.manifest().capturedEventCount() > 0));
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
+                SchemaVersions.COLLECTION_EXECUTION_SUMMARY,
                 caseId, plan.analysisId(), runId, planId, collectionId,
-                result.manifest().completion().name(), baseline.outcome(), isEvidenceUsable(
-                        result.manifest().completion(), result.manifest().capturedEventCount(), baseline)
-                        && postProcessing.confirmationUsable(),
+                result.manifest().completion().name(), baseline.outcome(), eligibility,
                 artifacts.stream().map(ArtifactReference::relativePath).toList(),
                 artifacts.stream().map(ArtifactReference::artifactId).toList(),
                 completeCoverage
@@ -236,19 +241,6 @@ public final class CollectionApplicationService {
         executionLog.info(logContext, "CollectionApplicationService", "COLLECTION_COMPLETED",
                 summary.completion(), "CodePath collection completed");
         return new MultiArtifactBackedResult<>(summary, artifacts);
-    }
-
-    static boolean isEvidenceUsable(
-            CollectionCompletion completion,
-            long retainedEventCount,
-            CollectionBaselineCheck baseline) {
-        if (completion == null || baseline == null || retainedEventCount < 0) {
-            throw new IllegalArgumentException("completion, retainedEventCount and baseline must be valid");
-        }
-        return baseline.evidenceUsable()
-                && retainedEventCount > 0
-                && (completion == CollectionCompletion.SUCCESS
-                        || completion == CollectionCompletion.TARGET_FAILED);
     }
 
     private static List<ArtifactReference> describeArtifacts(
@@ -457,19 +449,18 @@ public final class CollectionApplicationService {
             if (completion == org.example.algorithmdebug.methodpath.CollectionCompletion.TARGET_FAILED) {
                 return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
-            var reference = archive.findLatestCompletedRun(
-                    record.caseId(), record.analysisId());
-            if (reference.isEmpty()
-                    || reference.orElseThrow().testOutcome()
-                    != org.example.algorithmdebug.contracts.TestOutcome.PASSED) {
-                return incomparable(record,
-                        "No completed passing uninstrumented run exists for this Analysis");
-            }
+            Optional<RunId> referenceRunId = archive.findLatestCompletedRun(
+                            record.caseId(), record.analysisId())
+                    .filter(reference -> reference.testOutcome()
+                            == org.example.algorithmdebug.contracts.TestOutcome.PASSED)
+                    .map(org.example.algorithmdebug.contracts.RunOutcomeSummary::runId);
             return new CollectionBaselineCheck(
                 org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
-                    Optional.of(reference.orElseThrow().runId()), true,
-                    "Successful dynamic run; Gantt is not copied or used as an evidence gate",
+                    referenceRunId, false,
+                    referenceRunId.isPresent()
+                            ? "Successful dynamic run; reference Run retained for evidence correlation"
+                            : "Successful dynamic run; no uninstrumented reference Run is required",
                     clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "Dynamic result capture failed: "

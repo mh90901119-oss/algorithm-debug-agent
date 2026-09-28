@@ -17,6 +17,7 @@ import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.ArtifactReference;
+import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBaselineCheck;
 import org.example.algorithmdebug.contracts.CollectionValidation;
@@ -117,13 +118,10 @@ final class CollectionPostProcessingService {
                 plan.budget().maxBytes(), plan.budget().maxEvents(),
                 NormalizationBudget.defaults().maxHits());
         EvidenceId evidenceId = ids.newEvidenceId();
-        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
-                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
-                        "Collection has no completed uninstrumented reference run"));
-        EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.analysisId(),
-                evidenceRunId, collection.collectionId(), EvidenceDimension.METHOD_PATH, budget);
-        archive.createEvidenceRequest(request);
+        Optional<EvidenceBuildRequest> request = baseline.referenceRunId().map(runId -> request(
+                evidenceId, collection.caseId(), collection.analysisId(), runId,
+                collection.collectionId(), EvidenceDimension.METHOD_PATH, budget));
+        request.ifPresent(archive::createEvidenceRequest);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
         Path rawPath = layout.collectionRoot(collection.collectionId())
                 .resolve(collectorManifest.rawTrace()).normalize();
@@ -181,7 +179,8 @@ final class CollectionPostProcessingService {
         CollectionValidation validation = validator.validateMethodPath(new MethodPathValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath, queryArtifacts);
+        return complete(collection.caseId(), evidenceId, request, validation,
+                summaryReference, normalizationPath, queryArtifacts);
     }
 
     private CollectionPostProcessingResult doProcessJdwp(
@@ -193,13 +192,10 @@ final class CollectionPostProcessingService {
                 plan.budget().maxBytes(), plan.budget().maxEvents() + 2L,
                 plan.budget().maxEvents());
         EvidenceId evidenceId = ids.newEvidenceId();
-        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
-                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
-                        "Collection has no completed uninstrumented reference run"));
-        EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.analysisId(),
-                evidenceRunId, collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget);
-        archive.createEvidenceRequest(request);
+        Optional<EvidenceBuildRequest> request = baseline.referenceRunId().map(runId -> request(
+                evidenceId, collection.caseId(), collection.analysisId(), runId,
+                collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget));
+        request.ifPresent(archive::createEvidenceRequest);
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
         Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/jdwp.jsonl");
         ArtifactReference raw = describe(
@@ -230,64 +226,73 @@ final class CollectionPostProcessingService {
         CollectionValidation validation = validator.validateJdwp(new JdwpValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath, List.of());
+        return complete(collection.caseId(), evidenceId, request, validation,
+                summaryReference, normalizationPath, List.of());
     }
 
     private CollectionPostProcessingResult complete(
-            EvidenceBuildRequest request,
+            CaseId caseId,
+            EvidenceId evidenceId,
+            Optional<EvidenceBuildRequest> request,
             CollectionValidation validation,
             ArtifactReference summaryReference,
             Path normalizationPath,
             List<ArtifactReference> queryArtifacts) {
-        CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, request.caseId());
+        CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, caseId);
         Path validationPath = archive.createCollectionValidation(validation);
         ArtifactReference validationReference = describe(
-                request.caseId(), validationPath, request.evidenceId().value() + "-validation",
+                caseId, validationPath, evidenceId.value() + "-validation",
                 "COLLECTION_VALIDATION", "application/json");
-        var runOutcome = archive.findRunOutcome(request.caseId(), request.runId()).orElseThrow(() ->
+        ArrayList<ArtifactReference> result = new ArrayList<>();
+        result.addAll(queryArtifacts);
+        result.add(summaryReference);
+        result.add(describe(caseId, normalizationPath,
+                evidenceId.value() + "-normalization", "NORMALIZATION_MANIFEST",
+                "application/json"));
+        result.add(validationReference);
+        if (request.isEmpty()) {
+            return new CollectionPostProcessingResult(
+                    validation.status() != EvidenceValidationStatus.INVALID, result);
+        }
+
+        EvidenceBuildRequest buildRequest = request.orElseThrow();
+        var runOutcome = archive.findRunOutcome(caseId, buildRequest.runId()).orElseThrow(() ->
                 new CaseRunException("EVIDENCE_REFERENCE_RUN_INCOMPLETE",
                         "The uninstrumented Run referenced by Evidence is not completed"));
         ArtifactReference outcomeReference = describe(
-                request.caseId(), layout.runOutcome(request.runId()),
-                request.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
+                caseId, layout.runOutcome(buildRequest.runId()),
+                buildRequest.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
         Optional<RunResultFingerprint> fingerprint = archive.findLatestRunResultFingerprint(
-                        request.caseId(), request.analysisId())
-                .filter(value -> value.runId().equals(request.runId()));
+                        caseId, buildRequest.analysisId())
+                .filter(value -> value.runId().equals(buildRequest.runId()));
         Optional<ArtifactReference> fingerprintReference = fingerprint.map(value -> describe(
-                request.caseId(), layout.runResultFingerprint(value.runId()),
+                caseId, layout.runResultFingerprint(value.runId()),
                 value.runId().value() + "-fingerprint", "RUN_RESULT_FINGERPRINT",
                 "application/json"));
         var sources = new EvidenceBuildSources(
                 runOutcome, outcomeReference,
                 fingerprint, fingerprintReference,
                 List.of(new ValidatedCollectionSource(validation, validationReference)));
-        var bundle = new EvidenceBundleBuilder().build(request, sources);
+        var bundle = new EvidenceBundleBuilder().build(buildRequest, sources);
         Path bundlePath = archive.createEvidenceBundle(bundle);
-        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(request, bundle);
+        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(buildRequest, bundle);
         Path sufficiencyPath = archive.createSufficiencyEvaluation(sufficiency);
 
-        ArrayList<ArtifactReference> result = new ArrayList<>();
-        result.addAll(queryArtifacts);
-        result.add(describe(request.caseId(), layout.evidenceBuildRequest(request.evidenceId()),
-                request.evidenceId().value() + "-request", "EVIDENCE_BUILD_REQUEST",
+        result.add(describe(caseId, layout.evidenceBuildRequest(evidenceId),
+                evidenceId.value() + "-request", "EVIDENCE_BUILD_REQUEST",
                 "application/json"));
-        result.add(summaryReference);
-        result.add(describe(request.caseId(), normalizationPath,
-                request.evidenceId().value() + "-normalization", "NORMALIZATION_MANIFEST",
-                "application/json"));
-        result.add(validationReference);
-        result.add(describe(request.caseId(), bundlePath,
-                request.evidenceId().value() + "-bundle", "EVIDENCE_BUNDLE", "application/json"));
-        result.add(describe(request.caseId(), sufficiencyPath,
-                request.evidenceId().value() + "-sufficiency", "SUFFICIENCY_EVALUATION",
+        result.add(describe(caseId, bundlePath,
+                evidenceId.value() + "-bundle", "EVIDENCE_BUNDLE", "application/json"));
+        result.add(describe(caseId, sufficiencyPath,
+                evidenceId.value() + "-sufficiency", "SUFFICIENCY_EVALUATION",
                 "application/json"));
         return new CollectionPostProcessingResult(
-                validation.status() == EvidenceValidationStatus.VALID, result);
+                validation.status() != EvidenceValidationStatus.INVALID, result);
     }
 
     private EvidenceBuildRequest request(
             EvidenceId evidenceId,
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
@@ -346,7 +351,7 @@ final class CollectionPostProcessingService {
 
     private static NormalizationManifest normalizationManifest(
             EvidenceId evidenceId,
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.PlanId planId,
@@ -367,7 +372,7 @@ final class CollectionPostProcessingService {
     }
 
     private CollectionPostProcessingResult failed(
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
             RuntimeException failure) {
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, caseId);
@@ -395,7 +400,7 @@ final class CollectionPostProcessingService {
     }
 
     private ArtifactReference describe(
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             Path path,
             String id,
             String type,

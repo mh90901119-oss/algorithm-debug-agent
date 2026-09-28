@@ -34,4 +34,15 @@ public record CollectionBaselineCheck(
         summary = ContractChecks.requireBoundedText(summary, "summary", 2_048, false);
         checkedAt = ContractChecks.requireNonNull(checkedAt, "checkedAt");
     }
+
+    /**
+     * 历史 v2 字段，仅表示旧调用方记录的失败指纹匹配结果。
+     *
+     * <p>新生产代码必须使用 {@link ComparisonOutcome} 和 {@link EvidenceEligibility}，
+     * 不得用该值判断成功采集的可读性或确认资格。</p>
+     */
+    @Deprecated(forRemoval = false)
+    public boolean evidenceUsable() {
+        return evidenceUsable;
+    }
 }

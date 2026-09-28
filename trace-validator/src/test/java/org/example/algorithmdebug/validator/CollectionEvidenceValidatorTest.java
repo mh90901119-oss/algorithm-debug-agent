@@ -77,6 +77,17 @@ class CollectionEvidenceValidatorTest {
     }
 
     @Test
+    void successfulNotComparedBaselineIsValid() throws Exception {
+        Fixture fixture = fixture(NormalizationStatus.COMPLETE, ComparisonOutcome.NOT_COMPARED);
+
+        var validation = new CollectionEvidenceValidator().validateMethodPath(fixture.input());
+
+        assertEquals(EvidenceValidationStatus.VALID, validation.status());
+        assertTrue(validation.findings().stream().noneMatch(finding ->
+                "BASELINE_NOT_CONFIRMED".equals(finding.code())));
+    }
+
+    @Test
     void rawTamperIsInvalid() throws Exception {
         Fixture fixture = fixture(NormalizationStatus.COMPLETE, ComparisonOutcome.MATCHED);
         Files.writeString(fixture.rawPath(), "{\"eventId\":999}\n");

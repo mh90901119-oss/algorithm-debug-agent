@@ -70,6 +70,15 @@ public final class SchemaVersions {
     /** 动态采集与同 Analysis 普通 Run 的基线检查 Schema 版本。 */
     public static final String COLLECTION_BASELINE_CHECK = "2.0";
 
+    /** 动态证据正交资格 Schema 版本。 */
+    public static final String EVIDENCE_ELIGIBILITY = "1.0";
+
+    /** 面向模型的动态采集摘要 Schema 版本。 */
+    public static final String COLLECTION_EXECUTION_SUMMARY = "3.0";
+
+    /** 无显式版本和资格字段的历史动态采集摘要读取标识。 */
+    public static final String COLLECTION_EXECUTION_SUMMARY_LEGACY = "2.0";
+
     /** 通用 Trace 归一化清单 Schema 版本。 */
     public static final String NORMALIZATION_MANIFEST = "2.0";
     /** 通用方法路径摘要 Schema 版本。 */

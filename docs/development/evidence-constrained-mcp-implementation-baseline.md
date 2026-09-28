@@ -125,12 +125,16 @@ FAILURE_FINGERPRINT_MATCHES
 | CodePath Plan | 6.0 |
 | JDWP Plan | 5.0 |
 | Collection Baseline Check | 2.0 |
+| Evidence Eligibility | 1.0 |
+| Collection Execution Summary | 3.0 |
 | Method Path Summary | 5.0 |
 | JDWP Snapshot Summary | 4.0 |
 | Collection Validation | 2.0 |
 | Evidence Bundle / Sufficiency | 2.0 / 2.0 |
 
-目标版本为 CodePath Plan 7.0、JDWP Plan 6.0 和 Collection Execution Summary 3.0。旧 CodePath v6/JDWP v5
+目标版本为 CodePath Plan 7.0 和 JDWP Plan 6.0。Collection Execution Summary 3.0 已落地：新 Writer 只写
+`EvidenceEligibility`，历史 v2 的 `evidenceUsable` 只读为 `LEGACY_UNKNOWN`，不得自动取得确认资格。成功 UT 的
+Collection 不需要 reference Run；失败 UT 仍只有失败指纹 `MATCHED` 才能取得确认资格。旧 CodePath v6/JDWP v5
 只读兼容，必须投影为 `LEGACY_UNSTRUCTURED`，不能自动满足结构化调查义务。
 
 ## 6. Qwen CLI 真实宿主契约

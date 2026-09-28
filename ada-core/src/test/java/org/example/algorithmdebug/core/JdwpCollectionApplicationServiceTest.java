@@ -156,7 +156,7 @@ class JdwpCollectionApplicationServiceTest {
 
         assertEquals("SUCCESS", result.summary().completion());
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
         Set<String> types = result.artifacts().stream()
                 .map(reference -> reference.artifactType()).collect(Collectors.toSet());
         assertTrue(types.containsAll(Set.of(
@@ -174,6 +174,33 @@ class JdwpCollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
                         "case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
                 SufficiencyEvaluation.class).status());
+    }
+
+    @Test
+    void successfulJdwpWithoutRunTestRegistersPrimaryArtifact() throws Exception {
+        JdwpCollectionApplicationService service = service(
+                request -> successfulExecution(request, "{\"schedule\":1}", 201, 202));
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
+        assertFalse(result.summary().eligibility().baselineRequired());
+        assertTrue(result.summary().eligibility().confirmationEligible());
+        assertTrue(result.summary().primaryArtifactId().isPresent());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "JDWP_SNAPSHOT_SUMMARY".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        var query = new org.example.algorithmdebug.casecore.RegisteredEvidenceQuery(archive()).query(
+                CASE_ID, result.summary().primaryArtifactId().orElseThrow(),
+                org.example.algorithmdebug.contracts.EvidenceQueryRequest.summary(65_536));
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceQueryOutcome.MATCHED,
+                query.outcome());
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE,
+                query.sourceCoverage());
     }
 
     @Test
@@ -197,7 +224,9 @@ class JdwpCollectionApplicationServiceTest {
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service.execute(
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().collectionComplete());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
@@ -245,7 +274,9 @@ class JdwpCollectionApplicationServiceTest {
                         "case-1/evidence/evidence-fixed/evidence-bundle.json"),
                 org.example.algorithmdebug.contracts.EvidenceBundle.class);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().obligationSatisfied());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "JDWP_SNAPSHOT_SUMMARY".equals(reference.artifactType())));
         assertTrue(bundle.facts().stream().anyMatch(fact ->
@@ -264,7 +295,7 @@ class JdwpCollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
     }
 
     @Test
@@ -290,7 +321,8 @@ class JdwpCollectionApplicationServiceTest {
 
         assertEquals("TARGET_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertFalse(result.artifacts().stream().anyMatch(reference ->
                 "GANTT_RAW".equals(reference.artifactType())));
     }
@@ -320,7 +352,7 @@ class JdwpCollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
     }
 
     @Test
@@ -377,7 +409,8 @@ class JdwpCollectionApplicationServiceTest {
 
         assertEquals("TOOL_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertFalse(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "JDWP_MANIFEST".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().noneMatch(reference ->

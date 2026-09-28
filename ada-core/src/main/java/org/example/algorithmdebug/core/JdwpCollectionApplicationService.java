@@ -42,6 +42,7 @@ import org.example.algorithmdebug.contracts.RunId;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
+import org.example.algorithmdebug.evidence.EvidenceEligibilityEvaluator;
 import org.example.algorithmdebug.harness.CapturedScheduleResult;
 import org.example.algorithmdebug.harness.HarnessException;
 import org.example.algorithmdebug.harness.JsonResultParser;
@@ -61,8 +62,11 @@ import org.example.algorithmdebug.plan.CollectorDebugPlanWriter;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
-/** 缂栨帓涓€娆¤拷鍔犲紡 JDWP 閲囬泦銆佸師濮嬩骇鐗╁綊妗ｅ拰鏃犻噰闆?Baseline 涓€鑷存€ф鏌ャ€?*/
+/** 编排单次 JDWP 采集、原始产物归档、失败基线检查和证据资格计算。 */
 public final class JdwpCollectionApplicationService {
+    private static final String JDWP_SUMMARY_ARTIFACT_TYPE = "JDWP_SNAPSHOT_SUMMARY";
+    private static final String COLLECTION_TRUNCATED_REASON = "COLLECTION_TRUNCATED";
+    private static final String EVIDENCE_QUERY_TOOL = "evidence_query";
     private final ProjectRegistrationRepository registrations;
     private final BoundedDocumentMapper mapper;
     private final AtomicDocumentWriter writer;
@@ -77,7 +81,7 @@ public final class JdwpCollectionApplicationService {
     private final AgentExecutionLog executionLog;
     private final CollectorDebugPlanWriter collectorPlans = new CollectorDebugPlanWriter();
 
-    /** 娉ㄥ叆鍏ㄩ儴鏈哄櫒杈圭晫锛屼互渚跨‘瀹氭€ф祴璇曠鍙ｃ€佽繘绋嬪拰婧愮爜婕傜Щ鍒嗘敮銆?*/
+    /** 注入全部机器边界，以便确定性测试端口、进程和源码漂移分支。 */
     public JdwpCollectionApplicationService(
             ProjectRegistrationRepository registrations,
             BoundedDocumentMapper mapper,
@@ -127,7 +131,7 @@ public final class JdwpCollectionApplicationService {
         this.executionLog = executionLog;
     }
 
-    /** 姣忔璋冪敤鍒涘缓鏂扮殑 runId/collectionId锛屼笉瑕嗙洊鍚屼竴 Case 鐨勪换浣曞巻鍙查噰闆嗐€?*/
+    /** 每次调用创建新的 runId/collectionId，不覆盖同一 Case 的历史采集。 */
     public MultiArtifactBackedResult<CollectionExecutionSummary> execute(
             Path workspaceRoot, ProjectId projectId, CaseId caseId, PlanId planId) {
         AgentLogContext logContext = AgentLogContext.forCase(
@@ -263,21 +267,43 @@ public final class JdwpCollectionApplicationService {
                 : new CollectionPostProcessingResult(false, List.of());
         executionLog.info(logContext, "JdwpCollectionApplicationService",
                 "COLLECTION_POST_PROCESSING_COMPLETED",
-                postProcessing.confirmationUsable() ? "USABLE" : "PARTIAL",
+                postProcessing.artifactReadable() ? "READABLE" : "UNREADABLE",
                 "JDWP normalization, validation, and evidence processing completed");
         List<ArtifactReference> artifacts = new ArrayList<>(describeArtifacts(
                 caseRoot, collectionRoot, plan, collectionId));
         artifacts.addAll(postProcessing.artifacts());
         artifacts = List.copyOf(artifacts);
-        boolean usable = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
+        boolean completeCoverage = (manifest.completion() == JdwpCollectionCompletion.SUCCESS
                 || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
-                && manifest.eventCount() > 0 && !manifest.truncated()
-                && baseline.evidenceUsable() && postProcessing.confirmationUsable();
+                && !manifest.truncated();
+        long capturedHits = manifest.capturedHitCounts().values().stream()
+                .mapToLong(Integer::longValue).sum();
+        var eligibility = new EvidenceEligibilityEvaluator().evaluate(
+                new EvidenceEligibilityEvaluator.Context(
+                        postProcessing.artifactReadable(), completeCoverage,
+                        manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED,
+                        baseline.outcome(), capturedHits > 0));
+        Optional<String> primaryArtifactId = artifacts.stream()
+                .filter(artifact -> JDWP_SUMMARY_ARTIFACT_TYPE.equals(artifact.artifactType()))
+                .map(ArtifactReference::artifactId).findFirst();
         CollectionExecutionSummary summary = new CollectionExecutionSummary(
+                SchemaVersions.COLLECTION_EXECUTION_SUMMARY,
                 caseId, plan.analysisId(), runId, planId, collectionId,
-                manifest.completion().name(), baseline.outcome(), usable,
+                manifest.completion().name(), baseline.outcome(), eligibility,
                 artifacts.stream().map(ArtifactReference::relativePath).toList(),
-                artifacts.stream().map(ArtifactReference::artifactId).toList());
+                artifacts.stream().map(ArtifactReference::artifactId).toList(),
+                completeCoverage
+                        ? org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE
+                        : org.example.algorithmdebug.contracts.EvidenceSourceCoverage.PARTIAL,
+                manifest.truncated() ? List.of(COLLECTION_TRUNCATED_REASON) : List.of(),
+                primaryArtifactId, primaryArtifactId.isPresent() ? EVIDENCE_QUERY_TOOL : "",
+                List.of(org.example.algorithmdebug.contracts.EvidenceQueryMode.SUMMARY,
+                        org.example.algorithmdebug.contracts.EvidenceQueryMode.FILTER,
+                        org.example.algorithmdebug.contracts.EvidenceQueryMode.WINDOW,
+                        org.example.algorithmdebug.contracts.EvidenceQueryMode.COUNT),
+                primaryArtifactId.isPresent()
+                        ? "Query SUMMARY then narrow with FILTER, COUNT, or WINDOW as required"
+                        : "Inspect validation and collection limitations before recollecting");
         artifacts.forEach(artifact -> archive.registerArtifact(caseId, artifact, clock.instant()));
         archive.createCollectionExecutionSummary(summary);
         executionLog.info(logContext, "JdwpCollectionApplicationService", "COLLECTION_COMPLETED",
@@ -503,19 +529,18 @@ public final class JdwpCollectionApplicationService {
             if (completion == JdwpCollectionCompletion.TARGET_FAILED) {
                 return checkTargetFailureBaseline(archive, record, moduleRoot);
             }
-            var reference = archive.findLatestCompletedRun(
-                    record.caseId(), record.analysisId());
-            if (reference.isEmpty()
-                    || reference.orElseThrow().testOutcome()
-                    != org.example.algorithmdebug.contracts.TestOutcome.PASSED) {
-                return incomparable(record,
-                        "No completed passing uninstrumented run exists for this Analysis");
-            }
+            Optional<RunId> referenceRunId = archive.findLatestCompletedRun(
+                            record.caseId(), record.analysisId())
+                    .filter(reference -> reference.testOutcome()
+                            == org.example.algorithmdebug.contracts.TestOutcome.PASSED)
+                    .map(org.example.algorithmdebug.contracts.RunOutcomeSummary::runId);
             return new CollectionBaselineCheck(
                 org.example.algorithmdebug.contracts.SchemaVersions.COLLECTION_BASELINE_CHECK, record.caseId(), record.analysisId(), record.runId(),
                     record.collectionId(), ComparisonOutcome.NOT_COMPARED,
-                    Optional.of(reference.orElseThrow().runId()), true,
-                    "Successful JDWP run; Gantt is not copied or used as an evidence gate",
+                    referenceRunId, false,
+                    referenceRunId.isPresent()
+                            ? "Successful JDWP run; reference Run retained for evidence correlation"
+                            : "Successful JDWP run; no uninstrumented reference Run is required",
                     clock.instant());
         } catch (HarnessException | WorkspaceException | SurefireDiagnosticException failure) {
             return incomparable(record, "JDWP result capture failed: "
