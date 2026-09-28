@@ -20,6 +20,7 @@ import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 import org.example.algorithmdebug.contracts.DoctorCheck;
 import org.example.algorithmdebug.contracts.DoctorStatus;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.core.coordination.AnalysisCoordinator;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -41,6 +42,7 @@ public final class ControlPlaneServices {
     private final StaticAnalysisApplicationService staticAnalysis;
     private final CollectionApplicationService collections;
     private final JdwpCollectionApplicationService jdwpCollections;
+    private final Optional<AnalysisCoordinator> coordinator;
 
     private ControlPlaneServices(
             WorkspaceApplicationService workspace,
@@ -52,6 +54,21 @@ public final class ControlPlaneServices {
             StaticAnalysisApplicationService staticAnalysis,
             CollectionApplicationService collections,
             JdwpCollectionApplicationService jdwpCollections) {
+        this(workspace, project, doctor, cases, algorithmInputs, runs, staticAnalysis,
+                collections, jdwpCollections, Optional.empty());
+    }
+
+    private ControlPlaneServices(
+            WorkspaceApplicationService workspace,
+            ProjectApplicationService project,
+            DoctorApplicationService doctor,
+            CaseApplicationService cases,
+            AlgorithmInputApplicationService algorithmInputs,
+            RunApplicationService runs,
+            StaticAnalysisApplicationService staticAnalysis,
+            CollectionApplicationService collections,
+            JdwpCollectionApplicationService jdwpCollections,
+            Optional<AnalysisCoordinator> coordinator) {
         this.workspace = workspace;
         this.project = project;
         this.doctor = doctor;
@@ -61,6 +78,7 @@ public final class ControlPlaneServices {
         this.staticAnalysis = staticAnalysis;
         this.collections = collections;
         this.jdwpCollections = jdwpCollections;
+        this.coordinator = coordinator;
     }
 
     /**
@@ -366,6 +384,24 @@ public final class ControlPlaneServices {
             throw new IllegalStateException("ControlPlaneServices has no configured JDWP Collector");
         }
         return jdwpCollections;
+    }
+
+    /**
+     * 返回绑定同一服务集合与唯一 Coordinator 的不可变副本，供共享 Runtime 组合根使用。
+     */
+    public ControlPlaneServices withCoordinator(AnalysisCoordinator value) {
+        if (value == null) {
+            throw new IllegalArgumentException("coordinator must not be null");
+        }
+        return new ControlPlaneServices(
+                workspace, project, doctor, cases, algorithmInputs, runs, staticAnalysis,
+                collections, jdwpCollections, Optional.of(value));
+    }
+
+    /** @return 共享 Runtime 已绑定的唯一 Coordinator；基础服务集合不得伪装成模型入口。 */
+    public AnalysisCoordinator coordinator() {
+        return coordinator.orElseThrow(() -> new IllegalStateException(
+                "ControlPlaneServices has no configured AnalysisCoordinator"));
     }
 
     private static Path currentJavaExecutable(boolean windows) {

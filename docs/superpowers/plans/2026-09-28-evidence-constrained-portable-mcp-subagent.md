@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.0；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 1.1；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -933,6 +933,8 @@ git commit -m "feat: gate causal conclusions with counterevidence"
 
 **Files:**
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionInputs.java`
+- Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionPrerequisites.java`
+- Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ActionPolicySupport.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/LifecycleActionPolicies.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/ReadActionPolicies.java`
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisActionPolicies.java`
@@ -941,14 +943,20 @@ git commit -m "feat: gate causal conclusions with counterevidence"
 - Create: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/CoreActionHandlers.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/ControlPlaneServices.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CaseApplicationService.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/coordination/AnalysisStateProjector.java`
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseSessionRequest.java`
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseSessionService.java`
+- Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveRepository.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/CoreActionRegistryTest.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/PolicyTestFixtures.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/LifecycleActionPoliciesTest.java`
+- Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/SourceQueryActionPolicyTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/InvestigationUpdatePolicyTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/RunTestActionPolicyTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/CodePathCollectActionPolicyTest.java`
 - Create: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/JdwpCollectActionPolicyTest.java`
 - Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/CaseApplicationServiceTest.java`
+- Modify: `ada-core/src/test/java/org/example/algorithmdebug/core/coordination/AnalysisStateProjectorTest.java`
 - Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/CaseSessionServiceTest.java`
 
 **Interfaces:**
@@ -982,7 +990,9 @@ mvn -pl case-management,ada-core -am test "-Dtest=CoreActionRegistryTest,Investi
 public final class CoreActionInputs {
     public record AnalysisBegin(ProblemFrame problemFrame,
             Optional<CaseId> existingCaseId, Optional<String> adapterId) { }
-    public record SourceQuery(SourceQueryRequest request) { }
+    public record SourceQuery(SourceQueryMode mode, Optional<String> methodKey,
+            Optional<String> targetMethodKey, Optional<SourceAnchor> sourceAnchor,
+            Optional<String> symbol, SourceQueryBudget budget) { }
     public record InvestigationUpdate(InvestigationUpdateCommand command) { }
     public record CodePathPlanCreate(CodePathPlanRequest request) { }
     public record CodePathCollect(PlanId planId) { }
@@ -993,7 +1003,15 @@ public final class CoreActionInputs {
 }
 ```
 
-其余输入使用明确 record；Workspace/Case/Analysis identity 只在 `ActionTarget`，payload 不重复。`CaseSessionRequest` 将不可变 `ProblemFrame` 作为创建 Analysis 的必需值，`CaseSessionService` 在同一个 staging/atomic commit 中写 Analysis manifest 与第一条 `ProblemFrameCreated` 事件；任一写入失败都不得暴露半初始化 Analysis。
+其余输入使用明确 record；Workspace/Case/Analysis identity 只在 `ActionTarget`，领域命令自身需要身份时必须与 Target
+完全一致。`ProblemFrame` 的 Case/Analysis identity 由服务端预分配，不由模型选择。`CaseSessionRequest` 将不可变
+`ProblemFrame` 作为创建 Analysis 的必需值，`CaseSessionService` 在同一个 staging/atomic commit 中写 Analysis
+manifest 与第一条 `ProblemFrameDefined` 事件；任一写入失败都不得暴露半初始化 Analysis。`ANALYSIS_BEGIN` 使用
+“manifest 与 journal 均不存在”的合法 revision 0 引导视图；半初始化或损坏状态仍 fail closed。
+
+Policy 可使用组合根注入的只读 prerequisite port 检查算法输入、当前 Method Catalog 和 Plan 归属；不得读取 Raw
+Trace 或执行副作用。Task 13 只构造完整 Registry 并提供 `ControlPlaneServices` 的不可变 Coordinator 绑定接口，
+Task 14 在唯一 Runtime 组合根注入 Workspace/Project 路由、状态源、锁、幂等日志和结论目录，不创建第二套 Policy。
 
 - [ ] **Step 4: 接入 ControlPlaneServices 并运行 GREEN**
 

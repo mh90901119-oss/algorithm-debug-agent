@@ -19,10 +19,14 @@ import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
+import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrameId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -105,6 +109,35 @@ class CaseApplicationServiceTest {
                 workspace, PROJECT_ID, TARGET, "问题", Optional.empty(), Optional.empty());
 
         assertEquals(opened.digest(), service.inspect(workspace, PROJECT_ID, opened.caseId()));
+    }
+
+    @Test
+    void coordinatedBeginUsesServerAllocatedProblemFrameIdentity() {
+        CaseApplicationService service = new CaseApplicationService(
+                registrations, mapper, writer,
+                new AdapterCatalog(List.of(new MissingInputAdapter())),
+                new OpaqueIdGenerator(() -> {
+                    throw new AssertionError("coordinated begin must not mint a second identity");
+                }), Clock.fixed(TIME, ZoneOffset.UTC));
+        ProblemFrame frame = new ProblemFrame(
+                SchemaVersions.PROBLEM_FRAME, new ProblemFrameId("problem-1"),
+                new org.example.algorithmdebug.contracts.CaseId("case-coordinated"),
+                new AnalysisId("analysis-coordinated"),
+                "调度结果顺序异常", "测试断言通过", "实际顺序错误", TARGET,
+                List.of(new SourceAnchor(
+                        "a.b.Scheduler", "schedule", "()V",
+                        "src/main/java/a/b/Scheduler.java", 1, 20)),
+                List.of("target-test:a.b.TargetTest#runs"),
+                List.of("候选选择分支是否错误"), TIME);
+
+        CaseOpenResult result = service.begin(
+                workspace, PROJECT_ID, frame, Optional.empty(), Optional.of("missing-input"));
+
+        assertEquals(frame.caseId(), result.caseId());
+        assertEquals(frame.analysisId(), result.analysisId());
+        assertTrue(Files.isRegularFile(workspace.resolve(
+                "projects/project-1/cases/case-coordinated/analyses/analysis-coordinated/"
+                        + "investigation/events/1-problem-frame-problem-1.json")));
     }
 
     @Test

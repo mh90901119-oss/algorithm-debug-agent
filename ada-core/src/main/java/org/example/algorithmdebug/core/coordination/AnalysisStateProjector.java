@@ -26,6 +26,10 @@ import org.example.algorithmdebug.contracts.investigation.ObservationEvaluation;
  * 仅从已校验 Artifact metadata 和 Investigation Journal 派生控制视图，不保存可覆盖状态文件。
  */
 public final class AnalysisStateProjector {
+    private static final String ALGORITHM_INPUT_ARTIFACT = "ALGORITHM_INPUT";
+    private static final String METHOD_CATALOG_ARTIFACT = "METHOD_CATALOG";
+    private static final String CODEPATH_PLAN_ARTIFACT = "CODEPATH_PLAN";
+    private static final String JDWP_PLAN_ARTIFACT = "JDWP_PLAN";
     private final AnalysisArtifactIndex artifactIndex;
     private final InvestigationSource investigationSource;
     private final InvestigationStateProjector investigationProjector;
@@ -132,7 +136,7 @@ public final class AnalysisStateProjector {
                 supported,
                 refuted,
                 unevaluated,
-                allowedActions(state),
+                allowedActions(state, artifacts),
                 terminalEligibility);
     }
 
@@ -156,21 +160,57 @@ public final class AnalysisStateProjector {
                 ConclusionStatus.MISSING_EVIDENCE);
     }
 
-    private List<AnalysisActionType> allowedActions(InvestigationState state) {
+    private List<AnalysisActionType> allowedActions(
+            InvestigationState state, List<AnalysisArtifactIndex.Entry> artifacts) {
         EnumSet<AnalysisActionType> actions = EnumSet.of(
                 AnalysisActionType.CASE_INSPECT,
                 AnalysisActionType.CASE_AUDIT,
                 AnalysisActionType.ARTIFACT_READ,
                 AnalysisActionType.EVIDENCE_QUERY,
                 AnalysisActionType.ANALYSIS_STATUS,
-                AnalysisActionType.SOURCE_QUERY,
+                AnalysisActionType.ALGORITHM_INPUT_CAPTURE,
+                AnalysisActionType.STATIC_ANALYZE,
                 AnalysisActionType.INVESTIGATION_UPDATE);
+        boolean hasInput = hasArtifactType(artifacts, ALGORITHM_INPUT_ARTIFACT);
+        boolean hasCatalog = hasArtifactType(artifacts, METHOD_CATALOG_ARTIFACT);
+        if (hasInput) {
+            actions.add(AnalysisActionType.RUN_TEST);
+        }
+        if (hasCatalog) {
+            actions.add(AnalysisActionType.SOURCE_QUERY);
+        }
+        if (hasInput && hasCatalog) {
+            actions.add(AnalysisActionType.CODEPATH_PLAN_CREATE);
+            actions.add(AnalysisActionType.JDWP_PLAN_CREATE);
+        }
+        if (hasPlanType(artifacts, CODEPATH_PLAN_ARTIFACT)) {
+            actions.add(AnalysisActionType.CODEPATH_COLLECT);
+        }
+        if (hasPlanType(artifacts, JDWP_PLAN_ARTIFACT)) {
+            actions.add(AnalysisActionType.JDWP_COLLECT);
+        }
+        if (artifacts.stream().anyMatch(value ->
+                value.artifact().artifactType().contains("GANTT"))) {
+            actions.add(AnalysisActionType.GANTT_INSPECT);
+        }
         if (!state.hypotheses().isEmpty()) {
             actions.add(AnalysisActionType.ANALYSIS_FINALIZE);
         }
         List<AnalysisActionType> sorted = new ArrayList<>(actions);
         sorted.sort(Comparator.comparing(Enum::name));
         return List.copyOf(sorted);
+    }
+
+    private static boolean hasArtifactType(
+            List<AnalysisArtifactIndex.Entry> artifacts, String artifactType) {
+        return artifacts.stream().anyMatch(value ->
+                artifactType.equals(value.artifact().artifactType()));
+    }
+
+    private static boolean hasPlanType(
+            List<AnalysisArtifactIndex.Entry> artifacts, String artifactType) {
+        return artifacts.stream().anyMatch(value -> value.planId().isPresent()
+                && artifactType.equals(value.artifact().artifactType()));
     }
 
     private static <T> T requireNonNull(T value, String field) {

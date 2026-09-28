@@ -47,6 +47,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -299,6 +300,83 @@ public final class CaseArchiveRepository {
             throw identityMismatch("MethodCatalog document identity does not match its path");
         }
         return value;
+    }
+
+    /**
+     * 在不可见 staging 目录写入 Analysis manifest 与第一条 Problem Frame 事件，再原子发布目录。
+     * 任一预提交失败只会留下不可见 staging 内容，不会暴露半初始化 Analysis。
+     */
+    public void createInitializedAnalysis(
+            AnalysisRequest analysis,
+            InvestigationEvent.ProblemFrameDefined initialEvent) {
+        AnalysisRequest checked = requireNonNull(analysis, "analysis");
+        InvestigationEvent.ProblemFrameDefined event = requireNonNull(
+                initialEvent, "initialEvent");
+        requireCase(checked.caseId());
+        if (!checked.caseId().equals(event.caseId())
+                || !checked.analysisId().equals(event.analysisId())
+                || event.sequence() != 1
+                || !event.problemFrame().caseId().equals(checked.caseId())
+                || !event.problemFrame().analysisId().equals(checked.analysisId())) {
+            throw new IllegalArgumentException(
+                    "Initial ProblemFrame event must be sequence one for the Analysis");
+        }
+
+        CaseArchiveLayout layout = layout(checked.caseId());
+        Path analysesRoot = layout.analysesRoot();
+        Path target = layout.analysisRoot(checked.analysisId());
+        Path staging = analysesRoot.resolve(
+                "." + checked.analysisId().value() + ".staging").normalize();
+        Path stagedAnalysis = staging.resolve("analysis-request.json");
+        Path stagedEvent = staging.resolve("investigation/events/1-"
+                + event.eventId() + ".json");
+        InvestigationEventArchive.ArchivedEvent archivedEvent =
+                new InvestigationEventArchive.ArchivedEvent(
+                        ControlArchiveSupport.ARCHIVE_SCHEMA_VERSION,
+                        ControlArchiveSupport.digest(mapper.writeJson(event)), event);
+        try {
+            Files.createDirectories(analysesRoot);
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+                    || Files.exists(staging, LinkOption.NOFOLLOW_LINKS)) {
+                throw new WorkspaceException(
+                        "CASE_ARCHIVE_ALREADY_EXISTS",
+                        "Analysis or its staging directory already exists");
+            }
+            writer.writeNewWithParents(stagedAnalysis, mapper.writeJson(checked));
+            writer.writeNewWithParents(stagedEvent, mapper.writeJson(archivedEvent));
+            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException | WorkspaceException failure) {
+            removeInitializedAnalysisStaging(
+                    analysesRoot, staging, stagedAnalysis, stagedEvent);
+            throw archiveWriteFailure(failure instanceof WorkspaceException workspaceFailure
+                    ? workspaceFailure
+                    : new WorkspaceException(
+                            "CASE_ARCHIVE_WRITE_FAILED",
+                            "Initialized Analysis could not be committed", failure));
+        }
+    }
+
+    private static void removeInitializedAnalysisStaging(
+            Path analysesRoot,
+            Path staging,
+            Path stagedAnalysis,
+            Path stagedEvent) {
+        Path normalizedRoot = analysesRoot.toAbsolutePath().normalize();
+        Path normalizedStaging = staging.toAbsolutePath().normalize();
+        if (!normalizedStaging.startsWith(normalizedRoot)
+                || normalizedStaging.equals(normalizedRoot)
+                || Files.isSymbolicLink(normalizedStaging)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(stagedEvent);
+            Files.deleteIfExists(stagedEvent.getParent());
+            Files.deleteIfExists(stagedEvent.getParent().getParent());
+            Files.deleteIfExists(stagedAnalysis);
+            Files.deleteIfExists(normalizedStaging);
+        } catch (IOException ignored) {
+            // staging 不属于可见 Analysis；保留它供审计，后续相同 identity 将 fail closed。
+        }
     }
 
     /** 为当前 Analysis 追加 Source Query 请求，并校验其 Method Catalog provenance。 */

@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：1.0
+- 设计版本：1.1
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -276,6 +276,35 @@ Coordinator 或现有确定性模块完成。
 
 `AnalysisCoordinator` 不包含 Maven、CodePath 或 JDWP 的具体实现。Action Handler 只适配已有服务；Policy 只检查
 通用动作契约和该工具的机械前后置条件。
+
+#### 6.3.1 Action 绑定与 Analysis 引导态
+
+17 个 Action 的 Registry 在 `ada-core` 内一次性构造，每个枚举值必须恰好对应一个 typed payload、一个
+`ActionSideEffect`、一个 Policy 和一个 Handler。Policy 可以依赖由组合根注入的确定性只读 prerequisite port，
+用于查询 Analysis 是否存在、算法输入、Method Catalog 和指定 Plan 的归属；它不得自行扫描 Raw Artifact、启动进程
+或写归档。Handler 只把已授权的 typed 输入适配到现有 ApplicationService。
+
+`ANALYSIS_BEGIN` 是唯一允许在 Analysis 尚不存在时执行的动作。状态源必须把以下状态区分开，不能把它们都折叠为
+“缺少 Problem Frame”：
+
+- Analysis manifest 与 Investigation Journal 都不存在：返回 revision 0 的合法引导视图，只允许
+  `ANALYSIS_BEGIN`；
+- 两者同时存在且首事件为 Problem Frame：进入普通投影；
+- 仅存在一侧、首事件错误、序号/哈希损坏：fail closed，不允许重新 begin 覆盖或修复。
+
+`ProblemFrame.caseId/analysisId` 由服务端请求构造层预分配，模型不能选择。`CaseSessionRequest` 接收完整不可变
+Problem Frame，并校验其 Project/Case/Analysis/TargetTest 与 Action identity 一致。Analysis manifest 与第一条
+`ProblemFrameDefined` 事件先写入同一 staging Analysis 目录，再通过同文件系统原子目录移动一次发布；任一预提交
+写入失败均不得出现可见的半初始化 Analysis。
+
+Task 13 产出完整 Registry/Policy/Handler 组合能力，并为 `ControlPlaneServices` 提供不可变 coordinator 绑定与
+`coordinator()` 访问器；Task 14 的唯一 Runtime 组合根负责注入可信 Workspace 映射、按 Project 路由的 Archive
+端口、状态源、锁、幂等日志和结论 Reference Catalog。基础/旧式 Service 集合没有 coordinator 时，访问器必须明确
+失败，禁止退回直接模型入口。
+
+`SOURCE_QUERY` Action payload 只包含 mode、method/source/symbol 选择器和预算，不包含 `queryId` 或 Method Catalog
+Artifact。Core Handler 继续调用 Task 8 的 `querySource(...)`，由 Core 创建 queryId 并绑定当前 Method Catalog，
+避免模型伪造归档身份。
 
 ### 6.4 `static-analysis` 增加有界源码查询
 
@@ -1660,3 +1689,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.8 | Task 10 实施前审计冻结 Plan v7/v6 的结构化 binding、旧 Plan 只读投影、CodePath Launcher 透传与锁定 JDWP Collector 协议边界 | Codex |
 | 2026-09-28 | 0.9 | Task 11 实施前审计冻结 PlanBound/PLANNED 时序、typed EvidenceView 字段映射、Evaluation 状态转换和失败产物保留语义 | Codex |
 | 2026-09-28 | 1.0 | Task 12 实施前审计修正结论输入空悬：Candidate 内嵌有界 CausalChain，Decision 返回 allowedActions；冻结 Reference Catalog 校验与 candidate-first 单终态归档语义 | Codex |
+| 2026-09-28 | 1.1 | Task 13 实施前审计冻结 17 Action 唯一绑定、只读 prerequisite port、Analysis 引导态、Problem Frame 原子初始化、Core 生成 Source Query ID，以及 Task 13 绑定能力与 Task 14 唯一生产组合根的边界 | Codex |

@@ -9,6 +9,8 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CaseManifest;
 import org.example.algorithmdebug.contracts.CaseOpenResult;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.InvestigationEvent;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
 
 /** 实现显式 Case 续接规则并追加 Analysis，但绝不扫描或运行目标项目。 */
 public final class CaseSessionService {
@@ -39,8 +41,11 @@ public final class CaseSessionService {
             throw new IllegalArgumentException("request must not be null");
         }
         Instant now = clock.instant();
+        ProblemFrame frame = request.problemFrame().orElse(null);
         boolean caseCreated = request.caseId().isEmpty();
-        CaseId caseId = request.caseId().orElseGet(ids::newCaseId);
+        CaseId caseId = frame == null
+                ? request.caseId().orElseGet(ids::newCaseId)
+                : frame.caseId();
         if (caseCreated) {
             repository.createCase(new CaseManifest(
                     SchemaVersions.CASE_MANIFEST, caseId, request.projectId(),
@@ -49,9 +54,19 @@ public final class CaseSessionService {
             validateExistingCase(repository.requireCase(caseId), request);
         }
 
-        AnalysisId analysisId = ids.newAnalysisId();
-        repository.createAnalysis(new AnalysisRequest(
-                SchemaVersions.ANALYSIS_REQUEST, caseId, analysisId, request.question(), now));
+        AnalysisId analysisId = frame == null ? ids.newAnalysisId() : frame.analysisId();
+        AnalysisRequest analysis = new AnalysisRequest(
+                SchemaVersions.ANALYSIS_REQUEST, caseId, analysisId, request.question(), now);
+        if (frame == null) {
+            repository.createAnalysis(analysis);
+        } else {
+            InvestigationEvent.ProblemFrameDefined initialEvent =
+                    new InvestigationEvent.ProblemFrameDefined(
+                            SchemaVersions.INVESTIGATION_EVENT,
+                            "problem-frame-" + frame.problemFrameId().value(),
+                            caseId, analysisId, 1, now, frame);
+            repository.createInitializedAnalysis(analysis, initialEvent);
+        }
         CaseDigest digest = digestReader.read(caseId);
         return new CaseOpenResult(
                 caseId, analysisId, caseCreated, java.util.Optional.empty(), digest);

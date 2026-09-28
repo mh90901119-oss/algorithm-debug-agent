@@ -14,10 +14,12 @@ import org.example.algorithmdebug.contracts.EvidenceEligibility;
 import org.example.algorithmdebug.contracts.EvidenceEligibilityReason;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.ProjectId;
+import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.coordination.ActionDecisionCode;
 import org.example.algorithmdebug.contracts.coordination.AnalysisControlView;
 import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
+import org.example.algorithmdebug.contracts.coordination.AnalysisActionType;
 import org.example.algorithmdebug.contracts.coordination.CoordinationErrorCode;
 import org.example.algorithmdebug.contracts.coordination.ConclusionStatus;
 import org.junit.jupiter.api.Test;
@@ -70,6 +72,25 @@ class AnalysisStateProjectorTest {
         assertEquals(ConclusionStatus.MISSING_EVIDENCE, projector.project(IDENTITY).terminalEligibility());
     }
 
+    @Test
+    void allowedActionsReflectArchivedInputCatalogAndPlanTypes() {
+        AnalysisArtifactIndex index = AnalysisArtifactIndex.from(List.of(
+                entry("input", "ALGORITHM_INPUT", Optional.empty()),
+                entry("catalog", "METHOD_CATALOG", Optional.empty()),
+                entry("codepath-plan", "CODEPATH_PLAN", Optional.of(new PlanId("plan-codepath"))),
+                entry("jdwp-plan", "JDWP_PLAN", Optional.of(new PlanId("plan-jdwp")))));
+
+        List<AnalysisActionType> actions = projector(index).project(IDENTITY).allowedActions();
+
+        org.junit.jupiter.api.Assertions.assertTrue(actions.contains(AnalysisActionType.RUN_TEST));
+        org.junit.jupiter.api.Assertions.assertTrue(actions.contains(AnalysisActionType.SOURCE_QUERY));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                actions.contains(AnalysisActionType.CODEPATH_PLAN_CREATE));
+        org.junit.jupiter.api.Assertions.assertTrue(actions.contains(AnalysisActionType.CODEPATH_COLLECT));
+        org.junit.jupiter.api.Assertions.assertTrue(actions.contains(AnalysisActionType.JDWP_PLAN_CREATE));
+        org.junit.jupiter.api.Assertions.assertTrue(actions.contains(AnalysisActionType.JDWP_COLLECT));
+    }
+
     private static AnalysisStateProjector projector(AnalysisArtifactIndex index) {
         return new AnalysisStateProjector(
                 index,
@@ -81,9 +102,14 @@ class AnalysisStateProjectorTest {
     }
 
     private static AnalysisArtifactIndex.Entry entry(String artifactId) {
+        return entry(artifactId, "EVIDENCE_BUNDLE", Optional.empty());
+    }
+
+    private static AnalysisArtifactIndex.Entry entry(
+            String artifactId, String artifactType, Optional<PlanId> planId) {
         ArtifactReference artifact = new ArtifactReference(
                 artifactId,
-                "EVIDENCE_BUNDLE",
+                artifactType,
                 "evidence/" + artifactId + ".json",
                 "application/json",
                 "b".repeat(64),
@@ -94,7 +120,7 @@ class AnalysisStateProjectorTest {
                 List.of(EvidenceEligibilityReason.BASELINE_NOT_REQUIRED.name()));
         return new AnalysisArtifactIndex.Entry(
                 IDENTITY,
-                Optional.empty(), Optional.empty(), Optional.empty(),
+                Optional.empty(), planId, Optional.empty(),
                 Optional.of(new EvidenceId("evidence-" + artifactId)),
                 artifact,
                 Optional.of(eligibility));
