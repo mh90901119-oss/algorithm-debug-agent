@@ -35,6 +35,24 @@ import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
+import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGap;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus;
+import org.example.algorithmdebug.contracts.investigation.HypothesisEffect;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.HypothesisRecord;
+import org.example.algorithmdebug.contracts.investigation.HypothesisStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBinding;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationEvent;
+import org.example.algorithmdebug.contracts.investigation.ObservationOperator;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicate;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
+import org.example.algorithmdebug.contracts.investigation.ObservationSelector;
+import org.example.algorithmdebug.contracts.investigation.PredicateRole;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrameId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -112,6 +130,7 @@ class CaseArchiveRepositoryTest {
         repository.createAnalysis(analysis());
         MethodCatalog catalog = methodCatalog();
         CodePathCollectionPlan plan = codePathPlan();
+        archiveInvestigation(repository);
 
         Path catalogPath = repository.createMethodCatalog(catalog);
         Path planPath = repository.createCodePathPlan(plan);
@@ -125,6 +144,64 @@ class CaseArchiveRepositoryTest {
                 WorkspaceException.class, () -> repository.createMethodCatalog(catalog)).code());
         assertEquals("CASE_ARCHIVE_WRITE_FAILED", assertThrows(
                 WorkspaceException.class, () -> repository.createCodePathPlan(plan)).code());
+    }
+
+    @Test
+    void shouldRejectLegacyPlanCreationAndUnknownPredicateBinding() {
+        repository.createCase(manifest());
+        repository.createAnalysis(analysis());
+        repository.createMethodCatalog(methodCatalog());
+        CodePathCollectionPlan current = codePathPlan();
+        CodePathCollectionPlan legacy = new CodePathCollectionPlan(
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY,
+                new PlanId("legacy-plan"), current.caseId(), current.analysisId(),
+                current.targetTest(), current.methodSelections(), current.scopeMethodKey(),
+                current.scopeConditions(), current.captureMode(), current.scopeStartOrdinal(),
+                current.maxMatchedScopes(), current.budget(), current.rationale(),
+                new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        current.questionToAnswer(), "old hypothesis", List.of(),
+                        List.of("old observation")), current.createdAt());
+
+        WorkspaceException legacyFailure = assertThrows(
+                WorkspaceException.class, () -> repository.createCodePathPlan(legacy));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", legacyFailure.code());
+
+        archiveInvestigation(repository);
+        InvestigationBinding unknown = new InvestigationBinding(
+                SchemaVersions.INVESTIGATION_BINDING, CASE_ID, ANALYSIS_ID,
+                new EvidenceGapId("gap-1"), List.of(new HypothesisId("hypothesis-1")),
+                List.of(new ObservationPredicateId("predicate-missing")), List.of());
+        CodePathCollectionPlan invalid = new CodePathCollectionPlan(
+                current.schemaVersion(), new PlanId("unknown-predicate"), current.caseId(),
+                current.analysisId(), current.targetTest(), current.methodSelections(),
+                current.scopeMethodKey(), current.scopeConditions(), current.captureMode(),
+                current.scopeStartOrdinal(), current.maxMatchedScopes(), current.budget(),
+                current.rationale(), current.questionToAnswer(),
+                InvestigationBindingStatus.STRUCTURED, Optional.of(unknown), current.createdAt());
+
+        WorkspaceException predicateFailure = assertThrows(
+                WorkspaceException.class, () -> repository.createCodePathPlan(invalid));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", predicateFailure.code());
+
+        ObservationPredicateId corroboratingId =
+                new ObservationPredicateId("predicate-corroborating");
+        appendPredicate(repository, corroboratingId, PredicateRole.CORROBORATING, 5);
+        InvestigationBinding withoutCritical = new InvestigationBinding(
+                SchemaVersions.INVESTIGATION_BINDING, CASE_ID, ANALYSIS_ID,
+                new EvidenceGapId("gap-1"), List.of(new HypothesisId("hypothesis-1")),
+                List.of(corroboratingId), List.of());
+        CodePathCollectionPlan insufficient = new CodePathCollectionPlan(
+                current.schemaVersion(), new PlanId("without-critical"), current.caseId(),
+                current.analysisId(), current.targetTest(), current.methodSelections(),
+                current.scopeMethodKey(), current.scopeConditions(), current.captureMode(),
+                current.scopeStartOrdinal(), current.maxMatchedScopes(), current.budget(),
+                current.rationale(), current.questionToAnswer(),
+                InvestigationBindingStatus.STRUCTURED, Optional.of(withoutCritical),
+                current.createdAt());
+
+        WorkspaceException criticalFailure = assertThrows(
+                WorkspaceException.class, () -> repository.createCodePathPlan(insufficient));
+        assertEquals("CASE_ARCHIVE_IDENTITY_MISMATCH", criticalFailure.code());
     }
 
     @Test
@@ -252,6 +329,7 @@ class CaseArchiveRepositoryTest {
         repository.createCase(manifest());
         repository.createAnalysis(analysis());
         repository.createMethodCatalog(methodCatalog());
+        archiveInvestigation(repository);
         repository.createCodePathPlan(codePathPlan());
         MethodPathCollectionRecord record = new MethodPathCollectionRecord(
                 "1.0", CASE_ID, ANALYSIS_ID, new RunId("run-codepath-1"),
@@ -275,6 +353,7 @@ class CaseArchiveRepositoryTest {
         repository.createCase(manifest());
         repository.createAnalysis(analysis());
         repository.createMethodCatalog(methodCatalog());
+        archiveInvestigation(repository);
         JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID);
 
         Path planPath = repository.createJdwpPlan(plan);
@@ -309,6 +388,7 @@ class CaseArchiveRepositoryTest {
                 WorkspaceException.class, () -> repository.createJdwpPlan(wrongPlan)).code());
 
         JdwpCollectionPlan plan = jdwpPlan(ANALYSIS_ID);
+        archiveInvestigation(repository);
         repository.createJdwpPlan(plan);
         JdwpCollectionRecord wrongRecord = new JdwpCollectionRecord(
                 SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, otherAnalysis,
@@ -494,10 +574,11 @@ class CaseArchiveRepositoryTest {
                                 "a.b.ScheduleTest#case1()V", anchor.className(), anchor.methodName(),
                                 anchor.descriptor()),
                         List.of())),
-                java.util.Optional.empty(), CollectionBudget.defaults(), "定位",
-                new org.example.algorithmdebug.contracts.InvestigationIntent(
-                        "Which path executed?", "The selected method executed", List.of(),
-                        List.of("Observed method path")),
+                Optional.empty(), List.of(),
+                org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE, 1, 10_000,
+                CollectionBudget.defaults(), "定位", "Which path executed?",
+                InvestigationBindingStatus.STRUCTURED,
+                Optional.of(binding(ANALYSIS_ID)),
                 TIME.plusSeconds(4));
     }
 
@@ -508,10 +589,11 @@ class CaseArchiveRepositoryTest {
                         .map(selector -> new org.example.algorithmdebug.contracts.CodePathMethodSelection(
                                 selector, List.of()))
                         .toList(),
-                java.util.Optional.empty(), CollectionBudget.defaults(), "定位",
-                new org.example.algorithmdebug.contracts.InvestigationIntent(
-                        "Which path executed?", "The selected method executed", List.of(),
-                        List.of("Observed method path")),
+                Optional.empty(), List.of(),
+                org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE, 1, 10_000,
+                CollectionBudget.defaults(), "定位", "Which path executed?",
+                InvestigationBindingStatus.STRUCTURED,
+                Optional.of(binding(ANALYSIS_ID)),
                 TIME.plusSeconds(4));
     }
 
@@ -523,6 +605,79 @@ class CaseArchiveRepositoryTest {
                 List.of(new JdwpTracepointSpec(
                         "schedule-entry", methodCatalog().entries().getFirst().methodKey(),
                         anchor, 1, 3, 3, 3, 0, null, JdwpCaptureSpec.stackOnly())),
-                JdwpCollectionBudget.defaults(), "Inspect scheduler method", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), TIME.plusSeconds(4));
+                JdwpCollectionBudget.defaults(), "Inspect scheduler method",
+                "Which state was observed?", InvestigationBindingStatus.STRUCTURED,
+                Optional.of(binding(analysisId)), TIME.plusSeconds(4));
+    }
+
+    private static InvestigationBinding binding(AnalysisId analysisId) {
+        return new InvestigationBinding(
+                SchemaVersions.INVESTIGATION_BINDING, CASE_ID, analysisId,
+                new EvidenceGapId("gap-1"),
+                List.of(new HypothesisId("hypothesis-1")),
+                List.of(new ObservationPredicateId("predicate-1")), List.of());
+    }
+
+    static void archiveInvestigation(CaseArchiveRepository repository) {
+        SourceAnchor anchor = methodCatalog().entries().getFirst().sourceAnchor();
+        HypothesisId hypothesisId = new HypothesisId("hypothesis-1");
+        EvidenceGapId gapId = new EvidenceGapId("gap-1");
+        ObservationPredicateId predicateId = new ObservationPredicateId("predicate-1");
+        ProblemFrame frame = new ProblemFrame(
+                SchemaVersions.PROBLEM_FRAME, new ProblemFrameId("frame-1"),
+                CASE_ID, ANALYSIS_ID, "unexpected scheduler result", "expected result",
+                "actual result", TARGET, List.of(anchor), List.of("run:run-1"),
+                List.of("which path executed"), TIME);
+        HypothesisRecord hypothesis = new HypothesisRecord(
+                SchemaVersions.HYPOTHESIS_RECORD, hypothesisId, CASE_ID, ANALYSIS_ID,
+                "the selected method produced the result", HypothesisStatus.OPEN,
+                List.of(anchor), List.of(), List.of(), List.of(gapId), TIME);
+        EvidenceGap gap = new EvidenceGap(
+                SchemaVersions.EVIDENCE_GAP, gapId, CASE_ID, ANALYSIS_ID,
+                "which path produced the result", EvidenceGapStatus.OPEN,
+                List.of(hypothesisId), List.of(predicateId), TIME);
+        ObservationPredicate predicate = new ObservationPredicate(
+                SchemaVersions.OBSERVATION_PREDICATE, predicateId, CASE_ID, ANALYSIS_ID,
+                hypothesisId, gapId, ObservationOperator.FAILURE_FINGERPRINT_MATCHES,
+                new ObservationSelector.FailureFingerprintMatches(), PredicateRole.CRITICAL,
+                HypothesisEffect.SUPPORT, HypothesisEffect.REFUTE,
+                HypothesisEffect.NO_CHANGE, TIME);
+        InvestigationEventArchive events = new InvestigationEventArchive(
+                repository.casesRoot(), repository.mapper(), new AtomicDocumentWriter());
+        AnalysisIdentity identity = new AnalysisIdentity(PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        events.appendEvent(identity, new InvestigationEvent.ProblemFrameDefined(
+                SchemaVersions.INVESTIGATION_EVENT, "event-frame", CASE_ID, ANALYSIS_ID,
+                1, TIME, frame));
+        events.appendEvent(identity, new InvestigationEvent.HypothesisAdded(
+                SchemaVersions.INVESTIGATION_EVENT, "event-hypothesis", CASE_ID, ANALYSIS_ID,
+                2, TIME.plusSeconds(1), hypothesis));
+        events.appendEvent(identity, new InvestigationEvent.EvidenceGapAdded(
+                SchemaVersions.INVESTIGATION_EVENT, "event-gap", CASE_ID, ANALYSIS_ID,
+                3, TIME.plusSeconds(2), gap));
+        events.appendEvent(identity, new InvestigationEvent.PredicateRegistered(
+                SchemaVersions.INVESTIGATION_EVENT, "event-predicate", CASE_ID, ANALYSIS_ID,
+                4, TIME.plusSeconds(3), predicate));
+    }
+
+    private static void appendPredicate(
+            CaseArchiveRepository repository,
+            ObservationPredicateId predicateId,
+            PredicateRole role,
+            long sequence) {
+        ObservationPredicate predicate = new ObservationPredicate(
+                SchemaVersions.OBSERVATION_PREDICATE, predicateId, CASE_ID, ANALYSIS_ID,
+                new HypothesisId("hypothesis-1"), new EvidenceGapId("gap-1"),
+                ObservationOperator.FAILURE_FINGERPRINT_MATCHES,
+                new ObservationSelector.FailureFingerprintMatches(), role,
+                HypothesisEffect.SUPPORT, HypothesisEffect.REFUTE,
+                HypothesisEffect.NO_CHANGE, TIME.plusSeconds(sequence - 1));
+        InvestigationEventArchive events = new InvestigationEventArchive(
+                repository.casesRoot(), repository.mapper(), new AtomicDocumentWriter());
+        events.appendEvent(
+                new AnalysisIdentity(PROJECT_ID, CASE_ID, ANALYSIS_ID),
+                new InvestigationEvent.PredicateRegistered(
+                        SchemaVersions.INVESTIGATION_EVENT,
+                        "event-" + predicateId.value(), CASE_ID, ANALYSIS_ID,
+                        sequence, TIME.plusSeconds(sequence - 1), predicate));
     }
 }

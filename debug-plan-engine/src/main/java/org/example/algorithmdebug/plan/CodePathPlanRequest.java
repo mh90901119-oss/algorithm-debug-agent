@@ -7,7 +7,6 @@ import java.util.Optional;
 import org.example.algorithmdebug.contracts.CollectionBudget;
 import org.example.algorithmdebug.contracts.CodePathCaptureMode;
 import org.example.algorithmdebug.contracts.CodePathScopeCondition;
-import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.PlanId;
 
 /** 大模型提交给确定性编译器的有界 CodePath 请求。 */
@@ -20,7 +19,7 @@ public record CodePathPlanRequest(
         int scopeStartOrdinal,
         int maxMatchedScopes,
         String rationale,
-        InvestigationIntent intent,
+        InvestigationBindingRequest investigation,
         CollectionBudget budget,
         Instant requestedAt) {
 
@@ -46,7 +45,7 @@ public record CodePathPlanRequest(
         if (rationale.isEmpty() || rationale.length() > 4_096) {
             throw new IllegalArgumentException("rationale must contain between 1 and 4096 characters");
         }
-        intent = Objects.requireNonNull(intent, "intent");
+        investigation = Objects.requireNonNull(investigation, "investigation");
         budget = Objects.requireNonNull(budget, "budget");
         requestedAt = Objects.requireNonNull(requestedAt, "requestedAt");
     }
@@ -57,10 +56,10 @@ public record CodePathPlanRequest(
             List<CodePathMethodRequest> methods,
             Optional<String> scopeMethodKey,
             String rationale,
-            InvestigationIntent intent,
+            InvestigationBindingRequest investigation,
             CollectionBudget budget,
             Instant requestedAt) {
-        this(planId, methods, scopeMethodKey, List.of(), rationale, intent, budget, requestedAt);
+        this(planId, methods, scopeMethodKey, List.of(), rationale, investigation, budget, requestedAt);
     }
 
     /** 兼容未声明模式和 Scope 窗口的调用方。 */
@@ -70,10 +69,10 @@ public record CodePathPlanRequest(
             Optional<String> scopeMethodKey,
             List<CodePathScopeCondition> scopeConditions,
             String rationale,
-            InvestigationIntent intent,
+            InvestigationBindingRequest investigation,
             CollectionBudget budget,
             Instant requestedAt) {
         this(planId, methods, scopeMethodKey, scopeConditions, CodePathCaptureMode.TRACE,
-                1, 10_000, rationale, intent, budget, requestedAt);
+                1, 10_000, rationale, investigation, budget, requestedAt);
     }
 }

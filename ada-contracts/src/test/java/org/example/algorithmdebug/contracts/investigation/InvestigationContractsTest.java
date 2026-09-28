@@ -102,6 +102,15 @@ class InvestigationContractsTest {
                 HypothesisEffect.NO_CHANGE, HypothesisEffect.NO_CHANGE, NOW);
         assertThrows(IllegalArgumentException.class, () -> InvestigationBinding.bind(
                 openGap, List.of(hypothesis), List.of(corroborating), List.of()));
+
+        HypothesisRecord unrelatedHypothesis = new HypothesisRecord(
+                SchemaVersions.HYPOTHESIS_RECORD,
+                hypothesis.hypothesisId(), CASE_ID, ANALYSIS_ID,
+                hypothesis.statement(), hypothesis.status(), hypothesis.sourceAnchorRefs(),
+                hypothesis.supportingEvaluationIds(), hypothesis.contradictingEvaluationIds(),
+                List.of(new EvidenceGapId("gap-other")), NOW);
+        assertThrows(IllegalArgumentException.class, () -> InvestigationBinding.bind(
+                openGap, List.of(unrelatedHypothesis), List.of(predicate), List.of()));
     }
 
     @Test

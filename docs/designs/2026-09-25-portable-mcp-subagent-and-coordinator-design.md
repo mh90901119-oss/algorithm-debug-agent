@@ -1,7 +1,7 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：0.7
+- 设计版本：0.8
 - 创建日期：2026-09-25
 - 最后修订：2026-09-28
 - 批准日期：2026-09-28
@@ -584,6 +584,12 @@ CodePath Plan 升级为 v7，JDWP Plan 升级为 v6，使用 `InvestigationBindi
 `InvestigationIntent`。可保留有界 `questionToAnswer` 作为给人的说明，但它不参与机器判定。旧 CodePath v6/JDWP v5
 继续可读取和重放采集，投影为 `LEGACY_UNSTRUCTURED`，不能直接满足新调查义务。Plan Compiler 必须验证：绑定对象
 属于同一 Analysis、Gap 仍开放、Predicate 已冻结、选择的方法/tracepoint/projection 足以计算对应操作符。
+
+当前 Plan 固定写入 `questionToAnswer + investigationStatus=STRUCTURED + investigationBinding`，不再写入自由文本
+`hypothesis/expectedObservations`。兼容 reader 可以读取旧 `intent`，但只提取 `questionToAnswer` 并把状态设为
+`LEGACY_UNSTRUCTURED`。CodePath 外部 Launcher 直接读取 Agent Plan，因此必须无损镜像 binding；JDWP 外部 Collector 使用
+锁定的独立 v5 执行协议，不接收 Agent 调查元数据，Collector Writer 只接受 STRUCTURED Agent Plan，后处理从 Agent Plan
+归档恢复 binding。Core Plan Summary 返回 binding 本身，不复制可变的 InvestigationState。
 
 合法假设转换：
 
@@ -1589,3 +1595,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 0.5 | Task 7 将 Policy 校验和 Tool Result 映射拆出为包内高内聚组件，并增加独立的执行失败/取消错误码，避免 Coordinator 膨胀和错误语义复用 | Codex |
 | 2026-09-28 | 0.6 | Task 8 实施审计明确 Source Query 的流式源码窗口、源码文本控制字符规则、重复调用点路径去重、Core 生成 queryId 及请求/结果追加归档与 Catalog 完整性校验 | Codex |
 | 2026-09-28 | 0.7 | Task 9 实施前审计修正 Reducer 输入：显式接收冻结 Predicate 与 Gap，禁止从 Evaluation 字符串或 effectApplied 反推角色和 Gap 关闭状态 | Codex |
+| 2026-09-28 | 0.8 | Task 10 实施前审计冻结 Plan v7/v6 的结构化 binding、旧 Plan 只读投影、CodePath Launcher 透传与锁定 JDWP Collector 协议边界 | Codex |

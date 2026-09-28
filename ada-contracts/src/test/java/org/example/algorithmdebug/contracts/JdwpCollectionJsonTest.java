@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.nio.file.Path;
@@ -18,6 +19,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBinding;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
 import org.junit.jupiter.api.Test;
 
 class JdwpCollectionJsonTest {
@@ -34,17 +40,21 @@ class JdwpCollectionJsonTest {
 
         byte[] json = MAPPER.writeValueAsBytes(plan);
         assertEquals(plan, MAPPER.readValue(json, JdwpCollectionPlan.class));
+        JsonNode document = MAPPER.readTree(json);
         assertEquals("Which state selected the branch?",
-                MAPPER.readTree(json).path("intent").path("questionToAnswer").asText());
+                document.path("questionToAnswer").asText());
+        assertEquals("STRUCTURED", document.path("investigationStatus").asText());
+        assertFalse(document.has("intent"));
 
-        JsonNode schema = schema("jdwp-plan-v5.schema.json");
+        JsonNode schema = schema("jdwp-plan-v6.schema.json");
         assertFalse(schema.path("additionalProperties").asBoolean(true));
         Set<String> required = new HashSet<>();
         schema.path("required").forEach(node -> required.add(node.asText()));
         assertEquals(Set.of(
                 "schemaVersion", "planId", "caseId", "analysisId",
                 "targetTest", "tracepoints", "budget",
-                "rationale", "intent", "createdAt"), required);
+                "rationale", "questionToAnswer", "investigationStatus",
+                "investigationBinding", "createdAt"), required);
         for (String id : List.of("planId", "caseId", "analysisId")) {
             assertEquals("string", schema.path("properties").path(id).path("type").asText(), id);
         }
@@ -53,8 +63,25 @@ class JdwpCollectionJsonTest {
         assertEquals("#/$defs/capture",
                 schema.path("$defs").path("tracepoint").path("properties")
                         .path("capture").path("$ref").asText());
-        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v5.schema.json"),
+        JsonSchemaTestSupport.assertValid(schemaPath("jdwp-plan-v6.schema.json"),
                 MAPPER.writeValueAsString(plan));
+    }
+
+    @Test
+    void readsV5IntentOnlyAsLegacyUnstructured() throws Exception {
+        ObjectNode json = (ObjectNode) MAPPER.valueToTree(plan());
+        json.put("schemaVersion", SchemaVersions.JDWP_COLLECTION_PLAN_LEGACY);
+        json.remove(List.of("questionToAnswer", "investigationStatus", "investigationBinding"));
+        json.set("intent", MAPPER.valueToTree(new InvestigationIntent(
+                "Which state selected the branch?", "old hypothesis", List.of(),
+                List.of("old expected observation"))));
+
+        JdwpCollectionPlan legacy = MAPPER.treeToValue(json, JdwpCollectionPlan.class);
+
+        assertEquals(InvestigationBindingStatus.LEGACY_UNSTRUCTURED,
+                legacy.investigationStatus());
+        assertEquals(Optional.empty(), legacy.investigationBinding());
+        assertEquals("Which state selected the branch?", legacy.questionToAnswer());
     }
 
     @Test
@@ -65,13 +92,13 @@ class JdwpCollectionJsonTest {
 
         assertThrows(UnrecognizedPropertyException.class, () ->
                 MAPPER.treeToValue(root, JdwpCollectionPlan.class));
-        assertFalse(schema("jdwp-plan-v5.schema.json")
+        assertFalse(schema("jdwp-plan-v6.schema.json")
                 .path("$defs").path("capture").path("additionalProperties").asBoolean(true));
     }
 
     @Test
     void schemasExposeP4HardLimitsAndRejectRemoteHostFields() throws Exception {
-        JsonNode plan = schema("jdwp-plan-v5.schema.json");
+        JsonNode plan = schema("jdwp-plan-v6.schema.json");
         JsonNode tracepoints = plan.path("properties").path("tracepoints");
         JsonNode budget = plan.path("$defs").path("budget").path("properties");
 
@@ -115,20 +142,25 @@ class JdwpCollectionJsonTest {
     }
 
     private static JdwpCollectionPlan plan() {
+        CaseId caseId = new CaseId("case-1");
+        AnalysisId analysisId = new AnalysisId("analysis-1");
         SourceAnchor anchor = new SourceAnchor(
                 "fixture.Algorithm", "schedule", "()V",
                 "src/main/java/fixture/Algorithm.java", 10, 20);
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                new PlanId("plan-1"), caseId, analysisId,
+                new TargetTest("fixture.AlgorithmTest", "runs"),
                 List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#schedule()V", anchor, 11,
                         100, 20, 5, 5, List.of(), JdwpCaptureSpec.stackOnly())),
                 JdwpCollectionBudget.defaults(), "Capture the key decision state",
-                new InvestigationIntent(
-                        "Which state selected the branch?",
-                        "The selected flag may enable this branch",
-                        List.of(), List.of("Runtime flag value")),
+                "Which state selected the branch?", InvestigationBindingStatus.STRUCTURED,
+                Optional.of(new InvestigationBinding(
+                        SchemaVersions.INVESTIGATION_BINDING, caseId, analysisId,
+                        new EvidenceGapId("gap-1"),
+                        List.of(new HypothesisId("hypothesis-1")),
+                        List.of(new ObservationPredicateId("predicate-1")), List.of())),
                 Instant.parse("2026-08-18T00:00:00Z"));
     }
 

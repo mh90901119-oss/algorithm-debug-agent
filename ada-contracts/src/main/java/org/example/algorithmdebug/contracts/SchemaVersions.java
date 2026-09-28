@@ -56,10 +56,17 @@ public final class SchemaVersions {
 
     /** 目标 UT 静态方法目录 Schema 版本。 */
     public static final String METHOD_CATALOG = "3.0";
-    public static final String CODEPATH_COLLECTION_PLAN = "6.0";
+    /** 旧 CodePath 计划只读版本。 */
+    public static final String CODEPATH_COLLECTION_PLAN_LEGACY = "6.0";
 
-    /** JDWP 采集计划 Schema 版本。 */
-    public static final String JDWP_COLLECTION_PLAN = "5.0";
+    /** CodePath 结构化调查绑定计划版本。 */
+    public static final String CODEPATH_COLLECTION_PLAN = "7.0";
+
+    /** 旧 JDWP Agent 计划只读版本。 */
+    public static final String JDWP_COLLECTION_PLAN_LEGACY = "5.0";
+
+    /** JDWP 结构化调查绑定计划版本。 */
+    public static final String JDWP_COLLECTION_PLAN = "6.0";
 
     /** JDWP 采集请求 Schema 版本。 */
     public static final String JDWP_COLLECTION_REQUEST = "2.0";

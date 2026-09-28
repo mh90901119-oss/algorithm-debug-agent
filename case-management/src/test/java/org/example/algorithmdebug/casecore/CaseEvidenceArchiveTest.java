@@ -81,6 +81,7 @@ class CaseEvidenceArchiveTest {
                         "no feasible result", "", "fixture.Algorithm.solve")),
                 Optional.empty(), ComparisonOutcome.NOT_COMPARED, "not compared", List.of()));
         repository.createMethodCatalog(CaseArchiveRepositoryTest.methodCatalog());
+        CaseArchiveRepositoryTest.archiveInvestigation(repository);
         repository.createCodePathPlan(CaseArchiveRepositoryTest.codePathPlan());
         repository.startMethodPathCollection(new MethodPathCollectionRecord(
                 "1.0", CASE_ID, ANALYSIS_ID,

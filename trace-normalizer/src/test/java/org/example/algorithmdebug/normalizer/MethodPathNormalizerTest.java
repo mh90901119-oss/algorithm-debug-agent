@@ -422,14 +422,14 @@ class MethodPathNormalizerTest {
     private static CodePathCollectionPlan plan(
             List<MethodSelector> selectors, Optional<String> scopeMethodKey) {
         return new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
                 methodSelections(selectors), scopeMethodKey,
                 CollectionBudget.defaults(), "locate repeated paths", intent(), NOW);
     }
 
     private static CodePathCollectionPlan plan(List<MethodSelector> selectors) {
         return new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
                 methodSelections(selectors), Optional.empty(),
                 CollectionBudget.defaults(), "Locate the key path", intent(), NOW);
     }

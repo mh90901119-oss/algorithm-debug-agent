@@ -71,6 +71,10 @@ public record InvestigationBinding(
         }
         checkedHypotheses.forEach(value -> requireIdentity(
                 checkedGap.caseId(), checkedGap.analysisId(), value.caseId(), value.analysisId()));
+        if (checkedHypotheses.stream().anyMatch(
+                value -> !value.gapIds().contains(checkedGap.gapId()))) {
+            throw new IllegalArgumentException("Hypothesis must belong to the bound Gap");
+        }
         checkedPredicates.forEach(value -> {
             requireIdentity(
                     checkedGap.caseId(), checkedGap.analysisId(), value.caseId(), value.analysisId());

@@ -52,6 +52,7 @@ import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TestOutcome;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
@@ -128,6 +129,11 @@ class CollectionApplicationServiceTest {
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());
         staticAnalysis.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        InvestigationTestFixture.archive(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                new SourceAnchor(
+                        "fixture.TargetTest", "caseUnderTest", "()V",
+                        "src/test/java/fixture/TargetTest.java", 2, 2), NOW);
         staticAnalysis.createCodePathPlan(
                 workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new CodePathPlanRequest(
@@ -135,9 +141,7 @@ class CollectionApplicationServiceTest {
                         List.of(new org.example.algorithmdebug.plan.CodePathMethodRequest(
                                 "fixture.TargetTest#caseUnderTest()V", List.of())),
                         java.util.Optional.empty(), "Locate the runtime path",
-                        new org.example.algorithmdebug.contracts.InvestigationIntent(
-                                "Which path executed?", "The target test executed", List.of(),
-                                List.of("Observed method path")),
+                        InvestigationTestFixture.request("Which path executed?"),
                         org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
@@ -457,9 +461,7 @@ class CollectionApplicationServiceTest {
                         java.util.Optional.empty(), List.of(),
                         org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE,
                         1, 10_000, "Summarize the runtime path",
-                        new org.example.algorithmdebug.contracts.InvestigationIntent(
-                                "Which path executed?", "The target test executed", List.of(),
-                                List.of("Observed method counts")),
+                        InvestigationTestFixture.request("Which path executed?"),
                         org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 

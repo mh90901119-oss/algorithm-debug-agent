@@ -19,15 +19,28 @@ import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.MethodSelector;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationState;
 
 /** 将大模型选择的方法和可读投影确定性编译成精确 CodePath 计划。 */
 public final class CodePathPlanCompiler {
 
     private static final Pattern ARGUMENT_PATH = Pattern.compile("arg\\[(\\d+)]((?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*)");
     private static final Pattern RETURN_PATH = Pattern.compile("return((?:\\.[A-Za-z_$][A-Za-z0-9_$]*)*)");
+    private final InvestigationBindingValidator bindingValidator =
+            new InvestigationBindingValidator();
 
     /** 验证方法属于当前目录、投影符合 descriptor，并生成稳定排序的 Plan。 */
-    public CodePathCollectionPlan compile(MethodCatalog catalog, CodePathPlanRequest request) {
+    public CodePathCollectionPlan compile(
+            MethodCatalog catalog, InvestigationState state, CodePathPlanRequest request) {
+        if (catalog == null || state == null || request == null) {
+            throw new IllegalArgumentException("catalog, state and request must not be null");
+        }
+        if (!catalog.caseId().equals(state.caseId())
+                || !catalog.analysisId().equals(state.analysisId())) {
+            throw new PlanCompilationException(
+                    "InvestigationState identity does not match MethodCatalog");
+        }
         if (request.methods().isEmpty() || request.methods().size() > 50) {
             throw new PlanCompilationException("The CodePath plan must select between 1 and 50 methods");
         }
@@ -45,12 +58,16 @@ public final class CodePathPlanCompiler {
                 .sorted(Comparator.comparing(selection -> selection.selector().methodKey()))
                 .toList();
         validateScopeConditions(request, selections, scopeMethodKey);
+        var binding = bindingValidator.validateCodePath(
+                state, request.investigation(), selections, request.captureMode());
         return new CodePathCollectionPlan(
                 SchemaVersions.CODEPATH_COLLECTION_PLAN,
                 request.planId(), catalog.caseId(), catalog.analysisId(), catalog.targetTest(),
                 selections, scopeMethodKey, request.scopeConditions(), request.captureMode(),
                 request.scopeStartOrdinal(), request.maxMatchedScopes(), request.budget(),
-                request.rationale(), request.intent(), request.requestedAt());
+                request.rationale(), request.investigation().questionToAnswer(),
+                InvestigationBindingStatus.STRUCTURED, Optional.of(binding),
+                request.requestedAt());
     }
 
     private void validateScopeConditions(

@@ -146,7 +146,7 @@ class JdwpCollectionContractsTest {
     private static JdwpCollectionPlan plan(
             List<JdwpTracepointSpec> tracepoints, JdwpCollectionBudget budget) {
         return new JdwpCollectionPlan(
-                SchemaVersions.JDWP_COLLECTION_PLAN,
+                SchemaVersions.JDWP_COLLECTION_PLAN_LEGACY,
                 new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new TargetTest("fixture.AlgorithmTest", "runs"), tracepoints, budget,
                 "Capture the decision state",

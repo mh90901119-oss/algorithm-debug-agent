@@ -8,7 +8,7 @@
 
 **Tech Stack:** Java 21、Maven 3.9+、JUnit 5、Jackson 2.17.2、JSON Schema Draft 2020-12、官方 MCP Java SDK 2.0.1、PowerShell、Node.js Eval Harness、Qwen CLI Extension。
 
-**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.7；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
+**Spec:** `docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.8；`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 
 **Execution location:** 当前根仓库 `D:\javacode\algorithm-debug-agent`；不创建或使用 worktree。用户未跟踪目录 `docs/sharing/` 不修改、不暂存、不提交。
 
@@ -120,6 +120,7 @@ git commit -m "docs: freeze evidence-constrained mcp baseline"
 - Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/CollectionBaselineCheck.java`
 - Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/CollectionExecutionSummary.java`
 - Modify: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/SchemaVersions.java`
+- Create: `ada-contracts/src/main/java/org/example/algorithmdebug/contracts/investigation/InvestigationBindingStatus.java`
 - Create: `schemas/collection/evidence-eligibility-v1.schema.json`
 - Create: `schemas/collection/collection-execution-summary-v3.schema.json`
 - Create: `evidence-engine/src/main/java/org/example/algorithmdebug/evidence/EvidenceEligibilityEvaluator.java`
@@ -741,9 +742,10 @@ git commit -m "feat: evaluate investigation observations deterministically"
 - Create: `schemas/collection/jdwp-plan-v6.schema.json`
 - Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/CodePathPlanRequest.java`
 - Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/JdwpPlanRequest.java`
+- Create: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/InvestigationBindingRequest.java`
 - Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/CodePathPlanCompiler.java`
 - Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/JdwpPlanCompiler.java`
-- Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/CollectorDebugPlan.java`
+- Review only: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/CollectorDebugPlan.java`（外部 Collector v5 协议保持不变）
 - Modify: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/CollectorDebugPlanWriter.java`
 - Create: `debug-plan-engine/src/main/java/org/example/algorithmdebug/plan/InvestigationBindingValidator.java`
 - Create: `debug-plan-engine/src/test/java/org/example/algorithmdebug/plan/InvestigationBoundPlanCompilerTest.java`
@@ -752,10 +754,11 @@ git commit -m "feat: evaluate investigation observations deterministically"
 - Modify: `debug-plan-engine/src/test/java/org/example/algorithmdebug/plan/CollectorDebugPlanWriterTest.java`
 - Modify: `debug-plan-engine/src/test/java/org/example/algorithmdebug/plan/CollectorDebugPlanCompatibilityTest.java`
 - Modify: `tools/code-path-tracer-junit-launcher/src/main/java/org/example/algorithmdebug/codepath/launcher/LauncherCodePathPlan.java`
-- Modify: `tools/code-path-tracer-junit-launcher/src/main/java/org/example/algorithmdebug/codepath/launcher/CodePathPlanReader.java`
+- Review only: `tools/code-path-tracer-junit-launcher/src/main/java/org/example/algorithmdebug/codepath/launcher/CodePathPlanReader.java`（现有严格 Mapper 无需修改）
 - Modify: `tools/code-path-tracer-junit-launcher/src/test/java/org/example/algorithmdebug/codepath/launcher/CodePathPlanReaderTest.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/CodePathPlanSummary.java`
 - Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/JdwpPlanSummary.java`
+- Modify: `ada-core/src/main/java/org/example/algorithmdebug/core/StaticAnalysisApplicationService.java`
 - Modify: `case-management/src/main/java/org/example/algorithmdebug/casecore/CaseArchiveRepository.java`
 - Modify: `case-management/src/test/java/org/example/algorithmdebug/casecore/CaseArchiveRepositoryTest.java`
 
@@ -780,7 +783,7 @@ git commit -m "feat: evaluate investigation observations deterministically"
 - [ ] **Step 2: 运行 RED**
 
 ```powershell
-mvn -pl ada-contracts,debug-plan-engine,tools/code-path-tracer-junit-launcher,case-management,ada-core -am test "-Dtest=InvestigationBoundPlanCompilerTest,CodePathPlanCompilerTest,JdwpPlanCompilerTest,CollectorDebugPlanWriterTest,CollectorDebugPlanCompatibilityTest,CodePathPlanReaderTest,CaseArchiveRepositoryTest" "-Dsurefire.failIfNoSpecifiedTests=false"
+mvn -Pcodepath-launcher -pl ada-contracts,debug-plan-engine,case-management,ada-core,:code-path-tracer-junit-launcher -am test "-Dtest=InvestigationBoundPlanCompilerTest,CodePathPlanCompilerTest,JdwpPlanCompilerTest,CollectorDebugPlanWriterTest,CollectorDebugPlanCompatibilityTest,CodePathPlanReaderTest,CaseArchiveRepositoryTest" "-Dsurefire.failIfNoSpecifiedTests=false"
 ```
 
 - [ ] **Step 3: 实现 Plan v7/v6 和 validator**
@@ -794,7 +797,7 @@ Validator 校验 identity、Gap 状态、Hypothesis、Predicate 数量/唯一性
 - [ ] **Step 5: 运行 GREEN 和 Commit**
 
 ```powershell
-mvn -pl ada-contracts,debug-plan-engine,tools/code-path-tracer-junit-launcher,case-management,ada-core -am test
+mvn -Pcodepath-launcher -pl ada-contracts,debug-plan-engine,case-management,ada-core,:code-path-tracer-junit-launcher -am test
 git add ada-contracts debug-plan-engine tools/code-path-tracer-junit-launcher case-management ada-core schemas/collection
 git commit -m "feat: bind collection plans to investigation predicates"
 ```

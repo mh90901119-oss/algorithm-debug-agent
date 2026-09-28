@@ -3,7 +3,6 @@ package org.example.algorithmdebug.plan;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.PlanId;
 
@@ -13,7 +12,7 @@ public record JdwpPlanRequest(
         List<JdwpTracepointRequest> tracepoints,
         JdwpCollectionBudget budget,
         String rationale,
-        InvestigationIntent intent,
+        InvestigationBindingRequest investigation,
         Instant requestedAt) {
 
     public JdwpPlanRequest {
@@ -27,7 +26,7 @@ public record JdwpPlanRequest(
         if (rationale.isEmpty() || rationale.length() > 4_096) {
             throw new IllegalArgumentException("rationale must contain between 1 and 4096 characters");
         }
-        intent = Objects.requireNonNull(intent, "intent");
+        investigation = Objects.requireNonNull(investigation, "investigation");
         requestedAt = Objects.requireNonNull(requestedAt, "requestedAt");
     }
 }

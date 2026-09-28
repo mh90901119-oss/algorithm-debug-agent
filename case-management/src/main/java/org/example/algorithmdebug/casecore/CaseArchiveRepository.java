@@ -31,6 +31,17 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
+import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGap;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBinding;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationEvent;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicate;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
+import org.example.algorithmdebug.contracts.investigation.PredicateRole;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -426,6 +437,9 @@ public final class CaseArchiveRepository {
             throw identityMismatch("CodePath plan identity does not match MethodCatalog");
         }
         validatePlanSelectors(catalog, checked);
+        validateCurrentInvestigationBinding(
+                checked.caseId(), checked.analysisId(), checked.investigationStatus(),
+                checked.investigationBinding());
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
@@ -508,6 +522,9 @@ public final class CaseArchiveRepository {
                 throw identityMismatch("JDWP tracepoint is outside MethodCatalog or its source anchor does not match");
             }
         }
+        validateCurrentInvestigationBinding(
+                checked.caseId(), checked.analysisId(), checked.investigationStatus(),
+                checked.investigationBinding());
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
@@ -1102,6 +1119,70 @@ public final class CaseArchiveRepository {
         if (!caseId.equals(fingerprint.caseId())
                 || !analysisId.equals(fingerprint.analysisId())) {
             throw identityMismatch("RunResultFingerprint document identity does not match its Analysis");
+        }
+    }
+
+    private void validateCurrentInvestigationBinding(
+            CaseId caseId,
+            AnalysisId analysisId,
+            InvestigationBindingStatus status,
+            Optional<InvestigationBinding> binding) {
+        if (status != InvestigationBindingStatus.STRUCTURED || binding.isEmpty()) {
+            throw identityMismatch(
+                    "Legacy unstructured collection plans are read-only and cannot be archived");
+        }
+        InvestigationBinding value = binding.orElseThrow();
+        if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
+            throw identityMismatch("Collection plan InvestigationBinding identity mismatch");
+        }
+        var projectId = requireCase(caseId).projectId();
+        InvestigationJournalReader.Result journal = new InvestigationJournalReader(
+                casesRoot, mapper).readValidatedEvents(
+                        new AnalysisIdentity(projectId, caseId, analysisId));
+        if (journal.events().isEmpty() || !journal.limitations().isEmpty()) {
+            throw identityMismatch(
+                    "Collection plan requires a complete Investigation journal");
+        }
+
+        var hypotheses = new HashSet<HypothesisId>();
+        var gaps = new HashMap<EvidenceGapId, EvidenceGap>();
+        var gapStatuses = new HashMap<EvidenceGapId, EvidenceGapStatus>();
+        var predicates = new HashMap<ObservationPredicateId, ObservationPredicate>();
+        for (InvestigationEvent event : journal.events()) {
+            if (event instanceof InvestigationEvent.HypothesisAdded added) {
+                hypotheses.add(added.hypothesis().hypothesisId());
+            } else if (event instanceof InvestigationEvent.EvidenceGapAdded added) {
+                gaps.put(added.gap().gapId(), added.gap());
+                gapStatuses.put(added.gap().gapId(), added.gap().status());
+            } else if (event instanceof InvestigationEvent.PredicateRegistered registered) {
+                predicates.put(registered.predicate().predicateId(), registered.predicate());
+            } else if (event instanceof InvestigationEvent.GapStatusChanged changed) {
+                gapStatuses.put(changed.gapId(), changed.newStatus());
+            }
+        }
+        EvidenceGap gap = gaps.get(value.gapId());
+        if (gap == null || gapStatuses.get(value.gapId()) != EvidenceGapStatus.OPEN
+                || !hypotheses.containsAll(value.hypothesisIds())
+                || !gap.hypothesisIds().containsAll(value.hypothesisIds())) {
+            throw identityMismatch(
+                    "Collection plan references a missing or non-open Investigation object");
+        }
+        boolean containsCriticalPredicate = false;
+        for (ObservationPredicateId predicateId : value.predicateIds()) {
+            ObservationPredicate predicate = predicates.get(predicateId);
+            if (predicate == null || !predicate.gapId().equals(value.gapId())
+                    || !value.hypothesisIds().contains(predicate.hypothesisId())) {
+                throw identityMismatch(
+                        "Collection plan references an unregistered or unrelated Predicate");
+            }
+            containsCriticalPredicate |= predicate.role() == PredicateRole.CRITICAL;
+        }
+        if (!containsCriticalPredicate) {
+            throw identityMismatch(
+                    "Collection plan requires at least one CRITICAL Predicate");
+        }
+        for (EvidenceId evidenceId : value.basedOnEvidenceIds()) {
+            requireEvidenceBundle(caseId, evidenceId);
         }
     }
 

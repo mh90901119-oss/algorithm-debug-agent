@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
@@ -22,6 +23,11 @@ import org.example.algorithmdebug.contracts.PlanId;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBinding;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
 import org.junit.jupiter.api.Test;
 
 class CollectorDebugPlanWriterTest {
@@ -47,6 +53,8 @@ class CollectorDebugPlanWriterTest {
         assertEquals(11, point.path("line").asInt());
         assertFalse(point.path("capture").has("locals"));
         assertFalse(root.toString().contains("sourceSha256"));
+        assertFalse(root.has("questionToAnswer"));
+        assertFalse(root.has("investigationBinding"));
         assertEquals(0, point.path("capture").path("valuePaths").size());
         assertEquals(5, point.path("captureFirstMatchedHits").asInt());
         assertEquals(5, point.path("captureEveryMatchedHits").asInt());
@@ -59,6 +67,22 @@ class CollectorDebugPlanWriterTest {
         assertArrayEquals(writer.write(plan(), 50_005), writer.write(plan(), 50_005));
         assertThrows(PlanCompilationException.class, () -> writer.write(plan(), 0));
         assertThrows(PlanCompilationException.class, () -> writer.write(plan(), 65_536));
+    }
+
+    @Test
+    void rejectsLegacyUnstructuredAgentPlan() {
+        JdwpCollectionPlan legacy = new JdwpCollectionPlan(
+                SchemaVersions.JDWP_COLLECTION_PLAN_LEGACY,
+                new PlanId("legacy-plan"), new CaseId("case-1"),
+                new AnalysisId("analysis-1"),
+                new TargetTest("fixture.AlgorithmTest", "runs"),
+                List.of(point("point-1", 11)), JdwpCollectionBudget.defaults(),
+                "legacy plan", new org.example.algorithmdebug.contracts.InvestigationIntent(
+                        "old question", "old hypothesis", List.of(),
+                        List.of("old observation")), Instant.EPOCH);
+
+        assertThrows(PlanCompilationException.class,
+                () -> new CollectorDebugPlanWriter().write(legacy, 50_005));
     }
 
     @Test
@@ -129,14 +153,21 @@ class CollectorDebugPlanWriterTest {
     }
 
     private static JdwpCollectionPlan plan(List<JdwpTracepointSpec> points) {
+        CaseId caseId = new CaseId("case-1");
+        AnalysisId analysisId = new AnalysisId("analysis-1");
         return new JdwpCollectionPlan(
                 SchemaVersions.JDWP_COLLECTION_PLAN,
-                new PlanId("plan-1"), new CaseId("case-1"), new AnalysisId("analysis-1"), new TargetTest("fixture.AlgorithmTest", "runs"),
+                new PlanId("plan-1"), caseId, analysisId,
+                new TargetTest("fixture.AlgorithmTest", "runs"),
                 points,
                 JdwpCollectionBudget.defaults(), "Inspect the decision state",
-                new org.example.algorithmdebug.contracts.InvestigationIntent(
-                        "Which value selected the branch?", "The state selected the branch",
-                        List.of(), List.of("Observed runtime state")),
+                "Which value selected the branch?",
+                InvestigationBindingStatus.STRUCTURED,
+                Optional.of(new InvestigationBinding(
+                        SchemaVersions.INVESTIGATION_BINDING, caseId, analysisId,
+                        new EvidenceGapId("gap-1"),
+                        List.of(new HypothesisId("hypothesis-1")),
+                        List.of(new ObservationPredicateId("predicate-1")), List.of())),
                 Instant.parse("2026-08-18T00:00:00Z"));
     }
 }

@@ -27,6 +27,7 @@ import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryCompleteness;
@@ -90,6 +91,12 @@ class StaticAnalysisApplicationServiceTest {
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaTestAlgorithmInputLocator(), Clock.fixed(NOW, ZoneOffset.UTC))
                 .capture(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        InvestigationTestFixture.archive(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                new SourceAnchor(
+                        "fixture.TargetTest", "caseUnderTest", "()V",
+                        "src/test/java/fixture/TargetTest.java", 2, 2),
+                NOW);
     }
 
     @Test
@@ -147,6 +154,7 @@ class StaticAnalysisApplicationServiceTest {
                         "fixture.TargetTest#caseUnderTest()V", "Locate the runtime path"));
 
         assertEquals(1, result.summary().selectorCount());
+        assertEquals("gap-1", result.summary().investigationBinding().gapId().value());
         assertEquals("analyses/analysis-1/plans/plan-1.json",
                 result.artifact().relativePath());
         assertEquals(result.artifact().sizeBytes(), Files.size(
@@ -174,10 +182,10 @@ class StaticAnalysisApplicationServiceTest {
                 new PlanId("plan-missing-evidence"),
                 codePathMethods("fixture.TargetTest#caseUnderTest()V"), java.util.Optional.empty(),
                 "Verify the observed path",
-                new org.example.algorithmdebug.contracts.InvestigationIntent(
-                        "Which path executed?", "One candidate path executed",
-                        List.of(new org.example.algorithmdebug.contracts.EvidenceId("missing-evidence")),
-                        List.of("Observed method entries")),
+                InvestigationTestFixture.request(
+                        "Which path executed?",
+                        List.of(new org.example.algorithmdebug.contracts.EvidenceId(
+                                "missing-evidence"))),
                 org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
@@ -236,9 +244,12 @@ class StaticAnalysisApplicationServiceTest {
                                 "target-entry", methodKey, 2,
                                 3, 3, 3, 0, null,
                                 org.example.algorithmdebug.contracts.JdwpCaptureSpec.stackOnly())),
-                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(), "Inspect target method", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
+                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(),
+                        "Inspect target method",
+                        InvestigationTestFixture.request("Which state was observed?"), NOW));
 
         assertEquals(1, result.summary().tracepointCount());
+        assertEquals("gap-1", result.summary().investigationBinding().gapId().value());
         assertEquals("analyses/analysis-1/plans/jdwp-plan-1.json",
                 result.artifact().relativePath());
         assertEquals(result.summary().planId(), archive().requireJdwpPlan(
@@ -310,10 +321,8 @@ class StaticAnalysisApplicationServiceTest {
                 .toList();
     }
 
-    private static org.example.algorithmdebug.contracts.InvestigationIntent codePathIntent() {
-        return new org.example.algorithmdebug.contracts.InvestigationIntent(
-                "Which path executed?", "The selected method executed", List.of(),
-                List.of("Observed method path"));
+    private static org.example.algorithmdebug.plan.InvestigationBindingRequest codePathIntent() {
+        return InvestigationTestFixture.request("Which path executed?");
     }
 
     private static String portable(Path path) {

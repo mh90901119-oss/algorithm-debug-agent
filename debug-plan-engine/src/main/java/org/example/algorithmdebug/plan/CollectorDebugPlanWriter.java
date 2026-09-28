@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.util.Comparator;
 import java.util.List;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
 
 /** 将 Agent JDWP Plan 映射为锁定外部 Collector 可以直接解析的稳定 JSON。 */
 public final class CollectorDebugPlanWriter {
@@ -25,6 +26,11 @@ public final class CollectorDebugPlanWriter {
     public byte[] write(JdwpCollectionPlan plan, int port) {
         if (plan == null) {
             throw new IllegalArgumentException("plan must not be null");
+        }
+        if (plan.investigationStatus() != InvestigationBindingStatus.STRUCTURED
+                || plan.investigationBinding().isEmpty()) {
+            throw new PlanCompilationException(
+                    "Legacy unstructured JDWP plans cannot be written for collection");
         }
         if (port < 1 || port > 65_535) {
             throw new PlanCompilationException("JDWP loopback port must be between 1 and 65535");

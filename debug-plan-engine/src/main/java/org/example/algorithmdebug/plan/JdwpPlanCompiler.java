@@ -13,9 +13,13 @@ import org.example.algorithmdebug.contracts.JdwpTracepointSpec;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationState;
 
 /** 将模型提出的 JDWP 采集意图绑定到当前 MethodCatalog 和模块内真实源码位置。 */
 public final class JdwpPlanCompiler {
+    private final InvestigationBindingValidator bindingValidator =
+            new InvestigationBindingValidator();
 
     /**
      * 解析方法身份、校验源码路径和断点行范围，并生成确定性排序的 Agent JDWP Plan。
@@ -27,9 +31,18 @@ public final class JdwpPlanCompiler {
      * @throws PlanCompilationException 请求不安全、源码漂移或文件读取失败
      */
     public JdwpCollectionPlan compile(
-            MethodCatalog catalog, JdwpPlanRequest request, Path moduleRoot) {
-        if (catalog == null || request == null || moduleRoot == null) {
-            throw new IllegalArgumentException("catalog, request and moduleRoot must not be null");
+            MethodCatalog catalog,
+            InvestigationState state,
+            JdwpPlanRequest request,
+            Path moduleRoot) {
+        if (catalog == null || state == null || request == null || moduleRoot == null) {
+            throw new IllegalArgumentException(
+                    "catalog, state, request and moduleRoot must not be null");
+        }
+        if (!catalog.caseId().equals(state.caseId())
+                || !catalog.analysisId().equals(state.analysisId())) {
+            throw new PlanCompilationException(
+                    "InvestigationState identity does not match MethodCatalog");
         }
         if (request.tracepoints().isEmpty() || request.tracepoints().size() > 20) {
             throw new PlanCompilationException("The JDWP plan must contain between 1 and 20 tracepoints");
@@ -47,12 +60,17 @@ public final class JdwpPlanCompiler {
                 .sorted(Comparator.comparing(JdwpTracepointRequest::tracepointId))
                 .map(point -> compilePoint(entries, point, realRoot))
                 .toList();
+        var binding = bindingValidator.validateJdwp(
+                state, request.investigation(), points);
         try {
             return new JdwpCollectionPlan(
                     SchemaVersions.JDWP_COLLECTION_PLAN,
                     request.planId(), catalog.caseId(), catalog.analysisId(),
                     catalog.targetTest(), points,
-                    request.budget(), request.rationale(), request.intent(), request.requestedAt());
+                    request.budget(), request.rationale(),
+                    request.investigation().questionToAnswer(),
+                    InvestigationBindingStatus.STRUCTURED,
+                    java.util.Optional.of(binding), request.requestedAt());
         } catch (IllegalArgumentException failure) {
             throw new PlanCompilationException("The JDWP plan violates the safety contract: " + failure.getMessage(), failure);
         }

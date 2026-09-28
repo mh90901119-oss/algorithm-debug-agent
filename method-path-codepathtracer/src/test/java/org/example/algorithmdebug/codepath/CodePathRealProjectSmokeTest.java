@@ -92,7 +92,7 @@ class CodePathRealProjectSmokeTest {
         Path java = Path.of(System.getProperty("java.home"), "bin",
                 System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java");
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-smoke"),
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, new PlanId("plan-smoke"),
                 new CaseId("case-smoke"), new AnalysisId("analysis-smoke"),
                 new TargetTest("org.example.scheduler.wafer.SimpleWaferSchedulerTest",
                         "parallelModeAllowsJobsToAlternateOnSharedChamber"),

@@ -95,7 +95,7 @@ class AggregateMethodPathNormalizerTest {
         TargetTest target = new TargetTest("fixture.Test", "case1");
         String methodKey = "fixture.A#run(Ljava/lang/Object;)V";
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, planId, caseId, analysisId, target,
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, planId, caseId, analysisId, target,
                 List.of(new CodePathMethodSelection(
                         new MethodSelector(methodKey, "fixture.A", "run", "(Ljava/lang/Object;)V"),
                         List.of(new CodePathProjection(

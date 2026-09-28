@@ -122,8 +122,11 @@ class CollectionEvidenceValidatorTest {
                 original.plan().schemaVersion(), original.plan().planId(),
                 original.plan().caseId(), original.plan().analysisId(), original.plan().targetTest(),
                 original.plan().methodSelections(), Optional.of(scopeMethod),
+                original.plan().scopeConditions(), original.plan().captureMode(),
+                original.plan().scopeStartOrdinal(), original.plan().maxMatchedScopes(),
                 original.plan().budget(), original.plan().rationale(),
-                original.plan().intent(), original.plan().createdAt());
+                original.plan().questionToAnswer(), original.plan().investigationStatus(),
+                original.plan().investigationBinding(), original.plan().createdAt());
         MethodPathSummary old = original.summary();
         MethodPathSummary scopedSummary = new MethodPathSummary(
                 old.schemaVersion(), old.evidenceId(), old.caseId(), old.analysisId(), old.runId(), old.planId(), old.collectionId(), old.rawTrace(),
@@ -188,7 +191,7 @@ class CollectionEvidenceValidatorTest {
                 SchemaVersions.JDWP_COLLECTION_REQUEST, CASE_ID, ANALYSIS_ID,
                 RUN_ID, PLAN_ID, COLLECTION_ID, TARGET, "JDWP", NOW);
         JdwpCollectionPlan plan = new JdwpCollectionPlan(
-                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET, List.of(new JdwpTracepointSpec(
+                SchemaVersions.JDWP_COLLECTION_PLAN_LEGACY, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET, List.of(new JdwpTracepointSpec(
                         "point-1", "fixture.Algorithm#solve()V",
                         new SourceAnchor("fixture.Algorithm", "solve", "()V",
                                 "src/main/java/fixture/Algorithm.java", 10, 20),
@@ -248,7 +251,7 @@ class CollectionEvidenceValidatorTest {
                 "1.0", CASE_ID, ANALYSIS_ID, RUN_ID, PLAN_ID,
                 COLLECTION_ID, TARGET, "CODEPATH", NOW);
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, PLAN_ID, CASE_ID, ANALYSIS_ID, TARGET,
                 List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(
                         new MethodSelector(
                                 "fixture.Algorithm#solve()V", "fixture.Algorithm", "solve", "()V"),

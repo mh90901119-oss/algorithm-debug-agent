@@ -16,6 +16,7 @@ import java.util.Optional;
 import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
+import org.example.algorithmdebug.casecore.InvestigationJournalReader;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
 import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceException;
@@ -24,6 +25,7 @@ import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.ArtifactReference;
 import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
+import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
@@ -34,6 +36,9 @@ import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
 import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
+import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
+import org.example.algorithmdebug.contracts.investigation.InvestigationState;
+import org.example.algorithmdebug.core.coordination.InvestigationStateProjector;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanCompiler;
@@ -200,9 +205,12 @@ public final class StaticAnalysisApplicationService {
             requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
-            requireEvidenceLineage(archive, caseId, request.intent());
+            requireEvidenceLineage(
+                    archive, caseId, request.investigation().basedOnEvidenceIds());
+            InvestigationState state = requireInvestigationState(
+                    layout, projectId, caseId, analysisId);
             CodePathCollectionPlan plan = compiler.compile(
-                    archive.requireMethodCatalog(caseId, analysisId), request);
+                    archive.requireMethodCatalog(caseId, analysisId), state, request);
             Path document = archive.createCodePathPlan(plan);
             ArtifactReference artifact = describeArtifact(
                     layout.projectCases(projectId).resolve(caseId.value()), document,
@@ -216,11 +224,13 @@ public final class StaticAnalysisApplicationService {
                             "projectionCount", Integer.toString(plan.methodSelections().stream()
                                     .mapToInt(selection -> selection.projections().size()).sum()),
                             "basedOnEvidenceCount", Integer.toString(
-                                    plan.intent().basedOnEvidenceIds().size()),
+                                    plan.investigationBinding().orElseThrow()
+                                            .basedOnEvidenceIds().size()),
                             "scopeConfigured", Boolean.toString(plan.scopeMethodKey().isPresent())));
             return new ArtifactBackedResult<>(new CodePathPlanSummary(
                     plan.caseId(), plan.analysisId(), plan.planId(),
-                    plan.methodSelections().size()), artifact);
+                    plan.methodSelections().size(),
+                    plan.investigationBinding().orElseThrow()), artifact);
         } catch (PlanCompilationException failure) {
             throw new CaseRunException("PLAN_COMPILATION_FAILED", "CodePath plan compilation failed", failure);
         } catch (WorkspaceException failure) {
@@ -241,9 +251,12 @@ public final class StaticAnalysisApplicationService {
             ProjectRegistration registration = requireRegistration(layout, projectId);
             CaseArchiveRepository archive = archive(layout, projectId);
             archive.requireVerifiedAlgorithmInputCapture(caseId, analysisId);
-            requireEvidenceLineage(archive, caseId, request.intent());
+            requireEvidenceLineage(
+                    archive, caseId, request.investigation().basedOnEvidenceIds());
+            InvestigationState state = requireInvestigationState(
+                    layout, projectId, caseId, analysisId);
             var plan = jdwpCompiler.compile(
-                    archive.requireMethodCatalog(caseId, analysisId), request,
+                    archive.requireMethodCatalog(caseId, analysisId), state, request,
                     Path.of(registration.moduleRoot()));
             Path document = archive.createJdwpPlan(plan);
             ArtifactReference artifact = describeArtifact(
@@ -264,10 +277,12 @@ public final class StaticAnalysisApplicationService {
                             "requestedValuePathCount", Integer.toString(plan.tracepoints().stream()
                                     .mapToInt(point -> point.capture().valuePaths().size()).sum()),
                             "basedOnEvidenceCount", Integer.toString(
-                                    plan.intent().basedOnEvidenceIds().size())));
+                                    plan.investigationBinding().orElseThrow()
+                                            .basedOnEvidenceIds().size())));
             return new ArtifactBackedResult<>(new JdwpPlanSummary(
                     plan.caseId(), plan.analysisId(), plan.planId(),
-                    plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes()),
+                    plan.tracepoints().size(), plan.budget().maxEvents(), plan.budget().maxBytes(),
+                    plan.investigationBinding().orElseThrow()),
                     artifact);
         } catch (PlanCompilationException failure) {
             throw new CaseRunException("JDWP_PLAN_COMPILATION_FAILED", "JDWP plan compilation failed", failure);
@@ -418,8 +433,8 @@ public final class StaticAnalysisApplicationService {
     private static void requireEvidenceLineage(
             CaseArchiveRepository archive,
             CaseId caseId,
-            org.example.algorithmdebug.contracts.InvestigationIntent intent) {
-        for (var evidenceId : intent.basedOnEvidenceIds()) {
+            List<EvidenceId> evidenceIds) {
+        for (var evidenceId : evidenceIds) {
             try {
                 archive.requireEvidenceBundle(caseId, evidenceId);
             } catch (WorkspaceException failure) {
@@ -428,6 +443,33 @@ public final class StaticAnalysisApplicationService {
                         "Plan references Evidence that is not available in the current Case",
                         failure);
             }
+        }
+    }
+
+    private InvestigationState requireInvestigationState(
+            WorkspaceLayout layout,
+            ProjectId projectId,
+            CaseId caseId,
+            AnalysisId analysisId) {
+        AnalysisIdentity identity = new AnalysisIdentity(projectId, caseId, analysisId);
+        InvestigationJournalReader.Result journal = new InvestigationJournalReader(
+                layout.projectCases(projectId), mapper).readValidatedEvents(identity);
+        if (journal.events().isEmpty()) {
+            throw new CaseRunException(
+                    "INVESTIGATION_STATE_NOT_FOUND",
+                    "Collection plans require an initialized Investigation journal");
+        }
+        if (!journal.limitations().isEmpty()) {
+            throw new CaseRunException(
+                    "INVESTIGATION_STATE_INCOMPLETE",
+                    "Collection plans cannot bind to an Investigation journal with sequence gaps");
+        }
+        try {
+            return new InvestigationStateProjector().project(journal.events());
+        } catch (IllegalArgumentException failure) {
+            throw new CaseRunException(
+                    "INVESTIGATION_STATE_INVALID",
+                    "Investigation journal cannot be projected safely", failure);
         }
     }
 

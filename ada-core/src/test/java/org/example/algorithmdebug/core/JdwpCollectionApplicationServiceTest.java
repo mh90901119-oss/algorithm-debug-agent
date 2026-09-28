@@ -136,13 +136,16 @@ class JdwpCollectionApplicationServiceTest {
         staticAnalysis.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
         var catalog = archive.requireMethodCatalog(CASE_ID, ANALYSIS_ID);
         var anchor = catalog.entries().getFirst().sourceAnchor();
+        InvestigationTestFixture.archive(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, TARGET, anchor, NOW);
         staticAnalysis.createJdwpPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new JdwpPlanRequest(PLAN_ID, List.of(new JdwpTracepointRequest(
                         "target-entry", catalog.entries().getFirst().methodKey(),
                         anchor.startLine(), 3, 3, 3, 0, List.of(),
                         new JdwpCaptureSpec(
                                 true, 8, 256, List.of("algorithmInput")))),
-                        JdwpCollectionBudget.defaults(), "Inspect target call", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
+                        JdwpCollectionBudget.defaults(), "Inspect target call",
+                        InvestigationTestFixture.request("Which state was observed?"), NOW));
     }
 
     @Test

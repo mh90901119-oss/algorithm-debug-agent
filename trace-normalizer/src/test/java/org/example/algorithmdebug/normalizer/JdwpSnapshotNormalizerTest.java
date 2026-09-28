@@ -227,7 +227,7 @@ class JdwpSnapshotNormalizerTest {
                         List.of(), capture))
                 .toList();
         return new JdwpCollectionPlan(
-                SchemaVersions.JDWP_COLLECTION_PLAN, PLAN_ID, CASE_ID, ANALYSIS_ID,
+                SchemaVersions.JDWP_COLLECTION_PLAN_LEGACY, PLAN_ID, CASE_ID, ANALYSIS_ID,
                 TARGET, points, JdwpCollectionBudget.defaults(), "Inspect method state",
                 new InvestigationIntent(
                         "Which state was observed?",
