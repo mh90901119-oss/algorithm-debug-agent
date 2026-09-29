@@ -43,6 +43,21 @@ public final class McpToolCatalog {
             "schemas/tool/evidence-query-result-v2.schema.json";
     private static final String CONCLUSION_CANDIDATE_SCHEMA =
             "schemas/coordination/conclusion-candidate-v2.schema.json";
+    private static final String CONCLUSION_DECISION_SCHEMA =
+            "schemas/coordination/conclusion-decision-v2.schema.json";
+    private static final String CONCLUSION_FINALIZATION_SCHEMA =
+            "schemas/coordination/conclusion-finalization-v1.schema.json";
+    private static final String SCHEMA_PROPERTIES = "properties";
+    private static final String SCHEMA_DEFINITIONS = "$defs";
+    private static final String SCHEMA_REFERENCE_PREFIX = "#/$defs/";
+    private static final String REQUEST_FIELD = "request";
+    private static final String CANDIDATE_FIELD = "candidate";
+    private static final String DECISION_FIELD = "decision";
+    private static final String DATA_FIELD = "data";
+    private static final String CANDIDATE_NAMESPACE = "candidate_";
+    private static final String DECISION_NAMESPACE = "decision_";
+    private static final Set<String> SCHEMA_METADATA_KEYS = Set.of(
+            "$schema", "$id", "title", SCHEMA_DEFINITIONS);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
 
     private final List<McpToolDescriptor> descriptors;
@@ -169,20 +184,109 @@ public final class McpToolCatalog {
             String description) {
         Map<String, Object> input = readSchema(mapper, TOOL_SCHEMA_PREFIX
                 + name.replace('_', '-') + TOOL_SCHEMA_SUFFIX);
+        Map<String, Object> effectiveOutput = output;
         if (actionType == AnalysisActionType.EVIDENCE_QUERY) {
             input = composeNestedSchema(
                     input, readSchema(mapper, EVIDENCE_QUERY_SCHEMA),
-                    "request", true);
+                    REQUEST_FIELD, true);
         } else if (actionType == AnalysisActionType.ANALYSIS_FINALIZE) {
             input = composeNestedSchema(
                     input, readSchema(mapper, CONCLUSION_CANDIDATE_SCHEMA),
-                    "candidate", false);
+                    CANDIDATE_FIELD, false);
+            effectiveOutput = composeFinalizationOutput(
+                    output,
+                    readSchema(mapper, CONCLUSION_FINALIZATION_SCHEMA),
+                    readSchema(mapper, CONCLUSION_CANDIDATE_SCHEMA),
+                    readSchema(mapper, CONCLUSION_DECISION_SCHEMA));
         }
         return new McpToolDescriptor(
-                name, actionType, description, inputType, input, output);
+                name, actionType, description, inputType, input, effectiveOutput);
+    }
+
+    private static Map<String, Object> composeFinalizationOutput(
+            Map<String, Object> toolOutput,
+            Map<String, Object> finalizationSchema,
+            Map<String, Object> candidateSchema,
+            Map<String, Object> decisionSchema) {
+        NamespacedSchema candidate = namespaceSchema(candidateSchema, CANDIDATE_NAMESPACE);
+        NamespacedSchema decision = namespaceSchema(decisionSchema, DECISION_NAMESPACE);
+
+        LinkedHashMap<String, Object> finalization = schemaBody(finalizationSchema);
+        LinkedHashMap<String, Object> finalizationProperties = new LinkedHashMap<>(
+                requiredSchemaObject(finalization, SCHEMA_PROPERTIES));
+        finalizationProperties.put(CANDIDATE_FIELD, candidate.root());
+        finalizationProperties.put(DECISION_FIELD, decision.root());
+        finalization.put(SCHEMA_PROPERTIES, finalizationProperties);
+
+        LinkedHashMap<String, Object> composed = new LinkedHashMap<>(toolOutput);
+        LinkedHashMap<String, Object> outputProperties = new LinkedHashMap<>(
+                requiredSchemaObject(toolOutput, SCHEMA_PROPERTIES));
+        outputProperties.put(DATA_FIELD, finalization);
+        composed.put(SCHEMA_PROPERTIES, outputProperties);
+
+        LinkedHashMap<String, Object> definitions = new LinkedHashMap<>(
+                requiredSchemaObject(toolOutput, SCHEMA_DEFINITIONS));
+        definitions.putAll(candidate.definitions());
+        definitions.putAll(decision.definitions());
+        composed.put(SCHEMA_DEFINITIONS, definitions);
+        return immutableMap(composed);
     }
 
     @SuppressWarnings("unchecked")
+    private static NamespacedSchema namespaceSchema(
+            Map<String, Object> schema, String prefix) {
+        LinkedHashMap<String, Object> rewritten = (LinkedHashMap<String, Object>)
+                copyWithNamespacedRefs(schema, prefix);
+        Map<String, Object> sourceDefinitions = requiredSchemaObject(
+                rewritten, SCHEMA_DEFINITIONS);
+        rewritten.remove(SCHEMA_DEFINITIONS);
+        LinkedHashMap<String, Object> definitions = new LinkedHashMap<>();
+        sourceDefinitions.forEach((name, value) -> definitions.put(prefix + name, value));
+        return new NamespacedSchema(
+                java.util.Collections.unmodifiableMap(schemaBody(rewritten)),
+                java.util.Collections.unmodifiableMap(definitions));
+    }
+
+    private static LinkedHashMap<String, Object> schemaBody(Map<String, Object> schema) {
+        LinkedHashMap<String, Object> body = new LinkedHashMap<>(schema);
+        body.keySet().removeAll(SCHEMA_METADATA_KEYS);
+        return body;
+    }
+
+    private static Object copyWithNamespacedRefs(Object value, String prefix) {
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, nested) -> copy.put(
+                    String.valueOf(key), copyWithNamespacedRefs(nested, prefix)));
+            return copy;
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(nested -> copyWithNamespacedRefs(nested, prefix)).toList();
+        }
+        if (value instanceof String text && text.startsWith(SCHEMA_REFERENCE_PREFIX)) {
+            return SCHEMA_REFERENCE_PREFIX + prefix
+                    + text.substring(SCHEMA_REFERENCE_PREFIX.length());
+        }
+        return value;
+    }
+
+    private static Map<String, Object> requiredSchemaObject(
+            Map<String, Object> schema, String field) {
+        Object value = schema.get(field);
+        if (!(value instanceof Map<?, ?> map)) {
+            throw new IllegalStateException(
+                    "Schema field must be an object: " + field);
+        }
+        LinkedHashMap<String, Object> copy = new LinkedHashMap<>();
+        map.forEach((key, nested) -> copy.put(String.valueOf(key), nested));
+        return copy;
+    }
+
+    private record NamespacedSchema(
+            Map<String, Object> root,
+            Map<String, Object> definitions) {
+    }
+
     private static Map<String, Object> composeNestedSchema(
             Map<String, Object> toolSchema,
             Map<String, Object> domainSchema,
@@ -190,22 +294,20 @@ public final class McpToolCatalog {
             boolean useRequestDefinition) {
         LinkedHashMap<String, Object> composed = new LinkedHashMap<>(toolSchema);
         LinkedHashMap<String, Object> properties = new LinkedHashMap<>(
-                (Map<String, Object>) toolSchema.get("properties"));
-        Map<String, Object> definitions = (Map<String, Object>) domainSchema.get("$defs");
+                requiredSchemaObject(toolSchema, SCHEMA_PROPERTIES));
+        Map<String, Object> definitions = requiredSchemaObject(
+                domainSchema, SCHEMA_DEFINITIONS);
         Map<String, Object> nested;
         if (useRequestDefinition) {
-            nested = (Map<String, Object>) definitions.get("request");
+            nested = requiredSchemaObject(definitions, REQUEST_FIELD);
         } else {
             LinkedHashMap<String, Object> candidate = new LinkedHashMap<>(domainSchema);
-            candidate.keySet().removeAll(Set.of("$schema", "$id", "title", "$defs"));
+            candidate.keySet().removeAll(SCHEMA_METADATA_KEYS);
             nested = candidate;
         }
-        if (nested == null || definitions == null) {
-            throw new IllegalStateException("Domain schema cannot be composed into MCP input");
-        }
         properties.put(field, nested);
-        composed.put("properties", properties);
-        composed.put("$defs", definitions);
+        composed.put(SCHEMA_PROPERTIES, properties);
+        composed.put(SCHEMA_DEFINITIONS, definitions);
         return immutableMap(composed);
     }
 

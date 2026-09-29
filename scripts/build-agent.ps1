@@ -128,8 +128,6 @@ try {
         (Join-Path $repository "agent-definition\algorithm-debug-agent-v1.json") `
         -Raw -Encoding UTF8 | ConvertFrom-Json
     Assert-AgentAssetHash $definition.prompt.path $definition.prompt.sha256 "Canonical Prompt"
-    Assert-AgentAssetHash $definition.completionContract.path `
-        $definition.completionContract.sha256 "Completion Contract"
     Assert-AgentAssetHash $definition.capabilityManifest.path `
         $definition.capabilityManifest.sha256 "Capability Manifest"
 
@@ -143,8 +141,10 @@ try {
         "org/example/algorithmdebug/mcp/AlgorithmDebugMcpMain.class",
         "agent-definition/algorithm-debug-agent-v1.json",
         "agent-definition/system-prompt-v1.md",
-        "agent-definition/completion-contract-v1.schema.json",
         "schemas/agent/algorithm-debug-agent-v1.schema.json",
+        "schemas/coordination/conclusion-candidate-v2.schema.json",
+        "schemas/coordination/conclusion-decision-v2.schema.json",
+        "schemas/coordination/conclusion-finalization-v1.schema.json",
         "schemas/config/mcp-agent-settings-v1.schema.json",
         "META-INF/THIRD_PARTY_NOTICES.md"
     )

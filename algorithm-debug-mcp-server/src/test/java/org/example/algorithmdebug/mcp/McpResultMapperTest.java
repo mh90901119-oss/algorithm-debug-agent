@@ -57,6 +57,23 @@ class McpResultMapperTest {
         assertTrue(((Map<?, ?>) mapped.structuredContent()).containsKey("control"));
     }
 
+    @Test
+    void requestBudgetSizedDataRemainsCompleteForFinalizationRoundTrip() {
+        McpResultMapper mapper = new McpResultMapper();
+        CoordinatedToolResult<?> result = result(
+                ActionOutcome.SUCCEEDED, "ACTION_SUCCEEDED",
+                Map.of("candidate", "x".repeat(McpServerLimits.MAX_REQUEST_BYTES)));
+
+        CallToolResult mapped = mapper.map(result);
+
+        assertEquals(McpServerLimits.MAX_REQUEST_BYTES
+                        + McpServerLimits.MAX_COORDINATION_RESPONSE_OVERHEAD_BYTES,
+                McpServerLimits.MAX_RESULT_BYTES);
+        assertEquals(McpServerLimits.MAX_REQUEST_BYTES,
+                ((String) ((Map<?, ?>) ((Map<?, ?>) mapped.structuredContent())
+                        .get("data")).get("candidate")).length());
+    }
+
     private static Object field(CallToolResult result, String name) {
         return ((Map<?, ?>) result.structuredContent()).get(name);
     }

@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.example.algorithmdebug.contracts.coordination.ActionInputLimits;
@@ -39,9 +41,40 @@ class McpToolCatalogTest {
             assertFalse(descriptor.description().isBlank());
             McpJsonDefaults.getSchemaValidator().assertConforms(
                     descriptor.name(), descriptor.inputSchema());
+            McpJsonDefaults.getSchemaValidator().assertConforms(
+                    descriptor.name() + " output", descriptor.outputSchema());
             assertThrows(UnsupportedOperationException.class,
                     () -> descriptor.inputSchema().put("unexpected", true));
         }
+    }
+
+    @Test
+    void analysisFinalizeOutputCarriesTheCandidateAndGateDecision() {
+        McpToolCatalog catalog = McpToolCatalog.load();
+        Map<String, Object> finalizeOutput = catalog.require("analysis_finalize").outputSchema();
+        Map<String, Object> data = schema(properties(finalizeOutput).get("data"));
+
+        assertEquals(Set.of("schemaVersion", "candidate", "decision"), required(data));
+        assertTrue(properties(data).containsKey("candidate"));
+        assertTrue(properties(data).containsKey("decision"));
+        assertEquals(Map.of(), properties(
+                catalog.require("case_inspect").outputSchema()).get("data"));
+    }
+
+    @Test
+    void analysisFinalizeOutputSchemaAcceptsACompleteFinalizationOnly() {
+        Map<String, Object> outputSchema = McpToolCatalog.load()
+                .require("analysis_finalize").outputSchema();
+        var validator = McpJsonDefaults.getSchemaValidator();
+        Map<String, Object> result = finalizationResult();
+
+        assertTrue(validator.validate(outputSchema, result).valid());
+
+        Map<String, Object> invalidData = new LinkedHashMap<>(schema(result.get("data")));
+        invalidData.remove("decision");
+        Map<String, Object> invalidResult = new LinkedHashMap<>(result);
+        invalidResult.put("data", invalidData);
+        assertFalse(validator.validate(outputSchema, invalidResult).valid());
     }
 
     @Test
@@ -147,6 +180,11 @@ class McpToolCatalogTest {
     }
 
     @SuppressWarnings("unchecked")
+    private static Map<String, Object> schema(Object schema) {
+        return (Map<String, Object>) schema;
+    }
+
+    @SuppressWarnings("unchecked")
     private static Set<String> required(Map<String, Object> schema) {
         return Set.copyOf((java.util.List<String>) schema.get("required"));
     }
@@ -154,5 +192,56 @@ class McpToolCatalogTest {
     @SuppressWarnings("unchecked")
     private static int number(Object schema, String field) {
         return ((Number) ((Map<String, Object>) schema).get(field)).intValue();
+    }
+
+    private static Map<String, Object> finalizationResult() {
+        Map<String, Object> identity = Map.of(
+                "projectId", "project-1", "caseId", "case-1", "analysisId", "analysis-1");
+        Map<String, Object> node = Map.of(
+                "nodeId", "node-1", "type", "SYMPTOM", "label", "Observed symptom",
+                "evidenceIds", List.of("evidence-1"), "sourceQueryIds", List.of());
+        Map<String, Object> edge = Map.of(
+                "edgeId", "edge-1", "fromNodeId", "node-1", "toNodeId", "node-1",
+                "relation", "explains", "classification", "CONFIRMED_FACT", "critical", true,
+                "evidenceIds", List.of("evidence-1"), "sourceQueryIds", List.of());
+        Map<String, Object> chain = Map.of(
+                "schemaVersion", "1.0", "causalChainId", "chain-1",
+                "caseId", "case-1", "analysisId", "analysis-1",
+                "nodes", List.of(node), "edges", List.of(edge),
+                "createdAt", "2026-09-29T00:00:00Z");
+        Map<String, Object> claim = Map.of(
+                "claimId", "claim-1", "statement", "Evidence-backed conclusion",
+                "classification", "CONFIRMED_FACT", "evidenceIds", List.of("evidence-1"),
+                "artifactReferences", List.of(), "sourceReferenceIds", List.of("edge-1"));
+        Map<String, Object> candidate = Map.of(
+                "schemaVersion", "2.0", "conclusionId", "conclusion-1", "identity", identity,
+                "basedOnRevision", 7, "requestedStatus", "CONFIRMED",
+                "claims", List.of(claim), "causalChains", List.of(chain),
+                "unresolvedGapIds", List.of());
+        Map<String, Object> decision = Map.of(
+                "schemaVersion", "2.0", "policyVersion", "1.0",
+                "conclusionId", "conclusion-1", "identity", identity,
+                "evaluatedRevision", 7, "decision", "ALLOWED", "allowedStatus", "CONFIRMED",
+                "reasonCodes", List.of(), "missingEvidence", List.of(),
+                "allowedActions", List.of("CASE_AUDIT"));
+        Map<String, Object> control = Map.ofEntries(
+                Map.entry("schemaVersion", "1.0"), Map.entry("policyVersion", "1.0"),
+                Map.entry("identity", identity), Map.entry("revision", 7),
+                Map.entry("requestedAction", "ANALYSIS_FINALIZE"),
+                Map.entry("decision", "ALLOWED"), Map.entry("reasonCodes", List.of()),
+                Map.entry("satisfiedObligationIds", List.of()),
+                Map.entry("remainingObligationIds", List.of()),
+                Map.entry("contradictionIds", List.of()), Map.entry("openGapIds", List.of()),
+                Map.entry("supportedHypothesisIds", List.of("hypothesis-1")),
+                Map.entry("refutedHypothesisIds", List.of("hypothesis-2")),
+                Map.entry("unevaluatedPredicateIds", List.of()),
+                Map.entry("allowedActions", List.of("CASE_AUDIT")),
+                Map.entry("terminalEligibility", "CONFIRMED"));
+        return Map.of(
+                "schemaVersion", "1.0", "outcome", "SUCCEEDED",
+                "code", "ANALYSIS_FINALIZED", "message", "Conclusion evaluated",
+                "data", Map.of(
+                        "schemaVersion", "1.0", "candidate", candidate, "decision", decision),
+                "artifacts", List.of(), "control", control);
     }
 }

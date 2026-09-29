@@ -7,6 +7,9 @@
 - 审计阶段：生产代码实施前
 - 审计结论：`TECHNICALLY_IMPLEMENTABLE / REVIEW_REQUIRED`
 
+> 说明：本文件保存 2026-09-25 的实施前审计快照。2026-09-29 已由 Profile 2.0 边界简化设计取代其中“模型自填
+> Completion Contract”的宿主契约；当前完成边界是服务端 `ConclusionFinalization(candidate, decision)`。
+
 ## 1. 结论
 
 方案在架构、依赖方向、协议边界、状态恢复、并发控制、证据语义、兼容策略和测试入口上已经形成闭环，未发现
@@ -33,7 +36,7 @@
 | 用户目标 | 设计落点 | 审计结论 |
 |---|---|---|
 | Agent 可适配任意编程工具 | Canonical Agent Definition + stdio MCP Server + Host Adapter Kit | 闭环；宿主无子 Agent 能力时只承诺 MCP 能力集成 |
-| 不是一盘散沙的 MCP 工具 | Catalog、Dispatcher、Coordinator、ControlView、Completion Contract | 闭环；统一性由服务内部控制面实现 |
+| 不是一盘散沙的 MCP 工具 | Catalog、Dispatcher、Coordinator、ControlView、ConclusionFinalization | 闭环；统一性由服务内部控制面实现 |
 | Coordinator 不依赖 Skill 约束 | 每次 Tool Call 在 Server 内强制经过 `AnalysisCoordinator` | 闭环；模型没有可绕过入口 |
 | MCP Server 本身是否等于 Agent | 明确区分宿主模型子 Agent、Agent Definition 与 MCP 能力服务 | 语义清晰 |
 | 先 Qwen，再适配其他宿主 | Qwen Adapter 为第一实现，第二宿主作为可移植性门禁 | 闭环；不把 Qwen 规则写入 Core |
@@ -72,7 +75,8 @@ Lock 和 Conclusion Gate 分解，并要求类级单元测试。实施审查必�
 ### 4.3 MCP 与 Agent 边界
 
 MCP Server 不调用模型、不持有凭据、不实现第二个 Agent Loop；宿主负责创建子 Agent，Agent Definition 统一角色和
-完成契约。该设计既能通过 MCP 跨宿主复用能力，又不会把“协议服务”误称为“完整模型 Agent Runtime”。
+必需能力，Java Finalization 契约统一完成边界。该设计既能通过 MCP 跨宿主复用能力，又不会把“协议服务”误称为
+“完整模型 Agent Runtime”。
 
 审计结论：边界成立。
 

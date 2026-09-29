@@ -1,73 +1,97 @@
 # Algorithm Debug Agent
 
-面向本地 Java/Maven 算法 UT 的离线问题定位 Agent。OpenCode 与 LLM 负责理解问题、选择下一步工具和解释因果；Java 代码负责确定性执行 UT、静态分析、CodePath/JDWP 采集、校验和证据归档。
+面向本地 Java/Maven 算法 UT 的离线问题定位子 Agent。Qwen CLI 等宿主持有模型会话；Java 原生 MCP Server 负责
+确定性源码查询、UT 执行、CodePath/JDWP 采集、证据归档、流程协调和结论门禁。
 
-## 当前能力
+## 架构定位
 
-- 以一个明确的 JUnit 5 测试类或测试方法作为目标。
-- 在 UT 第一层源码中识别唯一的 `String` 算法输入路径，支持文件名以 `input.json` 或 `input_.json` 结尾。
-- 首次捕获时按原文件名复制输入，后续多轮分析复用并校验同一份输入。
-- 执行 Maven/JUnit，区分目标测试不存在、目标代码异常、断言失败和 Agent/环境故障。
-- 成功 Run 从配置的日期化结果目录捕获新增或变化的 JSON Gantt，并保留原文件名。
-- 生成有界方法目录和源码调用关系，帮助 LLM 找到动态采集边界。
-- 按 LLM 提交的结构化意图执行 CodePath 与 JDWP；CodePath 支持参数/返回值标量投影，JDWP 支持栈帧值路径条件和有界周期采样。
-- 通过 `evidence_query` 对已校验的 CodePath/JDWP 派生数据执行概览、精确过滤、上下文窗口、
-  分组计数和 JDWP 状态变化查询；查询同时报告源覆盖和确定性下一步，不把临时视图落盘。
-- 同一 OpenCode 会话的普通 Run、CodePath 和 JDWP 严格顺序执行，不使用文件锁；最终回答直接返回用户，不归档模型文本。
-- 将原始 Trace、派生摘要、校验和证据追加归档到 Workspace；模型最终回答直接返回用户，不写入 Workspace。
-- 以 10 个真实 OpenCode Smoke Case 回归成功、失败、静态、动态、完整性和跨实体因果场景。
+```mermaid
+flowchart LR
+    H["Qwen CLI / 其他宿主"] --> A["Algorithm Debug 子 Agent"]
+    A --> M["单个 algorithm-debug MCP Server"]
+    M --> C["Coordinator"]
+    C --> K["Java Core + Collectors"]
+    K --> W["追加式 Workspace"]
+    C --> F["ConclusionFinalization"]
+```
 
-## 安装前提
+- 宿主只暴露 Capability Manifest 中的 17 个 Tool；Resources/Prompts 是可选增强。
+- 所有 Tool 强制经过 Coordinator。Prompt 帮助模型选择动作，但顺序、幂等、锁、证据义务和 Conclusion Gate 由代码执行。
+- `analysis_finalize` 返回服务端 `ConclusionFinalization(candidate, decision)`；宿主不再让模型生成第二套完成契约。
+- 可选知识只以有界 `KNOWLEDGE_HINT` 进入生成的子 Agent Prompt，不能成为 Evidence 或绕过门禁。
+- MCP Server 不运行第二个模型、不持有模型凭据、不修改目标算法生产源码，也不接管生产决策。
 
-- OpenCode 已安装并可使用大模型，不限制具体 OpenCode 版本；安装器以能力发现判断兼容性。
-- Agent 使用 JDK 21 构建和运行。
-- 目标算法 UT 可以使用独立的 JDK 17 或 JDK 21。
-- Maven 能在目标算法模块目录执行指定 UT；离线环境所需业务依赖应已在内部镜像或本机 Maven 仓库中。
+详细边界见 [当前能力](docs/current-capabilities.md)、[模块详细设计](docs/architecture/algorithm-debug-agent-module-detailed-design-v1.md)
+和 [工作流与产物](docs/algorithm-debug-workflow-and-artifacts.md)。
+
+## 核心能力
+
+- 对一个明确的 JUnit 5 测试类或方法建立追加式 Case/Analysis。
+- 捕获并有界读取唯一算法输入；普通 Maven/JUnit Run 区分断言失败、目标异常、超时和 Agent/环境故障。
+- 成功普通 Run 独立归档新增 Gantt；失败动态采集只用结构化失败指纹确认是否复现同类失败。
+- 生成 Method Catalog，并通过 `source_query` 有界查询方法、调用者、被调用者、可达路径、源码窗口和符号。
+- CodePath 使用 Byte Buddy 精确插桩，支持高频 `AGGREGATE` 与窄范围 `TRACE`。
+- JDWP 使用精确断点、条件、命名标量投影和有界采样采集运行时状态。
+- `evidence_query` 提供 SUMMARY、FILTER、WINDOW、COUNT 与 JDWP CHANGES，同时报告 coverage 和 limitation。
+- Investigation Journal 保存竞争假设、Gap、冻结 Predicate 和 `TRUE/FALSE/UNKNOWN` Observation，反证不能被覆盖。
+- Conclusion Gate 校验因果链、引用、竞争假设、截断和失败指纹，把结论限制为 `CONFIRMED`、
+  `BOUNDED_HYPOTHESIS` 或 `MISSING_EVIDENCE`。
+
+## 环境要求
+
+- Agent 使用 JDK 21+ 构建和运行。
+- 目标算法 UT 可以使用独立 JDK 17 或 JDK 21。
+- Maven 能在目标算法模块执行指定 UT；离线环境所需业务依赖应已在内部镜像或本机仓库中。
+- Qwen CLI 正式 Adapter 的最低版本由 `integrations/qwen-cli/adapter-manifest.json` 声明。
 
 ## 配置
 
-安装前编辑 [config/agent-settings.json](config/agent-settings.json)。所有字段都有默认值，用户可直接修改：
+Java MCP 入口读取 [config/mcp-agent-settings.json](config/mcp-agent-settings.json)：
 
 | 字段 | 用途 |
 | --- | --- |
-| `openCodeConfigDirectory` | OpenCode 全局配置目录 |
-| `workspaceDirectory` | Case、Run、Trace、Evidence 和日志目录 |
-| `dfxDirectory` | 尚未建立 Case 时的 Java 启动诊断日志目录 |
-| `evalDirectory` | Eval 报告目录 |
-| `resultJsonDirectory` | 算法 Gantt 输出目录，支持 `${runDate}` |
-| `agentJavaHome` | Agent 的 JDK 21；空值时从环境发现 |
-| `targetJavaHome` | 目标 UT 使用的 JDK；空值时从环境发现 |
-| `mavenExecutable` | Maven 可执行文件；空值时使用 `mvn` |
+| `workspaceDirectory` | Case、Run、Collection、Evidence、Conclusion 和日志根目录 |
+| `agentJavaHome` | Agent 的 JDK 21+；空值时从环境发现 |
+| `targetJavaHome` | 目标 UT 与 CodePath 使用的 JDK；空值时使用 Agent Java |
+| `mavenExecutable` | Maven 可执行文件；空值时从环境发现 |
+| `knowledgeDirectory` | 可选 Markdown 知识目录；为空或不存在不阻断分析 |
 
-默认 Gantt 配置为 `D:\\log\\scheduler\\${runDate}\\gant`。`${runDate}` 在每次 Run 开始时按本机日期解析为 `yyyy-MM-dd`。绝对路径和相对目标模块目录的路径都受支持。
+普通 Run 的业务结果目录等目标项目配置由运行时 Project 配置管理。旧
+[config/agent-settings.json](config/agent-settings.json) 仅供 CLI/OpenCode 兼容路径使用；宿主 Adapter 不向目标仓库
+写配置，也不修改目标 POM。
 
-## 构建与安装
+## 构建
 
 ```powershell
 .\scripts\build-agent.ps1
-.\scripts\install-opencode.ps1 -Mode Install
-.\scripts\install-opencode.ps1 -Mode Check
 ```
 
-安装器复制 Agent、Skill、Command、Custom Tool、JS Runtime 和指向仓库 `bin/ada.cmd` 的路径
-配置。Java CLI、CodePath Launcher 和 JDWP Collector JAR 保留在 Agent 仓库。纯 Java 修改后执行
-`build-agent.ps1` 即可；Agent、Skill、Custom Tool、JS Runtime 或路径配置修改后重新安装并重启
-OpenCode：
+该命令使用 Maven `codepath-launcher` Profile 构建 Java CLI、CodePath Launcher、JDWP Collector 和自包含 MCP
+Server，并校验 Agent Definition、Prompt、Schema、Main class 与四类产物 SHA-256。
+
+## Qwen CLI 安装
 
 ```powershell
-.\scripts\uninstall-opencode.ps1
-.\scripts\install-opencode.ps1 -Mode Install
+.\integrations\qwen-cli\install.ps1 -RepositoryRoot . -Scope User
+.\integrations\qwen-cli\check.ps1 -RepositoryRoot . -Scope User
 ```
 
-`algorithm-debug` 使用 `bash: deny`，正常算法分析不需要终端权限。只有开发、构建、重新安装或
-修复 Agent 自身时才切换 OpenCode Build Agent，或使用外部 PowerShell；目标 UT 仍始终通过
-`run_test` 执行。
+安装器从 Canonical Agent Definition 生成 Qwen Extension 与子 Agent：先写同父目录 staging，再原子切换；已有受管
+文件会通过 ownership hash 校验，避免覆盖用户修改。卸载使用：
 
-安装器不会修改目标算法仓库或 POM。完整步骤见 [目标环境安装与验证](docs/testing/target-algorithm-environment-installation.md)。
+```powershell
+.\integrations\qwen-cli\uninstall.ps1 -RepositoryRoot . -Scope User
+```
+
+CI 或本地无副作用验证使用 `-Scope TestProfile`，不会接触用户 Qwen 配置。完整说明见
+[Qwen CLI Adapter](integrations/qwen-cli/README.md)。
+
+OpenCode 的旧入口仍可用于兼容验证，但不再是 Canonical Agent 的正式架构依赖。相关脚本保留在 `scripts/` 和
+`integrations/opencode/`。
 
 ## 使用
 
-在目标算法 Maven 模块目录启动 OpenCode，然后明确提供 UT 和问题，例如：
+在目标算法 Maven 模块中启动已安装该子 Agent 的宿主，明确给出 UT 和问题，例如：
 
 ```text
 使用 algorithm-debug 分析
@@ -75,29 +99,9 @@ com.example.scheduler.SchedulerTest#shouldScheduleAllWafers：
 为什么 WAFER-2 的 PICK 晚于可用腔室时间？
 ```
 
-工作流会先建立 Case/Analysis，捕获并读取算法输入，再按证据缺口选择 UT、静态分析、CodePath 或 JDWP。动态采集没有固定轮数，但每个 Plan 都必须说明问题、假设、预期观察和来源 Evidence；同一无效 Plan 不得重复。
-
-直接调用兼容 Java CLI 时，`case open --question-file` 的参数名保持不变，但文件内容必须是结构化
-Problem Frame JSON，不能再传自由文本。最小输入必须同时给出症状、预期/实际行为、至少一个真实源码锚点
-和至少一个待确认问题；Case、Analysis、Problem Frame 和 Operation 身份仍由 Agent 生成：
-
-```json
-{
-  "symptom": "低优先级任务先被选择",
-  "expectedBehavior": "高优先级任务先执行",
-  "actualBehavior": "低优先级任务先执行",
-  "scopeAnchors": [{
-    "className": "com.example.scheduler.Scheduler",
-    "methodName": "select",
-    "descriptor": "()V",
-    "sourceRelativePath": "src/main/java/com/example/scheduler/Scheduler.java",
-    "startLine": 10,
-    "endLine": 30
-  }],
-  "knownFactRefs": [],
-  "initialUnknowns": ["候选比较结果是否错误"]
-}
-```
+需要新证据时，子 Agent 先建立 Problem Frame，再捕获输入、运行基准 UT、查询源码并维护竞争假设。每轮动态 Plan
+必须绑定一个 Gap、一个可证伪 Hypothesis 和一个能改变下一步决策的 Predicate。证据足够时提交 Candidate；被 Gate
+拒绝时只能按 `allowedActions/missingEvidence` 继续或如实报告边界。
 
 ## Workspace
 
@@ -108,29 +112,31 @@ projects/<projectId>/cases/<caseId>/
   case.json
   input/<original-input-name>
   analyses/<analysisId>/
+    operations/
+    investigation/
+    source-queries/
+    plans/
+    conclusions/
   runs/<runId>/
   collections/<collectionId>/
   evidence/<evidenceId>/
   artifacts/<artifactId>.json
-  logs/agent-YYYY-MM-DD.log
+  logs/
 ```
 
-输入只在 Case 首次捕获时复制一次；成功的非采集 Run 才捕获 Gantt，文件保存在该 Run 的 `raw/` 下并保持原名。CodePath/JDWP 重跑不复制 Gantt，也不使用 Gantt SHA 作为门禁。
+历史产物只追加不覆盖。CodePath/JDWP 重跑不复制 Gantt，也不使用 Gantt SHA 作为门禁。知识文件不复制到 Case。
 
-完整流程与每种文件说明见 [工作流与产物](docs/algorithm-debug-workflow-and-artifacts.md)。当前边界见 [当前能力](docs/current-capabilities.md)。
-
-## 验证入口
+## 验证
 
 ```powershell
 mvn -Pcodepath-launcher test
-node --test agent-evals/test/*.test.mjs integrations/opencode/test/*.test.mjs
-.\scripts\verify-opencode-installer.ps1
+node --test agent-definition/test/*.test.mjs `
+  integrations/host-adapter-kit/test/*.test.mjs `
+  integrations/qwen-cli/test/*.test.mjs
+node --test integrations/opencode/test/*.test.mjs agent-evals/test/*.test.mjs
+.\integrations\qwen-cli\install.ps1 -RepositoryRoot . -Scope TestProfile
+.\integrations\qwen-cli\check.ps1 -RepositoryRoot . -Scope TestProfile
+.\integrations\qwen-cli\uninstall.ps1 -RepositoryRoot . -Scope TestProfile
 ```
 
-真实 OpenCode Eval：
-
-```powershell
-.\scripts\run-agent-evals.ps1 -Suite Smoke
-```
-
-调试安装副本与源码的区别见 [OpenCode Agent 调试](docs/testing/opencode-agent-debugging.md)，删除规则见 [卸载与重新安装](docs/testing/opencode-uninstallation.md)。
+完整交付检查见 [工具验证基线](docs/architecture/tool-validation-baseline.md)。

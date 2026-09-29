@@ -2,7 +2,7 @@
 
 - 状态：Accepted
 - 日期：2026-09-25
-- 批准日期：2026-09-28
+- 批准日期：2026-09-28；2026-09-29 修订
 - 决策范围：模型入口、Agent 边界、MCP Server、Coordinator、宿主适配器
 - 关联设计：[可移植 MCP 子 Agent 与确定性 Coordinator 可实施详细设计](../designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md)
 - 取代范围：实施完成并通过迁移门禁后，取代 ADR-007 的 OpenCode 专用集成边界，并取代 ADR-017 中 Qwen 专用 Gateway、双 Runtime 产品形态和 OpenCode 兼容基线；保留“Java 确定性后端、Adapter 薄、领域规则不进入宿主 Core”的原则
@@ -44,14 +44,19 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
    公司环境额外 5 个工具必须在提供真实契约、实现来源和测试后导入，不得推测创建。
 9. 新增追加式 Investigation Runtime，保存唯一 Problem Frame、竞争假设、证据缺口、冻结 Predicate、三值
    Evaluation、支持与反证；新增有界 `source_query`，让源码理解不依赖宿主私有读文件工具。
-10. 新增 Canonical Agent Definition，版本化记录角色、输入、所需 MCP 能力、Prompt、权限和完成契约。关键
-   安全、证据和流程规则由代码执行；Prompt 只指导模型的业务推理和工具选择。
-    知识 Markdown 是可选提示，不进入 Evidence、Predicate Evaluation 或 ConclusionGate。
-11. 每个宿主只提供薄 Adapter：注册同一个 MCP Server、创建子 Agent、加载 Canonical Agent Definition、映射
+10. Canonical Agent Definition Profile 2.0 只记录角色、输入、必需 MCP Server、必需能力、Prompt/能力清单哈希和
+    有界知识策略。`capability-manifest-v1.json` 是宿主工具权限的唯一快照，并由构建测试与 Java Catalog 强制对齐；
+    不在 Agent Definition 中复制工具组或宿主模型参数。关键安全、证据和流程规则由代码执行，Prompt 只指导模型的
+    业务推理和工具选择。知识 Markdown 是可选 `KNOWLEDGE_HINT`，由宿主 Adapter 在固定预算内注入，不进入
+    Evidence、Predicate Evaluation 或 Conclusion Gate。
+11. `analysis_finalize` 返回 Java 服务生成的 `ConclusionFinalization(candidate, decision)`。它将模型提交的
+    ConclusionCandidate 与同一 conclusionId、Analysis 身份和控制修订上的确定性 ConclusionDecision 绑定；不再由
+    Prompt 要求模型生成第二套 Canonical Completion Contract JSON。
+12. 每个宿主只提供薄 Adapter：注册同一个 MCP Server、创建子 Agent、加载 Canonical Agent Definition、映射
     权限并完成兼容检查。先实现 Qwen CLI，再以第二个真实宿主证明可移植性。
-12. 第一版不提供远程 Streamable HTTP、共享服务、多租户或 OAuth。出现真实需求后单独设计。
-13. 所有实现只在当前根仓库进行；`.worktrees` 中的实验代码只能作为只读参考，不作为实施目录或直接覆盖来源。
-14. 0.3 实施计划因缺失 17 Tool、Source Query、Investigation、Observation 和 CausalChain 已失效；只能执行
+13. 第一版不提供远程 Streamable HTTP、共享服务、多租户或 OAuth。出现真实需求后单独设计。
+14. 所有实现只在当前根仓库进行；`.worktrees` 中的实验代码只能作为只读参考，不作为实施目录或直接覆盖来源。
+15. 0.3 实施计划因缺失 17 Tool、Source Query、Investigation、Observation 和 CausalChain 已失效；只能执行
     2026-09-28 的替代计划，不允许在旧计划上叠加补丁。
 
 ## 影响
@@ -63,6 +68,8 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 - MCP 使用新的协调结果契约；历史 Artifact 和 CLI `ToolResponse 2.0` 保持可读。
 - `algorithm-debug-cli` 不再是模型正常调用链的一部分，但继续提供管理和诊断价值。
 - Agent 的角色与 Prompt 从 OpenCode 专用文件迁移为 Canonical Agent Definition；宿主资产由其生成或引用。
+- 宿主只需支持 Tools；MCP Resources/Prompts 是可选增强，不再被描述为所有宿主的硬依赖。
+- 完成边界由 `ConclusionFinalization` 契约拥有，宿主展示格式不再形成第二套状态或 Schema。
 - 需要增加 MCP 协议、并发、恢复、幂等、跨宿主和结果收敛评测。
 - OpenCode 资产在新路径通过完整发布门禁后退出正式架构；此次决策不要求在第一批实现中立即删除。
 
@@ -114,6 +121,10 @@ Schema、CLI 参数和 Java DTO 三份契约，并使 Coordinator、并发和错
 2026-09-28 Task 16 依赖审查确认 SDK 2.0.1 的 Jackson 2 适配器按 2.21.1 编译；继续由根 BOM 降级到 2.17.2
 会把风险推迟到 Tool Schema 校验阶段。因此统一升级 Jackson 2 BOM，并以全仓测试和 MCP Schema Validator smoke
 作为兼容门禁；该修订不改变“不引入 Jackson 3/Spring”的架构选择。
+
+2026-09-29 对宿主边界实施简化审计：删除 Agent Definition 中重复的工具组、未生效模型提示和模型自填完成
+契约；保留 17 个业务 Tool，不新增 Coordinator Tool。知识目录从“仅报告目录状态”改为受预算和 provenance 约束的
+Prompt 附加，并保持零知识等价。该修订消除重复真相源，不改变 Coordinator、Evidence 或 Conclusion Gate 规则。
 
 ## 回滚条件
 

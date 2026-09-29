@@ -6,8 +6,17 @@ import java.time.Duration;
 public final class McpServerLimits {
     /** 单个 stdio JSON-RPC 帧的硬字节上限。 */
     public static final int MAX_REQUEST_BYTES = 1024 * 1024;
-    /** 单个工具结构化结果的硬字节上限，为 JSON-RPC 信封保留余量。 */
-    public static final int MAX_RESULT_BYTES = 768 * 1024;
+    /**
+     * Coordinator 在回显一个请求预算内的 ConclusionCandidate 之外，可追加的
+     * Decision、ControlView 和结果信封预算。
+     */
+    public static final int MAX_COORDINATION_RESPONSE_OVERHEAD_BYTES = 512 * 1024;
+    /**
+     * 单个工具结构化结果的硬字节上限。该上限必须容纳请求预算内的 Candidate 及
+     * Coordinator 生成的有界控制信息，避免 Finalization 被通用截断逻辑破坏。
+     */
+    public static final int MAX_RESULT_BYTES =
+            MAX_REQUEST_BYTES + MAX_COORDINATION_RESPONSE_OVERHEAD_BYTES;
     /** 工具的人类可读摘要最大字符数。 */
     public static final int MAX_RESULT_SUMMARY_CHARS = 8 * 1024;
     /** 单个内置 Schema 资源最大字节数。 */

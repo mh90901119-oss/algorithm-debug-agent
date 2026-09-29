@@ -125,6 +125,9 @@ public final class SchemaVersions {
     /** 结论门禁决策 Schema 版本。 */
     public static final String CONCLUSION_DECISION = "2.0";
 
+    /** 结论候选与门禁决策组成的最终化结果 Schema 版本。 */
+    public static final String CONCLUSION_FINALIZATION = "1.0";
+
     /** Problem Frame Schema 版本。 */
     public static final String PROBLEM_FRAME = "1.0";
     /** Hypothesis 记录 Schema 版本。 */

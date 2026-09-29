@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -16,15 +16,18 @@ async function sha256(filePath) {
   return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
-test("prompt and completion contract hashes match the agent definition", async () => {
+test("profile 2.0 hashes only the prompt and capability manifest", async () => {
   const definition = await readJson(definitionPath);
   const promptPath = path.resolve(repositoryRoot, definition.prompt.path);
-  const completionPath = path.resolve(repositoryRoot, definition.completionContract.path);
 
+  assert.equal(definition.profileVersion, "2.0");
   assert.equal(definition.prompt.sha256, await sha256(promptPath));
-  assert.equal(definition.completionContract.sha256, await sha256(completionPath));
   assert.equal(definition.capabilityManifest.sha256,
     await sha256(path.resolve(repositoryRoot, definition.capabilityManifest.path)));
+  assert.deepEqual(definition.requiredCapabilities, { tools: true });
+  assert.equal(Object.hasOwn(definition, "allowedToolGroups"), false);
+  assert.equal(Object.hasOwn(definition, "completionContract"), false);
+  assert.equal(Object.hasOwn(definition, "defaultModelHints"), false);
 });
 
 test("canonical prompt states every convergence boundary", async () => {
@@ -38,31 +41,35 @@ test("canonical prompt states every convergence boundary", async () => {
     "FALSE",
     "UNKNOWN",
     "已接受的 CausalChain",
-    "只返回一个有效 JSON 对象",
-    "`claims`",
-    "`causalChains`",
-    "`consideredHypothesisIds`",
-    "`refutedHypothesisIds`",
-    "`missingEvidence`",
-    "`limitations`",
-    "`capabilitiesUsed`",
+    "ConclusionFinalization",
+    "decision=ALLOWED",
+    "decision=REJECTED",
   ]) {
     assert.match(prompt, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.doesNotMatch(prompt, /只返回一个有效 JSON 对象/);
 });
 
-test("completion contract has one canonical body", async () => {
+test("capability manifest is the sole distributable tool permission list", async () => {
   const definition = await readJson(definitionPath);
-  const contract = await readJson(path.resolve(repositoryRoot, definition.completionContract.path));
-  const agentSchemaFiles = await readdir(path.join(repositoryRoot, "schemas", "agent"));
+  const manifest = await readJson(path.resolve(repositoryRoot, definition.capabilityManifest.path));
 
-  assert.equal(contract.$id, "https://algorithm-debug-agent.local/schemas/agent-completion-v1.schema.json");
-  assert.ok(!agentSchemaFiles.some((name) => name.includes("completion")));
-  assert.deepEqual(contract.required, [
-    "caseId", "analysisId", "status", "claims", "causalChains",
-    "consideredHypothesisIds", "refutedHypothesisIds", "missingEvidence",
-    "limitations", "capabilitiesUsed",
-  ]);
+  assert.ok(manifest.tools.length > 0);
+  assert.equal(new Set(manifest.tools).size, manifest.tools.length);
+  assert.ok(manifest.tools.every((tool) => /^[a-z][a-z0-9_]*$/.test(tool)));
+  assert.equal(JSON.stringify(definition).includes("toolNames"), false);
+  assert.equal(JSON.stringify(definition).includes("analysis_finalize"), false);
+  assert.deepEqual(definition.knowledge, {
+    required: false,
+    role: "KNOWLEDGE_HINT",
+    delivery: "PROMPT_APPEND",
+    limits: {
+      maxFiles: 32,
+      maxDepth: 4,
+      maxFileBytes: 65536,
+      maxTotalBytes: 262144,
+    },
+  });
 });
 
 test("legacy skill is a hash-controlled compatibility copy of the canonical prompt", async () => {

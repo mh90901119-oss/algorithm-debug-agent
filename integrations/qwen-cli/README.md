@@ -39,6 +39,8 @@ CI/本地验证使用 `-Scope TestProfile`，默认写入 `target/qwen-test-prof
 - Qwen 只看到一个名为 `algorithm-debug` 的 stdio MCP Server。
 - MCP command 固定指向本仓库 `bin/ada-mcp.cmd`；宿主只能提供当前 `${workspacePath}` 作为 `--project`。
 - Workspace、Java 和 Maven 只在 `config/mcp-agent-settings.json` 配置。
-- `knowledgeDirectory` 可为空或不存在；存在时也只代表 `KNOWLEDGE_HINT`，不改变 Evidence 或结论门禁。
-- Agent Definition 中的模型参数是非凭据提示；Qwen 0.20.0 子 Agent front matter 不支持的提示不会被伪装成已生效配置。
+- `knowledgeDirectory` 可为空或不存在；存在时，Adapter 把预算内的 Markdown 作为带 provenance 的
+  `KNOWLEDGE_HINT` 附加到生成的子 Agent Prompt，不改变 Evidence 或结论门禁。
+- 工具权限仅来自 Canonical Capability Manifest；Qwen 模板不复制 Java Tool Schema 或业务规则。
+- Agent Definition 不指定温度、模型名称等宿主模型参数；这些策略继续由 Qwen 管理。
 - 模型凭据继续由 Qwen 管理，不写入 Extension、Agent Definition、Workspace 或 ownership manifest。

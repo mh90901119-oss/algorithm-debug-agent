@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/conclusion-finalization-v1.schema.json",
+  "title": "ConclusionFinalization v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "candidate", "decision"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "candidate": {
+      "$ref": "https://example.org/algorithm-debug/schemas/coordination/conclusion-candidate-v2.schema.json"
+    },
+    "decision": {
+      "$ref": "https://example.org/algorithm-debug/schemas/coordination/conclusion-decision-v2.schema.json"
+    }
+  }
+}

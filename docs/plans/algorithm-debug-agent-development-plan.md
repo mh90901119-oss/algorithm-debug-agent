@@ -1,6 +1,6 @@
 # Algorithm Debug Agent 当前开发计划
 
-更新日期：2026-09-28。
+更新日期：2026-09-29。
 
 ## 目标
 
@@ -19,16 +19,20 @@
 | 5. 输入优先因果工作流 | 完成 | 唯一输入识别、Case 级原名复用、Plan 意图和 Evidence 谱系、条件化 JDWP |
 | 6. 复杂因果 Eval | 完成 | 10-Case Smoke、跨实体因果 Case、确定性 Grader |
 | 7. OpenCode 文档与端到端审计 | 已形成迁移基线 | 当前文档、自动测试、安装生命周期、Workspace/日志审计 |
-| 8. 证据约束 MCP 可移植子 Agent | 执行中 | 17 Tool、Source Query、Investigation Runtime、Coordinator、MCP Server、Qwen/第二宿主、收敛 Eval |
+| 8. 证据约束 MCP 可移植子 Agent | 主链已实现，跨宿主验证继续 | 17 Tool、Source Query、Investigation Runtime、Coordinator、Java MCP Server、Qwen Adapter、收敛门禁 |
 
 ## 阶段 8 实施依据
 
-- 设计：`docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 0.4。
+- 主设计：`docs/designs/2026-09-25-portable-mcp-subagent-and-coordinator-design.md` 2.2。
+- 边界简化设计：`docs/designs/2026-09-29-portable-agent-boundary-simplification-design.md` 1.1。
 - 决策：`docs/decisions/ADR-018-java-native-mcp-portable-subagent.md`。
 - 基线：`docs/development/evidence-constrained-mcp-implementation-baseline.md`。
-- 计划：`docs/superpowers/plans/2026-09-28-evidence-constrained-portable-mcp-subagent.md`，它是当前唯一可执行计划。
+- 主链实施记录：`docs/superpowers/plans/2026-09-28-evidence-constrained-portable-mcp-subagent.md`。
+- 当前收口计划：`docs/superpowers/plans/2026-09-29-portable-agent-boundary-simplification.md`。
+- 当前最终审计：`docs/audits/2026-09-29-portable-agent-boundary-simplification-audit.md`。
 
-旧 0.3 计划已失效，不得通过恢复旧文件或向旧 Task 零散插入补丁继续使用。
+旧 0.3 计划已失效，不得通过恢复旧文件或向旧 Task 零散插入补丁继续使用。2026-09-29 计划只简化宿主边界、
+落实有界知识注入和服务端 Finalization，不改变主链 Coordinator/Gate 语义。
 
 ## 阶段 8 完成标准
 
@@ -36,10 +40,11 @@
 2. `source_query`、调查账本、冻结 Predicate、三值 Evaluation、反证和 CausalChain 结论门禁闭环。
 3. 成功 UT 没有普通 Run 时动态证据不被误丢弃；失败 UT 只有匹配失败指纹可用于确认同类失败。
 4. CLI 与 MCP 共用唯一 Runtime；Case、Operation、Investigation 和 Conclusion 可追加恢复且跨进程执行互斥。
-5. 无知识目录也能完成闭环；知识文件只能帮助模型理解，不能绕过 Evidence/Predicate/Conclusion 门禁。
+5. 无知识目录也能完成闭环；知识文件由 Adapter 有界注入并保留 provenance，只能帮助模型理解，不能绕过 Evidence/Predicate/Conclusion 门禁。
 6. Qwen CLI 和一个真实第二宿主运行同一 MCP Catalog、Agent Definition 和 Eval Suite。
 7. Maven、Node、MCP Contract、7 条 E2E、10 类机制重复收敛 Eval、性能和故障注入均达到设计阈值。
-8. 最终审计记录 requirement-to-code-to-test 映射、命令、结果、偏差、限制和回滚方式。
+8. `analysis_finalize` 返回服务端 `ConclusionFinalization(candidate, decision)`，宿主不维护第二套完成状态。
+9. 最终审计记录 requirement-to-code-to-test 映射、命令、结果、偏差、限制和回滚方式。
 
 ## 后续候选项
 

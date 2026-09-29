@@ -56,6 +56,7 @@ class CoordinationSchemaTest {
         values.put(schemaPath("coordination", "operation-receipt-v1.schema.json"), fixtures.receipt());
         values.put(schemaPath("coordination", "conclusion-candidate-v2.schema.json"), fixtures.candidate());
         values.put(schemaPath("coordination", "conclusion-decision-v2.schema.json"), fixtures.conclusionDecision());
+        values.put(schemaPath("coordination", "conclusion-finalization-v1.schema.json"), fixtures.finalization());
 
         for (Map.Entry<Path, Object> fixture : values.entrySet()) {
             assertValid(fixture.getKey(), MAPPER.writeValueAsString(fixture.getValue()));
@@ -73,6 +74,8 @@ class CoordinationSchemaTest {
         assertEquals(fixtures.candidate(), roundTrip(fixtures.candidate(), ConclusionCandidate.class));
         assertEquals(fixtures.conclusionDecision(), roundTrip(
                 fixtures.conclusionDecision(), ConclusionDecision.class));
+        assertEquals(fixtures.finalization(), roundTrip(
+                fixtures.finalization(), ConclusionFinalization.class));
     }
 
     @Test
@@ -86,7 +89,8 @@ class CoordinationSchemaTest {
                 schemaPath("tool", "coordinated-tool-result-v1.schema.json"), fixtures.result(),
                 schemaPath("coordination", "operation-receipt-v1.schema.json"), fixtures.receipt(),
                 schemaPath("coordination", "conclusion-candidate-v2.schema.json"), fixtures.candidate(),
-                schemaPath("coordination", "conclusion-decision-v2.schema.json"), fixtures.conclusionDecision());
+                schemaPath("coordination", "conclusion-decision-v2.schema.json"), fixtures.conclusionDecision(),
+                schemaPath("coordination", "conclusion-finalization-v1.schema.json"), fixtures.finalization());
 
         for (Map.Entry<Path, Object> fixture : values.entrySet()) {
             ObjectNode json = (ObjectNode) MAPPER.valueToTree(fixture.getValue());
@@ -180,7 +184,9 @@ class CoordinationSchemaTest {
                 schemaPath("coordination", "conclusion-candidate-v2.schema.json"),
                 SchemaVersions.CONCLUSION_CANDIDATE,
                 schemaPath("coordination", "conclusion-decision-v2.schema.json"),
-                SchemaVersions.CONCLUSION_DECISION);
+                SchemaVersions.CONCLUSION_DECISION,
+                schemaPath("coordination", "conclusion-finalization-v1.schema.json"),
+                SchemaVersions.CONCLUSION_FINALIZATION);
         for (Map.Entry<Path, String> entry : versions.entrySet()) {
             JsonNode json = MAPPER.readTree(entry.getKey().toFile());
             assertFalse(json.path("additionalProperties").asBoolean(true),
@@ -320,8 +326,10 @@ class CoordinationSchemaTest {
                 List.of(CoordinationErrorCode.CONCLUSION_NOT_ELIGIBLE),
                 List.of("gap-1"),
                 List.of(AnalysisActionType.CODEPATH_PLAN_CREATE));
+        ConclusionFinalization finalization = new ConclusionFinalization(
+                SchemaVersions.CONCLUSION_FINALIZATION, candidate, conclusionDecision);
         return new Fixtures(request, control, decision, obligation, result, receipt,
-                candidate, conclusionDecision);
+                candidate, conclusionDecision, finalization);
     }
 
     private static <T> T roundTrip(T value, Class<T> type) throws Exception {
@@ -342,7 +350,16 @@ class CoordinationSchemaTest {
     private static java.util.List<com.networknt.schema.Error> validationErrors(
             Path schemaPath, String json) throws Exception {
         String schemaJson = Files.readString(schemaPath, StandardCharsets.UTF_8);
-        var schema = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12)
+        Map<String, String> dependentSchemas = Map.of(
+                "https://example.org/algorithm-debug/schemas/coordination/conclusion-candidate-v2.schema.json",
+                Files.readString(schemaPath("coordination", "conclusion-candidate-v2.schema.json"),
+                        StandardCharsets.UTF_8),
+                "https://example.org/algorithm-debug/schemas/coordination/conclusion-decision-v2.schema.json",
+                Files.readString(schemaPath("coordination", "conclusion-decision-v2.schema.json"),
+                        StandardCharsets.UTF_8));
+        var schema = SchemaRegistry.withDefaultDialect(
+                        SpecificationVersion.DRAFT_2020_12,
+                        builder -> builder.schemas(dependentSchemas))
                 .getSchema(schemaJson, InputFormat.JSON);
         return schema.validate(json, InputFormat.JSON);
     }
@@ -386,6 +403,7 @@ class CoordinationSchemaTest {
             CoordinatedToolResult<Map<String, String>> result,
             OperationReceipt receipt,
             ConclusionCandidate candidate,
-            ConclusionDecision conclusionDecision) {
+            ConclusionDecision conclusionDecision,
+            ConclusionFinalization finalization) {
     }
 }

@@ -99,7 +99,7 @@ public final class AnalysisActionPolicies {
     /** Conclusion candidate 必须属于当前 Action identity。 */
     public static AnalysisActionPolicy<
             CoreActionInputs.AnalysisFinalize,
-            org.example.algorithmdebug.contracts.coordination.ConclusionDecision>
+            org.example.algorithmdebug.contracts.coordination.ConclusionFinalization>
             analysisFinalize(CoreActionPrerequisites prerequisites) {
         require(AnalysisActionType.ANALYSIS_FINALIZE, prerequisites);
         return ActionPolicySupport.policy(
@@ -115,7 +115,8 @@ public final class AnalysisActionPolicies {
                             ? null : CoordinationErrorCode.COORDINATION_IDENTITY_MISMATCH;
                 },
                 (before, request, result, after) -> result != null
-                        && result.identity().equals(request.identity())
+                        && result.candidate().equals(request.payload().candidate())
+                        && result.decision().identity().equals(request.identity())
                         ? null : CoordinationErrorCode.COORDINATION_POSTCONDITION_FAILED);
     }
 

@@ -2,6 +2,7 @@ package org.example.algorithmdebug.core.coordination;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -56,6 +57,18 @@ class CoreActionRegistryTest {
         registry.bindings().forEach(binding -> assertEquals(
                 expected.get(binding.actionType()), binding.sideEffect(),
                 binding.actionType().name()));
+    }
+
+    @Test
+    void analysisFinalizePortReturnsTheCanonicalFinalizationContract() {
+        var component = java.util.Arrays.stream(
+                        CoreActionHandlers.ActionPorts.class.getRecordComponents())
+                .filter(value -> value.getName().equals("analysisFinalize"))
+                .findFirst()
+                .orElseThrow();
+
+        assertTrue(component.getGenericType().getTypeName().contains(
+                "org.example.algorithmdebug.contracts.coordination.ConclusionFinalization"));
     }
 
     private static void put(

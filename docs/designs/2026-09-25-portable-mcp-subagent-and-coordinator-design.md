@@ -1,9 +1,9 @@
 # 可移植 MCP 子 Agent 与证据约束调查运行时可实施详细设计
 
 - 文档状态：Approved
-- 设计版本：2.1
+- 设计版本：2.2
 - 创建日期：2026-09-25
-- 最后修订：2026-09-28
+- 最后修订：2026-09-29
 - 批准日期：2026-09-28
 - 负责人：Algorithm Debug Agent Team
 - 目标里程碑：MCP-native portable evidence-constrained subagent
@@ -36,7 +36,7 @@
 12. 当前 Agent Eval 主要校验工具顺序、Evidence ID 和答案模式，不能证明重复运行收敛、干扰信息抗性、错误假设拒绝或因果链完整性。
 
 本次重构不是把 13 个 Custom Tool 机械改成 13 个 MCP Tool。目标是形成一个宿主无关的
-Algorithm Debug Agent Package：宿主负责创建模型子 Agent，Agent Definition 规定角色和完成契约，标准
+Algorithm Debug Agent Package：宿主负责创建模型子 Agent，Agent Definition 规定角色和必需能力，标准
 MCP Server 提供统一能力，Coordinator 在服务端不可绕过地执行流程与证据门禁，Java Core 继续负责确定性分析。
 在此基础上，本设计增加证据约束调查闭环：模型可以提出业务假设，但每轮采集必须绑定明确证据缺口和采集前冻结的结构化观测条件；确定性代码计算 `TRUE/FALSE/UNKNOWN` 并保留支持与反证；结论门禁只允许与已验证因果链相匹配的等级。目标不是让模型每次执行完全相同的工具序列，而是让相同问题稳定收敛到相同的受支持机制或相同的证据不足状态。
 
@@ -201,7 +201,7 @@ flowchart TB
 重构后的产品级 Agent 由以下部分共同构成：
 
 1. 宿主创建的模型子 Agent：负责理解问题、提出假设、选择允许的 MCP Tool、解释证据。
-2. Canonical Agent Definition：提供宿主无关的角色、输入、Prompt 版本、能力要求和完成契约。
+2. Canonical Agent Definition：提供宿主无关的角色、输入、Prompt/能力清单版本、必需能力和知识交付策略。
 3. Algorithm Debug MCP Server：向任意兼容宿主暴露同一工具、资源和 Prompt。
 4. Analysis Coordinator：确定性执行动作门禁、状态投影、并发、幂等、证据义务和结论门禁。
 5. Investigation Runtime：追加保存 Problem Frame、竞争假设、证据缺口和 Predicate，并确定性更新支持、反证和未知状态。
@@ -491,7 +491,7 @@ Schema 生成或测试中复制魔鬼数字。稳定错误码、reason code、ar
 agent-definition/
   algorithm-debug-agent-v1.json
   system-prompt-v1.md
-  completion-contract-v1.schema.json
+  capability-manifest-v1.json
   README.md
 ```
 
@@ -503,13 +503,17 @@ Agent Definition 包含：
 - `inputContract`
 - `requiredMcpServer`
 - `requiredCapabilities`
-- `allowedToolGroups`
 - `prompt.path/sha256/version`
-- `completionContract.path/version`
-- `defaultModelHints`（只允许温度等非凭据提示，宿主可拒绝）
+- `capabilityManifest.path/sha256/version`
+- `knowledge.required/role/delivery/limits`
 
 现有 `skills/algorithm-debug/SKILL.md` 的领域工作流内容迁移到规范 Prompt；硬规则同时由 Coordinator 实现。
 各宿主产物必须从 Agent Definition 生成或引用，不维护可独立漂移的第二份正文。
+
+Profile 2.0 删除重复的工具组、宿主模型提示和模型自填完成契约。Capability Manifest 是宿主权限唯一快照，
+Java Catalog 与其一致性由构建门禁保证。只有 Tools 是必需宿主能力；Resources 和 Prompts 是可选增强。
+`analysis_finalize` 的完成边界改由 Java `ConclusionFinalization` 契约拥有。详细取代关系见
+[边界简化设计](2026-09-29-portable-agent-boundary-simplification-design.md)。
 
 ### 6.9 Host Adapter Kit
 
@@ -859,40 +863,32 @@ CodePath/JDWP 的 `RUNTIME_OBSERVED` 证据关联后，才允许描述本次执�
 ### 7.8 可选知识输入边界
 
 无知识文件时，Agent 使用用户问题、UT、算法输入、Gantt、源码和动态 Evidence 完成同一闭环。知识 MD 存在时，
-宿主可以把版本化、带来源的片段作为 `KNOWLEDGE_HINT` 提供给模型，用于术语解释、候选假设和源码搜索方向。
+Host Adapter 只读取有界、非符号链接、有效 UTF-8 的 Markdown，按稳定相对路径顺序附加到生成的子 Agent Prompt。
+每段携带相对路径、SHA-256 和字节数 provenance，用于术语解释、候选假设和源码搜索方向。
 
 知识内容不得注册为 Evidence，不进入 `ObservationEvaluator`，不改变 Predicate 结果，不满足任何系统/工具/调查义务，
-也不能单独支持 `CONFIRMED_FACT` 或 `VALIDATOR_CONCLUSION`。第一版不新增知识解析模块；核心契约不得依赖知识目录
-存在。使用知识形成的假设仍必须通过源码锚点、动态观测和反证流程。
+也不能单独支持 `CONFIRMED_FACT` 或 `VALIDATOR_CONCLUSION`。Adapter 使用 Definition 声明的文件数、深度、单文件
+和总字节预算；Core 不新增知识解析模块，也不依赖知识目录存在。使用知识形成的假设仍必须通过源码锚点、动态观测
+和反证流程。
 
-### 7.9 Agent 完成契约
+### 7.9 Agent 最终化契约
 
-子 Agent 最终返回父 Agent 的结构化语义至少包含：
+`analysis_finalize` 接收结构化 `ConclusionCandidate v2`，返回服务端构造的
+`ConclusionFinalization v1(candidate, decision)`。Finalization 强制 candidate 与 decision 具有同一个
+conclusionId、AnalysisIdentity 和控制状态修订号；宿主不得自行拼装第二套完成对象或状态。
 
-```text
-caseId
-analysisId
-status: CONFIRMED | BOUNDED_HYPOTHESIS | INSUFFICIENT_EVIDENCE |
-        CONTRADICTED | TOOL_BLOCKED | BUDGET_EXHAUSTED
-claims[]: classification/text/evidenceIds
-causalChain: nodes/edges/sourceRefs/evidenceRefs
-consideredHypothesisIds[]
-refutedHypothesisIds[]
-missingEvidence[]
-limitations[]
-capabilitiesUsed[]
-```
-
-`analysis_finalize` 校验结构化候选；自然语言解释仍由模型输出，不冒充 Validator 事实。状态规则固定为：
+Gate 的结论状态规则固定为：
 
 - `CONFIRMED`：关键因果边均有允许等级的源码/动态引用；关键 Predicate 非 UNKNOWN；无未解决关键反证；合理竞争
   假设已 REFUTED；失败场景指纹 MATCHED；无影响结论的截断。至少存在两个有源码锚点或 Evidence 依据的候选假设，
   其中目标假设为 SUPPORTED，至少一个竞争假设为 REFUTED；只有一个候选时最高为 `BOUNDED_HYPOTHESIS`。
 - `BOUNDED_HYPOTHESIS`：机制得到部分源码和动态支持，但替代假设、反事实或关键上游原因未完全关闭。
-- `INSUFFICIENT_EVIDENCE`：没有可执行区分手段、持续 UNKNOWN、关键截断、多个假设无法区分或证据预算不足。
-- `CONTRADICTED`：候选结论与确定性事实、Predicate FALSE 或 Validator 结论冲突。
-- `TOOL_BLOCKED`：环境或工具失败阻止继续；不得包装为业务根因。
-- `BUDGET_EXHAUSTED`：达到已声明轮次、执行、时间或数据预算；保留已知事实但不得越级。
+- `MISSING_EVIDENCE`：没有可执行区分手段、持续 UNKNOWN、关键截断、多个假设无法区分或证据预算不足。
+
+候选与确定性事实冲突、环境/工具阻断和预算耗尽分别记录为拒绝原因、调查事实或限制，不定义为另一套 Conclusion
+状态。`decision=ALLOWED` 时模型只能解释 Finalization 内已接受的 candidate；`decision=REJECTED` 时只能按
+`allowedActions/missingEvidence` 继续或如实报告边界，不能输出确认性根因。最终面向用户的排版由宿主决定，但不得
+增加 Finalization 之外的新 claim。
 
 `CausalNode` 类型固定为 `SYMPTOM | INPUT | RUNTIME_STATE | DECISION | SOURCE_MECHANISM | UPSTREAM_CAUSE`；
 `CausalEdge` 必须声明 `from/to/relation/classification/evidenceIds/sourceQueryIds`。`CONFIRMED` 的关键路径至少包含
@@ -910,7 +906,7 @@ capabilitiesUsed[]
 文档；v1 Candidate 若没有另行保存完整 Chain，不能猜测迁移，必须依据原 Evidence/Source Query 重新提交 v2。
 迁移步骤见 `docs/development/conclusion-contract-v2-migration.md`。
 
-完成状态与单条 claim 分类相互独立：整体为 `BOUNDED_HYPOTHESIS` 或 `INSUFFICIENT_EVIDENCE` 时，仍可包含“UT 返回
+完成状态与单条 claim 分类相互独立：整体为 `BOUNDED_HYPOTHESIS` 或 `MISSING_EVIDENCE` 时，仍可包含“UT 返回
 断言失败”等有直接 Evidence 的 `CONFIRMED_FACT`；但不得把这些局部事实包装为整体根因 `CONFIRMED`。
 
 ## 8. MCP Tool、Resource 与 Prompt 设计
@@ -967,7 +963,7 @@ MCP Tool，不再等待宿主能力清单决定。它复用当前 `static-analys
 
 该 Tool 必须满足：Workspace allowlist、路径规范化、相对源码路径、行数/字节/深度/节点/路径限制、敏感文件拒绝、
 稳定排序、Catalog 和源码 hash provenance。宿主即使提供源码工具，Canonical Agent 仍以 `source_query` 为可移植
-路径；宿主工具只能作为人工辅助，不进入 Agent 完成契约。
+路径；宿主工具只能作为人工辅助，不进入 Agent 的确定性调查状态。
 
 ### 8.3 `investigation_update` 语义
 
@@ -997,7 +993,8 @@ ada://cases/{caseId}/digest
 ada://cases/{caseId}/analyses/{analysisId}/status
 ```
 
-带参数的大数据读取仍使用 Tool，不通过 Resource 返回 Raw Trace 或完整 Gantt。
+带参数的大数据读取仍使用 Tool，不通过 Resource 返回 Raw Trace 或完整 Gantt。Resources 是可选宿主增强；不支持
+MCP Resources 的宿主仍可通过 Tools 完成整个调查闭环。
 
 ### 8.5 Prompts
 
@@ -1011,6 +1008,7 @@ algorithm-debug/explain-evidence
 
 Prompt 用于提高模型理解一致性，不承担动作授权。Host Adapter 必须能在宿主不支持 MCP Prompt 自动加载时，将
 Canonical Prompt 映射为子 Agent 系统指令。
+Prompts 是可选宿主增强，不是 Profile 2.0 的必需能力。
 
 ## 9. 核心流程
 
@@ -1134,7 +1132,9 @@ flowchart LR
     ALT --> LIMIT["校验截断、矛盾、失败指纹和义务"]
     LIMIT --> CLASS["校验 claim classification 和完成状态上限"]
     CLASS -->|"通过"| ACCEPT["追加 ConclusionDecision ACCEPTED"]
-    CLASS -->|"不通过"| REJECT["返回允许等级与缺失证据"]
+    CLASS -->|"不通过"| REJECT["追加 ConclusionDecision REJECTED"]
+    ACCEPT --> FINAL["返回 ConclusionFinalization"]
+    REJECT --> FINAL
 ```
 
 Coordinator 不替代模型理解算法业务语义，但可以确定性验证模型提交的因果结构是否引用了真实源码和动态证据、
@@ -1147,6 +1147,8 @@ Coordinator 不替代模型理解算法业务语义，但可以确定性验证�
 归档顺序固定为：先以 create-new 原子写入包含完整 `causalChains[]` 的 candidate 信封，再计算门禁，最后只允许写入
 `accepted.json` 或 `rejected.json` 之一。相同内容的精确重放幂等返回既有文档；同一 conclusionId 的内容冲突、双终态
 或候选缺失均视为归档冲突。candidate 和 decision 信封都包含 policyVersion、输入哈希、时间和 provenance。
+MCP Handler 以两者构造 `ConclusionFinalization`，并强制 conclusionId、AnalysisIdentity 与 revision 一致。宿主只
+解释该对象；不得另造状态或在自然语言中新增未通过 Gate 的 claim。
 
 ## 10. 错误处理与可观测性
 
@@ -1265,7 +1267,8 @@ Manifest，不反复扫描 Raw Trace。表中默认值和硬上限必须在职�
 | `schemas/coordination/*.schema.json` | 新增 | 上述公共模型的 JSON Schema |
 | `schemas/investigation/*.schema.json` | 新增 | 调查事件、状态、Predicate、Evaluation 和 CausalChain Schema |
 | `schemas/source-query/*.schema.json` | 新增 | Source Query request/result Schema |
-| `schemas/agent/*.schema.json` | 新增 | Agent Definition、Completion Contract、Capability Manifest |
+| `schemas/agent/*.schema.json` | 新增 | Agent Definition、Capability Manifest |
+| `schemas/coordination/conclusion-finalization-v1.schema.json` | 新增 | 绑定 ConclusionCandidate v2 与 ConclusionDecision v2 的服务端最终化结果 |
 | `schemas/tool/coordinated-tool-result-v1.schema.json` | 新增 | MCP Tool 统一结构化返回 |
 | `schemas/tool/tool-response-v2.schema.json` | 保留 | CLI 兼容，不在原位增加 control |
 
@@ -1389,7 +1392,7 @@ Coordinator 抛出执行包装异常时，CLI 只恢复其直接 cause 中已知
 
 | 文件/目录 | 动作 | 修改内容 |
 |---|---|---|
-| `agent-definition/*` | 新增 | Canonical Agent Definition、Prompt 和完成契约 |
+| `agent-definition/*` | 新增 | Canonical Agent Definition、Prompt 和 Capability Manifest |
 | `skills/algorithm-debug/SKILL.md` | 迁移后保留生成源或兼容副本 | 内容由 Canonical Prompt 生成并做 hash 一致性测试 |
 | `integrations/host-adapter-kit/*` | 新增 | 宿主配置生成与兼容检查，不含业务逻辑 |
 | `integrations/qwen-cli/*` | 新增 | 第一宿主安装、检查、卸载和模板 |
@@ -1513,7 +1516,7 @@ Coordinator 抛出执行包装异常时，CLI 只恢复其直接 cause 中已知
   再用最小动态证据支持剩余机制。
 - 无知识目录时完成相同 Core/MCP 闭环；正确知识减少探索和误导知识不能改变为错误确认由 Agent Eval 验证。
 - 静态可达但动态完整覆盖未命中的分支只能形成 Source Inference，不能形成运行事实。
-- 两个假设在预算内无法区分时，`analysis_finalize` 只接受 `INSUFFICIENT_EVIDENCE` 或 `BOUNDED_HYPOTHESIS`。
+- 两个假设在预算内无法区分时，`analysis_finalize` 只接受 `MISSING_EVIDENCE` 或 `BOUNDED_HYPOTHESIS`。
 - MCP Tool 错误顺序被拒绝，目标 Maven/JVM 未启动。
 - Qwen CLI Adapter 安装、发现、真实 Case、卸载。
 - 第二宿主只新增 Adapter 即运行同一 Suite。
@@ -1654,7 +1657,7 @@ MCP stdout 只有协议帧。
 
 ### 阶段 H：Canonical Agent 包与 Qwen CLI 适配
 
-1. 建立 Agent Definition、Prompt 和 Completion Contract，并将现有 Skill 宿主无关内容迁移为单一生成源。
+1. 建立 Agent Definition、Prompt 和 Capability Manifest，并将现有 Skill 宿主无关内容迁移为单一生成源。
 2. 建立 Host Adapter Kit 和 hash/Schema 一致性测试。
 3. Qwen Adapter 只实现 MCP 注册、子 Agent 配置、权限、安装、检查和卸载。
 4. 执行 Qwen 真实 Smoke、知识可选、错误假设拒绝和故障测试。
@@ -1728,7 +1731,7 @@ MCP stdout 只有协议帧。
 | 知识 MD 错误或缺失 | 误导或无法启动 | 知识为可选 hint、无结论权；无知识和误导知识 Eval | Resolved by test gate |
 | 静态源码关系被当作运行事实 | 错误因果 | Source Query 类型化静态状态；确认关键边要求动态 Evidence | Resolved |
 | Predicate 操作符不足 | 无法验证新机制 | 返回证据不足；只有真实 Eval 证明缺口后版本化新增固定操作符 | Resolved by extension rule |
-| 调查规则过严阻塞合法分析 | 能力下降 | BOUNDED_HYPOTHESIS/INSUFFICIENT_EVIDENCE 合法结束；真实 Gold/negative Eval 校准 | Resolved by gate |
+| 调查规则过严阻塞合法分析 | 能力下降 | BOUNDED_HYPOTHESIS/MISSING_EVIDENCE 合法结束；真实 Gold/negative Eval 校准 | Resolved by gate |
 | 两个 Server 执行同一目标 | 结果污染 | OS 文件锁 + 二次状态检查 + Operation Journal | Resolved |
 | Tool Schema 在宿主复制 | 漂移 | Canonical Catalog；Adapter 只注册 Server | Resolved |
 | 宿主无子 Agent 能力 | 无法隔离角色 | 仅声明 MCP 能力集成，不虚假声明子 Agent | Resolved |
@@ -1748,7 +1751,7 @@ MCP stdout 只有协议帧。
 - [ ] `docs/algorithm-debug-workflow-and-artifacts.md` 增加 Operation/Control/Investigation/Source Query/Conclusion
 - [ ] `README.md` 更新构建、安装和使用入口
 - [ ] MCP Tool、Resource、Prompt 和返回 Schema 示例
-- [x] Agent Definition 与 Completion Contract
+- [x] Agent Definition、Capability Manifest 与 ConclusionFinalization
 - [ ] Problem Frame、Hypothesis、Gap、Predicate、Evaluation、CausalChain 和 Source Query Schema 示例
 - [ ] Qwen 和第二宿主安装、检查、卸载说明
 - [ ] 许可证、NOTICE 和 SBOM
@@ -1819,3 +1822,4 @@ MCP stdout 只有协议帧。
 | 2026-09-28 | 1.9 | Task 16 最终并发审查把请求预算从工具调用扩展到所有 JSON-RPC request；非工具请求也必须先占槽，终态响应 flush 后释放，禁止绕过 SDK 内部无界队列积压 | Codex |
 | 2026-09-28 | 2.0 | Task 17 实施审计冻结 17 Tool typed Catalog、4 Resource、3 Prompt、统一结果与协议错误分层；Action payload 预算提升为公共唯一常量，Server 启动不要求目录已存在，真实路径/注册交集在项目访问时惰性校验；状态 Resource 使用无决策归档的只读控制投影 | Codex |
 | 2026-09-28 | 2.1 | Task 18 建立带 SHA-256 绑定的 Canonical Agent Definition、唯一 Completion Contract、能力清单和规范 Prompt；Qwen Adapter 从规范资产生成单 Server/显式工具权限的子 Agent，知识目录可选；安装采用 staging 原子切换和 ownership hash 卸载，MCP shaded JAR 自包含 Prompt/Schema/Main class，构建统一校验 CLI、CodePath、JDWP、MCP 四类产物 | Codex |
+| 2026-09-29 | 2.2 | 边界简化审计删除重复工具组、未生效模型提示和模型自填 Completion Contract；Capability Manifest 成为宿主工具权限唯一快照；知识按有界 Markdown 和 provenance 实际注入；`analysis_finalize` 返回服务端 `ConclusionFinalization`，Resources/Prompts 降为可选宿主能力 | Codex |

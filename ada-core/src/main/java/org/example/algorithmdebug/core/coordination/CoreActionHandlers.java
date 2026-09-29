@@ -15,12 +15,14 @@ import org.example.algorithmdebug.contracts.CollectionExecutionSummary;
 import org.example.algorithmdebug.contracts.EvidenceQueryResult;
 import org.example.algorithmdebug.contracts.GanttInspection;
 import org.example.algorithmdebug.contracts.RunOutcomeSummary;
+import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.coordination.ActionSideEffect;
 import org.example.algorithmdebug.contracts.coordination.AnalysisActionType;
 import org.example.algorithmdebug.contracts.coordination.AnalysisControlView;
 import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
 import org.example.algorithmdebug.contracts.coordination.ConclusionCandidate;
 import org.example.algorithmdebug.contracts.coordination.ConclusionDecision;
+import org.example.algorithmdebug.contracts.coordination.ConclusionFinalization;
 import org.example.algorithmdebug.contracts.investigation.InvestigationState;
 import org.example.algorithmdebug.core.AlgorithmInputApplicationService;
 import org.example.algorithmdebug.core.ArtifactBackedResult;
@@ -70,7 +72,7 @@ public final class CoreActionHandlers {
             AnalysisActionHandler<CoreActionInputs.EvidenceQuery, EvidenceQueryResult> evidenceQuery,
             AnalysisActionHandler<CoreActionInputs.NoInput, AnalysisControlView> analysisStatus,
             AnalysisActionHandler<CoreActionInputs.AnalysisFinalize,
-                    ConclusionDecision> analysisFinalize) {
+                    ConclusionFinalization> analysisFinalize) {
         /** 拒绝任何缺失 Handler，确保 Registry 不存在半绑定动作。 */
         public ActionPorts {
             if (java.util.stream.Stream.of(
@@ -279,8 +281,10 @@ public final class CoreActionHandlers {
                 (target, input, cancellation) -> services.stateSource().project(
                         new AnalysisIdentity(
                                 target.projectId(), target.caseId(), target.analysisId())),
-                (target, input, cancellation) -> services.conclusionAction().evaluate(
-                        input.candidate()));
+                (target, input, cancellation) -> new ConclusionFinalization(
+                        SchemaVersions.CONCLUSION_FINALIZATION,
+                        input.candidate(),
+                        services.conclusionAction().evaluate(input.candidate())));
     }
 
     /** 现有服务到 Handler 的不可变组合参数。 */

@@ -36,7 +36,9 @@ class McpPackagingTest {
             RESOURCE_ROOT + "algorithm-debug-agent-v1.json",
             RESOURCE_ROOT + "capability-manifest-v1.json",
             RESOURCE_ROOT + "system-prompt-v1.md",
-            RESOURCE_ROOT + "completion-contract-v1.schema.json",
+            "schemas/coordination/conclusion-candidate-v2.schema.json",
+            "schemas/coordination/conclusion-decision-v2.schema.json",
+            "schemas/coordination/conclusion-finalization-v1.schema.json",
             "schemas/agent/algorithm-debug-agent-v1.schema.json",
             "schemas/agent/capability-manifest-v1.schema.json",
             "schemas/config/mcp-agent-settings-v1.schema.json",
@@ -57,13 +59,13 @@ class McpPackagingTest {
                 RESOURCE_ROOT + "algorithm-debug-agent-v1.json")) {
             JsonNode definition = MAPPER.readTree(stream);
             assertEquals("algorithm-debug", definition.path("agentId").asText());
-            List<String> declaredTools = new ArrayList<>();
-            definition.path("allowedToolGroups").forEach(group ->
-                    group.path("toolNames").forEach(tool -> declaredTools.add(tool.asText())));
+            assertEquals("2.0", definition.path("profileVersion").asText());
+            assertFalse(definition.has("allowedToolGroups"));
+            assertFalse(definition.has("completionContract"));
+            assertFalse(definition.has("defaultModelHints"));
             List<String> catalogTools = McpToolCatalog.load().descriptors().stream()
                     .map(McpToolDescriptor::name)
                     .toList();
-            assertEquals(catalogTools, declaredTools);
             try (InputStream capabilities = loader.getResourceAsStream(
                     RESOURCE_ROOT + "capability-manifest-v1.json")) {
                 JsonNode manifest = new ObjectMapper().readTree(capabilities);
@@ -127,8 +129,8 @@ class McpPackagingTest {
                 "schemas/agent/algorithm-debug-agent-v1.schema.json");
         Map<String, Object> capabilitySchema = resourceMap(
                 "schemas/agent/capability-manifest-v1.schema.json");
-        Map<String, Object> completionSchema = resourceMap(
-                RESOURCE_ROOT + "completion-contract-v1.schema.json");
+        Map<String, Object> finalizationSchema = resourceMap(
+                "schemas/coordination/conclusion-finalization-v1.schema.json");
         Map<String, Object> settingsSchema = resourceMap(
                 "schemas/config/mcp-agent-settings-v1.schema.json");
         Map<String, Object> definition = resourceMap(
@@ -148,7 +150,7 @@ class McpPackagingTest {
 
         validator.assertConforms("Agent Definition schema", definitionSchema);
         validator.assertConforms("Capability Manifest schema", capabilitySchema);
-        validator.assertConforms("Completion Contract schema", completionSchema);
+        validator.assertConforms("Conclusion Finalization schema", finalizationSchema);
         validator.assertConforms("MCP settings schema", settingsSchema);
         validator.assertConforms("Host Adapter schema", adapterSchema);
         assertTrue(validator.validate(definitionSchema, definition).valid());

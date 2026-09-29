@@ -35,6 +35,8 @@
                 <targetPath>schemas/coordination</targetPath>
                 <includes>
                     <include>conclusion-candidate-v2.schema.json</include>
+                    <include>conclusion-decision-v2.schema.json</include>
+                    <include>conclusion-finalization-v1.schema.json</include>
                 </includes>
             </resource>
             <resource>
@@ -44,7 +46,6 @@
                     <include>algorithm-debug-agent-v1.json</include>
                     <include>capability-manifest-v1.json</include>
                     <include>system-prompt-v1.md</include>
-                    <include>completion-contract-v1.schema.json</include>
                 </includes>
             </resource>
             <resource>

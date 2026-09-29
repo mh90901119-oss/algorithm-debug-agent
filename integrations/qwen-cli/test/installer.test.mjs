@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const integrationRoot = path.join(repositoryRoot, "integrations", "qwen-cli");
 
-function runScript(name, profileRoot) {
-  const result = invokeScript(name, profileRoot);
+function runScript(name, profileRoot, options = {}) {
+  const result = invokeScript(name, profileRoot, options);
   assert.equal(result.status, 0, `${name} failed:\n${result.stdout}\n${result.stderr}`);
   return result.stdout;
 }
@@ -147,6 +147,38 @@ test("installer rejects a configured placeholder when its environment variable i
     });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /LOCALAPPDATA is not configured/);
+  } finally {
+    await rm(temporary.root, { recursive: true, force: true });
+  }
+});
+
+test("invalid knowledge leaves the previously installed profile unchanged", async () => {
+  const temporary = await createTemporaryRepository("");
+  const extensionAgent = path.join(temporary.profileRoot, "extensions",
+    "algorithm-debug-agent", "agents", "algorithm-debug-agent.md");
+  const oversizedKnowledge = path.join(temporary.root, "oversized-knowledge");
+  try {
+    assert.equal(invokeScript("install.ps1", temporary.profileRoot, {
+      repositoryRoot: temporary.root,
+    }).status, 0);
+    const installedBefore = await readFile(extensionAgent, "utf8");
+
+    await mkdir(oversizedKnowledge, { recursive: true });
+    await writeFile(path.join(oversizedKnowledge, "too-large.md"), "x".repeat(65537), "utf8");
+    const settingsPath = path.join(temporary.root, "config", "mcp-agent-settings.json");
+    const settings = JSON.parse(await readFile(settingsPath, "utf8"));
+    settings.knowledgeDirectory = oversizedKnowledge;
+    await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+
+    const reinstall = invokeScript("install.ps1", temporary.profileRoot, {
+      repositoryRoot: temporary.root,
+    });
+    assert.notEqual(reinstall.status, 0);
+    assert.match(reinstall.stderr, /file byte budget/i);
+    assert.equal(await readFile(extensionAgent, "utf8"), installedBefore);
+    assert.match(runScript("check.ps1", temporary.profileRoot, {
+      repositoryRoot: temporary.root,
+    }), /QWEN_ADAPTER_CHECK_OK/);
   } finally {
     await rm(temporary.root, { recursive: true, force: true });
   }

@@ -36,8 +36,14 @@ prints the effective values. Invalid configured paths fail with an explicit Engl
 - `agentJavaHome`: optional JDK 21+ home; empty uses `JAVA_HOME` or `PATH`.
 - `targetJavaHome`: optional target-test JDK home; empty uses Agent Java.
 - `mavenExecutable`: optional explicit Maven executable.
-- `knowledgeDirectory`: optional hint directory. Missing or empty knowledge never blocks analysis and
-  never becomes Evidence.
+- `knowledgeDirectory`: optional knowledge-hint directory. Missing or empty knowledge never blocks
+  analysis. The host adapter accepts only bounded UTF-8 Markdown, rejects symbolic links and invalid
+  files, sorts entries by relative path, and injects them into the generated subagent prompt with
+  relative-path/SHA-256/size provenance. The exact file-count, depth, per-file and total-byte limits
+  come from the Canonical Agent Definition. Knowledge never becomes Evidence and is never read by the
+  Java Coordinator or Conclusion Gate.
 
 The launcher derives every repository-owned JAR from its installation root. The file therefore has
 no server JAR, Main class, Collector JAR, credentials, host profile or target-project field.
+Changing `knowledgeDirectory` regenerates only host-owned Agent files; it never migrates, rewrites or
+deletes Case Workspace artifacts.
