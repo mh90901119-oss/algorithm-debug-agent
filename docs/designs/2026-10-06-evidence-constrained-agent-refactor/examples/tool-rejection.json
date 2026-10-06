@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "2.0",
+  "outcome": "REJECTED",
+  "code": "INPUT_REQUIRED",
+  "message": "尚未归档目标算法输入，本次未启动目标 UT。请先采集输入。",
+  "operationId": "operation-demo-collect",
+  "data": {"failureCategory": "PREREQUISITE", "missingPrerequisites": ["ALGORITHM_INPUT_CAPTURE"]},
+  "artifacts": [],
+  "limitations": [],
+  "recoveryActions": [
+    {
+      "toolName": "algorithm_input_capture",
+      "arguments": {"caseId": "case-demo", "analysisId": "analysis-demo"},
+      "requiredUserInput": [],
+      "reasonCode": "INPUT_REQUIRED"
+    }
+  ],
+  "control": {
+    "schemaVersion": "2.0",
+    "policyVersion": "design-1.0",
+    "identity": {"projectId": "project-demo", "caseId": "case-demo", "analysisId": "analysis-demo"},
+    "revision": 1,
+    "snapshotToken": "0000000000000000000000000000000000000000000000000000000000000000",
+    "requestedAction": "CODEPATH_COLLECT",
+    "decision": "REJECTED",
+    "reasonCodes": ["INPUT_REQUIRED"],
+    "openGapIds": ["gap-ready-inputs"],
+    "supportedHypothesisIds": [],
+    "refutedHypothesisIds": [],
+    "unevaluatedPredicateIds": [],
+    "allowedActions": ["ALGORITHM_INPUT_CAPTURE", "ANALYSIS_STATUS", "CASE_INSPECT"],
+    "limitations": []
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "fixtureVersion": "1.0",
+  "exampleKind": "SEMANTIC_SUBSET_NOT_COMPLETE_WIRE_DOCUMENT",
+  "cases": [
+    {
+      "name": "false_can_support",
+      "onTrue": "REFUTE", "onFalse": "SUPPORT", "onUnknown": "NO_CHANGE",
+      "truth": "FALSE", "disposition": "CONFIRMATION_ELIGIBLE",
+      "coverage": "COMPLETE", "effectApplied": true, "appliedEffect": "SUPPORT"
+    },
+    {
+      "name": "true_can_refute",
+      "onTrue": "REFUTE", "onFalse": "SUPPORT", "onUnknown": "NO_CHANGE",
+      "truth": "TRUE", "disposition": "CONFIRMATION_ELIGIBLE",
+      "coverage": "COMPLETE", "effectApplied": true, "appliedEffect": "REFUTE"
+    },
+    {
+      "name": "unknown_is_not_refutation",
+      "onTrue": "SUPPORT", "onFalse": "REFUTE", "onUnknown": "NO_CHANGE",
+      "truth": "UNKNOWN", "disposition": "CONFIRMATION_ELIGIBLE",
+      "coverage": "INCOMPLETE", "effectApplied": false, "appliedEffect": "NO_CHANGE"
+    },
+    {
+      "name": "readable_clue_is_not_confirmation",
+      "onTrue": "SUPPORT", "onFalse": "REFUTE", "onUnknown": "NO_CHANGE",
+      "truth": "TRUE", "disposition": "CLUE_ONLY",
+      "coverage": "COMPLETE", "effectApplied": false, "appliedEffect": "NO_CHANGE"
+    }
+  ]
+}

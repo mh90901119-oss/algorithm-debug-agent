@@ -28,3 +28,7 @@
 
 当前实现以设计 2.2、边界简化设计和 ADR-018 为准。若历史 ADR 的背景描述与当前代码不同，以其后续 ADR、已批准的当前设计和代码
 为准；不得恢复已删除的阶段性设计文件或 0.3 实施计划。
+
+## 正在实施的整改方案
+
+[2026-10-06 算法定位 Agent 整改设计交付包](../designs/2026-10-06-evidence-constrained-agent-refactor/README.md)：包含通用设计、本地代码映射、公司 Skill+MCP 版本迁移、测试与实施计划。用户已批准本地实施，状态为 Approved / Implementing，尚未完成全部契约串联与发布验证。实际完成范围见[进度记录](../designs/2026-10-06-evidence-constrained-agent-refactor/progress.md)，不能把目标设计当成已发布能力。重点修订多轮调查、Truth/Effect、逐条证据资格、模型反馈与执行恢复；公司已有扩展工具按真实契约保留并接入。
