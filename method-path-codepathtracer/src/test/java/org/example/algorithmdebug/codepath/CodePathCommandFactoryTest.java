@@ -53,7 +53,7 @@ class CodePathCommandFactoryTest {
 
     private MethodPathCollectionRequest request(Path java) {
         CodePathCollectionPlan plan = new CodePathCollectionPlan(
-                SchemaVersions.CODEPATH_COLLECTION_PLAN, new PlanId("plan-1"),
+                SchemaVersions.CODEPATH_COLLECTION_PLAN_LEGACY, new PlanId("plan-1"),
                 new CaseId("case-1"), new AnalysisId("analysis-1"),
                 new TargetTest("fixture.Test", "case1"),
                 List.of(new org.example.algorithmdebug.contracts.CodePathMethodSelection(

@@ -17,7 +17,8 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <junit.version>5.10.3</junit.version>
-        <jackson.version>2.17.2</jackson.version>
+        <jackson.version>2.21.1</jackson.version>
+        <mcp.sdk.version>2.0.1</mcp.sdk.version>
         <project.build.outputTimestamp>2026-08-18T00:00:00Z</project.build.outputTimestamp>
     </properties>
 
@@ -37,6 +38,8 @@
         <module>trace-validator</module>
         <module>evidence-engine</module>
         <module>ada-core</module>
+        <module>algorithm-debug-runtime</module>
+        <module>algorithm-debug-mcp-server</module>
         <module>algorithm-debug-cli</module>
         <module>adapters/maven-junit-adapter</module>
         <module>integration-tests</module>
@@ -57,6 +60,16 @@
                 <version>${jackson.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-core</artifactId>
+                <version>${mcp.sdk.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson2</artifactId>
+                <version>${mcp.sdk.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

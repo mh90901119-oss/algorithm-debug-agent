@@ -15,6 +15,7 @@ import org.example.algorithmdebug.casecore.AtomicDocumentWriter;
 import org.example.algorithmdebug.casecore.BoundedDocumentMapper;
 import org.example.algorithmdebug.casecore.CaseArchiveRepository;
 import org.example.algorithmdebug.casecore.ProjectRegistrationRepository;
+import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceLayout;
 import org.example.algorithmdebug.contracts.AnalysisId;
 import org.example.algorithmdebug.contracts.AnalysisRequest;
@@ -26,7 +27,11 @@ import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryBudget;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryCompleteness;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryMode;
 import org.example.algorithmdebug.plan.CodePathPlanCompiler;
 import org.example.algorithmdebug.plan.CodePathPlanRequest;
 import org.example.algorithmdebug.plan.JdwpPlanRequest;
@@ -86,6 +91,12 @@ class StaticAnalysisApplicationServiceTest {
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaTestAlgorithmInputLocator(), Clock.fixed(NOW, ZoneOffset.UTC))
                 .capture(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        InvestigationTestFixture.archive(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                new SourceAnchor(
+                        "fixture.TargetTest", "caseUnderTest", "()V",
+                        "src/test/java/fixture/TargetTest.java", 2, 2),
+                NOW);
     }
 
     @Test
@@ -102,6 +113,38 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
+    void sourceQueryCreatesIdentityArchivesBothDocumentsAndReturnsRegisteredArtifacts() {
+        ArtifactBackedResult<StaticAnalysisSummary> staticResult =
+                service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        String methodKey = archive().requireMethodCatalog(CASE_ID, ANALYSIS_ID)
+                .entries().getFirst().methodKey();
+        StaticAnalysisApplicationService deterministic = service(
+                new OpaqueIdGenerator(() -> "fixed"));
+
+        StaticAnalysisApplicationService.SourceQueryExecution execution =
+                deterministic.querySource(
+                        workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
+                        SourceQueryMode.METHOD, Optional.of(methodKey), Optional.empty(),
+                        Optional.empty(), Optional.empty(), SourceQueryBudget.defaults());
+
+        assertEquals("source-query-fixed", execution.result().queryId().value());
+        assertEquals(SourceQueryCompleteness.COMPLETE, execution.result().completeness());
+        assertEquals(staticResult.artifact(), execution.result().methodCatalogArtifact());
+        assertEquals("SOURCE_QUERY_REQUEST", execution.requestArtifact().artifactType());
+        assertEquals("SOURCE_QUERY_RESULT", execution.resultArtifact().artifactType());
+        assertEquals("analyses/analysis-1/source-queries/source-query-fixed/request.json",
+                execution.requestArtifact().relativePath());
+        assertEquals("analyses/analysis-1/source-queries/source-query-fixed/result.json",
+                execution.resultArtifact().relativePath());
+        assertEquals(execution.result(), archive().requireSourceQueryResult(
+                CASE_ID, ANALYSIS_ID, execution.result().queryId()));
+        assertEquals(execution.requestArtifact(), archive().requireArtifactRegistration(
+                CASE_ID, execution.requestArtifact().artifactId()).artifact());
+        assertEquals(execution.resultArtifact(), archive().requireArtifactRegistration(
+                CASE_ID, execution.resultArtifact().artifactId()).artifact());
+    }
+
+    @Test
     void codePathPlanReturnsBoundedSummaryAndCaseRelativeArtifact() throws Exception {
         service().analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
 
@@ -111,11 +154,20 @@ class StaticAnalysisApplicationServiceTest {
                         "fixture.TargetTest#caseUnderTest()V", "Locate the runtime path"));
 
         assertEquals(1, result.summary().selectorCount());
+        assertEquals("gap-1", result.summary().investigationBinding().gapId().value());
         assertEquals("analyses/analysis-1/plans/plan-1.json",
                 result.artifact().relativePath());
         assertEquals(result.artifact().sizeBytes(), Files.size(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                         .resolve(CASE_ID.value()).resolve(result.artifact().relativePath())));
+        var state = new org.example.algorithmdebug.core.coordination.InvestigationStateProjector()
+                .project(new org.example.algorithmdebug.casecore.InvestigationJournalReader(
+                        WorkspaceLayout.of(workspace).projectCases(PROJECT_ID),
+                        new BoundedDocumentMapper())
+                        .readValidatedEvents(new org.example.algorithmdebug.contracts.coordination.AnalysisIdentity(
+                                PROJECT_ID, CASE_ID, ANALYSIS_ID)).events());
+        assertEquals(org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.PLANNED,
+                state.gaps().getFirst().status());
     }
 
     @Test
@@ -138,10 +190,10 @@ class StaticAnalysisApplicationServiceTest {
                 new PlanId("plan-missing-evidence"),
                 codePathMethods("fixture.TargetTest#caseUnderTest()V"), java.util.Optional.empty(),
                 "Verify the observed path",
-                new org.example.algorithmdebug.contracts.InvestigationIntent(
-                        "Which path executed?", "One candidate path executed",
-                        List.of(new org.example.algorithmdebug.contracts.EvidenceId("missing-evidence")),
-                        List.of("Observed method entries")),
+                InvestigationTestFixture.request(
+                        "Which path executed?",
+                        List.of(new org.example.algorithmdebug.contracts.EvidenceId(
+                                "missing-evidence"))),
                 org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW);
 
         CaseRunException failure = assertThrows(CaseRunException.class, () ->
@@ -200,13 +252,24 @@ class StaticAnalysisApplicationServiceTest {
                                 "target-entry", methodKey, 2,
                                 3, 3, 3, 0, null,
                                 org.example.algorithmdebug.contracts.JdwpCaptureSpec.stackOnly())),
-                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(), "Inspect target method", new org.example.algorithmdebug.contracts.InvestigationIntent("Which state was observed?", "The target method receives the expected state", List.of(), List.of("A matching runtime snapshot")), NOW));
+                        org.example.algorithmdebug.contracts.JdwpCollectionBudget.defaults(),
+                        "Inspect target method",
+                        InvestigationTestFixture.request("Which state was observed?"), NOW));
 
         assertEquals(1, result.summary().tracepointCount());
+        assertEquals("gap-1", result.summary().investigationBinding().gapId().value());
         assertEquals("analyses/analysis-1/plans/jdwp-plan-1.json",
                 result.artifact().relativePath());
         assertEquals(result.summary().planId(), archive().requireJdwpPlan(
                 CASE_ID, ANALYSIS_ID, result.summary().planId()).planId());
+        var state = new org.example.algorithmdebug.core.coordination.InvestigationStateProjector()
+                .project(new org.example.algorithmdebug.casecore.InvestigationJournalReader(
+                        WorkspaceLayout.of(workspace).projectCases(PROJECT_ID),
+                        new BoundedDocumentMapper())
+                        .readValidatedEvents(new org.example.algorithmdebug.contracts.coordination.AnalysisIdentity(
+                                PROJECT_ID, CASE_ID, ANALYSIS_ID)).events());
+        assertEquals(org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.PLANNED,
+                state.gaps().getFirst().status());
     }
 
     @Test
@@ -219,7 +282,7 @@ class StaticAnalysisApplicationServiceTest {
     }
 
     @Test
-    void mapsStaticAndPlanArchiveFailuresToStageCodes() {
+    void mapsStaticFailureAndRejectsASecondPlanForTheAlreadyPlannedGap() {
         StaticAnalysisApplicationService service = service();
         service.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
 
@@ -234,16 +297,21 @@ class StaticAnalysisApplicationServiceTest {
                 service.createCodePathPlan(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, request));
 
         assertEquals("STATIC_ARCHIVE_FAILED", staticFailure.code());
-        assertEquals("PLAN_ARCHIVE_FAILED", planFailure.code());
+        assertEquals("PLAN_COMPILATION_FAILED", planFailure.code());
     }
 
     private StaticAnalysisApplicationService service() {
+        return service(new OpaqueIdGenerator());
+    }
+
+    private StaticAnalysisApplicationService service(OpaqueIdGenerator ids) {
         return new StaticAnalysisApplicationService(
                 new ProjectRegistrationRepository(
                         new BoundedDocumentMapper(), new AtomicDocumentWriter()),
                 new BoundedDocumentMapper(), new AtomicDocumentWriter(),
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(),
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), ids,
+                org.example.algorithmdebug.casecore.logging.AgentExecutionLog.disabled());
     }
 
     private CaseArchiveRepository archive() {
@@ -269,10 +337,8 @@ class StaticAnalysisApplicationServiceTest {
                 .toList();
     }
 
-    private static org.example.algorithmdebug.contracts.InvestigationIntent codePathIntent() {
-        return new org.example.algorithmdebug.contracts.InvestigationIntent(
-                "Which path executed?", "The selected method executed", List.of(),
-                List.of("Observed method path"));
+    private static org.example.algorithmdebug.plan.InvestigationBindingRequest codePathIntent() {
+        return InvestigationTestFixture.request("Which path executed?");
     }
 
     private static String portable(Path path) {

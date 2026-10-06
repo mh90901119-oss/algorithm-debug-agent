@@ -17,11 +17,14 @@ import org.example.algorithmdebug.casecore.OpaqueIdGenerator;
 import org.example.algorithmdebug.casecore.WorkspaceException;
 import org.example.algorithmdebug.contracts.AgentFailureDiagnostic;
 import org.example.algorithmdebug.contracts.ArtifactReference;
+import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.CodePathCollectionPlan;
 import org.example.algorithmdebug.contracts.CollectionBaselineCheck;
 import org.example.algorithmdebug.contracts.CollectionValidation;
+import org.example.algorithmdebug.contracts.ComparisonOutcome;
 import org.example.algorithmdebug.contracts.EvidenceBuildRequest;
 import org.example.algorithmdebug.contracts.EvidenceDimension;
+import org.example.algorithmdebug.contracts.EvidenceEligibility;
 import org.example.algorithmdebug.contracts.EvidenceId;
 import org.example.algorithmdebug.contracts.EvidenceValidationStatus;
 import org.example.algorithmdebug.contracts.JdwpCollectionCompletion;
@@ -37,7 +40,9 @@ import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.evidence.EvidenceBuildSources;
 import org.example.algorithmdebug.evidence.EvidenceBundleBuilder;
+import org.example.algorithmdebug.evidence.EvidenceEligibilityEvaluator;
 import org.example.algorithmdebug.evidence.EvidenceSufficiencyEvaluator;
+import org.example.algorithmdebug.evidence.EvidenceView;
 import org.example.algorithmdebug.evidence.ValidatedCollectionSource;
 import org.example.algorithmdebug.methodpath.CollectionCompletion;
 import org.example.algorithmdebug.methodpath.MethodPathManifest;
@@ -89,10 +94,13 @@ final class CollectionPostProcessingService {
             CodePathCollectionPlan plan,
             MethodPathManifest manifest,
             CollectionBaselineCheck baseline) {
+        ArrayList<ArtifactReference> produced = new ArrayList<>();
         try {
-            return doProcessCodePath(collection, plan, manifest, baseline);
+            return doProcessCodePath(collection, plan, manifest, baseline, produced);
         } catch (RuntimeException failure) {
-            return failed(collection.caseId(), collection.collectionId(), failure);
+            return failed(
+                    collection.caseId(), collection.collectionId(), failure, produced,
+                    codePathEligibility(false, manifest, baseline));
         }
     }
 
@@ -101,10 +109,13 @@ final class CollectionPostProcessingService {
             JdwpCollectionPlan plan,
             JdwpCollectionManifest manifest,
             CollectionBaselineCheck baseline) {
+        ArrayList<ArtifactReference> produced = new ArrayList<>();
         try {
-            return doProcessJdwp(collection, plan, manifest, baseline);
+            return doProcessJdwp(collection, plan, manifest, baseline, produced);
         } catch (RuntimeException failure) {
-            return failed(collection.caseId(), collection.collectionId(), failure);
+            return failed(
+                    collection.caseId(), collection.collectionId(), failure, produced,
+                    jdwpEligibility(false, manifest, baseline));
         }
     }
 
@@ -112,19 +123,22 @@ final class CollectionPostProcessingService {
             MethodPathCollectionRecord collection,
             CodePathCollectionPlan plan,
             MethodPathManifest collectorManifest,
-            CollectionBaselineCheck baseline) {
+            CollectionBaselineCheck baseline,
+            List<ArtifactReference> produced) {
         NormalizationBudget budget = budget(
                 plan.budget().maxBytes(), plan.budget().maxEvents(),
                 NormalizationBudget.defaults().maxHits());
         EvidenceId evidenceId = ids.newEvidenceId();
-        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
-                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
-                        "Collection has no completed uninstrumented reference run"));
-        EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.analysisId(),
-                evidenceRunId, collection.collectionId(), EvidenceDimension.METHOD_PATH, budget);
-        archive.createEvidenceRequest(request);
+        Optional<EvidenceBuildRequest> request = baseline.referenceRunId().map(runId -> request(
+                evidenceId, collection.caseId(), collection.analysisId(), runId,
+                collection.collectionId(), EvidenceDimension.METHOD_PATH, budget));
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
+        request.ifPresent(value -> {
+            Path requestPath = archive.createEvidenceRequest(value);
+            addUnique(produced, describe(
+                    collection.caseId(), requestPath, evidenceId.value() + "-request",
+                    "EVIDENCE_BUILD_REQUEST", "application/json"));
+        });
         Path rawPath = layout.collectionRoot(collection.collectionId())
                 .resolve(collectorManifest.rawTrace()).normalize();
         if (!rawPath.startsWith(layout.collectionRoot(collection.collectionId()))) {
@@ -149,58 +163,80 @@ final class CollectionPostProcessingService {
                         .normalize(normalizationInput)
                 : new MethodPathNormalizer().normalize(normalizationInput);
         if (normalized.summary().isEmpty()) {
-            archive.createNormalizationManifest(normalizationManifest(
+            Path failedNormalization = archive.createNormalizationManifest(normalizationManifest(
                     evidenceId, collection, "CODEPATH",
                     plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
                             ? "aggregate-method-path-normalizer" : "method-path-normalizer", raw,
                     Optional.empty(), budget, normalized, now));
+            addUnique(produced, describe(
+                    collection.caseId(), failedNormalization,
+                    evidenceId.value() + "-normalization", "NORMALIZATION_MANIFEST",
+                    "application/json"));
             throw new CaseRunException(
                     normalized.failureCode().orElse("CODEPATH_NORMALIZATION_FAILED"),
                     "CodePath Raw Trace normalization failed");
         }
         MethodPathSummary summary = normalized.summary().orElseThrow();
-        ArrayList<ArtifactReference> queryArtifacts = new ArrayList<>();
         if (plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE
                 && Files.exists(invocationPath)) {
             ArtifactReference invocations = describe(
                     collection.caseId(), invocationPath,
                     collection.collectionId().value() + "-codepath-invocations",
                     "CODEPATH_INVOCATIONS", "application/x-ndjson");
-            queryArtifacts.add(invocations);
+            addUnique(produced, invocations);
         }
         Path summaryPath = archive.createMethodPathSummary(summary);
         ArtifactReference summaryReference = describe(
                 collection.caseId(), summaryPath, evidenceId.value() + "-method-path-summary",
                 "METHOD_PATH_SUMMARY", "application/json");
+        addUnique(produced, summaryReference);
         NormalizationManifest normalization = normalizationManifest(
                 evidenceId, collection, "CODEPATH",
                 plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE
                         ? "aggregate-method-path-normalizer" : "method-path-normalizer", raw,
                 Optional.of(summaryReference), budget, normalized, now);
         Path normalizationPath = archive.createNormalizationManifest(normalization);
+        addUnique(produced, describe(
+                collection.caseId(), normalizationPath,
+                evidenceId.value() + "-normalization", "NORMALIZATION_MANIFEST",
+                "application/json"));
         CollectionValidation validation = validator.validateMethodPath(new MethodPathValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath, queryArtifacts);
+        EvidenceEligibility eligibility = codePathEligibility(
+                validation.status() != EvidenceValidationStatus.INVALID,
+                collectorManifest, baseline);
+        CollectionPostProcessingResult completed = complete(
+                collection.caseId(), evidenceId, request, validation, eligibility, produced);
+        evaluateCodePath(plan, summary,
+                plan.captureMode() == org.example.algorithmdebug.contracts.CodePathCaptureMode.TRACE
+                        && Files.isRegularFile(invocationPath)
+                        ? Optional.of(invocationPath) : Optional.empty(),
+                eligibility, observationComparison(eligibility, baseline.outcome()));
+        return new CollectionPostProcessingResult(
+                completed.artifactReadable(), completed.artifacts(), eligibility);
     }
 
     private CollectionPostProcessingResult doProcessJdwp(
             JdwpCollectionRecord collection,
             JdwpCollectionPlan plan,
             JdwpCollectionManifest collectorManifest,
-            CollectionBaselineCheck baseline) {
+            CollectionBaselineCheck baseline,
+            List<ArtifactReference> produced) {
         NormalizationBudget budget = budget(
                 plan.budget().maxBytes(), plan.budget().maxEvents() + 2L,
                 plan.budget().maxEvents());
         EvidenceId evidenceId = ids.newEvidenceId();
-        var evidenceRunId = baseline.referenceRunId().orElseThrow(() ->
-                new CaseRunException("EVIDENCE_REFERENCE_RUN_MISSING",
-                        "Collection has no completed uninstrumented reference run"));
-        EvidenceBuildRequest request = request(
-                evidenceId, collection.caseId(), collection.analysisId(),
-                evidenceRunId, collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget);
-        archive.createEvidenceRequest(request);
+        Optional<EvidenceBuildRequest> request = baseline.referenceRunId().map(runId -> request(
+                evidenceId, collection.caseId(), collection.analysisId(), runId,
+                collection.collectionId(), EvidenceDimension.RUNTIME_STATE, budget));
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, collection.caseId());
+        request.ifPresent(value -> {
+            Path requestPath = archive.createEvidenceRequest(value);
+            addUnique(produced, describe(
+                    collection.caseId(), requestPath, evidenceId.value() + "-request",
+                    "EVIDENCE_BUILD_REQUEST", "application/json"));
+        });
         Path rawPath = layout.collectionRoot(collection.collectionId()).resolve("raw/jdwp.jsonl");
         ArtifactReference raw = describe(
                 collection.caseId(), rawPath, collection.collectionId().value() + "-raw",
@@ -211,9 +247,13 @@ final class CollectionPostProcessingService {
                         collection, plan, raw, rawPath, evidenceId, budget,
                         collectorManifest.completion() == JdwpCollectionCompletion.TRUNCATED, now));
         if (normalized.summary().isEmpty()) {
-            archive.createNormalizationManifest(normalizationManifest(
+            Path failedNormalization = archive.createNormalizationManifest(normalizationManifest(
                     evidenceId, collection, "JDWP", "jdwp-snapshot-normalizer", raw,
                     Optional.empty(), budget, normalized, now));
+            addUnique(produced, describe(
+                    collection.caseId(), failedNormalization,
+                    evidenceId.value() + "-normalization", "NORMALIZATION_MANIFEST",
+                    "application/json"));
             throw new CaseRunException(
                     normalized.failureCode().orElse("JDWP_NORMALIZATION_FAILED"),
                     "JDWP Raw Trace normalization failed");
@@ -223,71 +263,84 @@ final class CollectionPostProcessingService {
         ArtifactReference summaryReference = describe(
                 collection.caseId(), summaryPath, evidenceId.value() + "-jdwp-summary",
                 "JDWP_SNAPSHOT_SUMMARY", "application/json");
+        addUnique(produced, summaryReference);
         NormalizationManifest normalization = normalizationManifest(
                 evidenceId, collection, "JDWP", "jdwp-snapshot-normalizer", raw,
                 Optional.of(summaryReference), budget, normalized, now);
         Path normalizationPath = archive.createNormalizationManifest(normalization);
+        addUnique(produced, describe(
+                collection.caseId(), normalizationPath,
+                evidenceId.value() + "-normalization", "NORMALIZATION_MANIFEST",
+                "application/json"));
         CollectionValidation validation = validator.validateJdwp(new JdwpValidationInput(
                 collection, plan, collectorManifest, normalization, summary, baseline,
                 raw, rawPath, summaryReference, summaryPath, clock.instant()));
-        return complete(request, validation, summaryReference, normalizationPath, List.of());
+        EvidenceEligibility eligibility = jdwpEligibility(
+                validation.status() != EvidenceValidationStatus.INVALID,
+                collectorManifest, baseline);
+        CollectionPostProcessingResult completed = complete(
+                collection.caseId(), evidenceId, request, validation, eligibility, produced);
+        evaluateJdwp(
+                plan, summary, eligibility,
+                observationComparison(eligibility, baseline.outcome()));
+        return new CollectionPostProcessingResult(
+                completed.artifactReadable(), completed.artifacts(), eligibility);
     }
 
     private CollectionPostProcessingResult complete(
-            EvidenceBuildRequest request,
+            CaseId caseId,
+            EvidenceId evidenceId,
+            Optional<EvidenceBuildRequest> request,
             CollectionValidation validation,
-            ArtifactReference summaryReference,
-            Path normalizationPath,
-            List<ArtifactReference> queryArtifacts) {
-        CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, request.caseId());
+            EvidenceEligibility eligibility,
+            List<ArtifactReference> result) {
+        CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, caseId);
         Path validationPath = archive.createCollectionValidation(validation);
         ArtifactReference validationReference = describe(
-                request.caseId(), validationPath, request.evidenceId().value() + "-validation",
+                caseId, validationPath, evidenceId.value() + "-validation",
                 "COLLECTION_VALIDATION", "application/json");
-        var runOutcome = archive.findRunOutcome(request.caseId(), request.runId()).orElseThrow(() ->
+        addUnique(result, validationReference);
+        if (request.isEmpty()) {
+            return new CollectionPostProcessingResult(
+                    validation.status() != EvidenceValidationStatus.INVALID, result, eligibility);
+        }
+
+        EvidenceBuildRequest buildRequest = request.orElseThrow();
+        var runOutcome = archive.findRunOutcome(caseId, buildRequest.runId()).orElseThrow(() ->
                 new CaseRunException("EVIDENCE_REFERENCE_RUN_INCOMPLETE",
                         "The uninstrumented Run referenced by Evidence is not completed"));
         ArtifactReference outcomeReference = describe(
-                request.caseId(), layout.runOutcome(request.runId()),
-                request.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
+                caseId, layout.runOutcome(buildRequest.runId()),
+                buildRequest.runId().value() + "-outcome", "RUN_OUTCOME_SUMMARY", "application/json");
         Optional<RunResultFingerprint> fingerprint = archive.findLatestRunResultFingerprint(
-                        request.caseId(), request.analysisId())
-                .filter(value -> value.runId().equals(request.runId()));
+                        caseId, buildRequest.analysisId())
+                .filter(value -> value.runId().equals(buildRequest.runId()));
         Optional<ArtifactReference> fingerprintReference = fingerprint.map(value -> describe(
-                request.caseId(), layout.runResultFingerprint(value.runId()),
+                caseId, layout.runResultFingerprint(value.runId()),
                 value.runId().value() + "-fingerprint", "RUN_RESULT_FINGERPRINT",
                 "application/json"));
         var sources = new EvidenceBuildSources(
                 runOutcome, outcomeReference,
                 fingerprint, fingerprintReference,
                 List.of(new ValidatedCollectionSource(validation, validationReference)));
-        var bundle = new EvidenceBundleBuilder().build(request, sources);
+        var bundle = new EvidenceBundleBuilder().build(buildRequest, sources);
         Path bundlePath = archive.createEvidenceBundle(bundle);
-        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(request, bundle);
+        var sufficiency = new EvidenceSufficiencyEvaluator().evaluate(
+                buildRequest, bundle, eligibility, Set.of());
         Path sufficiencyPath = archive.createSufficiencyEvaluation(sufficiency);
 
-        ArrayList<ArtifactReference> result = new ArrayList<>();
-        result.addAll(queryArtifacts);
-        result.add(describe(request.caseId(), layout.evidenceBuildRequest(request.evidenceId()),
-                request.evidenceId().value() + "-request", "EVIDENCE_BUILD_REQUEST",
-                "application/json"));
-        result.add(summaryReference);
-        result.add(describe(request.caseId(), normalizationPath,
-                request.evidenceId().value() + "-normalization", "NORMALIZATION_MANIFEST",
-                "application/json"));
-        result.add(validationReference);
-        result.add(describe(request.caseId(), bundlePath,
-                request.evidenceId().value() + "-bundle", "EVIDENCE_BUNDLE", "application/json"));
-        result.add(describe(request.caseId(), sufficiencyPath,
-                request.evidenceId().value() + "-sufficiency", "SUFFICIENCY_EVALUATION",
+        addUnique(result, describe(caseId, bundlePath,
+                evidenceId.value() + "-bundle", "EVIDENCE_BUNDLE", "application/json"));
+        addUnique(result, describe(caseId, sufficiencyPath,
+                evidenceId.value() + "-sufficiency", "SUFFICIENCY_EVALUATION",
                 "application/json"));
         return new CollectionPostProcessingResult(
-                validation.status() == EvidenceValidationStatus.VALID, result);
+                validation.status() != EvidenceValidationStatus.INVALID, result, eligibility);
     }
 
     private EvidenceBuildRequest request(
             EvidenceId evidenceId,
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
@@ -346,7 +399,7 @@ final class CollectionPostProcessingService {
 
     private static NormalizationManifest normalizationManifest(
             EvidenceId evidenceId,
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.AnalysisId analysisId,
             org.example.algorithmdebug.contracts.RunId runId,
             org.example.algorithmdebug.contracts.PlanId planId,
@@ -366,10 +419,113 @@ final class CollectionPostProcessingService {
                 result.failureDetail(), createdAt);
     }
 
+    private void evaluateCodePath(
+            CodePathCollectionPlan plan,
+            MethodPathSummary summary,
+            Optional<Path> invocationPath,
+            EvidenceEligibility eligibility,
+            ComparisonOutcome comparisonOutcome) {
+        var binding = plan.investigationBinding().orElseThrow(() ->
+                new CaseRunException(
+                        "INVESTIGATION_BINDING_MISSING",
+                        "Current CodePath plan has no Investigation binding"));
+        InvestigationApplicationService investigation = investigation();
+        var predicates = boundPredicates(
+                investigation.currentState(plan.caseId(), plan.analysisId()), binding);
+        EvidenceView view = new CollectionEvidenceViewFactory().fromCodePath(
+                plan, summary, invocationPath, eligibility, comparisonOutcome, predicates);
+        investigation.recordCollectedEvidence(binding, view);
+    }
+
+    private void evaluateJdwp(
+            JdwpCollectionPlan plan,
+            JdwpSnapshotSummary summary,
+            EvidenceEligibility eligibility,
+            ComparisonOutcome comparisonOutcome) {
+        var binding = plan.investigationBinding().orElseThrow(() ->
+                new CaseRunException(
+                        "INVESTIGATION_BINDING_MISSING",
+                        "Current JDWP plan has no Investigation binding"));
+        InvestigationApplicationService investigation = investigation();
+        var predicates = boundPredicates(
+                investigation.currentState(plan.caseId(), plan.analysisId()), binding);
+        EvidenceView view = new CollectionEvidenceViewFactory().fromJdwp(
+                plan, summary, eligibility, comparisonOutcome, predicates);
+        investigation.recordCollectedEvidence(binding, view);
+    }
+
+    private InvestigationApplicationService investigation() {
+        return new InvestigationApplicationService(casesRoot, mapper, writer, clock);
+    }
+
+    private static List<org.example.algorithmdebug.contracts.investigation.ObservationPredicate>
+            boundPredicates(
+                    org.example.algorithmdebug.contracts.investigation.InvestigationState state,
+                    org.example.algorithmdebug.contracts.investigation.InvestigationBinding binding) {
+        return binding.predicateIds().stream().map(id -> state.predicates().stream()
+                .filter(value -> value.predicateId().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new CaseRunException(
+                        "INVESTIGATION_PREDICATE_MISSING",
+                        "Bound Predicate is absent from the Investigation Ledger: "
+                                + id.value())))
+                .toList();
+    }
+
+    private static EvidenceEligibility codePathEligibility(
+            boolean artifactReadable,
+            MethodPathManifest manifest,
+            CollectionBaselineCheck baseline) {
+        boolean collectionComplete =
+                (manifest.completion() == CollectionCompletion.SUCCESS
+                        || manifest.completion() == CollectionCompletion.TARGET_FAILED)
+                        && manifest.truncationReasons().isEmpty();
+        return eligibility(
+                artifactReadable, collectionComplete,
+                manifest.completion() == CollectionCompletion.TARGET_FAILED,
+                baseline.outcome(), manifest.capturedEventCount() > 0);
+    }
+
+    private static EvidenceEligibility jdwpEligibility(
+            boolean artifactReadable,
+            JdwpCollectionManifest manifest,
+            CollectionBaselineCheck baseline) {
+        boolean collectionComplete =
+                (manifest.completion() == JdwpCollectionCompletion.SUCCESS
+                        || manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED)
+                        && !manifest.truncated();
+        long capturedHits = manifest.capturedHitCounts().values().stream()
+                .mapToLong(Integer::longValue).sum();
+        return eligibility(
+                artifactReadable, collectionComplete,
+                manifest.completion() == JdwpCollectionCompletion.TARGET_FAILED,
+                baseline.outcome(), capturedHits > 0);
+    }
+
+    private static EvidenceEligibility eligibility(
+            boolean artifactReadable,
+            boolean collectionComplete,
+            boolean targetFailed,
+            ComparisonOutcome comparisonOutcome,
+            boolean obligationSatisfied) {
+        return new EvidenceEligibilityEvaluator().evaluate(
+                new EvidenceEligibilityEvaluator.Context(
+                        artifactReadable, collectionComplete, targetFailed,
+                        comparisonOutcome, obligationSatisfied));
+    }
+
+    private static ComparisonOutcome observationComparison(
+            EvidenceEligibility eligibility, ComparisonOutcome baselineOutcome) {
+        return eligibility.baselineRequired()
+                ? baselineOutcome : ComparisonOutcome.NOT_COMPARED;
+    }
+
     private CollectionPostProcessingResult failed(
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             org.example.algorithmdebug.contracts.CollectionId collectionId,
-            RuntimeException failure) {
+            RuntimeException failure,
+            List<ArtifactReference> produced,
+            EvidenceEligibility eligibility) {
         CaseArchiveLayout layout = CaseArchiveLayout.of(casesRoot, caseId);
         Path document = layout.collectionRoot(collectionId)
                 .resolve("validation/post-processing-failure.json");
@@ -381,7 +537,16 @@ final class CollectionPostProcessingService {
         ArtifactReference reference = describe(
                 caseId, document, collectionId.value() + "-post-processing-failure",
                 "POST_PROCESSING_FAILURE", "application/json");
-        return new CollectionPostProcessingResult(false, List.of(reference));
+        addUnique(produced, reference);
+        return new CollectionPostProcessingResult(false, produced, eligibility);
+    }
+
+    private static void addUnique(
+            List<ArtifactReference> artifacts, ArtifactReference candidate) {
+        if (artifacts.stream().noneMatch(value ->
+                value.artifactId().equals(candidate.artifactId()))) {
+            artifacts.add(candidate);
+        }
     }
 
     private static String failureCode(RuntimeException failure) {
@@ -395,7 +560,7 @@ final class CollectionPostProcessingService {
     }
 
     private ArtifactReference describe(
-            org.example.algorithmdebug.contracts.CaseId caseId,
+            CaseId caseId,
             Path path,
             String id,
             String type,

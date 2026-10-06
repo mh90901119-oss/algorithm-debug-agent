@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/analysis-action-request-v1.schema.json",
+  "title": "AnalysisActionRequest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "actionType", "identity", "target", "operationId", "payload"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "actionType": { "$ref": "#/$defs/actionType" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "target": { "$ref": "#/$defs/target" },
+    "operationId": { "type": ["string", "null"], "minLength": 1, "maxLength": 128 },
+    "payload": {}
+  },
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "actionType": {
+      "type": "string",
+      "enum": [
+        "ANALYSIS_BEGIN", "CASE_INSPECT", "ALGORITHM_INPUT_CAPTURE", "CASE_AUDIT",
+        "GANTT_INSPECT", "RUN_TEST", "STATIC_ANALYZE", "SOURCE_QUERY",
+        "INVESTIGATION_UPDATE", "CODEPATH_PLAN_CREATE", "CODEPATH_COLLECT",
+        "JDWP_PLAN_CREATE", "JDWP_COLLECT", "ARTIFACT_READ", "EVIDENCE_QUERY",
+        "ANALYSIS_STATUS", "ANALYSIS_FINALIZE"
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectId", "caseId", "analysisId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspaceId", "projectId", "caseId", "analysisId", "runId", "planId", "evidenceId"],
+      "properties": {
+        "workspaceId": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" },
+        "runId": { "anyOf": [{ "$ref": "#/$defs/opaqueId" }, { "type": "null" }] },
+        "planId": { "anyOf": [{ "$ref": "#/$defs/opaqueId" }, { "type": "null" }] },
+        "evidenceId": { "anyOf": [{ "$ref": "#/$defs/opaqueId" }, { "type": "null" }] }
+      }
+    }
+  }
+}

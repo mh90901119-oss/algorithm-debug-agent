@@ -52,6 +52,7 @@ import org.example.algorithmdebug.contracts.RunOutcomeSummary;
 import org.example.algorithmdebug.contracts.RunRequest;
 import org.example.algorithmdebug.contracts.RunResultFingerprint;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
 import org.example.algorithmdebug.contracts.TestOutcome;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
@@ -128,6 +129,11 @@ class CollectionApplicationServiceTest {
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());
         staticAnalysis.analyze(workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID);
+        InvestigationTestFixture.archive(
+                workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID, TARGET,
+                new SourceAnchor(
+                        "fixture.TargetTest", "caseUnderTest", "()V",
+                        "src/test/java/fixture/TargetTest.java", 2, 2), NOW);
         staticAnalysis.createCodePathPlan(
                 workspace, PROJECT_ID, CASE_ID, ANALYSIS_ID,
                 new CodePathPlanRequest(
@@ -135,9 +141,7 @@ class CollectionApplicationServiceTest {
                         List.of(new org.example.algorithmdebug.plan.CodePathMethodRequest(
                                 "fixture.TargetTest#caseUnderTest()V", List.of())),
                         java.util.Optional.empty(), "Locate the runtime path",
-                        new org.example.algorithmdebug.contracts.InvestigationIntent(
-                                "Which path executed?", "The target test executed", List.of(),
-                                List.of("Observed method path")),
+                        InvestigationTestFixture.request("Which path executed?"),
                         org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 
@@ -192,7 +196,7 @@ class CollectionApplicationServiceTest {
 
         assertEquals("SUCCESS", result.summary().completion());
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
         assertEquals(
                 result.artifacts().stream().map(
                         org.example.algorithmdebug.contracts.ArtifactReference::relativePath).toList(),
@@ -214,6 +218,40 @@ class CollectionApplicationServiceTest {
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer)).read(CASE_ID);
         assertEquals(List.of(result.summary()), digest.recentCollections());
         assertEquals(List.of(sufficiency), digest.recentEvidence());
+        var investigation = new InvestigationApplicationService(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer,
+                fixedClock()).currentState(CASE_ID, ANALYSIS_ID);
+        assertEquals(1, investigation.evaluations().size());
+        assertEquals(
+                org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.UNRESOLVED,
+                investigation.gaps().getFirst().status());
+    }
+
+    @Test
+    void successfulCodePathWithoutRunTestRegistersPrimaryArtifact() throws Exception {
+        CollectionApplicationService service = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}")));
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service.executeCodePath(
+                workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
+        assertFalse(result.summary().eligibility().baselineRequired());
+        assertTrue(result.summary().eligibility().confirmationEligible());
+        assertTrue(result.summary().primaryArtifactId().isPresent());
+        assertTrue(result.artifacts().stream().anyMatch(reference ->
+                "METHOD_PATH_SUMMARY".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "POST_PROCESSING_FAILURE".equals(reference.artifactType())));
+        assertTrue(result.artifacts().stream().noneMatch(reference ->
+                "EVIDENCE_BUNDLE".equals(reference.artifactType())));
+        var query = new org.example.algorithmdebug.casecore.RegisteredEvidenceQuery(archive()).query(
+                CASE_ID, result.summary().primaryArtifactId().orElseThrow(),
+                org.example.algorithmdebug.contracts.EvidenceQueryRequest.summary(65_536));
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceQueryOutcome.MATCHED,
+                query.outcome());
+        assertEquals(org.example.algorithmdebug.contracts.EvidenceSourceCoverage.COMPLETE,
+                query.sourceCoverage());
     }
 
     @Test
@@ -278,7 +316,8 @@ class CollectionApplicationServiceTest {
 
         assertEquals("TARGET_FAILED", result.summary().completion());
         assertEquals(ComparisonOutcome.INCOMPARABLE, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertFalse(result.artifacts().stream().anyMatch(reference ->
                 "GANTT_RAW".equals(reference.artifactType())));
     }
@@ -295,12 +334,12 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.MATCHED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
         var baseline = mapper.readJson(
                 WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
                         .resolve("case-1/collections/collection-fixed/validation/baseline-check.json"),
                 org.example.algorithmdebug.contracts.CollectionBaselineCheck.class);
-        assertTrue(baseline.evidenceUsable());
+        assertEquals(ComparisonOutcome.MATCHED, baseline.outcome());
     }
 
     @Test
@@ -314,7 +353,14 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.CHANGED, result.summary().baselineOutcome());
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
+        SufficiencyEvaluation sufficiency = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class);
+        assertEquals(SufficiencyStatus.CONTRADICTED, sufficiency.status());
+        assertTrue(sufficiency.contradictions().contains("FAILURE_FINGERPRINT_CHANGED"));
     }
 
     @Test
@@ -327,7 +373,7 @@ class CollectionApplicationServiceTest {
                 workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
         assertEquals(ComparisonOutcome.NOT_COMPARED, result.summary().baselineOutcome());
-        assertTrue(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().confirmationEligible());
     }
 
     @Test
@@ -337,7 +383,14 @@ class CollectionApplicationServiceTest {
                 CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}"), "", 0,
                 List.of())).executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(zeroHit.summary().evidenceUsable());
+        assertTrue(zeroHit.summary().eligibility().artifactReadable());
+        assertFalse(zeroHit.summary().eligibility().obligationSatisfied());
+        assertFalse(zeroHit.summary().eligibility().confirmationEligible());
+        SufficiencyEvaluation sufficiency = mapper.readJson(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID)
+                        .resolve("case-1/evidence/evidence-fixed/sufficiency-evaluation.json"),
+                SufficiencyEvaluation.class);
+        assertEquals(SufficiencyStatus.INSUFFICIENT, sufficiency.status());
         assertTrue(zeroHit.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(zeroHit.artifacts().stream().noneMatch(reference ->
@@ -356,7 +409,9 @@ class CollectionApplicationServiceTest {
                 CollectionCompletion.TRUNCATED, Optional.of("{\"schedule\":1}")))
                 .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertTrue(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().collectionComplete());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "EVIDENCE_BUNDLE".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().noneMatch(reference ->
@@ -385,7 +440,8 @@ class CollectionApplicationServiceTest {
         MultiArtifactBackedResult<CollectionExecutionSummary> result = service(malformed)
                 .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
 
-        assertFalse(result.summary().evidenceUsable());
+        assertFalse(result.summary().eligibility().artifactReadable());
+        assertFalse(result.summary().eligibility().confirmationEligible());
         assertTrue(result.artifacts().stream().anyMatch(reference ->
                 "CODEPATH_RAW".equals(reference.artifactType())));
         assertTrue(result.artifacts().stream().anyMatch(reference ->
@@ -402,6 +458,30 @@ class CollectionApplicationServiceTest {
                 collectionRoot.resolve("manifest.json"), MethodPathManifest.class).completion());
     }
 
+    @Test
+    void ledgerUpdateFailurePreservesEveryCompletedDerivedArtifact() throws Exception {
+        establishBaseline("{\"schedule\":1}");
+        Path events = WorkspaceLayout.of(workspace).projectCases(PROJECT_ID).resolve(
+                "case-1/analyses/analysis-1/investigation/events");
+        try (var paths = Files.list(events)) {
+            Files.delete(paths.filter(path -> path.getFileName().toString().startsWith("6-"))
+                    .findFirst().orElseThrow());
+        }
+
+        MultiArtifactBackedResult<CollectionExecutionSummary> result = service(
+                collector(CollectionCompletion.SUCCESS, Optional.of("{\"schedule\":1}")))
+                .executeCodePath(workspace, PROJECT_ID, CASE_ID, PLAN_ID);
+
+        Set<String> types = result.artifacts().stream()
+                .map(org.example.algorithmdebug.contracts.ArtifactReference::artifactType)
+                .collect(java.util.stream.Collectors.toSet());
+        assertFalse(result.summary().eligibility().artifactReadable());
+        assertTrue(types.containsAll(Set.of(
+                "CODEPATH_INVOCATIONS", "METHOD_PATH_SUMMARY", "NORMALIZATION_MANIFEST",
+                "COLLECTION_VALIDATION", "EVIDENCE_BUILD_REQUEST", "EVIDENCE_BUNDLE",
+                "SUFFICIENCY_EVALUATION", "POST_PROCESSING_FAILURE")));
+    }
+
     private CollectionApplicationService service(MethodPathCollector collector) {
         return new CollectionApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
@@ -411,6 +491,45 @@ class CollectionApplicationServiceTest {
     }
 
     private void createAggregatePlan(PlanId planId) {
+        var hypothesisId = new org.example.algorithmdebug.contracts.investigation.HypothesisId(
+                "hypothesis-aggregate");
+        var gapId = new org.example.algorithmdebug.contracts.investigation.EvidenceGapId(
+                "gap-aggregate");
+        var predicateId =
+                new org.example.algorithmdebug.contracts.investigation.ObservationPredicateId(
+                        "predicate-aggregate");
+        var investigation = new InvestigationApplicationService(
+                WorkspaceLayout.of(workspace).projectCases(PROJECT_ID), mapper, writer,
+                fixedClock());
+        investigation.update(new org.example.algorithmdebug.contracts.investigation.InvestigationUpdateCommand.AddHypothesis(
+                CASE_ID, ANALYSIS_ID,
+                new org.example.algorithmdebug.contracts.investigation.HypothesisRecord(
+                        SchemaVersions.HYPOTHESIS_RECORD, hypothesisId, CASE_ID, ANALYSIS_ID,
+                        "the aggregate runtime path explains the result",
+                        org.example.algorithmdebug.contracts.investigation.HypothesisStatus.OPEN,
+                        List.of(new SourceAnchor(
+                                "fixture.TargetTest", "caseUnderTest", "()V",
+                                "src/test/java/fixture/TargetTest.java", 2, 2)),
+                        List.of(), List.of(), List.of(gapId), NOW)));
+        investigation.update(new org.example.algorithmdebug.contracts.investigation.InvestigationUpdateCommand.AddEvidenceGap(
+                CASE_ID, ANALYSIS_ID,
+                new org.example.algorithmdebug.contracts.investigation.EvidenceGap(
+                        SchemaVersions.EVIDENCE_GAP, gapId, CASE_ID, ANALYSIS_ID,
+                        "which aggregate path was observed",
+                        org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus.OPEN,
+                        List.of(hypothesisId), List.of(predicateId), NOW)));
+        investigation.update(new org.example.algorithmdebug.contracts.investigation.InvestigationUpdateCommand.RegisterPredicate(
+                CASE_ID, ANALYSIS_ID,
+                new org.example.algorithmdebug.contracts.investigation.ObservationPredicate(
+                        SchemaVersions.OBSERVATION_PREDICATE, predicateId, CASE_ID, ANALYSIS_ID,
+                        hypothesisId, gapId,
+                        org.example.algorithmdebug.contracts.investigation.ObservationOperator.FAILURE_FINGERPRINT_MATCHES,
+                        new org.example.algorithmdebug.contracts.investigation.ObservationSelector.FailureFingerprintMatches(),
+                        org.example.algorithmdebug.contracts.investigation.PredicateRole.CRITICAL,
+                        org.example.algorithmdebug.contracts.investigation.HypothesisEffect.SUPPORT,
+                        org.example.algorithmdebug.contracts.investigation.HypothesisEffect.REFUTE,
+                        org.example.algorithmdebug.contracts.investigation.HypothesisEffect.NO_CHANGE,
+                        NOW)));
         StaticAnalysisApplicationService staticAnalysis = new StaticAnalysisApplicationService(
                 new ProjectRegistrationRepository(mapper, writer), mapper, writer,
                 new JavaSourceCallGraphAnalyzer(), new CodePathPlanCompiler(), fixedClock());
@@ -423,9 +542,9 @@ class CollectionApplicationServiceTest {
                         java.util.Optional.empty(), List.of(),
                         org.example.algorithmdebug.contracts.CodePathCaptureMode.AGGREGATE,
                         1, 10_000, "Summarize the runtime path",
-                        new org.example.algorithmdebug.contracts.InvestigationIntent(
-                                "Which path executed?", "The target test executed", List.of(),
-                                List.of("Observed method counts")),
+                        new org.example.algorithmdebug.plan.InvestigationBindingRequest(
+                                "Which path executed?", gapId, List.of(hypothesisId),
+                                List.of(predicateId), List.of()),
                         org.example.algorithmdebug.contracts.CollectionBudget.defaults(), NOW));
     }
 

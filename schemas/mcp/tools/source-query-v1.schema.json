@@ -1,0 +1,18 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","title":"Source query input","type":"object","additionalProperties":false,
+  "required":["caseId","analysisId","mode"],
+  "properties":{
+    "caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128},
+    "mode":{"enum":["METHOD","CALLERS","CALLEES","REACHABLE_PATH","SOURCE_WINDOW","SEARCH_SYMBOL"]},
+    "methodKey":{"type":"string","minLength":1,"maxLength":1024},"targetMethodKey":{"type":"string","minLength":1,"maxLength":1024},
+    "sourceAnchor":{"type":"object","additionalProperties":false,"required":["className","methodName","descriptor","sourceRelativePath","startLine","endLine"],"properties":{"className":{"type":"string","minLength":1,"maxLength":1024},"methodName":{"type":"string","minLength":1,"maxLength":1024},"descriptor":{"type":"string","minLength":3,"maxLength":4096},"sourceRelativePath":{"type":"string","minLength":1,"maxLength":4096,"pattern":"^(?![A-Za-z]:)(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"},"startLine":{"type":"integer","minimum":1},"endLine":{"type":"integer","minimum":1}}},
+    "symbol":{"type":"string","minLength":1,"maxLength":512,"pattern":"^[A-Za-z_$][A-Za-z0-9_$.#]*$"},
+    "budget":{"type":"object","additionalProperties":false,"required":["maxMethods","maxEdges","maxDepth","maxPaths","maxSourceLines","maxResponseBytes"],"properties":{"maxMethods":{"type":"integer","minimum":1,"maximum":100},"maxEdges":{"type":"integer","minimum":1,"maximum":500},"maxDepth":{"type":"integer","minimum":1,"maximum":8},"maxPaths":{"type":"integer","minimum":1,"maximum":20},"maxSourceLines":{"type":"integer","minimum":1,"maximum":500},"maxResponseBytes":{"type":"integer","minimum":1,"maximum":262144}}}
+  },
+  "oneOf":[
+    {"properties":{"mode":{"enum":["METHOD","CALLERS","CALLEES"]}},"required":["methodKey"]},
+    {"properties":{"mode":{"const":"REACHABLE_PATH"}},"required":["methodKey","targetMethodKey"]},
+    {"properties":{"mode":{"const":"SOURCE_WINDOW"}},"required":["sourceAnchor"]},
+    {"properties":{"mode":{"const":"SEARCH_SYMBOL"}},"required":["symbol"]}
+  ]
+}

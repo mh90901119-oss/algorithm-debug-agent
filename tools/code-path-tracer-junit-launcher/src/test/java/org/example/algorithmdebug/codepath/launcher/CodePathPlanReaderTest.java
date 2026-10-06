@@ -14,7 +14,7 @@ class CodePathPlanReaderTest {
 
     @Test
     void readsTheVersionedAgentPlanWithoutAdaContractsOnTheTargetJvm() throws Exception {
-        Path planFile = Files.writeString(directory.resolve("plan.json"), validPlan("6.0",
+        Path planFile = Files.writeString(directory.resolve("plan.json"), validPlan("7.0",
                 ",\"captureMode\":\"AGGREGATE\",\"scopeStartOrdinal\":100,\"maxMatchedScopes\":20"));
 
         LauncherCodePathPlan plan = new CodePathPlanReader().read(planFile);
@@ -25,15 +25,19 @@ class CodePathPlanReaderTest {
         assertEquals("fixture.Service#solve()V", plan.scopeMethodKey());
         assertEquals(100, plan.budget().maxEvents());
         assertEquals(4096, plan.budget().maxBytes());
-        assertEquals("Which path ran?", plan.intent().questionToAnswer());
+        assertEquals("Which path ran?", plan.questionToAnswer());
+        assertEquals("gap-1", plan.investigationBinding().gapId());
+        assertEquals(java.util.List.of("predicate-1"),
+                plan.investigationBinding().predicateIds());
         assertEquals(LauncherCodePathPlan.CaptureMode.AGGREGATE, plan.captureMode());
         assertEquals(100, plan.scopeStartOrdinal());
         assertEquals(20, plan.maxMatchedScopes());
     }
 
     @Test
-    void readsLegacyV5PlanAsTraceWithDefaultScopeWindow() throws Exception {
-        Path planFile = Files.writeString(directory.resolve("legacy.json"), validPlan("5.0", ""));
+    void readsLegacyV6PlanAsTraceWithDefaultScopeWindow() throws Exception {
+        Path planFile = Files.writeString(
+                directory.resolve("legacy.json"), legacyPlan("6.0"));
 
         LauncherCodePathPlan plan = new CodePathPlanReader().read(planFile);
 
@@ -50,8 +54,17 @@ class CodePathPlanReaderTest {
         assertThrows(IOException.class, () -> new CodePathPlanReader().read(planFile));
     }
 
+    @Test
+    void rejectsIncompleteInvestigationBinding() throws Exception {
+        Path planFile = Files.writeString(
+                directory.resolve("missing-gap.json"),
+                validPlan("").replace("    \"gapId\":\"gap-1\",\n", ""));
+
+        assertThrows(IOException.class, () -> new CodePathPlanReader().read(planFile));
+    }
+
     private static String validPlan(String suffix) {
-        return validPlan("6.0", suffix);
+        return validPlan("7.0", suffix);
     }
 
     private static String validPlan(String version, String suffix) {
@@ -81,14 +94,40 @@ class CodePathPlanReaderTest {
                   "scopeConditions":[],
                   "budget":{"maxEvents":100,"maxBytes":4096,"timeoutMillis":30000},
                   "rationale":"fixture",
-                  "intent":{
-                    "questionToAnswer":"Which path ran?",
-                    "hypothesis":"The selected method executes",
-                    "basedOnEvidenceIds":[],
-                    "expectedObservations":["The method is present in the runtime path"]
+                  "questionToAnswer":"Which path ran?",
+                  "investigationStatus":"STRUCTURED",
+                  "investigationBinding":{
+                    "schemaVersion":"1.0",
+                    "caseId":"case-1",
+                    "analysisId":"analysis-1",
+                    "gapId":"gap-1",
+                    "hypothesisIds":["hypothesis-1"],
+                    "predicateIds":["predicate-1"],
+                    "basedOnEvidenceIds":["evidence-1"]
                   },
                   "createdAt":"2026-08-25T00:00:00Z"
                 }
                 """.formatted(version).trim().replace("\n}", suffix + "\n}");
+    }
+
+    private static String legacyPlan(String version) {
+        return validPlan(version, "")
+                .replace("\"questionToAnswer\":\"Which path ran?\",\n"
+                                + "  \"investigationStatus\":\"STRUCTURED\",\n"
+                                + "  \"investigationBinding\":{\n"
+                                + "    \"schemaVersion\":\"1.0\",\n"
+                                + "    \"caseId\":\"case-1\",\n"
+                                + "    \"analysisId\":\"analysis-1\",\n"
+                                + "    \"gapId\":\"gap-1\",\n"
+                                + "    \"hypothesisIds\":[\"hypothesis-1\"],\n"
+                                + "    \"predicateIds\":[\"predicate-1\"],\n"
+                                + "    \"basedOnEvidenceIds\":[\"evidence-1\"]\n"
+                                + "  },",
+                        "\"intent\":{\n"
+                                + "    \"questionToAnswer\":\"Which path ran?\",\n"
+                                + "    \"hypothesis\":\"The selected method executes\",\n"
+                                + "    \"basedOnEvidenceIds\":[],\n"
+                                + "    \"expectedObservations\":[\"Observed method path\"]\n"
+                                + "  },");
     }
 }

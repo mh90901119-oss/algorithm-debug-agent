@@ -37,6 +37,21 @@ class WorkspaceLayoutTest {
     }
 
     @Test
+    void shouldDeriveAnalysisBeginControlCasesOutsideFormalCaseArchive() {
+        WorkspaceLayout layout = WorkspaceLayout.of(temporaryDirectory.resolve("agent-workspace"));
+        ProjectId projectId = new ProjectId("algorithm-module-123");
+
+        Path controlCases = layout.projectAnalysisBeginControlCases(projectId);
+
+        assertEquals(
+                layout.root().resolve(
+                        "projects/algorithm-module-123/control/analysis-begins/cases"),
+                controlCases);
+        assertTrue(controlCases.startsWith(layout.projectWorkspace(projectId)));
+        assertTrue(!controlCases.startsWith(layout.projectCases(projectId)));
+    }
+
+    @Test
     void shouldRejectProjectIdsThatAreNotSingleSafePathSegments() {
         WorkspaceLayout layout = WorkspaceLayout.of(temporaryDirectory.resolve("agent-workspace"));
 

@@ -26,17 +26,12 @@
         </dependency>
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
+            <artifactId>algorithm-debug-runtime</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.example.algorithmdebug</groupId>
             <artifactId>case-management</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>adapter-sdk</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>method-path-codepathtracer</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -47,16 +42,6 @@
         <dependency>
             <groupId>org.example.algorithmdebug</groupId>
             <artifactId>debug-plan-engine</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>method-path-spi</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.example.algorithmdebug</groupId>
-            <artifactId>jdwp-collector-adapter</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

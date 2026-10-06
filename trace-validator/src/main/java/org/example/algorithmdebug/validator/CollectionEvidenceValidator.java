@@ -260,7 +260,7 @@ public final class CollectionEvidenceValidator {
                     EvidenceValidationStatus.CONTRADICTED,
                     "The collected run result does not match the uncollected Baseline",
                     summaryReference));
-        } else if (!baseline.evidenceUsable()) {
+        } else if (baseline.outcome() == ComparisonOutcome.INCOMPARABLE) {
             add(findings, finding("BASELINE_NOT_CONFIRMED",
                     EvidenceValidationStatus.INCONCLUSIVE,
                     "Consistency between the collected run and uncollected Baseline has not been confirmed",

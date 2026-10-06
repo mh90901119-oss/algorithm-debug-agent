@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "2.0",
+  "caseId": "case-demo",
+  "analysisId": "analysis-demo",
+  "gapId": "gap-ready-inputs",
+  "purpose": "DISCOVERY",
+  "hypothesisIds": [],
+  "predicateIds": [],
+  "basedOnEvidenceIds": []
+}

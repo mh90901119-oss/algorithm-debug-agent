@@ -20,6 +20,7 @@ import org.example.algorithmdebug.methodpath.TargetClasspathResolver;
 import org.example.algorithmdebug.contracts.DoctorCheck;
 import org.example.algorithmdebug.contracts.DoctorStatus;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
+import org.example.algorithmdebug.core.coordination.AnalysisCoordinator;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -41,6 +42,7 @@ public final class ControlPlaneServices {
     private final StaticAnalysisApplicationService staticAnalysis;
     private final CollectionApplicationService collections;
     private final JdwpCollectionApplicationService jdwpCollections;
+    private final Optional<AnalysisCoordinator> coordinator;
 
     private ControlPlaneServices(
             WorkspaceApplicationService workspace,
@@ -52,6 +54,21 @@ public final class ControlPlaneServices {
             StaticAnalysisApplicationService staticAnalysis,
             CollectionApplicationService collections,
             JdwpCollectionApplicationService jdwpCollections) {
+        this(workspace, project, doctor, cases, algorithmInputs, runs, staticAnalysis,
+                collections, jdwpCollections, Optional.empty());
+    }
+
+    private ControlPlaneServices(
+            WorkspaceApplicationService workspace,
+            ProjectApplicationService project,
+            DoctorApplicationService doctor,
+            CaseApplicationService cases,
+            AlgorithmInputApplicationService algorithmInputs,
+            RunApplicationService runs,
+            StaticAnalysisApplicationService staticAnalysis,
+            CollectionApplicationService collections,
+            JdwpCollectionApplicationService jdwpCollections,
+            Optional<AnalysisCoordinator> coordinator) {
         this.workspace = workspace;
         this.project = project;
         this.doctor = doctor;
@@ -61,6 +78,7 @@ public final class ControlPlaneServices {
         this.staticAnalysis = staticAnalysis;
         this.collections = collections;
         this.jdwpCollections = jdwpCollections;
+        this.coordinator = coordinator;
     }
 
     /**
@@ -77,7 +95,8 @@ public final class ControlPlaneServices {
             boolean windows) {
         return createInternal(
                 clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                null, null, null, null, null, null, null, List.of());
+                null, null, currentJavaExecutable(windows),
+                null, null, null, null, null, List.of());
     }
 
     /**
@@ -157,7 +176,8 @@ public final class ControlPlaneServices {
             throw new IllegalArgumentException("Full control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                List.copyOf(adapters), mavenExecutable, currentJavaExecutable(windows),
+                collector, classpathResolver,
                 null, null, null, List.of(toolProbe));
     }
 
@@ -199,12 +219,40 @@ public final class ControlPlaneServices {
             ToolDoctorProbe codePathProbe,
             ToolDoctorProbe jdwpProbe,
             AgentExecutionLog executionLog) {
+        return create(
+                clock, javaFeatureSupplier, environment, pathSeparator, windows,
+                adapters, mavenExecutable, currentJavaExecutable(windows), collector,
+                classpathResolver, jdwpTool, jdwpExecutor, jdwpPorts,
+                codePathProbe, jdwpProbe, executionLog);
+    }
+
+    /** 共享 Runtime 显式注入目标 JVM，确保所有目标执行使用同一受信工具链。 */
+    public static ControlPlaneServices create(
+            Clock clock,
+            IntSupplier javaFeatureSupplier,
+            Map<String, String> environment,
+            String pathSeparator,
+            boolean windows,
+            List<TargetProjectAdapter> adapters,
+            Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
+            MethodPathCollector collector,
+            TargetClasspathResolver classpathResolver,
+            JdwpToolConfiguration jdwpTool,
+            JdwpCollectionExecutor jdwpExecutor,
+            JdwpPortProvider jdwpPorts,
+            ToolDoctorProbe codePathProbe,
+            ToolDoctorProbe jdwpProbe,
+            AgentExecutionLog executionLog) {
         if (jdwpTool == null || jdwpExecutor == null || jdwpPorts == null
-                || codePathProbe == null || jdwpProbe == null || executionLog == null) {
+                || codePathProbe == null || jdwpProbe == null || executionLog == null
+                || targetJavaExecutable == null) {
             throw new IllegalArgumentException("JDWP control plane composition dependencies must not be null");
         }
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                List.copyOf(adapters), mavenExecutable, collector, classpathResolver,
+                List.copyOf(adapters), mavenExecutable,
+                targetJavaExecutable.toAbsolutePath().normalize(),
+                collector, classpathResolver,
                 jdwpTool, jdwpExecutor, jdwpPorts, List.of(codePathProbe, jdwpProbe), executionLog);
     }
 
@@ -216,6 +264,7 @@ public final class ControlPlaneServices {
             boolean windows,
             List<TargetProjectAdapter> adapters,
             Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
             MethodPathCollector methodPathCollector,
             TargetClasspathResolver classpathResolver,
             JdwpToolConfiguration jdwpTool,
@@ -223,7 +272,8 @@ public final class ControlPlaneServices {
             JdwpPortProvider jdwpPorts,
             List<ToolDoctorProbe> toolProbes) {
         return createInternal(clock, javaFeatureSupplier, environment, pathSeparator, windows,
-                adapters, mavenExecutable, methodPathCollector, classpathResolver,
+                adapters, mavenExecutable, targetJavaExecutable,
+                methodPathCollector, classpathResolver,
                 jdwpTool, jdwpExecutor, jdwpPorts, toolProbes, AgentExecutionLog.disabled());
     }
 
@@ -235,6 +285,7 @@ public final class ControlPlaneServices {
             boolean windows,
             List<TargetProjectAdapter> adapters,
             Optional<Path> mavenExecutable,
+            Path targetJavaExecutable,
             MethodPathCollector methodPathCollector,
             TargetClasspathResolver classpathResolver,
             JdwpToolConfiguration jdwpTool,
@@ -243,7 +294,8 @@ public final class ControlPlaneServices {
             List<ToolDoctorProbe> toolProbes,
             AgentExecutionLog executionLog) {
         if (clock == null || javaFeatureSupplier == null || environment == null
-                || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null) {
+                || pathSeparator == null || pathSeparator.isEmpty() || toolProbes == null
+                || targetJavaExecutable == null) {
             throw new IllegalArgumentException("ControlPlaneServices dependencies must be valid");
         }
         AtomicDocumentWriter writer = new AtomicDocumentWriter();
@@ -283,12 +335,12 @@ public final class ControlPlaneServices {
                     mavenExecutable, classpathResolver, executionLog);
             collections = new CollectionApplicationService(
                     new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
-                    ids, clock, mavenExecutable, currentJavaExecutable(windows),
+                    ids, clock, mavenExecutable, targetJavaExecutable,
                     methodPathCollector, classpathResolver, executionLog);
             if (jdwpTool != null) {
                 jdwpCollections = new JdwpCollectionApplicationService(
                         new ProjectRegistrationRepository(mapper, writer), mapper, writer, catalog,
-                        ids, clock, mavenExecutable, currentJavaExecutable(windows), jdwpTool,
+                        ids, clock, mavenExecutable, targetJavaExecutable, jdwpTool,
                         jdwpExecutor, jdwpPorts, executionLog);
             }
         }
@@ -366,6 +418,24 @@ public final class ControlPlaneServices {
             throw new IllegalStateException("ControlPlaneServices has no configured JDWP Collector");
         }
         return jdwpCollections;
+    }
+
+    /**
+     * 返回绑定同一服务集合与唯一 Coordinator 的不可变副本，供共享 Runtime 组合根使用。
+     */
+    public ControlPlaneServices withCoordinator(AnalysisCoordinator value) {
+        if (value == null) {
+            throw new IllegalArgumentException("coordinator must not be null");
+        }
+        return new ControlPlaneServices(
+                workspace, project, doctor, cases, algorithmInputs, runs, staticAnalysis,
+                collections, jdwpCollections, Optional.of(value));
+    }
+
+    /** @return 共享 Runtime 已绑定的唯一 Coordinator；基础服务集合不得伪装成模型入口。 */
+    public AnalysisCoordinator coordinator() {
+        return coordinator.orElseThrow(() -> new IllegalStateException(
+                "ControlPlaneServices has no configured AnalysisCoordinator"));
     }
 
     private static Path currentJavaExecutable(boolean windows) {

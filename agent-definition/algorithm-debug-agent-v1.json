@@ -1,0 +1,38 @@
+{
+  "$schema": "../schemas/agent/algorithm-debug-agent-v1.schema.json",
+  "profileVersion": "2.0",
+  "agentId": "algorithm-debug",
+  "description": "Evidence-constrained subagent for one Java/Maven algorithm JUnit investigation.",
+  "inputContract": {
+    "scope": "one-java-maven-junit-test",
+    "requiredFields": ["problem", "projectRoot", "testClass", "testMethod"]
+  },
+  "requiredMcpServer": {
+    "serverId": "algorithm-debug",
+    "transport": "stdio"
+  },
+  "requiredCapabilities": {
+    "tools": true
+  },
+  "prompt": {
+    "path": "agent-definition/system-prompt-v1.md",
+    "version": "1.0",
+    "sha256": "58b7af31137bae4987c65b090a9c86b11d35a4796a62a1d3cb1949d59d8bbe48"
+  },
+  "capabilityManifest": {
+    "path": "agent-definition/capability-manifest-v1.json",
+    "version": "1.0",
+    "sha256": "dbabff3cc7a2db7987205f0a5682ad4ac42de0e2b79cc9d15a80f7de2ca3e870"
+  },
+  "knowledge": {
+    "required": false,
+    "role": "KNOWLEDGE_HINT",
+    "delivery": "PROMPT_APPEND",
+    "limits": {
+      "maxFiles": 32,
+      "maxDepth": 4,
+      "maxFileBytes": 65536,
+      "maxTotalBytes": 262144
+    }
+  }
+}

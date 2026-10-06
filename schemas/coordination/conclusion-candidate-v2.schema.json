@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/conclusion-candidate-v2.schema.json",
+  "title": "ConclusionCandidate v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "conclusionId", "identity", "basedOnRevision", "requestedStatus",
+    "claims", "causalChains", "unresolvedGapIds"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "2.0" },
+    "conclusionId": { "$ref": "#/$defs/opaqueId" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "basedOnRevision": { "type": "integer", "minimum": 0 },
+    "requestedStatus": { "$ref": "#/$defs/conclusionStatus" },
+    "claims": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "items": { "$ref": "#/$defs/claim" }
+    },
+    "causalChains": {
+      "type": "array", "minItems": 1, "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/causalChain" }
+    },
+    "unresolvedGapIds": { "$ref": "#/$defs/idList" }
+  },
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "idList": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/opaqueId" }
+    },
+    "identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["projectId", "caseId", "analysisId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "conclusionStatus": {
+      "enum": ["CONFIRMED", "BOUNDED_HYPOTHESIS", "MISSING_EVIDENCE"]
+    },
+    "artifactReference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifactId", "artifactType", "relativePath", "mediaType", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "$ref": "#/$defs/opaqueId" },
+        "artifactType": { "type": "string", "minLength": 1 },
+        "relativePath": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "causalNode": {
+      "type": "object", "additionalProperties": false,
+      "required": ["nodeId", "type", "label", "evidenceIds", "sourceQueryIds"],
+      "properties": {
+        "nodeId": { "$ref": "#/$defs/opaqueId" },
+        "type": { "enum": ["SYMPTOM", "INPUT", "RUNTIME_STATE", "DECISION", "SOURCE_MECHANISM", "UPSTREAM_CAUSE"] },
+        "label": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidenceIds": { "$ref": "#/$defs/idList" },
+        "sourceQueryIds": { "$ref": "#/$defs/idList" }
+      },
+      "anyOf": [
+        { "properties": { "evidenceIds": { "minItems": 1 } } },
+        { "properties": { "sourceQueryIds": { "minItems": 1 } } }
+      ]
+    },
+    "causalEdge": {
+      "type": "object", "additionalProperties": false,
+      "required": ["edgeId", "fromNodeId", "toNodeId", "relation", "classification", "critical", "evidenceIds", "sourceQueryIds"],
+      "properties": {
+        "edgeId": { "$ref": "#/$defs/opaqueId" },
+        "fromNodeId": { "$ref": "#/$defs/opaqueId" },
+        "toNodeId": { "$ref": "#/$defs/opaqueId" },
+        "relation": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "classification": {
+          "enum": ["CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE", "LLM_HYPOTHESIS", "MISSING_EVIDENCE"]
+        },
+        "critical": { "type": "boolean" },
+        "evidenceIds": { "$ref": "#/$defs/idList" },
+        "sourceQueryIds": { "$ref": "#/$defs/idList" }
+      },
+      "anyOf": [
+        { "properties": { "evidenceIds": { "minItems": 1 } } },
+        { "properties": { "sourceQueryIds": { "minItems": 1 } } }
+      ]
+    },
+    "causalChain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schemaVersion", "causalChainId", "caseId", "analysisId", "nodes", "edges", "createdAt"],
+      "properties": {
+        "schemaVersion": { "const": "1.0" },
+        "causalChainId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" },
+        "nodes": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "#/$defs/causalNode" } },
+        "edges": { "type": "array", "minItems": 1, "maxItems": 128, "items": { "$ref": "#/$defs/causalEdge" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "claim": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "claimId", "statement", "classification", "evidenceIds",
+        "artifactReferences", "sourceReferenceIds"
+      ],
+      "properties": {
+        "claimId": { "$ref": "#/$defs/opaqueId" },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "classification": {
+          "enum": [
+            "CONFIRMED_FACT", "VALIDATOR_CONCLUSION", "SOURCE_INFERENCE",
+            "LLM_HYPOTHESIS", "MISSING_EVIDENCE"
+          ]
+        },
+        "evidenceIds": {
+          "type": "array", "maxItems": 128, "uniqueItems": true,
+          "items": { "$ref": "#/$defs/opaqueId" }
+        },
+        "artifactReferences": {
+          "type": "array", "maxItems": 64,
+          "items": { "$ref": "#/$defs/artifactReference" }
+        },
+        "sourceReferenceIds": { "$ref": "#/$defs/idList" }
+      },
+      "anyOf": [
+        { "properties": { "evidenceIds": { "minItems": 1 } } },
+        { "properties": { "artifactReferences": { "minItems": 1 } } },
+        { "properties": { "sourceReferenceIds": { "minItems": 1 } } }
+      ]
+    }
+  }
+}

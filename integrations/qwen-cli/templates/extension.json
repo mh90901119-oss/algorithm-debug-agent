@@ -1,0 +1,15 @@
+{
+  "name": "algorithm-debug-agent",
+  "displayName": {
+    "en": "Algorithm Debug Agent",
+    "zh": "算法 UT 证据分析 Agent"
+  },
+  "description": {
+    "en": "Evidence-constrained analysis for one Java/Maven algorithm unit test",
+    "zh": "面向单个 Java/Maven 算法单测的证据约束分析"
+  },
+  "version": "1.0.0",
+  "mcpServers": {
+    "algorithm-debug": {{MCP_SERVER_JSON}}
+  }
+}

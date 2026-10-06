@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0",
+  "workspaceDirectory": "%LOCALAPPDATA%\\algorithm-debug-agent\\workspace",
+  "agentJavaHome": "",
+  "targetJavaHome": "",
+  "mavenExecutable": "",
+  "knowledgeDirectory": ""
+}

@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/coordination/action-decision-v1.schema.json",
+  "title": "ActionDecision v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "policyVersion", "identity", "revision", "requestedAction",
+    "decision", "sideEffect", "reasonCodes"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "policyVersion": { "type": "string", "minLength": 1, "maxLength": 32 },
+    "identity": { "$ref": "#/$defs/identity" },
+    "revision": { "type": "integer", "minimum": 0 },
+    "requestedAction": { "$ref": "#/$defs/actionType" },
+    "decision": { "enum": ["ALLOWED", "REJECTED"] },
+    "sideEffect": { "enum": ["READ_ONLY", "CASE_WRITE", "TARGET_EXECUTION"] },
+    "reasonCodes": { "$ref": "#/$defs/errorCodes" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "ALLOWED" } } },
+      "then": { "properties": { "reasonCodes": { "maxItems": 0 } } },
+      "else": { "properties": { "reasonCodes": { "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "opaqueId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["projectId", "caseId", "analysisId"],
+      "properties": {
+        "projectId": { "$ref": "#/$defs/opaqueId" },
+        "caseId": { "$ref": "#/$defs/opaqueId" },
+        "analysisId": { "$ref": "#/$defs/opaqueId" }
+      }
+    },
+    "actionType": {
+      "type": "string",
+      "enum": [
+        "ANALYSIS_BEGIN", "CASE_INSPECT", "ALGORITHM_INPUT_CAPTURE", "CASE_AUDIT",
+        "GANTT_INSPECT", "RUN_TEST", "STATIC_ANALYZE", "SOURCE_QUERY",
+        "INVESTIGATION_UPDATE", "CODEPATH_PLAN_CREATE", "CODEPATH_COLLECT",
+        "JDWP_PLAN_CREATE", "JDWP_COLLECT", "ARTIFACT_READ", "EVIDENCE_QUERY",
+        "ANALYSIS_STATUS", "ANALYSIS_FINALIZE"
+      ]
+    },
+    "errorCodes": {
+      "type": "array", "maxItems": 128, "uniqueItems": true,
+      "items": {
+        "enum": [
+          "COORDINATION_IDENTITY_MISMATCH", "COORDINATION_ACTION_NOT_ALLOWED",
+          "COORDINATION_STATE_INVALID", "COORDINATION_PREREQUISITE_MISSING",
+          "COORDINATION_POSTCONDITION_FAILED", "ACTION_EXECUTION_FAILED", "ACTION_CANCELLED",
+          "ACTION_OPERATION_ID_REQUIRED",
+          "TARGET_EXECUTION_BUSY", "OPERATION_IN_PROGRESS", "OPERATION_UNCERTAIN",
+          "OPERATION_JOURNAL_CONFLICT", "CONCLUSION_NOT_ELIGIBLE"
+        ]
+      }
+    }
+  }
+}

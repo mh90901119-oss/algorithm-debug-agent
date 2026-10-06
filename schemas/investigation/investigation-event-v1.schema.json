@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/investigation/investigation-event-v1.schema.json",
+  "oneOf": [
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "problemFrame"],
+      "properties": {
+        "eventType": { "const": "PROBLEM_FRAME_DEFINED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "problemFrame": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "hypothesis"],
+      "properties": {
+        "eventType": { "const": "HYPOTHESIS_ADDED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "hypothesis": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "gap"],
+      "properties": {
+        "eventType": { "const": "EVIDENCE_GAP_ADDED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "gap": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "predicate"],
+      "properties": {
+        "eventType": { "const": "PREDICATE_REGISTERED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "predicate": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "planId", "binding"],
+      "properties": {
+        "eventType": { "const": "PLAN_BOUND" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" },
+        "planId": { "$ref": "#/$defs/id" }, "binding": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "evaluation"],
+      "properties": {
+        "eventType": { "const": "OBSERVATION_EVALUATED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "evaluation": { "type": "object" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "gapId", "previousStatus", "newStatus"],
+      "properties": {
+        "eventType": { "const": "GAP_STATUS_CHANGED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "gapId": { "$ref": "#/$defs/id" },
+        "previousStatus": { "$ref": "#/$defs/gapStatus" }, "newStatus": { "$ref": "#/$defs/gapStatus" }
+      }
+    },
+    {
+      "type": "object", "additionalProperties": false,
+      "required": ["eventType", "schemaVersion", "eventId", "caseId", "analysisId", "sequence", "occurredAt", "hypothesisId", "previousStatus", "newStatus", "evaluation"],
+      "properties": {
+        "eventType": { "const": "HYPOTHESIS_STATUS_CHANGED" }, "schemaVersion": { "const": "1.0" },
+        "eventId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+        "sequence": { "$ref": "#/$defs/sequence" }, "occurredAt": { "$ref": "#/$defs/time" }, "hypothesisId": { "$ref": "#/$defs/id" },
+        "previousStatus": { "$ref": "#/$defs/hypothesisStatus" }, "newStatus": { "$ref": "#/$defs/hypothesisStatus" },
+        "evaluation": { "type": "object" }
+      }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "time": { "type": "string", "format": "date-time" },
+    "gapStatus": { "enum": ["OPEN", "PLANNED", "OBSERVED", "UNRESOLVED", "CLOSED"] },
+    "hypothesisStatus": { "enum": ["OPEN", "SUPPORTED", "REFUTED", "INCONCLUSIVE"] }
+  }
+}

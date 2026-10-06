@@ -337,9 +337,14 @@ class AdaMainTest {
         Files.createDirectories(input.getParent());
         Files.writeString(input, "{}", StandardCharsets.UTF_8);
         Path firstQuestion = Files.writeString(
-                temporaryDirectory.resolve("question-1.txt"), "为什么调度结果异常？", StandardCharsets.UTF_8);
+                temporaryDirectory.resolve("question-1.json"), problemFrameJson(
+                        "为什么调度结果异常？",
+                        "reproduceComplexSchedulingFromTimestampedInput"),
+                StandardCharsets.UTF_8);
         Path secondQuestion = Files.writeString(
-                temporaryDirectory.resolve("question-2.txt"), "请分析另一个测试", StandardCharsets.UTF_8);
+                temporaryDirectory.resolve("question-2.json"), problemFrameJson(
+                        "请分析另一个测试", "anotherCase"),
+                StandardCharsets.UTF_8);
 
         assertSuccess(invoke(application, "workspace", "init", "--root", workspace.toString()));
         Invocation registered = invoke(application,
@@ -392,6 +397,39 @@ class AdaMainTest {
     }
 
     @Test
+    void unregisteredProjectThroughCoordinatorPreservesHistoricalCliCode() throws Exception {
+        AdaMain application = AdaMain.defaultApplication();
+        Path workspace = temporaryDirectory.resolve("unregistered-project-workspace");
+        Path problemFrame = Files.writeString(
+                temporaryDirectory.resolve("unregistered-project-frame.json"),
+                problemFrameJson("无法开始分析", "case1"),
+                StandardCharsets.UTF_8);
+        assertSuccess(invoke(
+                application, "workspace", "init", "--root", workspace.toString()));
+
+        Invocation invocation = invoke(
+                application,
+                "case", "open",
+                "--workspace", workspace.toString(),
+                "--project-id", "project-not-registered",
+                "--test", "a.b.Test#case1",
+                "--question-file", problemFrame.toString());
+
+        assertFailure(invocation, 3, "PROJECT_NOT_REGISTERED");
+    }
+
+    @Test
+    void workspaceIdentityIsStableAcrossEquivalentPathsAndDoesNotLeakThePath() throws Exception {
+        Path workspace = Files.createDirectories(temporaryDirectory.resolve("stable-workspace"));
+        String absolute = AdaMain.stableWorkspaceId(workspace);
+        String equivalent = AdaMain.stableWorkspaceId(workspace.resolve(".").toAbsolutePath());
+
+        assertEquals(absolute, equivalent);
+        assertTrue(absolute.matches("workspace-[0-9a-f]{64}"));
+        assertFalse(absolute.contains(workspace.getFileName().toString()));
+    }
+
+    @Test
     void shouldRejectResponseAboveOneMebibyteBeforeWritingAnyBytes() throws Exception {
         CliResponseWriter writer = new CliResponseWriter();
         ToolResponse<String> oversized = ToolResponse.success(
@@ -440,6 +478,26 @@ class AdaMainTest {
         Files.createDirectories(module);
         Files.writeString(module.resolve("pom.xml"), "<project/>", StandardCharsets.UTF_8);
         return module;
+    }
+
+    private static String problemFrameJson(String symptom, String methodName) {
+        return """
+                {
+                  "symptom": "%s",
+                  "expectedBehavior": "调度结果符合算法约束",
+                  "actualBehavior": "调度结果偏离算法约束",
+                  "scopeAnchors": [{
+                    "className": "org.example.scheduler.wafer.WaferSchedulingReproductionTest",
+                    "methodName": "%s",
+                    "descriptor": "()V",
+                    "sourceRelativePath": "src/test/java/org/example/scheduler/wafer/WaferSchedulingReproductionTest.java",
+                    "startLine": 1,
+                    "endLine": 1
+                  }],
+                  "knownFactRefs": [],
+                  "initialUnknowns": ["异常分支由哪个条件触发"]
+                }
+                """.formatted(symptom, methodName);
     }
 
     private record Invocation(int exitCode, String stdout, String stderr, JsonNode response) {

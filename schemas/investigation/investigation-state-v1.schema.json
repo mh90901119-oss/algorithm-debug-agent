@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/investigation/investigation-state-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "caseId", "analysisId", "problemFrame", "hypotheses", "gaps", "predicates", "evaluations", "lastSequence", "limitations"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "problemFrame": { "type": "object" },
+    "hypotheses": { "type": "array", "maxItems": 32, "items": { "type": "object" } },
+    "gaps": { "type": "array", "maxItems": 64, "items": { "type": "object" } },
+    "predicates": { "type": "array", "maxItems": 128, "items": { "type": "object" } },
+    "evaluations": { "type": "array", "maxItems": 512, "items": { "type": "object" } },
+    "lastSequence": { "type": "integer", "minimum": 1 },
+    "limitations": { "type": "array", "maxItems": 128, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 4096 } }
+  },
+  "$defs": { "id": { "type": "string", "minLength": 1, "maxLength": 128 } }
+}

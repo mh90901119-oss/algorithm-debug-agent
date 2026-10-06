@@ -62,15 +62,17 @@ projectId、DFX 和 Eval 内部哈希只用于稳定 ID、脱敏和版本关联�
 
 ```mermaid
 flowchart TD
-    R["普通 run_test"] --> Q{"目标 UT 是否失败"}
-    Q -->|"否"| G["归档本次 Gantt Artifact"]
-    G --> N["后续动态 Collection: NOT_COMPARED"]
-    Q -->|"是"| F["生成结构化失败指纹"]
+    T{"目标 UT 场景"}
+    T -->|"成功"| S["执行动态 Collection"]
+    S --> N["baselineRequired=false / NOT_COMPARED"]
+    N --> E["无需 reference Run；归档可查询派生产物"]
+    T -->|"失败"| R["普通 run_test 建立失败基准"]
+    R --> F["生成结构化失败指纹"]
     F --> C["动态 Collection 重跑同一 UT"]
     C --> D{"失败指纹比较"}
     D -->|"MATCHED"| U["动态证据可确认该失败"]
     D -->|"CHANGED / INCOMPARABLE"| H["仅作线索，LLM 明示证据不足"]
-    G --> A["ArtifactReference 校验"]
+    E --> A["ArtifactReference 校验"]
     F --> A
     C --> A
     A -->|"size/SHA 不一致"| B["拒绝读取与引用"]
@@ -81,5 +83,7 @@ flowchart TD
 - 不同运行产生不同算法结果不再被误判为采集污染。
 - 真正的文件篡改仍被确定性拒绝。
 - 已失败 UT 的动态采集仍有明确复现门禁。
-- LLM 能直接看到 `baselineOutcome` 和 `evidenceUsable`，无需理解 SHA 细节。
+- LLM 能直接看到 `baselineOutcome` 和 `EvidenceEligibility` 的正交字段，无需理解 SHA 细节。
+- 成功 UT 的动态采集不要求预先存在普通 Run；`baselineRequired=false`，归一化摘要和校验产物仍会注册并可查询。
+- 失败 UT 只有在 `failureFingerprintMatched=true` 时可支持确认性结论；`CHANGED/INCOMPARABLE` 的可读产物保留为线索。
 - 历史 Case 可保留旧字段，但当前运行不再消费旧 Gantt/Plan/Source SHA。

@@ -14,7 +14,6 @@ import org.example.algorithmdebug.contracts.CaseId;
 import org.example.algorithmdebug.contracts.JdwpCaptureSpec;
 import org.example.algorithmdebug.contracts.JdwpCollectionBudget;
 import org.example.algorithmdebug.contracts.JdwpCollectionPlan;
-import org.example.algorithmdebug.contracts.InvestigationIntent;
 import org.example.algorithmdebug.contracts.MethodCatalog;
 import org.example.algorithmdebug.contracts.MethodCatalogEntry;
 import org.example.algorithmdebug.contracts.PlanId;
@@ -22,6 +21,21 @@ import org.example.algorithmdebug.contracts.SchemaVersions;
 import org.example.algorithmdebug.contracts.SnapshotCompleteness;
 import org.example.algorithmdebug.contracts.SourceAnchor;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGap;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus;
+import org.example.algorithmdebug.contracts.investigation.HypothesisEffect;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.HypothesisRecord;
+import org.example.algorithmdebug.contracts.investigation.HypothesisStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationState;
+import org.example.algorithmdebug.contracts.investigation.ObservationOperator;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicate;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
+import org.example.algorithmdebug.contracts.investigation.ObservationSelector;
+import org.example.algorithmdebug.contracts.investigation.PredicateRole;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrameId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -54,13 +68,13 @@ class JdwpPlanCompilerTest {
                 point("z-point", 5),
                 point("a-point", 4)));
 
-        JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(catalog(), request, moduleRoot);
+        JdwpCollectionPlan plan = compile(request);
 
         assertEquals(List.of("a-point", "z-point"),
                 plan.tracepoints().stream().map(point -> point.tracepointId()).toList());
         assertEquals(serviceAnchor, plan.tracepoints().getFirst().sourceAnchor());
         assertEquals("fixture.Algorithm#schedule()V", plan.tracepoints().getFirst().methodKey());
-        assertEquals("Which state selected the branch?", plan.intent().questionToAnswer());
+        assertEquals("Which state selected the branch?", plan.questionToAnswer());
     }
 
     @Test
@@ -69,44 +83,39 @@ class JdwpPlanCompilerTest {
                 "sampled", "fixture.Algorithm#schedule()V", 4,
                 100, 20, 5, 10, List.of(), JdwpCaptureSpec.stackOnly());
 
-        JdwpCollectionPlan plan = new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(sampled)), moduleRoot);
+        JdwpCollectionPlan plan = compile(request(List.of(sampled)));
 
         assertEquals(5, plan.tracepoints().getFirst().captureFirstMatchedHits());
         assertEquals(10, plan.tracepoints().getFirst().captureEveryMatchedHits());
-        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(new JdwpTracepointRequest(
+        assertThrows(PlanCompilationException.class, () -> compile(
+                request(List.of(new JdwpTracepointRequest(
                         "invalid", "fixture.Algorithm#schedule()V", 4,
-                        5, 3, 0, 0, List.of(), JdwpCaptureSpec.stackOnly()))), moduleRoot));
+                        5, 3, 0, 0, List.of(), JdwpCaptureSpec.stackOnly())))));
     }
 
     @Test
     void rejectsUnknownMethodDuplicatePointAndLineOutsideMethod() {
-        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(new JdwpTracepointRequest(
+        assertThrows(PlanCompilationException.class, () -> compile(
+                request(List.of(new JdwpTracepointRequest(
                         "missing", "fixture.Missing#run()V", 1,
-                        1, 1, 1, 0, List.of(), JdwpCaptureSpec.stackOnly()))), moduleRoot));
-        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(
+                        1, 1, 1, 0, List.of(), JdwpCaptureSpec.stackOnly())))));
+        assertThrows(PlanCompilationException.class, () -> compile(request(List.of(
                         point("same", 4),
-                        point("same", 5))), moduleRoot));
-        assertThrows(PlanCompilationException.class, () -> new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(point("outside", 7))),
-                moduleRoot));
+                        point("same", 5)))));
+        assertThrows(PlanCompilationException.class,
+                () -> compile(request(List.of(point("outside", 7)))));
     }
 
     @Test
     void usesCurrentSourceAndPreservesMissingFileCause() throws Exception {
         Path service = moduleRoot.resolve(serviceAnchor.sourceRelativePath());
         Files.writeString(service, "changed", StandardCharsets.UTF_8);
-        JdwpCollectionPlan current = new JdwpPlanCompiler().compile(
-                catalog(), request(List.of(point("changed", 4))), moduleRoot);
+        JdwpCollectionPlan current = compile(request(List.of(point("changed", 4))));
         assertEquals("changed", current.tracepoints().getFirst().tracepointId());
 
         Files.delete(service);
         PlanCompilationException missing = assertThrows(PlanCompilationException.class,
-                () -> new JdwpPlanCompiler().compile(
-                        catalog(), request(List.of(point("missing-file", 4))), moduleRoot));
+                () -> compile(request(List.of(point("missing-file", 4)))));
         assertNotNull(missing.getCause());
     }
 
@@ -114,10 +123,48 @@ class JdwpPlanCompilerTest {
         return new JdwpPlanRequest(
                 new PlanId("plan-1"), points, JdwpCollectionBudget.defaults(),
                 "Inspect the decision state",
-                new InvestigationIntent(
-                        "Which state selected the branch?", "A runtime flag selected it",
-                        List.of(), List.of("Runtime flag value")),
+                new InvestigationBindingRequest(
+                        "Which state selected the branch?", new EvidenceGapId("gap-1"),
+                        List.of(new HypothesisId("hypothesis-1")),
+                        List.of(new ObservationPredicateId("predicate-1")), List.of()),
                 NOW);
+    }
+
+    private JdwpCollectionPlan compile(JdwpPlanRequest request) {
+        MethodCatalog catalog = catalog();
+        return new JdwpPlanCompiler().compile(catalog, state(catalog), request, moduleRoot);
+    }
+
+    private InvestigationState state(MethodCatalog catalog) {
+        HypothesisId hypothesisId = new HypothesisId("hypothesis-1");
+        EvidenceGapId gapId = new EvidenceGapId("gap-1");
+        ObservationPredicateId predicateId = new ObservationPredicateId("predicate-1");
+        HypothesisRecord hypothesis = new HypothesisRecord(
+                SchemaVersions.HYPOTHESIS_RECORD, hypothesisId,
+                catalog.caseId(), catalog.analysisId(), "a runtime value selected the branch",
+                HypothesisStatus.OPEN, List.of(serviceAnchor), List.of(), List.of(),
+                List.of(gapId), NOW);
+        EvidenceGap gap = new EvidenceGap(
+                SchemaVersions.EVIDENCE_GAP, gapId, catalog.caseId(), catalog.analysisId(),
+                "which state selected the branch", EvidenceGapStatus.OPEN,
+                List.of(hypothesisId), List.of(predicateId), NOW);
+        ObservationPredicate predicate = new ObservationPredicate(
+                SchemaVersions.OBSERVATION_PREDICATE, predicateId,
+                catalog.caseId(), catalog.analysisId(), hypothesisId, gapId,
+                ObservationOperator.FAILURE_FINGERPRINT_MATCHES,
+                new ObservationSelector.FailureFingerprintMatches(), PredicateRole.CRITICAL,
+                HypothesisEffect.SUPPORT, HypothesisEffect.REFUTE,
+                HypothesisEffect.NO_CHANGE, NOW);
+        ProblemFrame frame = new ProblemFrame(
+                SchemaVersions.PROBLEM_FRAME, new ProblemFrameId("frame-1"),
+                catalog.caseId(), catalog.analysisId(), "unexpected branch",
+                "expected branch", "actual branch", catalog.targetTest(),
+                List.of(serviceAnchor), List.of("run:run-1"),
+                List.of("which state selected the branch"), NOW);
+        return new InvestigationState(
+                SchemaVersions.INVESTIGATION_STATE, catalog.caseId(), catalog.analysisId(),
+                frame, List.of(hypothesis), List.of(gap), List.of(predicate), List.of(),
+                4, List.of());
     }
 
     private JdwpTracepointRequest point(String id, int line) {

@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/collection-execution-summary-v3.schema.json",
+  "title": "Collection Execution Summary v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "analysisId",
+    "runId",
+    "planId",
+    "collectionId",
+    "completion",
+    "baselineOutcome",
+    "eligibility",
+    "artifactRelativePaths",
+    "artifactIds",
+    "sourceCoverage",
+    "reasonCodes",
+    "primaryArtifactId",
+    "recommendedTool",
+    "supportedModes",
+    "nextAction"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "3.0"},
+    "caseId": {"type": "string"},
+    "analysisId": {"type": "string"},
+    "runId": {"type": "string"},
+    "planId": {"type": "string"},
+    "collectionId": {"type": "string"},
+    "completion": {"type": "string", "minLength": 1, "maxLength": 64},
+    "baselineOutcome": {
+      "enum": ["MATCHED", "CHANGED", "INCOMPARABLE", "NOT_COMPARED"]
+    },
+    "eligibility": {"$ref": "#/$defs/evidenceEligibility"},
+    "artifactRelativePaths": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+    },
+    "artifactIds": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    },
+    "sourceCoverage": {"enum": ["COMPLETE", "PARTIAL", "UNKNOWN"]},
+    "reasonCodes": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 128}
+    },
+    "primaryArtifactId": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 128},
+        {"type": "null"}
+      ]
+    },
+    "recommendedTool": {"type": "string", "maxLength": 64},
+    "supportedModes": {
+      "type": "array",
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {"enum": ["SUMMARY", "FILTER", "WINDOW", "COUNT", "CHANGES"]}
+    },
+    "nextAction": {"type": "string", "minLength": 1, "maxLength": 256}
+  },
+  "$defs": {
+    "evidenceEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "artifactReadable",
+        "collectionComplete",
+        "baselineRequired",
+        "baselineComparable",
+        "failureFingerprintMatched",
+        "obligationSatisfied",
+        "confirmationEligible",
+        "reasonCodes"
+      ],
+      "properties": {
+        "schemaVersion": {"const": "1.0"},
+        "artifactReadable": {"type": "boolean"},
+        "collectionComplete": {"type": "boolean"},
+        "baselineRequired": {"type": "boolean"},
+        "baselineComparable": {"type": "boolean"},
+        "failureFingerprintMatched": {"type": "boolean"},
+        "obligationSatisfied": {"type": "boolean"},
+        "confirmationEligible": {"type": "boolean"},
+        "reasonCodes": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "ARTIFACT_UNREADABLE",
+              "COLLECTION_INCOMPLETE",
+              "BASELINE_NOT_REQUIRED",
+              "FAILURE_FINGERPRINT_MATCHED",
+              "FAILURE_FINGERPRINT_CHANGED",
+              "FAILURE_FINGERPRINT_INCOMPARABLE",
+              "OBLIGATION_UNSATISFIED",
+              "LEGACY_UNKNOWN"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

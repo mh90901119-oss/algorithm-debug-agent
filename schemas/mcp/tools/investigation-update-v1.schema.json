@@ -1,0 +1,13 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema","title":"Investigation update input","type":"object","additionalProperties":false,"required":["command"],
+  "properties":{"command":{"oneOf":[
+    {"$ref":"#/$defs/addHypothesis"},{"$ref":"#/$defs/addEvidenceGap"},{"$ref":"#/$defs/registerPredicate"},{"$ref":"#/$defs/markGapUnresolved"}
+  ]}},
+  "$defs":{
+    "base":{"type":"object","required":["commandType","caseId","analysisId"],"properties":{"commandType":{"type":"string"},"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128}}},
+    "addHypothesis":{"allOf":[{"$ref":"#/$defs/base"},{"type":"object","additionalProperties":false,"required":["commandType","caseId","analysisId","hypothesis"],"properties":{"commandType":{"const":"ADD_HYPOTHESIS"},"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128},"hypothesis":{"type":"object"}}}]},
+    "addEvidenceGap":{"allOf":[{"$ref":"#/$defs/base"},{"type":"object","additionalProperties":false,"required":["commandType","caseId","analysisId","gap"],"properties":{"commandType":{"const":"ADD_EVIDENCE_GAP"},"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128},"gap":{"type":"object"}}}]},
+    "registerPredicate":{"allOf":[{"$ref":"#/$defs/base"},{"type":"object","additionalProperties":false,"required":["commandType","caseId","analysisId","predicate"],"properties":{"commandType":{"const":"REGISTER_PREDICATE"},"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128},"predicate":{"type":"object"}}}]},
+    "markGapUnresolved":{"allOf":[{"$ref":"#/$defs/base"},{"type":"object","additionalProperties":false,"required":["commandType","caseId","analysisId","gapId","reason"],"properties":{"commandType":{"const":"MARK_GAP_UNRESOLVED"},"caseId":{"type":"string","minLength":1,"maxLength":128},"analysisId":{"type":"string","minLength":1,"maxLength":128},"gapId":{"type":"string","minLength":1,"maxLength":128},"reason":{"type":"string","minLength":1,"maxLength":4096}}}]}
+  }
+}

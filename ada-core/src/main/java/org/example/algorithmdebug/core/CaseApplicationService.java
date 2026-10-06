@@ -23,6 +23,7 @@ import org.example.algorithmdebug.contracts.EvidenceQueryResult;
 import org.example.algorithmdebug.contracts.ProjectId;
 import org.example.algorithmdebug.contracts.ProjectRegistration;
 import org.example.algorithmdebug.contracts.TargetTest;
+import org.example.algorithmdebug.contracts.investigation.ProblemFrame;
 import org.example.algorithmdebug.casecore.logging.AgentExecutionLog;
 import org.example.algorithmdebug.casecore.logging.AgentLogContext;
 
@@ -93,29 +94,41 @@ public final class CaseApplicationService {
             Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
             AdapterCatalog.AdapterSelection selection = adapters.select(moduleRoot, adapterId);
             CaseArchiveRepository archive = archive(layout, projectId);
-            CaseOpenResult opened = new CaseSessionService(
-                    archive, new CaseDigestReader(archive), ids, clock).open(
+            return openResolved(
+                    workspaceRoot, projectId, registration, archive,
                     new CaseSessionRequest(
                             caseId, projectId, targetTest,
                             selection.adapter().descriptor().adapterId(), question));
-            CaseOpenResult result = new CaseOpenResult(
-                    opened.caseId(), opened.analysisId(),
-                    opened.caseCreated(),
-                    Optional.ofNullable(registration.resultJsonDirectory()), opened.digest());
-            AgentLogContext logContext = AgentLogContext.forCase(
-                    workspaceRoot, projectId, result.caseId()).withAnalysis(result.analysisId());
-            executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_STARTED",
-                    "STARTED", "Case open processing started");
-            executionLog.info(logContext, "CaseApplicationService",
-                    result.caseCreated() ? "CASE_CREATED" : "CASE_REUSED",
-                    result.caseCreated() ? "CREATED" : "REUSED", "Case identity was resolved");
-            executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_CREATED",
-                    "CREATED", "Analysis was created");
-            executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_COMPLETED",
-                    "COMPLETED", "Case open processing completed");
-            return result;
         } catch (WorkspaceException failure) {
             throw new CaseRunException(failure.code(), "Failed to open Case", failure);
+        }
+    }
+
+    /**
+     * 使用服务端预分配身份原子创建 Analysis 与首条 Problem Frame 事件；不运行目标 UT。
+     */
+    public CaseOpenResult begin(
+            Path workspaceRoot,
+            ProjectId projectId,
+            ProblemFrame problemFrame,
+            Optional<CaseId> existingCaseId,
+            Optional<String> adapterId) {
+        if (problemFrame == null || existingCaseId == null || adapterId == null) {
+            throw new IllegalArgumentException("Analysis begin parameters must not be null");
+        }
+        try {
+            WorkspaceLayout layout = WorkspaceLayout.of(workspaceRoot);
+            ProjectRegistration registration = requireRegistration(layout, projectId);
+            Path moduleRoot = Path.of(registration.moduleRoot()).toAbsolutePath().normalize();
+            AdapterCatalog.AdapterSelection selection = adapters.select(moduleRoot, adapterId);
+            CaseArchiveRepository archive = archive(layout, projectId);
+            return openResolved(
+                    workspaceRoot, projectId, registration, archive,
+                    CaseSessionRequest.initialized(
+                            existingCaseId, projectId,
+                            selection.adapter().descriptor().adapterId(), problemFrame));
+        } catch (WorkspaceException failure) {
+            throw new CaseRunException(failure.code(), "Failed to begin Analysis", failure);
         }
     }
 
@@ -210,5 +223,30 @@ public final class CaseApplicationService {
 
     private CaseArchiveRepository archive(WorkspaceLayout layout, ProjectId projectId) {
         return new CaseArchiveRepository(layout.projectCases(projectId), mapper, writer);
+    }
+
+    private CaseOpenResult openResolved(
+            Path workspaceRoot,
+            ProjectId projectId,
+            ProjectRegistration registration,
+            CaseArchiveRepository archive,
+            CaseSessionRequest request) {
+        CaseOpenResult opened = new CaseSessionService(
+                archive, new CaseDigestReader(archive), ids, clock).open(request);
+        CaseOpenResult result = new CaseOpenResult(
+                opened.caseId(), opened.analysisId(), opened.caseCreated(),
+                Optional.ofNullable(registration.resultJsonDirectory()), opened.digest());
+        AgentLogContext logContext = AgentLogContext.forCase(
+                workspaceRoot, projectId, result.caseId()).withAnalysis(result.analysisId());
+        executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_STARTED",
+                "STARTED", "Case open processing started");
+        executionLog.info(logContext, "CaseApplicationService",
+                result.caseCreated() ? "CASE_CREATED" : "CASE_REUSED",
+                result.caseCreated() ? "CREATED" : "REUSED", "Case identity was resolved");
+        executionLog.info(logContext, "CaseApplicationService", "ANALYSIS_CREATED",
+                "CREATED", "Analysis was created");
+        executionLog.info(logContext, "CaseApplicationService", "CASE_OPEN_COMPLETED",
+                "COMPLETED", "Case open processing completed");
+        return result;
     }
 }

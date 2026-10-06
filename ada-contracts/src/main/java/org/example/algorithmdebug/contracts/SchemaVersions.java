@@ -56,10 +56,17 @@ public final class SchemaVersions {
 
     /** 目标 UT 静态方法目录 Schema 版本。 */
     public static final String METHOD_CATALOG = "3.0";
-    public static final String CODEPATH_COLLECTION_PLAN = "6.0";
+    /** 旧 CodePath 计划只读版本。 */
+    public static final String CODEPATH_COLLECTION_PLAN_LEGACY = "6.0";
 
-    /** JDWP 采集计划 Schema 版本。 */
-    public static final String JDWP_COLLECTION_PLAN = "5.0";
+    /** CodePath 结构化调查绑定计划版本。 */
+    public static final String CODEPATH_COLLECTION_PLAN = "7.0";
+
+    /** 旧 JDWP Agent 计划只读版本。 */
+    public static final String JDWP_COLLECTION_PLAN_LEGACY = "5.0";
+
+    /** JDWP 结构化调查绑定计划版本。 */
+    public static final String JDWP_COLLECTION_PLAN = "6.0";
 
     /** JDWP 采集请求 Schema 版本。 */
     public static final String JDWP_COLLECTION_REQUEST = "2.0";
@@ -69,6 +76,15 @@ public final class SchemaVersions {
 
     /** 动态采集与同 Analysis 普通 Run 的基线检查 Schema 版本。 */
     public static final String COLLECTION_BASELINE_CHECK = "2.0";
+
+    /** 动态证据正交资格 Schema 版本。 */
+    public static final String EVIDENCE_ELIGIBILITY = "1.0";
+
+    /** 面向模型的动态采集摘要 Schema 版本。 */
+    public static final String COLLECTION_EXECUTION_SUMMARY = "3.0";
+
+    /** 无显式版本和资格字段的历史动态采集摘要读取标识。 */
+    public static final String COLLECTION_EXECUTION_SUMMARY_LEGACY = "2.0";
 
     /** 通用 Trace 归一化清单 Schema 版本。 */
     public static final String NORMALIZATION_MANIFEST = "2.0";
@@ -84,6 +100,56 @@ public final class SchemaVersions {
     public static final String EVIDENCE_BUNDLE = "2.0";
     /** 证据充分性评估 Schema 版本。 */
     public static final String SUFFICIENCY_EVALUATION = "2.0";
+
+    /** 协调动作请求 Schema 版本。 */
+    public static final String ANALYSIS_ACTION_REQUEST = "1.0";
+
+    /** Analysis 确定性控制视图 Schema 版本。 */
+    public static final String ANALYSIS_CONTROL_VIEW = "1.0";
+
+    /** 动作授权决策 Schema 版本。 */
+    public static final String ACTION_DECISION = "1.0";
+
+    /** 证据义务 Schema 版本。 */
+    public static final String EVIDENCE_OBLIGATION = "1.0";
+
+    /** MCP 协调工具结果 Schema 版本。 */
+    public static final String COORDINATED_TOOL_RESULT = "1.0";
+
+    /** 幂等操作回执 Schema 版本。 */
+    public static final String OPERATION_RECEIPT = "1.0";
+
+    /** 结论候选 Schema 版本。 */
+    public static final String CONCLUSION_CANDIDATE = "2.0";
+
+    /** 结论门禁决策 Schema 版本。 */
+    public static final String CONCLUSION_DECISION = "2.0";
+
+    /** 结论候选与门禁决策组成的最终化结果 Schema 版本。 */
+    public static final String CONCLUSION_FINALIZATION = "1.0";
+
+    /** Problem Frame Schema 版本。 */
+    public static final String PROBLEM_FRAME = "1.0";
+    /** Hypothesis 记录 Schema 版本。 */
+    public static final String HYPOTHESIS_RECORD = "1.0";
+    /** Evidence Gap Schema 版本。 */
+    public static final String EVIDENCE_GAP = "1.0";
+    /** Observation Predicate Schema 版本。 */
+    public static final String OBSERVATION_PREDICATE = "1.0";
+    /** Observation Evaluation Schema 版本。 */
+    public static final String OBSERVATION_EVALUATION = "1.0";
+    /** Investigation Binding Schema 版本。 */
+    public static final String INVESTIGATION_BINDING = "1.0";
+    /** Investigation Event Schema 版本。 */
+    public static final String INVESTIGATION_EVENT = "1.0";
+    /** Investigation State Schema 版本。 */
+    public static final String INVESTIGATION_STATE = "1.0";
+    /** Causal Chain Schema 版本。 */
+    public static final String CAUSAL_CHAIN = "1.0";
+    /** Source Query 请求 Schema 版本。 */
+    public static final String SOURCE_QUERY_REQUEST = "1.0";
+    /** Source Query 结果 Schema 版本。 */
+    public static final String SOURCE_QUERY_RESULT = "1.0";
 
     private SchemaVersions() {
     }

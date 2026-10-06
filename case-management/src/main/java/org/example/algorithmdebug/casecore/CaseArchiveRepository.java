@@ -28,11 +28,27 @@ import org.example.algorithmdebug.contracts.MethodPathSummary;
 import org.example.algorithmdebug.contracts.NormalizationManifest;
 import org.example.algorithmdebug.contracts.SufficiencyEvaluation;
 import org.example.algorithmdebug.contracts.SchemaVersions;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryId;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryRequest;
+import org.example.algorithmdebug.contracts.investigation.SourceQueryResult;
+import org.example.algorithmdebug.contracts.coordination.AnalysisIdentity;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGap;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapId;
+import org.example.algorithmdebug.contracts.investigation.EvidenceGapStatus;
+import org.example.algorithmdebug.contracts.investigation.HypothesisId;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBinding;
+import org.example.algorithmdebug.contracts.investigation.InvestigationBindingStatus;
+import org.example.algorithmdebug.contracts.investigation.InvestigationEvent;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicate;
+import org.example.algorithmdebug.contracts.investigation.ObservationPredicateId;
+import org.example.algorithmdebug.contracts.investigation.PredicateRole;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -42,6 +58,10 @@ import java.util.stream.Stream;
 
 /** 原子创建并有界读取外部 Workspace 中的追加式 Case 归档。 */
 public final class CaseArchiveRepository {
+    private static final String SOURCE_QUERY_REQUEST_NOT_FOUND =
+            "SOURCE_QUERY_REQUEST_NOT_FOUND";
+    private static final String SOURCE_QUERY_RESULT_NOT_FOUND =
+            "SOURCE_QUERY_RESULT_NOT_FOUND";
 
     private final Path casesRoot;
     private final BoundedDocumentMapper mapper;
@@ -282,6 +302,211 @@ public final class CaseArchiveRepository {
         return value;
     }
 
+    /**
+     * 在不可见 staging 目录写入 Analysis manifest 与第一条 Problem Frame 事件，再原子发布目录。
+     * 任一预提交失败只会留下不可见 staging 内容，不会暴露半初始化 Analysis。
+     */
+    public void createInitializedAnalysis(
+            AnalysisRequest analysis,
+            InvestigationEvent.ProblemFrameDefined initialEvent) {
+        AnalysisRequest checked = requireNonNull(analysis, "analysis");
+        InvestigationEvent.ProblemFrameDefined event = requireNonNull(
+                initialEvent, "initialEvent");
+        requireCase(checked.caseId());
+        if (!checked.caseId().equals(event.caseId())
+                || !checked.analysisId().equals(event.analysisId())
+                || event.sequence() != 1
+                || !event.problemFrame().caseId().equals(checked.caseId())
+                || !event.problemFrame().analysisId().equals(checked.analysisId())) {
+            throw new IllegalArgumentException(
+                    "Initial ProblemFrame event must be sequence one for the Analysis");
+        }
+
+        CaseArchiveLayout layout = layout(checked.caseId());
+        Path analysesRoot = layout.analysesRoot();
+        Path target = layout.analysisRoot(checked.analysisId());
+        Path staging = analysesRoot.resolve(
+                "." + checked.analysisId().value() + ".staging").normalize();
+        Path stagedAnalysis = staging.resolve("analysis-request.json");
+        Path stagedEvent = staging.resolve("investigation/events/1-"
+                + event.eventId() + ".json");
+        InvestigationEventArchive.ArchivedEvent archivedEvent =
+                new InvestigationEventArchive.ArchivedEvent(
+                        ControlArchiveSupport.ARCHIVE_SCHEMA_VERSION,
+                        ControlArchiveSupport.digest(mapper.writeJson(event)), event);
+        try {
+            Files.createDirectories(analysesRoot);
+            if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+                    || Files.exists(staging, LinkOption.NOFOLLOW_LINKS)) {
+                throw new WorkspaceException(
+                        "CASE_ARCHIVE_ALREADY_EXISTS",
+                        "Analysis or its staging directory already exists");
+            }
+            writer.writeNewWithParents(stagedAnalysis, mapper.writeJson(checked));
+            writer.writeNewWithParents(stagedEvent, mapper.writeJson(archivedEvent));
+            Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException | WorkspaceException failure) {
+            removeInitializedAnalysisStaging(
+                    analysesRoot, staging, stagedAnalysis, stagedEvent);
+            throw archiveWriteFailure(failure instanceof WorkspaceException workspaceFailure
+                    ? workspaceFailure
+                    : new WorkspaceException(
+                            "CASE_ARCHIVE_WRITE_FAILED",
+                            "Initialized Analysis could not be committed", failure));
+        }
+    }
+
+    private static void removeInitializedAnalysisStaging(
+            Path analysesRoot,
+            Path staging,
+            Path stagedAnalysis,
+            Path stagedEvent) {
+        Path normalizedRoot = analysesRoot.toAbsolutePath().normalize();
+        Path normalizedStaging = staging.toAbsolutePath().normalize();
+        if (!normalizedStaging.startsWith(normalizedRoot)
+                || normalizedStaging.equals(normalizedRoot)
+                || Files.isSymbolicLink(normalizedStaging)) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(stagedEvent);
+            Files.deleteIfExists(stagedEvent.getParent());
+            Files.deleteIfExists(stagedEvent.getParent().getParent());
+            Files.deleteIfExists(stagedAnalysis);
+            Files.deleteIfExists(normalizedStaging);
+        } catch (IOException ignored) {
+            // staging 不属于可见 Analysis；保留它供审计，后续相同 identity 将 fail closed。
+        }
+    }
+
+    /** 为当前 Analysis 追加 Source Query 请求，并校验其 Method Catalog provenance。 */
+    public Path createSourceQueryRequest(SourceQueryRequest request) {
+        SourceQueryRequest checked = requireNonNull(request, "request");
+        validateSourceQueryRequest(checked);
+        CaseArchiveLayout archiveLayout = layout(checked.caseId());
+        return createP4Document(
+                archiveLayout.sourceQueryRequest(checked.analysisId(), checked.queryId()),
+                checked, BoundedDocumentMapper.MAX_DOCUMENT_BYTES);
+    }
+
+    /** 读取并校验指定 Source Query 请求的路径身份。 */
+    public SourceQueryRequest requireSourceQueryRequest(
+            CaseId caseId, AnalysisId analysisId, SourceQueryId queryId) {
+        SourceQueryRequest value = requireDocument(
+                layout(caseId).sourceQueryRequest(analysisId, queryId),
+                SourceQueryRequest.class, SOURCE_QUERY_REQUEST_NOT_FOUND);
+        if (!caseId.equals(value.caseId())
+                || !analysisId.equals(value.analysisId())
+                || !queryId.equals(value.queryId())) {
+            throw identityMismatch("Source Query request identity does not match its path");
+        }
+        validateSourceQueryRequest(value);
+        return value;
+    }
+
+    private void validateSourceQueryRequest(SourceQueryRequest request) {
+        requireAnalysis(request.caseId(), request.analysisId());
+        requireMethodCatalog(request.caseId(), request.analysisId());
+        ArtifactReference registered = requireArtifactRegistration(
+                request.caseId(), request.methodCatalogArtifact().artifactId()).artifact();
+        if (!registered.equals(request.methodCatalogArtifact())) {
+            throw identityMismatch(
+                    "Source Query Method Catalog does not match its Artifact registration");
+        }
+        CaseArchiveLayout archiveLayout = layout(request.caseId());
+        String expectedCatalogPath = archiveLayout.caseRoot()
+                .relativize(archiveLayout.analysisMethodCatalog(request.analysisId()))
+                .toString().replace('\\', '/');
+        if (!expectedCatalogPath.equals(registered.relativePath())) {
+            throw identityMismatch(
+                    "Source Query does not reference the current Analysis Method Catalog");
+        }
+        new CaseArtifactAccess(casesRoot).requireVerifiedArtifact(request.caseId(), registered);
+    }
+
+    /** 为已有请求追加唯一 Source Query 结果；请求与结果语义不得漂移。 */
+    public Path createSourceQueryResult(SourceQueryResult result) {
+        SourceQueryResult checked = requireNonNull(result, "result");
+        SourceQueryRequest request = requireSourceQueryRequest(
+                checked.caseId(), checked.analysisId(), checked.queryId());
+        if (request.mode() != checked.mode()
+                || !request.methodCatalogArtifact().equals(checked.methodCatalogArtifact())) {
+            throw identityMismatch("Source Query result does not match its immutable request");
+        }
+        validateSourceQueryResultBudget(request, checked);
+        MethodCatalog catalog = requireMethodCatalog(checked.caseId(), checked.analysisId());
+        validateSourceQueryResultCatalog(catalog, checked);
+        return createP4Document(
+                layout(checked.caseId()).sourceQueryResult(
+                        checked.analysisId(), checked.queryId()),
+                checked, BoundedDocumentMapper.MAX_JSON_ARTIFACT_BYTES);
+    }
+
+    /** 读取并校验指定 Source Query 结果的路径身份和请求身份。 */
+    public SourceQueryResult requireSourceQueryResult(
+            CaseId caseId, AnalysisId analysisId, SourceQueryId queryId) {
+        SourceQueryResult value = requireJsonArtifactDocument(
+                layout(caseId).sourceQueryResult(analysisId, queryId),
+                SourceQueryResult.class, SOURCE_QUERY_RESULT_NOT_FOUND);
+        if (!caseId.equals(value.caseId())
+                || !analysisId.equals(value.analysisId())
+                || !queryId.equals(value.queryId())) {
+            throw identityMismatch("Source Query result identity does not match its path");
+        }
+        SourceQueryRequest request = requireSourceQueryRequest(caseId, analysisId, queryId);
+        if (request.mode() != value.mode()
+                || !request.methodCatalogArtifact().equals(value.methodCatalogArtifact())) {
+            throw identityMismatch("Source Query result does not match its immutable request");
+        }
+        validateSourceQueryResultBudget(request, value);
+        validateSourceQueryResultCatalog(requireMethodCatalog(caseId, analysisId), value);
+        return value;
+    }
+
+    private static void validateSourceQueryResultBudget(
+            SourceQueryRequest request, SourceQueryResult result) {
+        boolean exceedsCounts = result.methods().size() > request.budget().maxMethods()
+                || result.edges().size() > request.budget().maxEdges()
+                || result.paths().size() > request.budget().maxPaths()
+                || result.paths().stream().anyMatch(
+                        path -> path.size() - 1 > request.budget().maxDepth());
+        long sourceLines = result.sourceWindows().stream()
+                .mapToLong(window -> (long) window.toLine() - window.fromLine() + 1L)
+                .sum();
+        long sourceBytes = result.sourceWindows().stream()
+                .mapToLong(window -> window.text().getBytes(StandardCharsets.UTF_8).length)
+                .sum();
+        if (exceedsCounts
+                || sourceLines > request.budget().maxSourceLines()
+                || sourceBytes > request.budget().maxResponseBytes()
+                || result.completedAt().isBefore(request.requestedAt())) {
+            throw identityMismatch("Source Query result exceeds or predates its immutable request");
+        }
+    }
+
+    private static void validateSourceQueryResultCatalog(
+            MethodCatalog catalog, SourceQueryResult result) {
+        var methodsByKey = new HashMap<String, org.example.algorithmdebug.contracts.MethodCatalogEntry>();
+        catalog.entries().forEach(entry -> methodsByKey.put(entry.methodKey(), entry));
+        for (var method : result.methods()) {
+            if (!method.equals(methodsByKey.get(method.methodKey()))) {
+                throw identityMismatch(
+                        "Source Query result contains a method outside its Method Catalog");
+            }
+        }
+        var catalogEdges = new HashSet<>(catalog.edges());
+        if (!catalogEdges.containsAll(result.edges())) {
+            throw identityMismatch(
+                    "Source Query result contains an edge outside its Method Catalog");
+        }
+        for (List<String> path : result.paths()) {
+            if (path.stream().anyMatch(methodKey -> !methodsByKey.containsKey(methodKey))) {
+                throw identityMismatch(
+                        "Source Query result contains a path outside its Method Catalog");
+            }
+        }
+    }
+
     /** 为已有 MethodCatalog 原子创建 CodePath 计划；计划 ID 不得覆盖。 */
     public Path createCodePathPlan(CodePathCollectionPlan plan) {
         CodePathCollectionPlan checked = requireNonNull(plan, "plan");
@@ -290,6 +515,9 @@ public final class CaseArchiveRepository {
             throw identityMismatch("CodePath plan identity does not match MethodCatalog");
         }
         validatePlanSelectors(catalog, checked);
+        validateCurrentInvestigationBinding(
+                checked.caseId(), checked.analysisId(), checked.investigationStatus(),
+                checked.investigationBinding());
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
@@ -372,6 +600,9 @@ public final class CaseArchiveRepository {
                 throw identityMismatch("JDWP tracepoint is outside MethodCatalog or its source anchor does not match");
             }
         }
+        validateCurrentInvestigationBinding(
+                checked.caseId(), checked.analysisId(), checked.investigationStatus(),
+                checked.investigationBinding());
         Path document = layout(checked.caseId()).planDocument(
                 checked.analysisId(), checked.planId());
         try {
@@ -502,6 +733,11 @@ public final class CaseArchiveRepository {
     /** 原子追加一次 Collection 的可恢复 Tool 摘要。 */
     public Path createCollectionExecutionSummary(CollectionExecutionSummary summary) {
         CollectionExecutionSummary checked = requireNonNull(summary, "summary");
+        if (!SchemaVersions.COLLECTION_EXECUTION_SUMMARY.equals(checked.schemaVersion())) {
+            throw new WorkspaceException(
+                    "COLLECTION_SUMMARY_VERSION_UNSUPPORTED",
+                    "Only CollectionExecutionSummary v3 may be archived by the current Writer");
+        }
         requireCollectionSummaryIdentity(checked);
         return createP4Document(
                 layout(checked.caseId()).collectionSummary(checked.collectionId()),
@@ -849,14 +1085,23 @@ public final class CaseArchiveRepository {
             CollectionId collectionId,
             EvidenceId evidenceId,
             String collectorType) {
-        EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
-        boolean currentEvidence = request.collectionIds().contains(collectionId);
-        boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
-        if (!currentEvidence && !comparisonEvidence) {
-            throw identityMismatch("Derived artifact Collection is not selected by the Evidence request");
+        Path requestPath = layout(caseId).evidenceBuildRequest(evidenceId);
+        if (Files.exists(requestPath, LinkOption.NOFOLLOW_LINKS)
+                && !Files.isRegularFile(requestPath, LinkOption.NOFOLLOW_LINKS)) {
+            throw identityMismatch("Evidence request path is not a regular file");
         }
-        if (currentEvidence && !request.analysisId().equals(analysisId)) {
-            throw identityMismatch("Current Evidence Collection must belong to the request Analysis");
+        if (Files.isRegularFile(requestPath, LinkOption.NOFOLLOW_LINKS)) {
+            EvidenceBuildRequest request = requireEvidenceRequest(caseId, evidenceId);
+            boolean currentEvidence = request.collectionIds().contains(collectionId);
+            boolean comparisonEvidence = request.comparisonCollectionIds().contains(collectionId);
+            if (!currentEvidence && !comparisonEvidence) {
+                throw identityMismatch(
+                        "Derived artifact Collection is not selected by the Evidence request");
+            }
+            if (currentEvidence && !request.analysisId().equals(analysisId)) {
+                throw identityMismatch(
+                        "Current Evidence Collection must belong to the request Analysis");
+            }
         }
         boolean matched;
         if ("CODEPATH".equals(collectorType)) {
@@ -916,6 +1161,19 @@ public final class CaseArchiveRepository {
         }
     }
 
+    private <T> T requireJsonArtifactDocument(
+            Path document, Class<T> type, String missingCode) {
+        if (!Files.isRegularFile(document, LinkOption.NOFOLLOW_LINKS)) {
+            throw new WorkspaceException(missingCode, "The archived Case document does not exist");
+        }
+        try {
+            return mapper.readJsonArtifact(document, type);
+        } catch (WorkspaceException failure) {
+            throw new WorkspaceException(
+                    "CASE_DOCUMENT_INVALID", "The archived JSON Artifact is invalid", failure);
+        }
+    }
+
     private RunResultFingerprint readFingerprint(Path document) {
         try {
             return mapper.readJson(document, RunResultFingerprint.class);
@@ -939,6 +1197,70 @@ public final class CaseArchiveRepository {
         if (!caseId.equals(fingerprint.caseId())
                 || !analysisId.equals(fingerprint.analysisId())) {
             throw identityMismatch("RunResultFingerprint document identity does not match its Analysis");
+        }
+    }
+
+    private void validateCurrentInvestigationBinding(
+            CaseId caseId,
+            AnalysisId analysisId,
+            InvestigationBindingStatus status,
+            Optional<InvestigationBinding> binding) {
+        if (status != InvestigationBindingStatus.STRUCTURED || binding.isEmpty()) {
+            throw identityMismatch(
+                    "Legacy unstructured collection plans are read-only and cannot be archived");
+        }
+        InvestigationBinding value = binding.orElseThrow();
+        if (!caseId.equals(value.caseId()) || !analysisId.equals(value.analysisId())) {
+            throw identityMismatch("Collection plan InvestigationBinding identity mismatch");
+        }
+        var projectId = requireCase(caseId).projectId();
+        InvestigationJournalReader.Result journal = new InvestigationJournalReader(
+                casesRoot, mapper).readValidatedEvents(
+                        new AnalysisIdentity(projectId, caseId, analysisId));
+        if (journal.events().isEmpty() || !journal.limitations().isEmpty()) {
+            throw identityMismatch(
+                    "Collection plan requires a complete Investigation journal");
+        }
+
+        var hypotheses = new HashSet<HypothesisId>();
+        var gaps = new HashMap<EvidenceGapId, EvidenceGap>();
+        var gapStatuses = new HashMap<EvidenceGapId, EvidenceGapStatus>();
+        var predicates = new HashMap<ObservationPredicateId, ObservationPredicate>();
+        for (InvestigationEvent event : journal.events()) {
+            if (event instanceof InvestigationEvent.HypothesisAdded added) {
+                hypotheses.add(added.hypothesis().hypothesisId());
+            } else if (event instanceof InvestigationEvent.EvidenceGapAdded added) {
+                gaps.put(added.gap().gapId(), added.gap());
+                gapStatuses.put(added.gap().gapId(), added.gap().status());
+            } else if (event instanceof InvestigationEvent.PredicateRegistered registered) {
+                predicates.put(registered.predicate().predicateId(), registered.predicate());
+            } else if (event instanceof InvestigationEvent.GapStatusChanged changed) {
+                gapStatuses.put(changed.gapId(), changed.newStatus());
+            }
+        }
+        EvidenceGap gap = gaps.get(value.gapId());
+        if (gap == null || gapStatuses.get(value.gapId()) != EvidenceGapStatus.OPEN
+                || !hypotheses.containsAll(value.hypothesisIds())
+                || !gap.hypothesisIds().containsAll(value.hypothesisIds())) {
+            throw identityMismatch(
+                    "Collection plan references a missing or non-open Investigation object");
+        }
+        boolean containsCriticalPredicate = false;
+        for (ObservationPredicateId predicateId : value.predicateIds()) {
+            ObservationPredicate predicate = predicates.get(predicateId);
+            if (predicate == null || !predicate.gapId().equals(value.gapId())
+                    || !value.hypothesisIds().contains(predicate.hypothesisId())) {
+                throw identityMismatch(
+                        "Collection plan references an unregistered or unrelated Predicate");
+            }
+            containsCriticalPredicate |= predicate.role() == PredicateRole.CRITICAL;
+        }
+        if (!containsCriticalPredicate) {
+            throw identityMismatch(
+                    "Collection plan requires at least one CRITICAL Predicate");
+        }
+        for (EvidenceId evidenceId : value.basedOnEvidenceIds()) {
+            requireEvidenceBundle(caseId, evidenceId);
         }
     }
 

@@ -1,0 +1,47 @@
+{
+  "documentVersion": "1.0",
+  "baselineCommit": "39514630743a65722fca8e90f8eda4051a85a302",
+  "scope": "LOCAL_BASELINE_ONLY_NOT_COMPANY_FILE_NAMES",
+  "groups": [
+    {"base": "ada-contracts/src/main/java/org/example/algorithmdebug/contracts", "classes": ["SchemaVersions", "EvidenceEligibility", "SourceAnchor", "CodePathCollectionPlan", "JdwpCollectionPlan", "JdwpCollectionRecord", "JdwpCollectionManifest", "CollectionBudget", "JdwpCollectionBudget", "NormalizationBudget"]},
+    {"base": "ada-contracts/src/main/java/org/example/algorithmdebug/contracts/investigation", "classes": ["EvidenceGap", "EvidenceGapStatus", "HypothesisRecord", "InvestigationBinding", "InvestigationUpdateCommand", "InvestigationEvent", "InvestigationState", "ObservationPredicate", "ObservationEvaluation", "CausalChain", "CausalEdge", "SourceQueryLimits", "InvestigationLimits"]},
+    {"base": "ada-contracts/src/main/java/org/example/algorithmdebug/contracts/coordination", "classes": ["AnalysisActionRequest", "AnalysisActionType", "ActionOutcome", "AnalysisControlView", "CoordinatedToolResult", "OperationReceipt", "ConclusionClaim", "ConclusionCandidate", "ConclusionDecision", "ConclusionFinalization", "CoordinationLimits"]},
+    {"base": "case-management/src/main/java/org/example/algorithmdebug/casecore", "classes": ["CaseArchiveLayout", "InvestigationEventArchive", "InvestigationJournalReader", "OperationJournal", "AnalysisArchiveReader", "ConclusionDecisionArchive", "WorkspaceExecutionLock"]},
+    {"base": "ada-core/src/main/java/org/example/algorithmdebug/core", "classes": ["InvestigationApplicationService", "StaticAnalysisApplicationService", "RunApplicationService", "CollectionApplicationService", "JdwpCollectionApplicationService", "JdwpCollectionExecutor", "TargetFailureBaselineEvaluator", "CollectionPostProcessingService", "CollectionEvidenceViewFactory"]},
+    {"base": "ada-core/src/main/java/org/example/algorithmdebug/core/coordination", "classes": ["AnalysisCoordinator", "OperationIdempotencyService", "WorkspaceExecutionLockManager", "AnalysisStateProjector", "InvestigationStateProjector", "ConclusionGate", "CoreActionInputs", "CoreActionHandlers", "TargetExecutionPolicies", "ReadActionPolicies", "LifecycleActionPolicies", "InvestigationUpdatePolicy", "CoordinatedResultFactory", "ActionCancellation"]},
+    {"base": "evidence-engine/src/main/java/org/example/algorithmdebug/evidence", "classes": ["ObservationEvaluator", "HypothesisEvidenceReducer", "CausalChainEligibilityEvaluator"]},
+    {"base": "debug-plan-engine/src/main/java/org/example/algorithmdebug/plan", "classes": ["InvestigationBindingRequest", "InvestigationBindingValidator", "CodePathPlanCompiler", "JdwpPlanCompiler"]},
+    {"base": "debug-harness/src/main/java/org/example/algorithmdebug/harness", "classes": ["TargetTestExecutor", "ExternalProcessRunner", "ManagedProcessRunner", "ManagedProcess", "ProcessSupervisor", "ProcessLimits"]},
+    {"base": "method-path-spi/src/main/java/org/example/algorithmdebug/methodpath", "classes": ["MethodPathCollector", "MethodPathCollectionRequest", "MethodPathManifest"]},
+    {"base": "method-path-codepathtracer/src/main/java/org/example/algorithmdebug/codepath", "classes": ["CodePathProcessCollector"]},
+    {"base": "jdwp-collector-adapter/src/main/java/org/example/algorithmdebug/jdwp", "classes": ["JdwpCollectionCoordinator"]},
+    {"base": "static-analysis/src/main/java/org/example/algorithmdebug/staticanalysis", "classes": ["SourceQueryService", "BoundedSourceWindowReader"]},
+    {"base": "trace-validator/src/main/java/org/example/algorithmdebug/validator", "classes": ["CollectionEvidenceValidator"]},
+    {"base": "algorithm-debug-runtime/src/main/java/org/example/algorithmdebug/runtime", "classes": ["AlgorithmDebugRuntimeBootstrap", "RuntimeAnalysisArchiveRouter", "RuntimeToolchainResolver"]},
+    {"base": "algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp", "classes": ["McpToolCatalog", "McpToolDispatcher", "McpActionRequestFactory", "McpRequestContextResolver", "McpResultMapper", "McpServerLimits", "McpServerLifecycle"]},
+    {"base": "algorithm-debug-mcp-server/src/main/java/org/example/algorithmdebug/mcp/input", "classes": ["AnalysisBeginInput", "AnalysisStatusInput", "AnalysisFinalizeInput", "InvestigationUpdateInput", "SourceQueryInput", "CodePathCollectInput", "JdwpCollectInput"]},
+    {"base": "tools/code-path-tracer-junit-launcher/src/main/java/org/example/algorithmdebug/codepath/launcher", "classes": ["CodePathPlanReader"]}
+  ],
+  "files": [
+    "agent-definition/system-prompt-v1.md",
+    "agent-definition/capability-manifest-v1.json",
+    "agent-definition/algorithm-debug-agent-v1.json",
+    "integrations/host-adapter-kit/scripts/render-host-config.mjs",
+    "agent-evals/run.mjs",
+    "agent-evals/grade.mjs",
+    "integration-tests/pom.xml",
+    "schemas/collection/codepath-plan-v7.schema.json",
+    "schemas/collection/jdwp-plan-v6.schema.json",
+    "schemas/collection/method-path-manifest-v5.schema.json",
+    "schemas/collection/jdwp-manifest-v3.schema.json",
+    "schemas/collection/method-path-collection-request-v2.schema.json",
+    "schemas/collection/jdwp-collection-request-v2.schema.json"
+  ],
+  "baselineToolNames": [
+    "analysis_begin", "case_inspect", "algorithm_input_capture", "case_audit",
+    "gantt_inspect", "run_test", "static_analyze", "source_query",
+    "investigation_update", "codepath_plan_create", "codepath_collect",
+    "jdwp_plan_create", "jdwp_collect", "artifact_read", "evidence_query",
+    "analysis_status", "analysis_finalize"
+  ]
+}

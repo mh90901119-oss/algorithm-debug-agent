@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://algorithm-debug-agent.local/schemas/collection/evidence-eligibility-v1.schema.json",
+  "title": "Evidence Eligibility v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "artifactReadable",
+    "collectionComplete",
+    "baselineRequired",
+    "baselineComparable",
+    "failureFingerprintMatched",
+    "obligationSatisfied",
+    "confirmationEligible",
+    "reasonCodes"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "1.0"},
+    "artifactReadable": {"type": "boolean"},
+    "collectionComplete": {"type": "boolean"},
+    "baselineRequired": {"type": "boolean"},
+    "baselineComparable": {"type": "boolean"},
+    "failureFingerprintMatched": {"type": "boolean"},
+    "obligationSatisfied": {"type": "boolean"},
+    "confirmationEligible": {"type": "boolean"},
+    "reasonCodes": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "ARTIFACT_UNREADABLE",
+          "COLLECTION_INCOMPLETE",
+          "BASELINE_NOT_REQUIRED",
+          "FAILURE_FINGERPRINT_MATCHED",
+          "FAILURE_FINGERPRINT_CHANGED",
+          "FAILURE_FINGERPRINT_INCOMPARABLE",
+          "OBLIGATION_UNSATISFIED",
+          "LEGACY_UNKNOWN"
+        ]
+      }
+    }
+  }
+}

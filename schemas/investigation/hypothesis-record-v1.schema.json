@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/algorithm-debug/schemas/investigation/hypothesis-record-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "hypothesisId", "caseId", "analysisId", "statement", "status", "sourceAnchorRefs", "supportingEvaluationIds", "contradictingEvaluationIds", "gapIds", "createdAt"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "hypothesisId": { "$ref": "#/$defs/id" }, "caseId": { "$ref": "#/$defs/id" }, "analysisId": { "$ref": "#/$defs/id" },
+    "statement": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "status": { "enum": ["OPEN", "SUPPORTED", "REFUTED", "INCONCLUSIVE"] },
+    "sourceAnchorRefs": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/sourceAnchor" } },
+    "supportingEvaluationIds": { "$ref": "#/$defs/evaluationIds" },
+    "contradictingEvaluationIds": { "$ref": "#/$defs/evaluationIds" },
+    "gapIds": { "$ref": "#/$defs/gapIds" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    { "if": { "properties": { "status": { "const": "SUPPORTED" } } }, "then": { "properties": { "supportingEvaluationIds": { "minItems": 1 } } } },
+    { "if": { "properties": { "status": { "const": "REFUTED" } } }, "then": { "properties": { "contradictingEvaluationIds": { "minItems": 1 } } } }
+  ],
+  "$defs": {
+    "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "evaluationIds": { "type": "array", "maxItems": 512, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "gapIds": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "sourceAnchor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["className", "methodName", "descriptor", "sourceRelativePath", "startLine", "endLine"],
+      "properties": {
+        "className": { "type": "string", "minLength": 3 }, "methodName": { "type": "string", "minLength": 1 },
+        "descriptor": { "type": "string", "minLength": 3 }, "sourceRelativePath": { "type": "string", "minLength": 1 },
+        "startLine": { "type": "integer", "minimum": 1 }, "endLine": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
